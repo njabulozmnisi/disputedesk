@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Blocks commits that contain secrets. Install: git config core.hooksPath .githooks
+set -euo pipefail
+command -v gitleaks >/dev/null || { echo "gitleaks not installed (brew install gitleaks)"; exit 1; }
+gitleaks git --staged --redact --no-banner --config .gitleaks.toml
