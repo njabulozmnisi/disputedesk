@@ -4,7 +4,7 @@
 
 ## Design
 
-- **EF Core directly,** no repository wrapper. `IAppDbContext` lives in Application and only Infrastructure implements it. Application references the EF Core abstractions package only.
+- **EF Core directly,** no repository wrapper. `IAppDbContext` lives in Application and only Infrastructure implements it. Application may reference EF Core itself (for `DbSet<T>`) but never a database provider such as Npgsql.
 - **ORM first.** Raw SQL only with evidence (a measured problem or a feature EF can't express, such as `FOR UPDATE SKIP LOCKED`), parameterised, in one named method in Infrastructure with the justification in a comment. No repository layer for it.
 - **Money is `decimal` with an ISO currency code,** never a float.
 - **Results for expected failures, exceptions for the unexpected.** The hand-written `Result`/`Error` type in Domain. 404 for not found or not yours, 409 for an invalid transition, 422 for validation or a business rule. A global handler returns a clean 500 without a stack trace.

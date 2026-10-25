@@ -47,3 +47,6 @@ _bmad/render/
 _bmad/scripts/
 _bmad/method/
 _bmad/core-tools/
+
+# Research working files (reports are committed)
+docs/research/*/digests/

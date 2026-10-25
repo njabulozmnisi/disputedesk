@@ -8,12 +8,14 @@ story=${1:?story id}; story_file=${2:?story file}
 models=("${VERIFIER_MODEL:-gpt-6-astra}" "${VERIFIER_FALLBACK_MODEL:-gpt-6-sol}")
 root=$(git rev-parse --show-toplevel)
 sha=$(git rev-parse HEAD)
-diff_hash=$(git diff HEAD | shasum -a 256 | cut -c1-12)
+# Fingerprint of the change: tracked edits plus new files (agents leave work uncommitted).
+diff_hash=$({ git diff HEAD; git ls-files -o --exclude-standard -z | xargs -0 shasum -a 256; } | shasum -a 256 | cut -c1-12)
 out="$root/docs/verification/$story-verify.md"
 mkdir -p "$(dirname "$out")"
 
 prompt=$(cat <<PROMPT
 You are an independent verifier. You did not write this code. Check code only.
+The work is deliberately uncommitted: treat every file in this worktree, including untracked ones, as the change under review.
 Story file: $story_file. Read it, then:
 1. Build: dotnet build backend (warnings are errors) and/or npm run build in frontend, whichever the diff touches.
 2. Run the tests: unit, integration (Testcontainers) and architecture tests; Vitest, type check and lint for the frontend.
