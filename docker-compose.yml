@@ -1,0 +1,275 @@
+# DisputeDesk local platform. `docker compose up --wait` brings everything up configured, zero clicks.
+#   http://localhost:8080                 gateway: app origin (placeholder page, /api/ -> api)
+#   http://auth.localhost:8080            gateway: Zitadel API, console and Login v2
+#   http://localhost:8025                 Mailpit (verification and reset emails)
+#   http://localhost:18888                Aspire dashboard (traces, metrics, logs)
+#   127.0.0.1:5433 / :19092 / :4317       Postgres, Redpanda and OTLP for apps run on the host
+#
+# Every credential below is a fixed DEV-ONLY value, overridable from an untracked .env file.
+# Generated client IDs and secrets never touch the repo: the provisioner writes them to the
+# `zitadel-clients` volume (see infra/README.md).
+# Images are pinned by tag and by multi-arch index digest.
+name: disputedesk
+
+x-app-config: &app-config
+  ConnectionStrings__DisputeDesk: Host=postgres;Port=5432;Database=disputedesk;Username=disputedesk;Password=${APP_DB_PASSWORD:-dev-only-app-db}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://aspire-dashboard:18889
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+
+services:
+  postgres:
+    image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-only-postgres}
+      POSTGRES_DB: postgres
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-dev-only-app-db}
+      ZITADEL_DB_PASSWORD: ${ZITADEL_DB_PASSWORD:-dev-only-zitadel-db}
+      QA_DB_PASSWORD: ${QA_DB_PASSWORD:-dev-only-qa-db}
+    ports: ["127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql                 # PG18 keeps its data under /var/lib/postgresql/18/docker
+      - ./infra/db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # TCP on purpose: the init-time server is socket-only, so a socket check goes healthy before the roles exist.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 512m
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.2@sha256:468bd13a9f2bd24794cb7fddc867c767fb1008b9a07b297b89fde48c564d7d96
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --default-log-level=warn
+    ports: ["127.0.0.1:19092:19092"]
+    volumes: ["redpanda:/var/lib/redpanda/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -Eq 'Healthy:[[:space:]]+true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    mem_limit: 1536m                               # --memory=1G for Seastar plus process overhead
+
+  redpanda-topics:   # one-shot: the dispute events topic (keyed by dispute ID)
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.2@sha256:468bd13a9f2bd24794cb7fddc867c767fb1008b9a07b297b89fde48c564d7d96
+    restart: "no"
+    environment:
+      TOPIC: disputedesk.disputes
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - rpk topic create "$$TOPIC" --partitions 3 --replicas 1 -X brokers=redpanda:9092
+        || rpk topic describe "$$TOPIC" -X brokers=redpanda:9092
+    depends_on:
+      redpanda: { condition: service_healthy }
+    mem_limit: 256m
+
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v4.20.0@sha256:9ea0e9ecfdc43115da871242e40a0320f2ece864c7cd8b5d41a863a7f4902499
+    restart: unless-stopped
+    user: "0"                                      # writes the bootstrap PAT files into fresh (root-owned) volumes
+    command: start-from-init --masterkeyFromEnv
+    environment:
+      ZITADEL_EXTERNALDOMAIN: auth.localhost
+      ZITADEL_EXTERNALPORT: "8080"
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY:-DevOnlyMasterKeyNotForProduction}   # exactly 32 characters
+      ZITADEL_PORT: "8080"
+      ZITADEL_TLS_ENABLED: "false"
+      GOMEMLIMIT: 600MiB
+      # Its own database and non-superuser role on the shared server; no admin credentials.
+      ZITADEL_DATABASE_POSTGRES_DSN: postgresql://zitadel:${ZITADEL_DB_PASSWORD:-dev-only-zitadel-db}@postgres:5432/zitadel?sslmode=disable
+
+      # FirstInstance: runs once, on an empty database.
+      ZITADEL_FIRSTINSTANCE_INSTANCENAME: DisputeDesk
+      ZITADEL_FIRSTINSTANCE_ORG_NAME: DisputeDesk
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_FIRSTNAME: Dispute
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_LASTNAME: Admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS: admin@disputedesk.test
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_VERIFIED: "true"
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD:-Dev-Only-Admin-1}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+      # IAM_OWNER machine user whose PAT only the provisioner reads (zitadel-bootstrap volume).
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: provisioner
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Provisioner (IAM_OWNER)
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2030-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /zitadel/bootstrap/admin.pat
+      # Login client (IAM_LOGIN_CLIENT) whose PAT only the login container reads (zitadel-login-pat volume).
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Login Client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: "2030-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /zitadel/login/login-client.pat
+
+      # DefaultInstance: instance defaults applied when the instance is created. The login policy defaults
+      # already allow self-registration, leave MFA optional and allow TOTP, so they are not restated here.
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: http://auth.localhost:8080/ui/v2/login/
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: http://auth.localhost:8080/ui/v2/login/login?authRequest=
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: http://auth.localhost:8080/ui/v2/login/logout?post_logout_redirect=
+      ZITADEL_SAML_DEFAULTLOGINURLV2: http://auth.localhost:8080/ui/v2/login/login?samlRequest=
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_SMTP_HOST: mailpit:1025
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_TLS: "false"
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROM: noreply@disputedesk.test
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROMNAME: DisputeDesk
+    volumes:
+      - zitadel-bootstrap:/zitadel/bootstrap
+      - zitadel-login-pat:/zitadel/login
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready"]
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      start_period: 20s
+    depends_on:
+      postgres: { condition: service_healthy }
+    mem_limit: 768m
+
+  provision:   # one-shot: project, roles, BFF app, operations machine user, fixture logins
+    build: ./infra/zitadel/provision
+    image: disputedesk-zitadel-provision:local
+    restart: "no"
+    environment:
+      ZITADEL_URL: http://auth.localhost:8080
+      CURL_CONNECT_TO: auth.localhost:8080:zitadel:8080
+      PAT_FILE: /zitadel/bootstrap/admin.pat
+      OUT_DIR: /out
+      OUT_UID: "1654"                              # APP_UID of the .NET chiseled images
+      FIXTURES_FILE: /fixtures/local.json
+      APP_ORIGINS: http://localhost:8080 http://localhost:5101 http://localhost:5102
+    volumes:
+      - zitadel-bootstrap:/zitadel/bootstrap:ro
+      - zitadel-clients:/out
+      - ./fixtures/local.json:/fixtures/local.json:ro
+    depends_on:
+      zitadel: { condition: service_healthy }
+    mem_limit: 128m
+
+  zitadel-login:
+    image: ghcr.io/zitadel/zitadel-login:v4.20.0@sha256:f1abfdf3c5d16eda03cad3b584226207ecc640ca5c679d7c45abbbce7d1d63f0
+    restart: unless-stopped                        # runs as the image's non-root user (nextjs)
+    environment:
+      ZITADEL_API_URL: http://zitadel:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /zitadel/login/login-client.pat
+      ZITADEL_SESSION_COOKIE_SECRET: ${LOGIN_SESSION_COOKIE_SECRET:-dev-only-login-session-cookie-secret}
+      CUSTOM_REQUEST_HEADERS: Host:auth.localhost:8080,X-Forwarded-Proto:http
+      EMAIL_VERIFICATION: "true"                   # self-registered logins must verify their email
+    volumes:
+      - zitadel-login-pat:/zitadel/login:ro
+    healthcheck:
+      test: ["CMD", "/bin/sh", "-c", "node /app/healthcheck.mjs http://localhost:3000/ui/v2/login/healthy"]
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      start_period: 20s
+    depends_on:
+      zitadel: { condition: service_healthy }
+    mem_limit: 768m                                # transient peaks near 550 MiB under load (lab)
+
+  mailpit:
+    image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+    restart: unless-stopped
+    ports: ["127.0.0.1:8025:8025"]
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 128m
+
+  api:
+    image: disputedesk-api-local:local
+    build: { context: ./backend, target: api-local }   # the api image plus a wget probe for the healthcheck
+    restart: unless-stopped
+    environment:
+      <<: *app-config
+      ASPNETCORE_ENVIRONMENT: Development
+      OTEL_SERVICE_NAME: disputedesk-api
+    volumes:
+      - zitadel-clients:/run/zitadel:ro            # zitadel-clients.json (Authority, client IDs and secrets)
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      postgres: { condition: service_healthy }
+      redpanda-topics: { condition: service_completed_successfully }
+      provision: { condition: service_completed_successfully }
+    mem_limit: 512m
+
+  worker:
+    image: disputedesk-worker:local
+    build: { context: ./backend, target: worker }
+    restart: unless-stopped
+    environment:
+      <<: *app-config
+      DOTNET_ENVIRONMENT: Development
+      OTEL_SERVICE_NAME: disputedesk-worker
+    depends_on:
+      postgres: { condition: service_healthy }
+      redpanda-topics: { condition: service_completed_successfully }
+    mem_limit: 384m
+
+  aspire-dashboard:
+    image: disputedesk-aspire-dashboard:local
+    build: ./infra/probe                           # the pinned dashboard image plus a wget probe
+    restart: unless-stopped
+    environment:
+      ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"   # dev only: no sign-in for the UI or OTLP
+    ports:
+      - "127.0.0.1:18888:18888"                    # UI, loopback only
+      - "127.0.0.1:4317:18889"                     # OTLP/gRPC for apps run on the host
+      - "127.0.0.1:4318:18890"                     # OTLP/HTTP for apps run on the host
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:18888/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 512m
+
+  gateway:
+    image: nginx:1.31.8-alpine@sha256:1ef7ca94d7879df82421428ce13bd1eaa412404953859cf7a5b6512c25e67a60
+    restart: unless-stopped
+    ports: ["127.0.0.1:8080:8080"]
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/html:/usr/share/nginx/html:ro
+    networks:
+      default:
+        aliases: ["auth.localhost"]                # containers reach the issuer at the same URL as browsers
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --header 'Host: auth.localhost:8080' http://127.0.0.1:8080/debug/healthz >/dev/null && wget -qO- http://127.0.0.1:8080/ >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      # nginx resolves its upstreams at start, so they must exist. The api only needs to be started:
+      # once its readiness probes Zitadel through this gateway, waiting for healthy would deadlock.
+      api: { condition: service_started }
+      zitadel: { condition: service_healthy }
+      zitadel-login: { condition: service_healthy }
+    mem_limit: 64m
+
+volumes:
+  pgdata:
+  redpanda:
+  zitadel-bootstrap:                               # IAM_OWNER PAT: zitadel (writes) and provision (reads) only
+  zitadel-login-pat:                               # login-client PAT: zitadel (writes) and zitadel-login (reads) only
+  zitadel-clients:

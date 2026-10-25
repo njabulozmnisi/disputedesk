@@ -1,0 +1,128 @@
+
+== clean slate
+volumes and locally built images removed
+
+== docker compose up --wait
+up and healthy in 28 s
+
+== docker compose ps -a
+SERVICE            STATUS
+api                Up 7 seconds (healthy)
+aspire-dashboard   Up 22 seconds (healthy)
+gateway            Up 5 seconds (healthy)
+mailpit            Up 22 seconds (healthy)
+postgres           Up 22 seconds (healthy)
+provision          Exited (0) 8 seconds ago
+redpanda           Up 22 seconds (healthy)
+redpanda-topics    Exited (0) 16 seconds ago
+worker             Up 16 seconds
+zitadel            Up 16 seconds (healthy)
+zitadel-login      Up 11 seconds (healthy)
+
+== memory (docker stats --no-stream)
+disputedesk-api-1	38.1MiB / 512MiB
+disputedesk-aspire-dashboard-1	60.35MiB / 512MiB
+disputedesk-gateway-1	4.277MiB / 64MiB
+disputedesk-mailpit-1	14.02MiB / 128MiB
+disputedesk-postgres-1	98.69MiB / 512MiB
+disputedesk-redpanda-1	275.8MiB / 1.5GiB
+disputedesk-worker-1	10.68MiB / 384MiB
+disputedesk-zitadel-1	85.96MiB / 768MiB
+disputedesk-zitadel-login-1	102.7MiB / 768MiB
+TOTAL	690.6 MiB (0.67 GiB)
+
+== api readiness through the gateway
+ok  GET http://localhost:8080/api/health/ready -> Healthy
+
+== gateway: placeholder page and security headers
+ok  GET http://localhost:8080/ -> 200
+ok  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' http://auth.localhost:8080
+ok  X-Content-Type-Options: nosniff
+ok  X-Frame-Options: DENY
+ok  Referrer-Policy: strict-origin-when-cross-origin
+ok  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+ok  Cross-Origin-Opener-Policy: same-origin
+
+== Zitadel discovery and Login v2 at auth.localhost
+{
+  "issuer": "http://auth.localhost:8080",
+  "authorization_endpoint": "http://auth.localhost:8080/oauth/v2/authorize",
+  "token_endpoint": "http://auth.localhost:8080/oauth/v2/token",
+  "code_challenge_methods_supported": [
+    "S256"
+  ]
+}
+ok  GET http://auth.localhost:8080/ui/v2/login/loginname -> 200
+
+== operations machine user: client-credentials token, decoded
+{
+  "iss": "http://auth.localhost:8080",
+  "client_id": "operations-tools",
+  "aud": [
+    "396687680148078599"
+  ],
+  "roles": [
+    "dispute.escalate",
+    "dispute.resolve",
+    "dispute.start_review"
+  ]
+}
+ok  JWT access token carries exactly the three action roles
+
+== BFF app: authorize (code + PKCE S256), exact redirect URIs
+ok  accepted  http://localhost:8080/api/signin-oidc
+ok  accepted  http://localhost:5101/api/signin-oidc
+ok  accepted  http://localhost:5102/api/signin-oidc
+ok  rejected  http://localhost:9999/api/signin-oidc
+ok  rejected  http://localhost:8080/signin-oidc
+ok  rejected  http://localhost:8080/api/signin-oidc/x
+
+== Zitadel facts invisible from outside (verify.sh, admin API, read-only)
+PASS  project: role assertion              {"name":"DisputeDesk","projectRoleAssertion":true,"authorizationRequired":false}
+PASS  BFF app: confidential web, code, JWT {"applicationType":"OIDC_APP_TYPE_WEB","authMethodType":"OIDC_AUTH_METHOD_TYPE_BASIC","responseTypes":["OIDC_RESPONSE_TYPE_CODE"],"grantTypes":["OIDC_GRANT_T
+PASS  BFF app: post-logout URIs (exact)    ["http://localhost:8080/api/signout-callback-oidc","http://localhost:5101/api/signout-callback-oidc","http://localhost:5102/api/signout-callback-oidc"]
+PASS  login thandi.nkosi: verified email   {"userId":"dd-login-customer-a","email":"thandi.nkosi@disputedesk.test","isVerified":true}
+PASS  login thandi.nkosi: password works   {"session":"created"}
+PASS  login pieter.vanwyk: verified email  {"userId":"dd-login-customer-b","email":"pieter.vanwyk@disputedesk.test","isVerified":true}
+PASS  login pieter.vanwyk: password works  {"session":"created"}
+PASS  login ayesha.patel: verified email   {"userId":"dd-login-customer-c","email":"ayesha.patel@disputedesk.test","isVerified":true}
+PASS  login ayesha.patel: password works   {"session":"created"}
+PASS  login policy: self-registration      {"allowRegister":true,"forceMfa":false}
+PASS  login policy: TOTP allowed           ["SECOND_FACTOR_TYPE_OTP","SECOND_FACTOR_TYPE_U2F"]
+PASS  smtp: Mailpit active                 [{"host":"mailpit:1025","state":"EMAIL_PROVIDER_ACTIVE"}]
+
+== provisioning is idempotent
+[provision] organization 396687671407214599
+[provision] project exists 396687680148078599
+[provision] roles ensured: ["dispute.start_review","dispute.escalate","dispute.resolve"]
+[provision] BFF web app exists (its settings are not updated)
+[provision] machine user operations-tools exists
+[provision] machine user operations-tools authorized for ["dispute.start_review","dispute.escalate","dispute.resolve"]
+[provision] login thandi.nkosi exists
+[provision] login pieter.vanwyk exists
+[provision] login ayesha.patel exists
+[provision] /out/zitadel-clients.json is current; secrets not rotated
+[provision] done
+ok  second run created nothing; zitadel-clients.json unchanged (sha256 8a5cdf9aed6c...)
+
+== Postgres roles
+ok  a wrong password for qa_readonly over TCP is refused (scram)
+ok  qa_readonly SELECTs a table the app role created later (default privileges)
+ok  qa_readonly sessions default to read-only
+ok  qa_readonly INSERT in a READ WRITE transaction refused: permission denied for table smoke_probe
+ok  qa_readonly connecting to the zitadel database refused: permission denied for database "zitadel"
+ok  zitadel role is not superuser, cannot create databases or roles
+
+== Redpanda topic
+NAME                  PARTITIONS  REPLICAS
+disputedesk.disputes  3           1
+
+== Mailpit and Aspire dashboard
+{"mailpit":"v1.32.0"}
+ok  Aspire dashboard /health -> 200
+ok  Aspire dashboard / -> /structuredlogs (anonymous, no sign-in)
+
+== docker compose down -v
+stopped and volumes removed
+
+SMOKE OK
