@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using DisputeDesk.Api.Errors;
@@ -5,14 +6,13 @@ using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Domain;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace DisputeDesk.Api.IntegrationTests;
 
 public class ProblemDetailsTests(PostgresFixture postgres)
 {
     private const string ProblemJson = "application/problem+json";
-    private const string SecretDetail = "secret-detail-that-must-not-leak";
+    private const string SecretDetail = ThrowingHealthCheckService.SecretDetail;
 
     [Fact]
     public async Task Unknown_route_returns_a_404_ProblemDetails_with_a_traceId()
@@ -30,13 +30,58 @@ public class ProblemDetailsTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task The_404_traceId_is_the_trace_ID_of_the_request_server_span()
+    {
+        var telemetry = new TelemetryCapture();
+        await using var factory = new ApiFactory(postgres.ConnectionString, configureServices: telemetry.AddTo);
+        using var client = factory.CreateClient();
+        var path = $"/api/v1/trace-probe-{Guid.NewGuid():N}";
+
+        var response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var problem = await ReadJsonAsync(response);
+        // The request's own span, found by its unique path: also the proof that ASP.NET Core requests are traced.
+        var span = await telemetry.WaitForSpanAsync(activity => Equals(activity.GetTagItem("url.path"), path));
+        Assert.Equal(ActivityKind.Server, span.Kind);
+        Assert.Equal("Microsoft.AspNetCore", span.Source.Name);
+        Assert.Equal("GET", span.GetTagItem("http.request.method"));
+        Assert.Equal(404, span.GetTagItem("http.response.status_code"));
+        Assert.Equal(span.TraceId.ToHexString(), problem.RootElement.GetProperty("traceId").GetString());
+    }
+
+    [Fact]
+    public async Task The_500_traceId_is_the_trace_ID_of_the_request_server_span()
+    {
+        var telemetry = new TelemetryCapture();
+        await using var factory = new ApiFactory(
+            postgres.ConnectionString,
+            configureServices: services =>
+            {
+                telemetry.AddTo(services);
+                ThrowingHealthCheckService.Register(services);
+            });
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync(new Uri("/health/live", UriKind.Relative), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        using var problem = await ReadJsonAsync(response);
+        var traceId = problem.RootElement.GetProperty("traceId").GetString();
+        // Other tests' server spans can reach this exporter, so the match is on this response's trace ID.
+        var span = await telemetry.WaitForSpanAsync(activity => activity.Kind == ActivityKind.Server && activity.TraceId.ToHexString() == traceId);
+        Assert.Equal("/health/live", span.GetTagItem("url.path"));
+        Assert.Equal(500, span.GetTagItem("http.response.status_code"));
+    }
+
+    [Fact]
     public async Task Unhandled_exception_returns_a_clean_500_without_message_or_stack_trace()
     {
         // Development is the worst case: it is where the developer exception page would leak details.
         await using var factory = new ApiFactory(
             postgres.ConnectionString,
             environment: "Development",
-            configureServices: services => services.AddSingleton<HealthCheckService, ThrowingHealthCheckService>());
+            configureServices: ThrowingHealthCheckService.Register);
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync(new Uri("/health/live", UriKind.Relative), TestContext.Current.CancellationToken);
@@ -88,6 +133,22 @@ public class ProblemDetailsTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task An_expected_failure_carries_the_current_trace_ID()
+    {
+        await using var factory = new ApiFactory(postgres.ConnectionString);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+        context.Response.Body = new MemoryStream();
+        using var activity = new Activity("expected-failure").Start();
+
+        await Error.NotFound("dispute.not_found", "Dispute not found.").ToProblem().ExecuteAsync(context);
+
+        context.Response.Body.Position = 0;
+        using var problem = await JsonDocument.ParseAsync(context.Response.Body, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(activity.TraceId.ToHexString(), problem.RootElement.GetProperty("traceId").GetString());
+    }
+
+    [Fact]
     public void Every_error_kind_has_a_status()
     {
         Assert.All(Enum.GetValues<ErrorKind>(), kind => Assert.InRange(ErrorResults.StatusCodeFor(kind), 400, 499));
@@ -97,12 +158,4 @@ public class ProblemDetailsTests(PostgresFixture postgres)
         await JsonDocument.ParseAsync(
             await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken),
             cancellationToken: TestContext.Current.CancellationToken);
-
-    private sealed class ThrowingHealthCheckService : HealthCheckService
-    {
-        public override Task<HealthReport> CheckHealthAsync(
-            Func<HealthCheckRegistration, bool>? predicate,
-            CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException(SecretDetail);
-    }
 }
