@@ -50,3 +50,8 @@ _bmad/core-tools/
 
 # Research working files (reports are committed)
 docs/research/*/digests/
+
+# BMAD working files (decision logs, review reports, addenda); only the documents are committed
+docs/**/review-*.md
+docs/**/reconcile-*.md
+docs/**/addendum.md
