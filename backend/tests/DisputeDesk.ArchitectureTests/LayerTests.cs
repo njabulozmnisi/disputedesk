@@ -1,0 +1,75 @@
+using System.Reflection;
+using DisputeDesk.Application.Abstractions;
+
+namespace DisputeDesk.ArchitectureTests;
+
+/// <summary>
+/// The Clean Architecture layer rules, read from compiled assembly metadata. A violation fails the
+/// test run, and CI with it.
+/// </summary>
+public class LayerTests
+{
+    private static readonly Assembly DomainAssembly = Assembly.Load("DisputeDesk.Domain");
+    private static readonly Assembly ApplicationAssembly = Assembly.Load("DisputeDesk.Application");
+    private static readonly Assembly InfrastructureAssembly = Assembly.Load("DisputeDesk.Infrastructure");
+    private static readonly Assembly ContractsAssembly = Assembly.Load("DisputeDesk.Contracts");
+    private static readonly Assembly ApiAssembly = Assembly.Load("DisputeDesk.Api");
+    private static readonly Assembly WorkerAssembly = Assembly.Load("DisputeDesk.Worker");
+
+    private static readonly Assembly[] SolutionAssemblies =
+        [DomainAssembly, ApplicationAssembly, InfrastructureAssembly, ContractsAssembly, ApiAssembly, WorkerAssembly];
+
+    [Fact]
+    public void Domain_depends_on_nothing_else_in_the_solution()
+    {
+        var forbidden = SolutionAssemblies.Where(assembly => assembly != DomainAssembly).Select(NameOf);
+
+        AssertReferencesNone(DomainAssembly, forbidden);
+    }
+
+    [Fact]
+    public void Application_never_depends_on_Infrastructure_or_Npgsql()
+    {
+        AssertReferencesNone(ApplicationAssembly, [NameOf(InfrastructureAssembly), NameOf(ApiAssembly), NameOf(WorkerAssembly)]);
+
+        var npgsql = ReferencedNames(ApplicationAssembly).Where(name => name.StartsWith("Npgsql", StringComparison.Ordinal));
+        Assert.Empty(npgsql);
+    }
+
+    [Fact]
+    public void Only_Infrastructure_implements_IAppDbContext()
+    {
+        var implementations = SolutionAssemblies
+            .SelectMany(assembly => assembly.GetTypes())
+            .Where(type => type is { IsClass: true, IsAbstract: false } && type.IsAssignableTo(typeof(IAppDbContext)))
+            .ToList();
+
+        Assert.NotEmpty(implementations);
+        Assert.All(implementations, type => Assert.True(
+            type.Assembly == InfrastructureAssembly,
+            $"{type.FullName} implements {nameof(IAppDbContext)} outside Infrastructure."));
+    }
+
+    [Fact]
+    public void Api_and_Worker_are_the_only_hosts()
+    {
+        var hosts = SolutionAssemblies
+            .Where(assembly => assembly.EntryPoint is not null)
+            .Select(NameOf)
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(["DisputeDesk.Api", "DisputeDesk.Worker"], hosts);
+    }
+
+    private static string NameOf(Assembly assembly) => assembly.GetName().Name ?? assembly.FullName ?? string.Empty;
+
+    private static IEnumerable<string> ReferencedNames(Assembly assembly) =>
+        assembly.GetReferencedAssemblies().Select(name => name.Name ?? string.Empty);
+
+    private static void AssertReferencesNone(Assembly assembly, IEnumerable<string> forbidden)
+    {
+        var violations = ReferencedNames(assembly).Intersect(forbidden, StringComparer.Ordinal).ToList();
+
+        Assert.True(violations.Count == 0, $"{NameOf(assembly)} references {string.Join(", ", violations)}.");
+    }
+}
