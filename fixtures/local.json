@@ -1,0 +1,81 @@
+{
+  "about": "Single source of truth for the local Compose environment. Synthetic data only: the ID numbers are format-valid (date, sequence, citizenship, Luhn check digit) but made up, the phone numbers and account numbers are made up, and every password is a dev-only value. Never put real customer data here.",
+  "customers": [
+    {
+      "key": "A",
+      "customerId": "CUS-000001",
+      "displayName": "Thandi Nkosi",
+      "idNumber": "9001015000085",
+      "cellphone": "+27820000001",
+      "linked": true,
+      "recentSimSwap": false,
+      "login": "customer-a",
+      "purpose": "Linked customer. Later stories give her disputes in every status.",
+      "accounts": [
+        { "accountNumber": "1000000011", "type": "cheque", "currency": "ZAR" },
+        { "accountNumber": "1000000012", "type": "savings", "currency": "ZAR" }
+      ]
+    },
+    {
+      "key": "B",
+      "customerId": "CUS-000002",
+      "displayName": "Pieter van Wyk",
+      "idNumber": "8506150123089",
+      "cellphone": "+27820000002",
+      "linked": true,
+      "recentSimSwap": false,
+      "login": "customer-b",
+      "purpose": "Linked customer. Used for the check that another customer's dispute returns 404.",
+      "accounts": [
+        { "accountNumber": "1000000021", "type": "cheque", "currency": "ZAR" }
+      ]
+    },
+    {
+      "key": "C",
+      "customerId": "CUS-000003",
+      "displayName": "Ayesha Patel",
+      "idNumber": "9202295801081",
+      "cellphone": "+27820000003",
+      "linked": false,
+      "recentSimSwap": true,
+      "login": "customer-c",
+      "purpose": "Has a login but is not linked. The SIM-swap check fails for her number, so linking is refused.",
+      "accounts": [
+        { "accountNumber": "1000000031", "type": "cheque", "currency": "ZAR" }
+      ]
+    }
+  ],
+  "transactions": {
+    "about": "Not part of P0-2. The core-banking story adds transactions here, keyed by accountNumber.",
+    "items": []
+  },
+  "logins": [
+    {
+      "key": "customer-a",
+      "userId": "dd-login-customer-a",
+      "username": "thandi.nkosi",
+      "givenName": "Thandi",
+      "familyName": "Nkosi",
+      "email": "thandi.nkosi@disputedesk.test",
+      "password": "Dev-Only-Pass-A1"
+    },
+    {
+      "key": "customer-b",
+      "userId": "dd-login-customer-b",
+      "username": "pieter.vanwyk",
+      "givenName": "Pieter",
+      "familyName": "van Wyk",
+      "email": "pieter.vanwyk@disputedesk.test",
+      "password": "Dev-Only-Pass-B1"
+    },
+    {
+      "key": "customer-c",
+      "userId": "dd-login-customer-c",
+      "username": "ayesha.patel",
+      "givenName": "Ayesha",
+      "familyName": "Patel",
+      "email": "ayesha.patel@disputedesk.test",
+      "password": "Dev-Only-Pass-C1"
+    }
+  ]
+}
