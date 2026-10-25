@@ -44,7 +44,7 @@ BASH_DENY = [
     (rf"dotnet\s+add\s+\S*\s*package\s+({BANNED_PACKAGES})\b", "Banned package (see AGENTS.md)."),
 ]
 BASH_ASK = [
-    (r"\bgit(\s+(-[cC]\s+\S+|--\S+))*\s+(commit|push|merge)\b|\bgh\s+pr\s+merge\b",
+    (r"\bgit\b[^;&|\n]*\s(commit|push|merge)\b|\bgh\s+pr\s+merge\b",
      "Njabulo approves every commit, push and merge explicitly."),
     (r"\bterraform\s+(apply|destroy|import)\b", "Infrastructure changes are irreversible: needs Njabulo."),
     (r"(^|[\s;&|])aws\s", "AWS calls need Njabulo (the account is his and may not exist yet)."),
@@ -124,6 +124,8 @@ def check_write(tool: str, tool_input: dict, agent: str | None) -> None:
                 decide("deny", reason)
     if is_production_cs(rel) and re.search(CLOCK_RULE[0], text):
         decide("deny", CLOCK_RULE[1])
+    if is_production_cs(rel) and re.search(r"^\s*//\s*!", text, re.MULTILINE):
+        decide("deny", "No `// !` justification comments: they silence the null-forgiving analyser. Fix the nullability.")
 
 
 def main() -> None:
