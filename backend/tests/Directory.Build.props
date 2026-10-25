@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup>
+    <!-- Exempts test projects from the null-forgiving analyser (see Directory.Packages.props). -->
+    <DisputeDeskTestProject>true</DisputeDeskTestProject>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>
