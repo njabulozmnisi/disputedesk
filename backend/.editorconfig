@@ -1,0 +1,91 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,xml,csproj,props,targets,slnx,yml,yaml}]
+indent_size = 2
+
+# Generated at build without a final newline; an editor adding one would show up as OpenAPI drift.
+[openapi.json]
+insert_final_newline = false
+
+[*.cs]
+# Layout and namespaces
+csharp_style_namespace_declarations = file_scoped:error
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:error
+csharp_prefer_braces = true:warning
+csharp_new_line_before_open_brace = all
+
+# Language
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_prefer_primary_constructors = true:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_prefer_switch_expression = true:suggestion
+csharp_style_prefer_pattern_matching = true:suggestion
+dotnet_style_readonly_field = true:warning
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+dotnet_style_predefined_type_for_locals_parameters_members = true:warning
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+
+# Naming: private fields are _camelCase, constants and static readonly fields are PascalCase
+dotnet_naming_rule.static_readonly_pascal.symbols = static_readonly_fields
+dotnet_naming_rule.static_readonly_pascal.style = pascal
+dotnet_naming_rule.static_readonly_pascal.severity = warning
+dotnet_naming_symbols.static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.static_readonly_fields.required_modifiers = static, readonly
+
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel
+dotnet_naming_rule.private_fields_underscore.severity = warning
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+dotnet_naming_style.underscore_camel.required_prefix = _
+
+dotnet_naming_rule.constants_pascal.symbols = constants
+dotnet_naming_rule.constants_pascal.style = pascal
+dotnet_naming_rule.constants_pascal.severity = warning
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.required_modifiers = const
+dotnet_naming_style.pascal.capitalization = pascal_case
+
+# Code-style rules surface in the build (EnforceCodeStyleInBuild) and fail it
+dotnet_diagnostic.IDE0005.severity = warning
+dotnet_diagnostic.IDE0161.severity = warning
+dotnet_diagnostic.IDE0040.severity = warning
+dotnet_diagnostic.IDE0044.severity = warning
+dotnet_diagnostic.IDE1006.severity = warning
+# IDE0003 and IDE0049 never run in `dotnet build` (Roslyn marks them IDE-only); the IDE and
+# `dotnet format style --verify-no-changes` enforce them.
+dotnet_diagnostic.IDE0003.severity = warning
+dotnet_diagnostic.IDE0049.severity = warning
+
+# No null-forgiving operator in production code (Nullable.Extended.Analyzer; not loaded in test projects)
+dotnet_diagnostic.NX0001.severity = error
+dotnet_diagnostic.NX0002.severity = error
+dotnet_diagnostic.NX0003.severity = error
+dotnet_diagnostic.NX0004.severity = error
+
+# XML comments are welcome, not mandatory (documentation files are generated only so IDE0005 runs)
+dotnet_diagnostic.CS1591.severity = suggestion
+
+# CA1716 skips type names only: the conventions name the domain type `Error`, and the solution is C# only (no VB consumers).
+dotnet_code_quality.CA1716.analyzed_symbol_kinds = Namespace, Method, Property, Event, Parameter
+
+# Structured logging: message templates, never interpolation
+dotnet_diagnostic.CA2254.severity = error
+dotnet_diagnostic.CA1848.severity = warning
+
+[tests/**.cs]
+# Test names read as sentences: Result_failure_exposes_the_error
+dotnet_diagnostic.CA1707.severity = suggestion
