@@ -29,3 +29,21 @@ test-results/
 .DS_Store
 .idea/
 .vscode/
+
+# BMAD decision logs (local only)
+.memlog.md
+_bmad/render/
+
+# Playwright MCP session output
+.playwright-mcp/
+
+# Local-only agent config
+.claude/forbidden-terms.local
+.claude/worktrees/
+
+# BMAD is an installed dependency, restored from skills-lock.json by scripts/bmad-install.sh
+.claude/skills/bmad*/
+.claude/skills/bmod-*/
+_bmad/scripts/
+_bmad/method/
+_bmad/core-tools/

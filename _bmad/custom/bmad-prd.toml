@@ -1,0 +1,9 @@
+[workflow]
+prd_output_path = "{output_folder}"
+run_folder_pattern = "prd"
+finalize_reviewers = ["skill:bmad-review lenses=adversarial,edge-case-hunter"]
+persistent_facts = [
+  "Planning docs live at: docs/product-brief/product-brief.md, docs/prd/prd.md, docs/ux/ (ux.md, DESIGN.md, EXPERIENCE.md), docs/architecture/architecture.md, docs/research/<topic>/<topic>.md, docs/initiative-disputedesk.md and docs/tickets/. Read inputs from these paths when no ticket lists them.",
+  "Group non-functional requirements under exactly these ten headings, in this order: Architecture and scalability; Resilience and operational readiness; Data and domain modelling; API design; Security (primary); Code quality and maintainability; Testing (important); Observability; Infrastructure and DevOps; Documentation and communication. Give each NFR a stable ID NFR-<AREA>-<n> with AREA one of ARC, RES, DATA, API, SEC, CODE, TEST, OBS, INFRA, DOC.",
+  "Over-engineering is the standing risk: show each area once and well; anything bigger is a note for docs/production-path.md, not a requirement.",
+]

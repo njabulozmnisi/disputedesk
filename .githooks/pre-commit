@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-# Blocks commits that contain secrets. Install: git config core.hooksPath .githooks
+# Blocks commits that contain secrets or forbidden terms. Install: scripts/bootstrap.sh
 set -euo pipefail
 command -v gitleaks >/dev/null || { echo "gitleaks not installed (brew install gitleaks)"; exit 1; }
 gitleaks git --staged --redact --no-banner --config .gitleaks.toml
+
+terms=.claude/forbidden-terms.local
+if [[ -s "$terms" ]]; then
+  patterns=$(grep -v '^\s*#' "$terms" | sed '/^\s*$/d' || true)
+  if [[ -n "$patterns" ]] && git diff --cached -U0 --no-color | grep '^+' | grep -v '^+++' | grep -qiwF -- "$patterns"; then
+    echo "pre-commit: a forbidden term (see $terms) is in the staged changes." >&2
+    exit 1
+  fi
+fi

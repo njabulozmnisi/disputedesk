@@ -1,0 +1,10 @@
+[agent]
+persistent_facts = ["Planning docs live at: docs/product-brief/product-brief.md, docs/prd/prd.md, docs/ux/ (ux.md, DESIGN.md, EXPERIENCE.md), docs/architecture/architecture.md, docs/research/<topic>/<topic>.md, docs/initiative-disputedesk.md and docs/tickets/. Read inputs from these paths when no ticket lists them. Name these exact paths in sources: and companions:."]
+
+[workflow]
+tickets_refactor_sweep = """
+Do not add a per-epic refactor sweep. The project closes with one sequential refactor-sweep story after all epics.\
+"""
+tickets_story_count = """
+No target story count. Cut the thinnest vertical slices that meet the criteria; offer a split only when an epic stops being one outcome.\
+"""
