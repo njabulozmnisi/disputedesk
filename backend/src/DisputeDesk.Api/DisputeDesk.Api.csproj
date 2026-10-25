@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <!-- Build-time OpenAPI: writes backend/openapi.json on every build; CI fails if it drifts from the committed file. -->
+    <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)/../..</OpenApiDocumentsDirectory>
+    <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DisputeDesk.Application\DisputeDesk.Application.csproj" />
+    <ProjectReference Include="..\DisputeDesk.Contracts\DisputeDesk.Contracts.csproj" />
+    <ProjectReference Include="..\DisputeDesk.Infrastructure\DisputeDesk.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Scalar.AspNetCore" />
+  </ItemGroup>
+</Project>

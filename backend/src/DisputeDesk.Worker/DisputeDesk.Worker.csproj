@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <ItemGroup>
+    <ProjectReference Include="..\DisputeDesk.Application\DisputeDesk.Application.csproj" />
+    <ProjectReference Include="..\DisputeDesk.Contracts\DisputeDesk.Contracts.csproj" />
+    <ProjectReference Include="..\DisputeDesk.Infrastructure\DisputeDesk.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+</Project>
