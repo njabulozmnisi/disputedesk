@@ -1,0 +1,4 @@
+[workflow]
+ux_output_path = "{output_folder}"
+run_folder_pattern = "ux"
+persistent_facts = ["Planning docs live at: docs/product-brief/product-brief.md, docs/prd/prd.md, docs/ux/ (ux.md, DESIGN.md, EXPERIENCE.md), docs/architecture/architecture.md, docs/research/<topic>/<topic>.md, docs/initiative-disputedesk.md and docs/tickets/. Read inputs from these paths when no ticket lists them."]

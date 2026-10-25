@@ -1,0 +1,3 @@
+[workflow]
+research_output_path = "{output_folder}/research"
+run_folder_pattern = "{topic_slug}"
