@@ -14,7 +14,8 @@ FORBIDDEN_TERMS_FILE = PROJECT / ".claude" / "forbidden-terms.local"
 
 # Which paths each agent may write. The main session (no agent_type) is the supervisor.
 OWNERSHIP = {
-    "backend-builder": ("backend/", "infra/", "fixtures/", ".github/", "docker-compose.yml", "scripts/floor-guard.sh"),
+    "backend-builder": ("backend/", "infra/", "fixtures/", ".github/", "docker-compose.yml", "docker-compose.aws.yml",
+                        "contracts/", ".zap/", ".nvmrc", "scripts/floor-guard.sh", "scripts/dev-login.sh"),
     "frontend-builder": ("frontend/",),
     "qa": ("e2e/", "docs/verification/"),
     "verifier": ("docs/verification/",),
@@ -98,14 +99,16 @@ def check_terms(text: str) -> None:
             decide("deny", "A forbidden term (see .claude/forbidden-terms.local) is in this change.")
 
 
-def check_bash(command: str) -> None:
+def check_bash(command: str, agent: str | None) -> None:
     check_terms(command)
     for pattern, reason in BASH_DENY:
         if re.search(pattern, command):
             decide("deny", reason)
     for pattern, reason in BASH_ASK:
         if re.search(pattern, command):
-            decide("ask", reason)
+            # Subagents never commit, push, merge or touch infrastructure; an "ask" can be
+            # auto-resolved in a background run, so only the main session gets the prompt.
+            decide("deny" if agent else "ask", reason)
 
 
 def check_write(tool: str, tool_input: dict, agent: str | None) -> None:
@@ -134,7 +137,7 @@ def main() -> None:
     tool_input = event.get("tool_input", {}) or {}
     agent = event.get("agent_type")
     if tool == "Bash":
-        check_bash(tool_input.get("command", ""))
+        check_bash(tool_input.get("command", ""), agent)
     elif tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
         check_write(tool, tool_input, agent)
 

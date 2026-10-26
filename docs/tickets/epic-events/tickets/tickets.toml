@@ -1,0 +1,18 @@
+# Dispute events reach Kafka in per-dispute order: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Outbox relay publishes dispute events to Kafka with a Worker heartbeat"
+description = "Adds the single-leader relay (AD-17) with trace propagation (AD-20), the relay heartbeat health check and graceful shutdown on both hosts (AD-25)."
+verify = "Worker integration tests on Testcontainers Postgres and Redpanda pass for publish, order, outage, failed rows and lock handover."
+covers = ["R23", "R26", "R27", "R28", "R36"]
+after = ["3.1"]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["backend/src/DisputeDesk.Worker/", "backend/src/DisputeDesk.Infrastructure/Outbox/", "backend/src/DisputeDesk.Api/Program.cs (ShutdownTimeout)", "backend/Directory.Packages.props (Confluent.Kafka)", "backend/Dockerfile (worker-local target)", "docker-compose.yml (worker health check, depends_on api healthy, stop_grace_period)", "backend/tests/DisputeDesk.Worker.IntegrationTests/"]
+supervisor_checks = ["Re-run the telemetry smoke check: one trace from the browser raise to the Worker producer span in the Aspire Dashboard.", "`docker compose stop redpanda`, raise twice, start it: both events arrive in order.", "`docker compose ps` shows the worker healthy and starting after the api."]
