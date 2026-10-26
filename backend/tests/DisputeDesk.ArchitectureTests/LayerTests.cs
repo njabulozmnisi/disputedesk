@@ -20,24 +20,24 @@ public class LayerTests
         [DomainAssembly, ApplicationAssembly, InfrastructureAssembly, ContractsAssembly, ApiAssembly, WorkerAssembly];
 
     [Fact]
-    public void Domain_depends_on_nothing_else_in_the_solution()
+    public void DomainAssembly_References_NoOtherSolutionAssembly()
     {
-        var forbidden = SolutionAssemblies.Where(assembly => assembly != DomainAssembly).Select(NameOf);
+        IEnumerable<string> forbidden = SolutionAssemblies.Where(assembly => assembly != DomainAssembly).Select(NameOf);
 
         AssertReferencesNone(DomainAssembly, forbidden);
     }
 
     [Fact]
-    public void Application_never_depends_on_Infrastructure_or_Npgsql()
+    public void ApplicationAssembly_References_NoInfrastructureHostsOrNpgsql()
     {
         AssertReferencesNone(ApplicationAssembly, [NameOf(InfrastructureAssembly), NameOf(ApiAssembly), NameOf(WorkerAssembly)]);
 
-        var npgsql = ReferencedNames(ApplicationAssembly).Where(name => name.StartsWith("Npgsql", StringComparison.Ordinal));
+        IEnumerable<string> npgsql = ReferencedNames(ApplicationAssembly).Where(name => name.StartsWith("Npgsql", StringComparison.Ordinal));
         Assert.Empty(npgsql);
     }
 
     [Fact]
-    public void Only_Infrastructure_implements_IAppDbContext()
+    public void IAppDbContext_Implementations_AreOnlyInInfrastructure()
     {
         var implementations = SolutionAssemblies
             .SelectMany(assembly => assembly.GetTypes())
@@ -51,9 +51,9 @@ public class LayerTests
     }
 
     [Fact]
-    public void Api_and_Worker_are_the_only_hosts()
+    public void SolutionAssemblies_WithEntryPoint_AreOnlyApiAndWorker()
     {
-        var hosts = SolutionAssemblies
+        IOrderedEnumerable<string> hosts = SolutionAssemblies
             .Where(assembly => assembly.EntryPoint is not null)
             .Select(NameOf)
             .Order(StringComparer.Ordinal);

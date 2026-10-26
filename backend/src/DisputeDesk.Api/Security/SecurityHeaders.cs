@@ -15,7 +15,7 @@ public static class SecurityHeaders
         {
             context.Response.OnStarting(static state =>
             {
-                var headers = ((HttpResponse)state).Headers;
+                IHeaderDictionary headers = ((HttpResponse)state).Headers;
                 headers.XContentTypeOptions = "nosniff";
                 headers["Referrer-Policy"] = "no-referrer";
                 return Task.CompletedTask;

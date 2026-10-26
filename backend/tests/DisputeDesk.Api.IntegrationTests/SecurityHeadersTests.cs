@@ -16,29 +16,29 @@ public class SecurityHeadersTests(PostgresFixture postgres)
 
     [Theory]
     [MemberData(nameof(Responses))]
-    public async Task Every_response_carries_nosniff_and_no_referrer(string path, bool throwing, HttpStatusCode expectedStatus)
+    public async Task UseSecurityHeaders_AnyResponse_SetsNosniffAndNoReferrer(string path, bool throwing, HttpStatusCode expectedStatus)
     {
         await using var factory = new ApiFactory(
             postgres.ConnectionString,
             configureServices: throwing ? ThrowingHealthCheckService.Register : null);
-        using var client = factory.CreateClient();
+        using HttpClient client = factory.CreateClient();
 
-        var response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
+        HttpResponseMessage response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
 
         Assert.Equal(expectedStatus, response.StatusCode);
         AssertSecurityHeaders(response);
     }
 
     [Fact]
-    public async Task Kestrel_sends_no_Server_header()
+    public async Task Kestrel_AnyResponse_SendsNoServerHeader()
     {
         // TestServer never writes a Server header, so this runs the real Kestrel on a loopback port.
         await using var factory = new ApiFactory(postgres.ConnectionString);
         factory.UseKestrel(0);
         factory.StartServer();
-        using var client = factory.CreateClient();
+        using HttpClient client = factory.CreateClient();
 
-        var response = await client.GetAsync(new Uri("/health/live", UriKind.Relative), TestContext.Current.CancellationToken);
+        HttpResponseMessage response = await client.GetAsync(new Uri("/health/live", UriKind.Relative), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Empty(response.Headers.Server);

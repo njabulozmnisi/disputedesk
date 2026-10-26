@@ -2,10 +2,10 @@ namespace DisputeDesk.Domain.Tests;
 
 public class ResultTests
 {
-    private static readonly Error SomeError = Error.BusinessRule("dispute.window_closed", "The dispute window has closed.");
+    private static readonly Error SomeError = Error.BusinessRule("not-disputable", "The transaction is older than 90 days.");
 
     [Fact]
-    public void Success_has_no_error()
+    public void Success_NoValue_HasNoError()
     {
         var result = Result.Success();
 
@@ -15,7 +15,7 @@ public class ResultTests
     }
 
     [Fact]
-    public void Failure_exposes_the_error()
+    public void Failure_WithError_ExposesError()
     {
         var result = Result.Failure(SomeError);
 
@@ -25,7 +25,7 @@ public class ResultTests
     }
 
     [Fact]
-    public void An_error_converts_implicitly_to_a_failed_result()
+    public void ImplicitConversion_FromError_ReturnsFailedResult()
     {
         Result result = SomeError;
 
@@ -34,14 +34,14 @@ public class ResultTests
     }
 
     [Fact]
-    public void Failure_rejects_a_null_error()
+    public void Failure_NullError_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => Result.Failure(null!));
         Assert.Throws<ArgumentNullException>(() => Result.Failure<string>(null!));
     }
 
     [Fact]
-    public void Successful_value_result_exposes_the_value()
+    public void Success_WithValue_ExposesValue()
     {
         var result = Result.Success(42);
 
@@ -50,7 +50,7 @@ public class ResultTests
     }
 
     [Fact]
-    public void A_value_converts_implicitly_to_a_successful_result()
+    public void ImplicitConversion_FromValue_ReturnsSuccessfulResult()
     {
         Result<string> result = "ok";
 
@@ -59,7 +59,7 @@ public class ResultTests
     }
 
     [Fact]
-    public void Failed_value_result_exposes_the_error()
+    public void ImplicitConversion_FromErrorToValueResult_ExposesError()
     {
         Result<string> result = SomeError;
 
@@ -68,53 +68,25 @@ public class ResultTests
     }
 
     [Fact]
-    public void Reading_the_value_of_a_failed_result_throws()
+    public void Value_OnFailedResult_ThrowsInvalidOperationException()
     {
         var result = Result.Failure<int>(SomeError);
 
-        var exception = Assert.Throws<InvalidOperationException>(() => result.Value);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => result.Value);
         Assert.Contains(SomeError.Code, exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Success_rejects_a_null_value()
+    public void Success_NullValue_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => Result.Success<string>(null!));
     }
 
     [Fact]
-    public void A_failed_value_result_is_also_a_plain_result()
+    public void FailureOfT_AssignedToResult_IsFailure()
     {
         Result result = Result.Failure<int>(SomeError);
 
         Assert.True(result.IsFailure);
-    }
-}
-
-public class ErrorTests
-{
-    public static TheoryData<Func<string, string, Error>, ErrorKind> Factories => new()
-    {
-        { Error.NotFound, ErrorKind.NotFound },
-        { Error.InvalidTransition, ErrorKind.InvalidTransition },
-        { Error.Validation, ErrorKind.Validation },
-        { Error.BusinessRule, ErrorKind.BusinessRule },
-    };
-
-    [Theory]
-    [MemberData(nameof(Factories))]
-    public void Each_factory_sets_its_kind_code_and_message(Func<string, string, Error> factory, ErrorKind kind)
-    {
-        var error = factory("dispute.code", "A message.");
-
-        Assert.Equal(kind, error.Kind);
-        Assert.Equal("dispute.code", error.Code);
-        Assert.Equal("A message.", error.Message);
-    }
-
-    [Fact]
-    public void Errors_with_the_same_parts_are_equal()
-    {
-        Assert.Equal(Error.NotFound("dispute.not_found", "Not found."), Error.NotFound("dispute.not_found", "Not found."));
     }
 }

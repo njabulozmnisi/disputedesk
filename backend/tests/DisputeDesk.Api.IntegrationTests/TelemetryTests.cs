@@ -16,7 +16,7 @@ namespace DisputeDesk.Api.IntegrationTests;
 public class TelemetryTests(PostgresFixture postgres)
 {
     [Fact]
-    public async Task Log_records_written_inside_a_request_carry_its_trace_and_span_ids()
+    public async Task Log_InsideRequest_CarriesTraceAndSpanIds()
     {
         var telemetry = new TelemetryCapture();
         await using var factory = new ApiFactory(
@@ -26,77 +26,77 @@ public class TelemetryTests(PostgresFixture postgres)
                 telemetry.AddTo(services);
                 ThrowingHealthCheckService.Register(services);
             });
-        using var client = factory.CreateClient();
+        using HttpClient client = factory.CreateClient();
 
-        var response = await client.GetAsync(new Uri("/health/live", UriKind.Relative), TestContext.Current.CancellationToken);
+        HttpResponseMessage response = await client.GetAsync(new Uri("/health/live", UriKind.Relative), TestContext.Current.CancellationToken);
 
-        var traceId = await ReadTraceIdAsync(response);
-        var span = await telemetry.WaitForSpanAsync(activity => activity.Kind == ActivityKind.Server && activity.TraceId.ToHexString() == traceId);
+        string? traceId = await ReadTraceIdAsync(response);
+        Activity span = await telemetry.WaitForSpanAsync(activity => activity.Kind == ActivityKind.Server && activity.TraceId.ToHexString() == traceId);
         // Log providers belong to one host, so every record here is from this test's Api.
-        var record = Assert.Single(telemetry.Logs, log => log.CategoryName == typeof(UnhandledExceptionHandler).FullName);
+        LogRecord record = Assert.Single(telemetry.Logs, log => log.CategoryName == typeof(UnhandledExceptionHandler).FullName);
         Assert.Equal(span.TraceId, record.TraceId);
         Assert.Equal(span.SpanId, record.SpanId);
         // Structured: the template's placeholders arrive as attributes, not only as formatted text.
-        var attributes = record.Attributes ?? [];
+        IReadOnlyList<KeyValuePair<string, object?>> attributes = record.Attributes ?? [];
         Assert.Contains(new KeyValuePair<string, object?>("Method", "GET"), attributes);
         Assert.Contains(attributes, attribute => attribute is { Key: "{OriginalFormat}", Value: "Unhandled exception on {Method} {Endpoint}" });
     }
 
     [Fact]
-    public async Task A_request_records_the_http_server_duration_metric()
+    public async Task Request_AnyRoute_RecordsHttpServerDurationMetric()
     {
         var telemetry = new TelemetryCapture();
         await using var factory = new ApiFactory(postgres.ConnectionString, configureServices: telemetry.AddTo);
-        using var client = factory.CreateClient();
+        using HttpClient client = factory.CreateClient();
 
         await client.GetAsync(new Uri("/health/live", UriKind.Relative), TestContext.Current.CancellationToken);
 
-        var metric = await telemetry.WaitForMetricAsync(factory.Services, "http.server.request.duration");
+        Metric metric = await telemetry.WaitForMetricAsync(factory.Services, "http.server.request.duration");
         Assert.Equal(MetricType.Histogram, metric.MetricType);
     }
 
     [Fact]
-    public async Task Npgsql_commands_produce_client_spans()
+    public async Task NpgsqlCommand_Executed_ProducesClientSpan()
     {
         var telemetry = new TelemetryCapture();
         await using var factory = new ApiFactory(postgres.ConnectionString, configureServices: telemetry.AddTo);
-        var marker = $"npgsql-probe-{Guid.NewGuid():N}";
-        var sql = "SELECT 1 /* " + marker + " */";
+        string marker = $"npgsql-probe-{Guid.NewGuid():N}";
+        string sql = "SELECT 1 /* " + marker + " */";
 
-        await using (var scope = factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await db.Database.ExecuteSqlRawAsync(sql, TestContext.Current.CancellationToken);
         }
 
-        var span = await telemetry.WaitForSpanAsync(activity => HasTagContaining(activity, marker));
+        Activity span = await telemetry.WaitForSpanAsync(activity => HasTagContaining(activity, marker));
         Assert.Equal("Npgsql", span.Source.Name);
         Assert.Equal(ActivityKind.Client, span.Kind);
     }
 
     [Fact]
-    public async Task HttpClient_calls_produce_client_spans()
+    public async Task HttpClient_CallFromApi_ProducesClientSpan()
     {
         var telemetry = new TelemetryCapture();
         await using var factory = new ApiFactory(postgres.ConnectionString, configureServices: telemetry.AddTo);
         _ = factory.Services; // builds the host, and with it the tracer provider
-        var marker = $"http-probe-{Guid.NewGuid():N}";
+        string marker = $"http-probe-{Guid.NewGuid():N}";
         using var http = new HttpClient();
 
         // Nothing listens on port 1: the call fails fast but is still traced.
         await Assert.ThrowsAsync<HttpRequestException>(() =>
             http.GetAsync(new Uri($"http://127.0.0.1:1/{marker}"), TestContext.Current.CancellationToken));
 
-        var span = await telemetry.WaitForSpanAsync(activity => HasTagContaining(activity, marker));
+        Activity span = await telemetry.WaitForSpanAsync(activity => HasTagContaining(activity, marker));
         Assert.Equal("System.Net.Http", span.Source.Name);
         Assert.Equal(ActivityKind.Client, span.Kind);
     }
 
     [Fact]
-    public async Task Every_signal_identifies_the_Api_and_its_version()
+    public async Task AddDisputeDeskTelemetry_InApi_TagsEverySignalWithServiceAndVersion()
     {
         await using var factory = new ApiFactory(postgres.ConnectionString);
-        var expectedVersion = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        string? expectedVersion = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         Assert.False(string.IsNullOrWhiteSpace(expectedVersion));
 
         BaseProvider[] providers =
@@ -115,7 +115,7 @@ public class TelemetryTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task OTEL_SERVICE_NAME_overrides_the_default_service_name()
+    public async Task AddDisputeDeskTelemetry_OtelServiceNameSet_OverridesDefaultServiceName()
     {
         await using var factory = new ApiFactory(
             postgres.ConnectionString,
@@ -131,7 +131,7 @@ public class TelemetryTests(PostgresFixture postgres)
 
     private static async Task<string?> ReadTraceIdAsync(HttpResponseMessage response)
     {
-        using var problem = await JsonDocument.ParseAsync(
+        using JsonDocument problem = await JsonDocument.ParseAsync(
             await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken),
             cancellationToken: TestContext.Current.CancellationToken);
         return problem.RootElement.GetProperty("traceId").GetString();

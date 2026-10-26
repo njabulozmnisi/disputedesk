@@ -6,7 +6,7 @@ namespace DisputeDesk.ArchitectureTests;
 public partial class SourceRulesTests
 {
     [Fact]
-    public void Production_code_has_no_null_forgiving_justification_comments()
+    public void ProductionSource_NullForgivingJustificationComment_IsAbsent()
     {
         // Nullable.Extended.Analyzer skips a `!` that has a `// ! <reason>` comment above it,
         // which would quietly bypass the no-null-forgiving rule.
@@ -20,7 +20,7 @@ public partial class SourceRulesTests
     }
 
     [Fact]
-    public void The_scan_finds_the_production_source()
+    public void ProductionSourceFiles_Scan_FindsResultCs()
     {
         Assert.Contains(ProductionSourceFiles(), file => file.EndsWith("Result.cs", StringComparison.Ordinal));
     }
@@ -33,7 +33,7 @@ public partial class SourceRulesTests
 
     private static bool IsBuildOutput(string file)
     {
-        var parts = Path.GetRelativePath(SourceRoot, file).Split(Path.DirectorySeparatorChar);
+        string[] parts = Path.GetRelativePath(SourceRoot, file).Split(Path.DirectorySeparatorChar);
         return parts.Contains("bin") || parts.Contains("obj");
     }
 

@@ -9,12 +9,12 @@ public class ApiReferenceTests(PostgresFixture postgres)
     [Theory]
     [InlineData("/scalar")]
     [InlineData("/openapi/v1.json")]
-    public async Task Api_reference_is_served_in_Development(string path)
+    public async Task ApiReference_Development_IsServed(string path)
     {
         await using var factory = new ApiFactory(postgres.ConnectionString, environment: "Development");
-        using var client = factory.CreateClient();
+        using HttpClient client = factory.CreateClient();
 
-        var response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
+        HttpResponseMessage response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -22,12 +22,12 @@ public class ApiReferenceTests(PostgresFixture postgres)
     [Theory]
     [InlineData("/scalar")]
     [InlineData("/openapi/v1.json")]
-    public async Task Api_reference_is_absent_in_Production(string path)
+    public async Task ApiReference_Production_Returns404(string path)
     {
         await using var factory = new ApiFactory(postgres.ConnectionString, environment: "Production");
-        using var client = factory.CreateClient();
+        using HttpClient client = factory.CreateClient();
 
-        var response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
+        HttpResponseMessage response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
