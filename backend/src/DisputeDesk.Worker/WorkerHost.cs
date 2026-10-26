@@ -8,7 +8,7 @@ public static class WorkerHost
 {
     public static HostApplicationBuilder CreateBuilder(string[] args)
     {
-        var builder = Host.CreateApplicationBuilder(args);
+        HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
         builder.AddDisputeDeskTelemetry("disputedesk-worker", typeof(WorkerHost).Assembly);
         builder.Services.AddInfrastructure();
         return builder;

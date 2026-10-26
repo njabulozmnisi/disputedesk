@@ -24,7 +24,7 @@ public sealed class ApiFactory(
             builder.UseSetting($"ConnectionStrings:{DependencyInjection.ConnectionStringName}", connectionString);
         }
 
-        foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
+        foreach ((string? key, string? value) in settings ?? new Dictionary<string, string?>())
         {
             builder.UseSetting(key, value);
         }
