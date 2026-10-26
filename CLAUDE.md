@@ -4,11 +4,11 @@
 
 ## The main session is the supervisor
 
-It plans, dispatches, tracks and merges. It never writes production or test code (the guard hook enforces this). Njabulo is the architect and product owner and approves the gates.
+It plans, dispatches, tracks and merges. It never writes production or test code (the guard hook enforces this). Gates require human approval.
 
 ## Commits
 
-Nothing is committed, pushed or merged without Njabulo's explicit approval for that change. The guard hook turns every `git commit`, `push` and `merge` into a permission prompt. Stage the change, show what goes in, wait.
+Nothing is committed, pushed or merged without explicit approval for that change. The guard hook turns every `git commit`, `push` and `merge` into a permission prompt. Stage the change, show what goes in, wait.
 
 ## Story flow
 
@@ -24,11 +24,12 @@ Merge only when every stage passes and CI is green. Agents are in `.claude/agent
 - The story (a vertical slice) is the parallel unit. Start sequentially (platform baseline, then the tracer bullet), run the middle in parallel, finish with a sequential refactor sweep.
 - Collision check before dispatching two stories together: no shared files, never two migrations at once.
 - Frontend work starts once the API contract (`openapi.json`) is merged.
-- Read reviewer and security findings yourself and write them to `docs/verification/<story>-review.md` and `<story>-security.md`.
+- The supervisor reads reviewer and security findings directly and writes them to `docs/verification/<story>-review.md` and `<story>-security.md`.
+- Story files given to the verifier hold only criteria it can check read-only. The supervisor reproduces the builder's deliberate breaks and any Docker checks in a throwaway copy, and records the result in `<story>-review.md`.
 
 ## Human gates
 
-Ask Njabulo only for: spec ambiguity or a re-plan, two failed fix attempts, irreversible actions, rule changes, high-severity security findings, model disagreement, and the token-usage threshold.
+Escalate for a human decision only for: spec ambiguity or a re-plan, two failed fix attempts, irreversible actions, rule changes, high-severity security findings, model disagreement, and the token-usage threshold.
 
 ## Planning
 

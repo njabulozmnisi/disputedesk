@@ -10,7 +10,7 @@
       "linked": true,
       "recentSimSwap": false,
       "login": "customer-a",
-      "purpose": "Linked customer. Later stories give her disputes in every status.",
+      "purpose": "Linked customer. Later stories give this customer disputes in every status.",
       "accounts": [
         { "accountNumber": "1000000011", "type": "cheque", "currency": "ZAR" },
         { "accountNumber": "1000000012", "type": "savings", "currency": "ZAR" }
@@ -39,7 +39,7 @@
       "linked": false,
       "recentSimSwap": true,
       "login": "customer-c",
-      "purpose": "Has a login but is not linked. The SIM-swap check fails for her number, so linking is refused.",
+      "purpose": "Has a login but is not linked. The SIM-swap check fails for this customer's number, so linking is refused.",
       "accounts": [
         { "accountNumber": "1000000031", "type": "cheque", "currency": "ZAR" }
       ]

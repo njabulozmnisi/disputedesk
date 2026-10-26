@@ -12,9 +12,9 @@ flowchart TB
     classDef agent fill:#bbf7d0,stroke:#15803d,color:#111
     classDef artifact fill:#f3f4f6,stroke:#6b7280,color:#111
 
-    N([Njabulo: architect and product owner]):::human
+    N([Human approval: architecture and product decisions]):::human
 
-    subgraph P1["Phase 1: Plan (BMAD skills, Njabulo in the loop)"]
+    subgraph P1["Phase 1: Plan (BMAD skills, human in the loop)"]
         G[grill: batched rounds, recommended answers]:::skill --> GL[(docs/glossary.md, decision records)]:::artifact
         G --> R[bmad-deep-recon: dispute lifecycle, event versioning]:::skill
         R --> B[bmad-product-brief]:::skill
@@ -50,7 +50,7 @@ The main Claude Code session is the supervisor: it dispatches, tracks and merges
 ```mermaid
 sequenceDiagram
     autonumber
-    actor N as Njabulo
+    actor N as Human approver
     participant S as Supervisor (main session)
     participant B as Builder (Opus backend / Sonnet frontend)
     participant V as Verifier (Sonnet → GPT-6 Astra via Copilot CLI)
@@ -68,7 +68,7 @@ sequenceDiagram
     opt High-stakes story (auth, identity, customer data, money, migrations)
         S->>SEC: Security review
         SEC-->>S: {status: pass|findings}
-        SEC-->>N: High-severity findings go straight to Njabulo
+        SEC-->>N: High-severity findings escalated for a decision
     end
     S->>Q: QA in that worktree
     Q->>Q: stack lock, walk every criterion: browser → network → DB (read-only role) → events, ZAP baseline
@@ -81,7 +81,7 @@ sequenceDiagram
     S->>S: Study note to ~/disputedesk-study, review-debt counter +1
 ```
 
-A failed stage sends the story back to its builder with the findings. After two failed attempts the builder returns `blocked` and the supervisor asks Njabulo.
+A failed stage sends the story back to its builder with the findings. After two failed attempts the builder returns `blocked` and the supervisor escalates for a decision.
 
 ## 3. What enforces the rules
 
@@ -103,11 +103,11 @@ flowchart LR
         CIx[build, tests, architecture tests, OpenAPI drift, floor guard, security scans]:::ci
     end
 
-    GU --> G1[Commit, push, merge → Njabulo approves]
+    GU --> G1[Commit, push, merge → explicit approval]
     GU --> G2[Each agent writes only its own area; the supervisor writes no code]
     GU --> G3[No hook bypass, force push, hard reset, prune]
     GU --> G4[No system clock, suppressions, DB mocks, banned packages in .NET code]
-    GU --> G5[terraform apply/destroy and aws → Njabulo]
+    GU --> G5[terraform apply/destroy and aws → explicit approval]
     GU --> G6[No forbidden terms anywhere]
     SC --> G7[Agent must end with the status contract]
     PC --> G8[No secrets or forbidden terms reach history]

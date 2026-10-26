@@ -15,22 +15,22 @@ claims_unverified: 10
 
 # Technical research: event versioning
 
-**Decision this research serves:** what is the simplest event envelope, schema and versioning approach we can defend for DisputeDesk's two domain events? They go through a transactional outbox to Redpanda, one Worker relays and consumes them, and the partition key is the dispute ID.
+**Decision this research serves:** what is the simplest event envelope, schema and versioning approach DisputeDesk can defend for DisputeDesk's two domain events? They go through a transactional outbox to Redpanda, one Worker relays and consumes them, and the partition key is the dispute ID.
 
 ## Executive summary
 
 **Recommendation:**
 
-- **Envelope.** Use CloudEvents 1.0 attribute names (`id`, `source`, `type`, `specversion`, `subject`, `time`, `datacontenttype`, `dataschema`). Send them as one JSON object in the Kafka message value: this is CloudEvents *structured mode*. We take only the names. We add no SDK and no new package.
-- **Versioning.** Put the major version in `type`, for example `disputedesk.dispute.status-changed.v1`. Changes within a version are additive only. A breaking change gets a new `.v2` type, and we publish v1 and v2 side by side for a while.
-- **Schemas.** Commit the C# records in DisputeDesk.Contracts, plus one JSON Schema file per type. These are the contract. We use no schema registry.
+- **Envelope.** Use CloudEvents 1.0 attribute names (`id`, `source`, `type`, `specversion`, `subject`, `time`, `datacontenttype`, `dataschema`). Send them as one JSON object in the Kafka message value: this is CloudEvents *structured mode*. Only the names are adopted. No SDK and no new package are added.
+- **Versioning.** Put the major version in `type`, for example `disputedesk.dispute.status-changed.v1`. Changes within a version are additive only. A breaking change gets a new `.v2` type, and v1 and v2 are published side by side for a while.
+- **Schemas.** Commit the C# records in DisputeDesk.Contracts, plus one JSON Schema file per type. These are the contract. No schema registry is used.
 - **Tracing.** Store `traceparent` in the outbox row when the row is written. The relay copies it into a plain Kafka `traceparent` header.
 - **Consumers.** Each consumer deduplicates on the event `id` through an inbox table, inside the same transaction as its own changes.
 
 Three findings drive this:
 
-1. **CloudEvents already defines the dedupe key we need.** `source` + `id` must be unique for each distinct event. A re-sent event "MAY have the same `id`", and consumers "MAY assume" that a repeated pair is a duplicate [1]. Microsoft's Idempotent Consumer guidance names that pair as the stable deduplication key [15]. So the CloudEvents names cost nothing and give us a standard to point to.
-2. **Versioning in the type name is what the spec itself suggests.** For a compatible change, the type "should generally stay the same". For an incompatible one, the producer changes the type and is "encouraged to produce both the old event and the new event for some time" [4]. A registry enforces compatibility modes (BACKWARD by default) across many independent teams [5][6]. We have one producer and one consumer in one repo, so a contract test does the same job.
+1. **CloudEvents already defines the dedupe key DisputeDesk needs.** `source` + `id` must be unique for each distinct event. A re-sent event "MAY have the same `id`", and consumers "MAY assume" that a repeated pair is a duplicate [1]. Microsoft's Idempotent Consumer guidance names that pair as the stable deduplication key [15]. So the CloudEvents names cost nothing and give a standard to point to.
+2. **Versioning in the type name is what the spec itself suggests.** For a compatible change, the type "should generally stay the same". For an incompatible one, the producer changes the type and is "encouraged to produce both the old event and the new event for some time" [4]. A registry enforces compatibility modes (BACKWARD by default) across many independent teams [5][6]. DisputeDesk has one producer and one consumer in one repo, so a contract test does the same job.
 3. **The outbox delivers at least once, by design.** The relay "might publish a message more than once" [13]. Kafka's idempotent producer only covers the client's internal retries, and librdkafka (the library under the .NET client) has it off by default [16]. Consumer dedupe on `id` is therefore required, not optional [15].
 
 **Biggest caveat:** OpenTelemetry's messaging conventions are still *Development*, not Stable [7]. The .NET Kafka instrumentation is a prerelease package, and its documentation does not say whether it writes trace headers [12]. Inject `traceparent` by hand (about ten lines) rather than depend on that package.
@@ -39,7 +39,7 @@ Three findings drive this:
 
 CloudEvents 1.0 requires `id`, `source`, `specversion` (value `1.0`) and `type`. It defines `datacontenttype`, `dataschema`, `subject` and `time` as optional [1]. The semantics that matter here:
 
-- `subject` names the thing the event is about, "in the context of the event producer". Middleware can filter on it without reading `data` [1]. The dispute ID fits here (our inference).
+- `subject` names the thing the event is about, "in the context of the event producer". Middleware can filter on it without reading `data` [1]. The dispute ID fits here (this report's inference).
 - `time` is RFC 3339 [1].
 - `type` "might include information such as the version". The spec's own example is `com.example.object.deleted.v2` [1].
 - `dataschema` should change URI when the schema changes incompatibly [1].
@@ -51,9 +51,9 @@ The Kafka protocol binding defines two modes [2]:
 
 Either way, the binding maps the producer's record key to the Kafka key by default [2], so the dispute-ID key needs no extension. (The spec pages are marked `1.0.3-wip` on the main branch; the wire `specversion` is still `1.0` [1][2].)
 
-**Is it worth adopting the names?** Yes, as names. Our own envelope would need the same fields anyway: eventId, eventType, occurredAt, aggregate ID. CloudEvents gives each one a defined meaning, including the duplicate rule. **Structured mode** is the simpler choice. It keeps the whole event in one JSON document, which is what the outbox row already stores, what Redpanda Console shows, and what a JSON Schema validates. Binary mode spreads the envelope across headers, so the outbox would need a header map and the consumer would rebuild the event. Its advantage, routing without parsing the value, does not matter with a single consumer. The CloudEvents .NET SDK is not needed to produce this JSON. Leave it out.
+**Is it worth adopting the names?** Yes, as names. A custom envelope would need the same fields anyway: eventId, eventType, occurredAt, aggregate ID. CloudEvents gives each one a defined meaning, including the duplicate rule. **Structured mode** is the simpler choice. It keeps the whole event in one JSON document, which is what the outbox row already stores, what Redpanda Console shows, and what a JSON Schema validates. Binary mode spreads the envelope across headers, so the outbox would need a header map and the consumer would rebuild the event. Its advantage, routing without parsing the value, does not matter with a single consumer. The CloudEvents .NET SDK is not needed to produce this JSON. Leave it out.
 
-**Field mapping**, from the names you asked about to CloudEvents:
+**Field mapping**, from the requested names to CloudEvents:
 
 | Asked for | CloudEvents | Value |
 |---|---|---|
@@ -70,7 +70,7 @@ Either way, the binding maps the producer's record key to the Kafka key by defau
 
 The CloudEvents primer leaves the versioning scheme to the producer. It also says that compatible changes keep the type, that incompatible changes change it, and that both versions should be published during a transition. It treats `dataschema` as informational [4]. That maps directly to the rules here:
 
-- **Within a version:** add optional fields only. Never rename, remove, or change the type or meaning of a field. Consumers ignore fields they do not know. (That last rule is a reader policy we choose. We found no authoritative rule for additive change to plain JSON. Confluent covers it only through JSON Schema open and closed content models [5].)
+- **Within a version:** add optional fields only. Never rename, remove, or change the type or meaning of a field. Consumers ignore fields they do not know. (That last rule is a chosen reader policy. No authoritative rule for additive change to plain JSON was found. Confluent covers it only through JSON Schema open and closed content models [5].)
 - **Breaking change:** create a new `.v2` type with its own C# record and schema file. The producer writes both types for a period, consumers move to v2, then v1 stops.
 
 **Registries:**
@@ -78,7 +78,7 @@ The CloudEvents primer leaves the versioning scheme to the producer. It also say
 - **Confluent Schema Registry** checks each new schema against earlier versions. Its modes are BACKWARD (the default), FORWARD, FULL, the `_TRANSITIVE` variant of each, and NONE. It supports Avro, Protobuf and JSON Schema [5].
 - **Redpanda** builds a registry into the broker binary. It supports the same three formats and the same modes, with BACKWARD as the default [6].
 
-Microsoft's choreography guidance recommends a registry when "multiple independent services consume the same events" [20]. That is not our case. **Recommendation: no registry.** The contract is the C# record in DisputeDesk.Contracts plus a committed JSON Schema (`contracts/events/<type>.schema.json`). A unit test checks that serialized samples validate against the schema and that v1 sample JSON still deserializes. Redpanda's registry needs no extra container, so moving to it later is cheap. It goes in the production path.
+Microsoft's choreography guidance recommends a registry when "multiple independent services consume the same events" [20]. That is not the DisputeDesk case. **Recommendation: no registry.** The contract is the C# record in DisputeDesk.Contracts plus a committed JSON Schema (`contracts/events/<type>.schema.json`). A unit test checks that serialized samples validate against the schema and that v1 sample JSON still deserializes. Redpanda's registry needs no extra container, so moving to it later is cheap. It goes in the production path.
 
 ## 3. Trace context through the outbox
 
@@ -98,19 +98,19 @@ The CloudEvents distributed-tracing extension "is not intended to replace the pr
 ## 4. Consumer idempotency
 
 - **Duplicates are expected.** The outbox guarantees publication only if the transaction commits, and the relay may publish twice [13]. Microsoft lists Kafka among at-least-once brokers. Duplicates come from producer retries, missed acknowledgements and consumer crashes [15].
-- **Producer setting.** Set `EnableIdempotence = true` on the producer. The librdkafka default is `false` [16], while the Java client defaults to `true` [17], so do not assume. It stops broker-retry duplicates. It does not stop the relay re-sending a row after a crash between producing and marking the row published (our inference from the scope of the setting [16][17]).
+- **Producer setting.** Set `EnableIdempotence = true` on the producer. The librdkafka default is `false` [16], while the Java client defaults to `true` [17], so do not assume. It stops broker-retry duplicates. It does not stop the relay re-sending a row after a crash between producing and marking the row published (this report's inference from the scope of the setting [16][17]).
 - **Inbox table.** The consumer inserts `(consumer_name, event_id)` into an `inbox` table with a unique constraint, in the same transaction as its side effects. A conflict means the event is a duplicate: acknowledge it and skip [14][15]. Key on the consumer name as well, so a second consumer later is not blocked by the first [15].
 - **Retention.** Keep inbox rows at least as long as redelivery is possible [15]. With Kafka that means the topic's retention period.
 - **Natural idempotency.** Carry the resulting state (`toStatus`), not a delta, so that applying an event twice gives the same result [15]. Optionally add the dispute's version number so that stale or out-of-order events can be rejected [15]. Ordering already holds per dispute because the key is the dispute ID. Keep **both event types on one topic**, or that ordering is lost between them.
 
 ## 5. DisputeStatusChanged payload and POPIA
 
-POPIA section 10 lets personal information be processed only if it is "adequate, relevant and not excessive" for the purpose [18]. (The source is an unofficial reproduction of the Act; confirm against the gazetted text.) Fowler separates two styles [19]:
+POPIA section 10 lets personal information be processed only if it is "adequate, relevant and not excessive" for the purpose [18]. (The source is an unofficial reproduction of the Act; confirm against the gazetted text.) A widely cited article separates two styles [19]:
 
 - **Event Notification:** a thin payload with IDs, so the receiver calls back for details.
 - **Event-Carried State Transfer:** the changed data travels in the event, at the cost of "lots of copies".
 
-Every copy in a Kafka log is another place personal information sits until retention expires. Our inference: carry state about the dispute, never about the person.
+Every copy in a Kafka log is another place personal information sits until retention expires. This report's inference: carry state about the dispute, never about the person.
 
 **Fields:**
 
@@ -178,7 +178,7 @@ The Kafka record has key `dsp_01JB7Q8M2X` and headers `content-type: application
 - Does `OpenTelemetry.Instrumentation.ConfluentKafka` inject or extract `traceparent` automatically? Its README says nothing [12]. Answer by reading the package source or doing a quick spike. It does not change the recommendation.
 - Does the gazetted text of POPIA section 10 match the reproduction used here, and do sections 14 (retention) and 19 (security safeguards) set limits on Kafka log retention? Answer from the Information Regulator's text.
 - Is W3C Trace Context Level 2 now a Recommendation? Only Level 1 was checked. This does not matter for `traceparent` version `00`.
-- We found no authoritative, format-neutral rule for additive change to plain JSON. The "ignore unknown fields" reader rule is our own policy.
+- No authoritative, format-neutral rule for additive change to plain JSON was found. The "ignore unknown fields" reader rule is a project policy.
 
 ## Source appendix
 

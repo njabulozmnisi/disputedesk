@@ -34,7 +34,7 @@ The SPA never decides who may see what. Every rule here (which rows show Dispute
 | 5 | Disputes | `/disputes` | Nav | linked | Open and closed disputes, newest first |
 | 6 | Dispute detail | `/disputes/:disputeId` | A dispute row; a status badge on a transaction row; after submit | linked | Summary, timeline, Withdraw where allowed, guidance after Rejected |
 | — | Session ended | `/signed-out?reason=expired` | Any 401 while signed in | anonymous | Explain, Sign in again |
-| — | Not found | any unknown route; 404 on a dispute | — | any | Same screen for unknown and not-yours |
+| — | Not found | any unknown route; 404 on a dispute | — | any | Same screen for unknown and another customer's |
 
 Navigation: two destinations only, **Transactions** and **Disputes**, plus **Sign out**. Phone: bottom tab bar. From 768px: top bar. The linking screens show the wordmark and Sign out only, because nothing else is reachable while unlinked.
 
@@ -174,19 +174,19 @@ Linking must never reveal whether a person banks here, whether their details mat
 2. **Neutral message (2b, top).** Always: "If these details match our records, we've sent a code to the cellphone number we hold for you." No masked number is shown, since showing one would confirm a match.
 3. **OTP (2b).** "Didn't get a code? Start again" (back to 2a, which invalidates the earlier challenge, subject to rate limits). The code is valid for 5 minutes; the screen says "The code expires 5 minutes after we send it" without a live countdown.
 4. **Wrong code.** "That code didn't work. You have {n} tries left." Shown identically for a wrong code, an expired code, and a login with no active challenge (no match, already linked, or failed SIM-swap check), because the API answers all of them as a wrong code [ASSUMPTION: showing tries left is acceptable].
-5. **Lockout (after 3).** One screen for every case, including the SIM-swap failure: heading "We can't link you online", body "Please contact the bank. If you think you mistyped your details or the code, you can start again." Secondary button "Start again". Showing different copy for the SIM-swap case would leak the check's result, so the FR-6 copy is used for all lockouts [ASSUMPTION: Njabulo confirms merging the two states].
+5. **Lockout (after 3).** One screen for every case, including the SIM-swap failure: heading "We can't link you online", body "Please contact the bank. If you think you mistyped your details or the code, you can start again." Secondary button "Start again". Showing different copy for the SIM-swap case would leak the check's result, so the FR-6 copy is used for all lockouts [ASSUMPTION: merging the two states requires explicit approval].
 6. **Rate limited.** The 429 state above. Copy does not distinguish per-login and per-IP limits.
 7. **Success.** Straight to Transactions with a toast "Your login is linked." No new sign-in.
 
 ## Accessibility Floor
 
-Behavioural. Visual contrast is in DESIGN.md, *Contrast*. The PRD has no accessibility NFR; this spine sets the floor at **WCAG 2.2 AA** [ASSUMPTION: Njabulo adds this as an NFR].
+Behavioural. Visual contrast is in DESIGN.md, *Contrast*. The PRD has no accessibility NFR; this spine sets the floor at **WCAG 2.2 AA** [ASSUMPTION: open, decision needed on adding this as an NFR].
 
 - Every screen has one `h1` (the title) and landmark regions (`header`, `nav`, `main`). Route changes move focus to the `h1` and update `document.title` ("Transactions · DisputeDesk").
 - Status is never conveyed by colour alone: badge text and icon always. Not-disputable rows say why in text.
 - Forms: visible labels (no placeholder-only fields), errors tied with `aria-describedby`, an error summary that takes focus, required fields marked in text.
 - Async results are announced through one polite live region: "Dispute submitted", "20 more transactions loaded", "Dispute withdrawn". Errors use `role="alert"`.
-- **2.2 specifics:** focus is never hidden under the phone bottom bar (`scroll-padding-bottom` equals its height); targets are at least 24px (we use 44px); linking is an accessible authentication flow (paste and one-time-code autofill allowed, no puzzle); the review step never asks again for what was entered (redundant entry); "Contact the bank" guidance sits in the same place on every linking state (consistent help); no dragging anywhere.
+- **2.2 specifics:** focus is never hidden under the phone bottom bar (`scroll-padding-bottom` equals its height); targets are at least 24px (DisputeDesk uses 44px); linking is an accessible authentication flow (paste and one-time-code autofill allowed, no puzzle); the review step never asks again for what was entered (redundant entry); "Contact the bank" guidance sits in the same place on every linking state (consistent help); no dragging anywhere.
 - Amounts are read as words where needed: a debit shows as "R849.00" and a credit as "+R1 200.00"; each carries an accessible label ("R849.00 out", "R1 200.00 in"); masked numbers are labelled "card ending 3456".
 - Times show "SAST" and carry a `<time datetime>` in ISO 8601 UTC.
 - Works at 200% zoom and at 320 CSS px reflow without horizontal scrolling. Respects `prefers-reduced-motion` (no motion beyond 150ms fades anyway) and `prefers-color-scheme`.
@@ -215,29 +215,29 @@ English only, ZAR only (PRD §6.2). Dates: "Mon 26 Oct" in lists, "26 Oct 2026, 
 
 Journey names follow PRD §2.4.
 
-### UJ-1: Thandi signs up, links and disputes a transaction she doesn't recognise
+### UJ-1: Thandi signs up, links and disputes an unrecognised transaction
 
-Thandi, a teacher in Durban, on her phone at break, sees an R849.00 debit from "ZXP*GLOBALSVCS" she has never heard of.
+Thandi, a teacher in Durban, on a phone at break, sees an R849.00 debit from "ZXP*GLOBALSVCS", a name Thandi has never heard of.
 
-1. On the start page she taps **Create a login**. The hosted sign-up page carries DisputeDesk's wordmark and cobalt button. She verifies her email.
-2. Back in DisputeDesk she lands on **Link your login**: ID number, account number, **Continue**.
-3. She reads: "If these details match our records, we've sent a code to the cellphone number we hold for you." Her phone offers the code from the SMS; she taps it, the six cells fill, and it submits.
-4. Toast "Your login is linked." She is on **Transactions**, newest first. The R849.00 row has a **Dispute** link; the pending fuel row above it says "Pending. You can dispute it once it has settled."
-5. She taps **Dispute**, picks **Unrecognised**, writes "I've never bought from this merchant", taps **Continue**, checks the review card (Disputed amount R849.00) and taps **Submit dispute**.
+1. On the start page Thandi taps **Create a login**. The hosted sign-up page carries DisputeDesk's wordmark and cobalt button. Thandi verifies the email address.
+2. Back in DisputeDesk Thandi lands on **Link your login**: ID number, account number, **Continue**.
+3. Thandi reads: "If these details match our records, we've sent a code to the cellphone number we hold for you." The phone offers the code from the SMS; one tap fills the six cells, and it submits.
+4. Toast "Your login is linked." Thandi is on **Transactions**, newest first. The R849.00 row has a **Dispute** link; the pending fuel row above it says "Pending. You can dispute it once it has settled."
+5. Thandi taps **Dispute**, picks **Unrecognised**, writes "I've never bought from this merchant", taps **Continue**, checks the review card (Disputed amount R849.00) and taps **Submit dispute**.
 6. **Climax:** the dispute detail opens with "Dispute submitted" and a timeline of one entry: Submitted, You, 26 Oct 2026, 09:14 SAST. Back on Transactions the R849.00 row now shows the **Submitted** badge instead of Dispute. Under two minutes, no phone call.
-7. She taps **Sign out**; both sessions end and she is on the start page.
+7. Thandi taps **Sign out**; both sessions end and the start page shows.
 
-Failure: her signal drops on Submit. The notice says she won't create a second dispute; **Try again** replays the same key and lands on the same detail.
+Failure: the signal drops on Submit. The notice says a retry won't create a second dispute; **Try again** replays the same key and lands on the same detail.
 
-### UJ-2: Sipho withdraws a dispute he no longer needs
+### UJ-2: Sipho withdraws a dispute that is no longer needed
 
 1. Sipho opens **Disputes**, sees "TechNova Online, Not received, Under review" under Open, and opens it.
-2. He taps **Withdraw dispute**. The dialog explains "You can't dispute this transaction again after you withdraw." He types "Parcel arrived" and confirms.
+2. Sipho taps **Withdraw dispute**. The dialog explains "You can't dispute this transaction again after you withdraw." Sipho types "Parcel arrived" and confirms.
 3. **Climax:** the badge changes to **Withdrawn**, the timeline ends "You withdrew this dispute. 'Parcel arrived'", the Withdraw button is gone, and the dispute moves to Closed.
 
 ### UJ-4 as seen by a customer: a dispute is prioritised
 
-Lindiwe opens her Online Gadgets dispute. The timeline shows Submitted (You), Under review (The bank), then **Under review (prioritised)** (The bank) with no reason given and no date promised. She can still withdraw.
+Lindiwe opens the Online Gadgets dispute. The timeline shows Submitted (You), Under review (The bank), then **Under review (prioritised)** (The bank) with no reason given and no date promised. Lindiwe can still withdraw.
 
 ### UJ-3 as seen by a customer: an outcome arrives
 
