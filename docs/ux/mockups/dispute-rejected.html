@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dispute · DisputeDesk</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar__in">
+  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <nav class="topnav" aria-label="Main"><a href="transactions.html">Transactions</a><a href="disputes.html" aria-current="page">Disputes</a></nav>
+  <a class="signout" href="start.html">Sign out</a>
+</div></header>
+<p class="mock-note">Mockup: guidance after a Rejected outcome is static text. Wrong amount shows transaction and expected amounts. <a href="index.html">All screens</a></p>
+<main class="wrap stack-lg">
+<div><a class="back" href="disputes.html">Back to disputes</a></div>
+
+<div class="split stack-lg">
+<section class="card summary-card stack" aria-labelledby="h1">
+<h1 class="title" id="h1">Karoo Fuel Stop, Pinetown</h1>
+<div><span class="badge badge--rejected"><span class="sr-only">Status: </span>Resolved · Rejected</span></div>
+<div><p class="caption">Disputed amount</p><p class="amount amount--hero">R500.00</p></div>
+<dl class="summary">
+<dt>Reason</dt><dd>Wrong amount</dd>
+<dt>Transaction amount</dt><dd class="amount">R1&#8239;150.00</dd><dt>Expected amount</dt><dd class="amount">R650.00</dd><dt>Transaction date</dt><dd>Tue 15 Sep 2026</dd>
+<dt>Card</dt><dd>492345•• •••• 3456</dd>
+<dt>Reference</dt><dd class="ref">9B0C77D5</dd>
+</dl>
+
+</section>
+<section class="stack" aria-labelledby="tl">
+<h2 class="heading" id="tl">Timeline</h2>
+<ol class="timeline"><li><p class="step">You submitted this dispute.</p><p class="meta"><span class="actor">You</span><time datetime="2026-09-16T10:40:00Z">16 Sep 2026, 12:40 SAST</time></p><p class="quote">“The pump showed R650.00.”</p></li><li><p class="step">The bank started reviewing your dispute.</p><p class="meta"><span class="actor">The bank</span><time datetime="2026-09-17T07:00:00Z">17 Sep 2026, 09:00 SAST</time></p></li><li><p class="step">Resolved · Rejected. The bank didn't uphold your dispute.</p><p class="meta"><span class="actor">The bank</span><time datetime="2026-09-24T12:15:00Z">24 Sep 2026, 14:15 SAST</time></p><p class="quote">“The merchant sent a signed slip for R1&#8239;150.00, so we can't reverse the difference.”</p></li></ol>
+<div class="surface stack"><h3 class="heading">If you disagree with this outcome</h3>
+<p>You can complain to the bank first. If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers.</p></div>
+
+</section>
+</div>
+</main>
+<footer class="footer"><div class="footer__in">
+  <p>Demo data only. Every name, number and amount shown here is made up.</p>
+  <p>Your details are used only to show your transactions and handle your disputes.</p>
+</div></footer>
+<nav class="tabbar" aria-label="Main (phone)">
+  <a href="transactions.html"><span aria-hidden="true">☰</span>Transactions</a>
+  <a href="disputes.html" aria-current="page"><span aria-hidden="true">⚑</span>Disputes</a>
+</nav>
+</body>
+</html>

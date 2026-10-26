@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Too many attempts · DisputeDesk</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar__in">
+  <a class="brand" href="link.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="signout" href="start.html">Sign out</a>
+</div></header>
+<p class="mock-note">Mockup: 429 from the linking rate limit; minutes come from Retry-After, rounded up. <a href="index.html">All screens</a></p>
+<main class="wrap wrap--form stack-lg">
+<div class="stack"><h1 class="title">Link your login</h1></div>
+<div class="notice notice--danger" role="alert"><strong>Too many attempts</strong><span>Try again in 12 minutes.</span></div>
+<form class="surface stack" aria-disabled="true">
+<div class="field"><label for="idn">ID number</label><input class="input" id="idn" disabled></div>
+<div class="field"><label for="acc">Account number</label><input class="input" id="acc" disabled></div>
+<span class="btn btn--primary btn--block" aria-disabled="true">Continue</span>
+</form>
+<p class="caption">Can't link online? Contact the bank.</p>
+</main>
+<footer class="footer"><div class="footer__in">
+  <p>Demo data only. Every name, number and amount shown here is made up.</p>
+  <p>Your details are used only to show your transactions and handle your disputes.</p>
+</div></footer>
+</body>
+</html>

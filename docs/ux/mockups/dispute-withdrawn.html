@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dispute · DisputeDesk</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar__in">
+  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <nav class="topnav" aria-label="Main"><a href="transactions.html">Transactions</a><a href="disputes.html" aria-current="page">Disputes</a></nav>
+  <a class="signout" href="start.html">Sign out</a>
+</div></header>
+<p class="mock-note">Mockup: Withdrawn is final; the transaction can't be disputed again. <a href="index.html">All screens</a></p>
+<main class="wrap stack-lg">
+<div><a class="back" href="disputes.html">Back to disputes</a></div>
+
+<div class="split stack-lg">
+<section class="card summary-card stack" aria-labelledby="h1">
+<h1 class="title" id="h1">TechNova Online</h1>
+<div><span class="badge badge--withdrawn"><span class="sr-only">Status: </span>Withdrawn</span></div>
+<div><p class="caption">Disputed amount</p><p class="amount amount--hero">R1&#8239;899.00</p></div>
+<dl class="summary">
+<dt>Reason</dt><dd>Not received</dd>
+<dt>Transaction date</dt><dd>Fri 4 Sep 2026</dd>
+<dt>Card</dt><dd>492345•• •••• 3456</dd>
+<dt>Reference</dt><dd class="ref">E2D5A940</dd>
+</dl>
+
+</section>
+<section class="stack" aria-labelledby="tl">
+<h2 class="heading" id="tl">Timeline</h2>
+<ol class="timeline"><li><p class="step">You submitted this dispute.</p><p class="meta"><span class="actor">You</span><time datetime="2026-09-05T17:20:00Z">5 Sep 2026, 19:20 SAST</time></p></li><li><p class="step">The bank started reviewing your dispute.</p><p class="meta"><span class="actor">The bank</span><time datetime="2026-09-07T07:45:00Z">7 Sep 2026, 09:45 SAST</time></p></li><li><p class="step">You withdrew this dispute.</p><p class="meta"><span class="actor">You</span><time datetime="2026-09-09T15:02:00Z">9 Sep 2026, 17:02 SAST</time></p><p class="quote">“Parcel arrived”</p></li></ol>
+
+
+</section>
+</div>
+</main>
+<footer class="footer"><div class="footer__in">
+  <p>Demo data only. Every name, number and amount shown here is made up.</p>
+  <p>Your details are used only to show your transactions and handle your disputes.</p>
+</div></footer>
+<nav class="tabbar" aria-label="Main (phone)">
+  <a href="transactions.html"><span aria-hidden="true">☰</span>Transactions</a>
+  <a href="disputes.html" aria-current="page"><span aria-hidden="true">⚑</span>Disputes</a>
+</nav>
+</body>
+</html>

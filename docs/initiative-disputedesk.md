@@ -1,0 +1,106 @@
+---
+type: initiative
+title: "Customers dispute their own card transactions online and follow each dispute to its outcome"
+sources:
+  - docs/prd/prd.md
+  - docs/product-brief/product-brief.md
+  - docs/research/dispute-lifecycle/dispute-lifecycle.md
+  - docs/research/event-versioning/event-versioning.md
+companions:
+  - docs/glossary.md
+risk: high
+---
+
+# Customers dispute their own card transactions online and follow each dispute to its outcome
+
+## Description
+
+DisputeDesk is done when a linked customer of a South African retail bank can see their recent transactions, raise a dispute on a disputable transaction, and follow it on its timeline to Resolved or Withdrawn, while operations tools and the Worker move disputes through one role-protected API under one set of rules and every change leaves an audit entry and a dispute event. It answers the take-home brief (front end and back end, with a historic view of disputed transactions) and is judged on ten assessment areas, so each area is shown once, done well. The PRD holds the testable detail; this ticket distils it.
+
+## Outcome
+
+Customers dispute a transaction in under two minutes without phoning the bank, and reviewers can run the whole system with one command and trust its tests; the signals are SM-1 to SM-4 (prd §8), measured from the NFR-OBS-3 metrics.
+
+## Requirements
+
+R1 (FR-1): A person creates a login and verifies their email on the identity provider's hosted pages, themed with DisputeDesk's design tokens; the emails land in Mailpit and an unverified login cannot sign in.
+R2 (FR-2, NFR-SEC-1): A verified login signs in through the BFF (code flow with PKCE, Api host as confidential client); the browser holds only an HttpOnly, Secure, SameSite=Strict session cookie, no token is ever browser-visible, unsafe methods need the antiforgery header, and the session ends after 15 minutes idle or 12 hours.
+R3 (FR-3): Signing out ends both the DisputeDesk and the identity provider session; a replayed old cookie gets 401.
+R4 (FR-4, NFR-SEC-4): An unlinked login starts linking with an ID number and account number and gets the same status and body whether the details match, match nothing, or match a customer with a linked login; the OTP goes off the request path, only on a match with no linked login, to the cellphone on the bank's record; malformed input gets 400 naming the field without echoing it; starting again invalidates the earlier challenge.
+R5 (FR-4, FR-6): The SIM-swap check runs before any OTP is sent and fails closed on failure, error or timeout, with an unchanged response and an audit entry; codes entered afterwards behave as wrong codes, ending in "We can't link you online. Please contact the bank." (seeded customer C).
+R6 (FR-4, NFR-SEC-4): At most 3 OTPs go to one customer per hour across all logins and IP addresses; further requests get the same response, send nothing and are audited.
+R7 (FR-5, FR-6, FR-7): An OTP is 6 digits, stored only as an HMAC, expires at issue plus 5 minutes and works once; a correct code makes the login a linked customer with no new sign-in; with no active challenge, verification answers as a wrong code; the 4th attempt after 3 wrong codes fails even when correct; parallel verifications never exceed 3 attempts or 1 success, and of two logins racing for one customer the loser gets the generic failure.
+R8 (FR-8): Linking start and verify together are limited to 5 per login and 20 per client IP in any 15 minutes (429 with `Retry-After`, rejected requests not counted); forwarded headers are trusted only from the known proxies.
+R9 (FR-9, NFR-SEC-3): Every endpoint enforces one authorisation state: anonymous gets 401 on customer and linking endpoints, an unlinked login gets 403 "linking required" on customer endpoints, a linked customer gets 403 "already linked" on linking endpoints; the customer is resolved on every request from the link table by login, never from the request or the token subject.
+R10 (FR-10, NFR-SEC-10): Every link and every linking failure, and every dispute change (raise, withdraw, operations actions, SLA escalation), is written to an audit log the application only appends to; linking entries carry time, login, outcome and client IP, never the ID number. v1 has no unlink endpoint.
+R11 (FR-11, NFR-RES-2): A linked customer lists their own transactions newest first with keyset pagination (default 20, maximum 50, bad cursor 400), each row showing the fields in FR-11; when the core-banking source is still down after the resilience policies, the list returns 503 and the SPA offers a retry while dispute history stays available.
+R12 (FR-12): Each transaction row shows either that it is disputable or its dispute's customer-facing status; pending transactions, credits, transfers between own accounts, transactions dated more than 90 South African calendar days ago (boundary at the end of D + 90), and any transaction ever disputed are not disputable.
+R13 (FR-13): A linked customer raises a dispute on their own disputable transaction with a reason and an optional note of up to 1,000 characters; the server re-reads the transaction, decides disputability, stores the snapshot and ignores any amount, date or description sent; success is 201 with status Submitted and one timeline entry; an ever-disputed transaction gets 409 (enforced by a unique index under concurrency), any other non-disputable one 422, another customer's or a missing one 404, and a core-banking outage 503 with nothing written.
+R14 (FR-14): For the reason wrong amount the customer must give an expected amount (rejected for every other reason) of at least R0.00, below the transaction amount, with at most 2 decimals; the dispute is for the difference, in the ZAR billed amount, with no floating-point arithmetic.
+R15 (FR-15): Raising requires an `Idempotency-Key`; a replay of the same validated request returns the original response with no second dispute or event, a different request under the same key gets 422, a key still in progress gets 409, a 5xx releases the key, and keys are scoped to the customer for 24 hours.
+R16 (FR-16, FR-17): A linked customer lists their disputes newest first and opens one to see its details and timeline oldest first, each entry showing the status as the customer sees it, the time in South African time, the actor label ("You" or "The bank") and any note meant for the customer; the history works while the core-banking source is down, and a Rejected outcome shows how to complain to the bank and then the National Financial Ombud Scheme.
+R17 (FR-17, NFR-SEC-6): Disputes are scoped to the customer resolved from the link table, so another customer's dispute and an unknown ID return 404 bodies identical apart from `traceId`; integration tests prove this on every customer endpoint, and only the operations endpoints and the Worker bypass the scope, each in one named place.
+R18 (FR-17, NFR-API-5): No customer response or screen contains an actor's identity, an SLA date, a due date or a promised resolution time, and Escalated always shows as "Under review (prioritised)".
+R19 (FR-18, FR-19, FR-20): The owning customer withdraws a Submitted, Under review or Escalated dispute with an optional note of up to 500 characters, through a customer endpoint only (a bearer token cannot); Withdrawn is final and its transaction is never disputable again; withdrawing a Resolved or Withdrawn dispute returns 409 and the SPA does not offer it.
+R20 (FR-21, FR-22, FR-23, FR-24, NFR-API-4): An actor holding the action's role performs start review, escalate or resolve, each on its own endpoint, only as the allowed-actions table in FR-24 permits, and anything else returns 409 with the current status; resolve requires an outcome and a customer-visible note of 1 to 500 characters; of two racing actions exactly one succeeds; checks run 401, 403, 404, 400, 409.
+R21 (FR-25, FR-30, NFR-SEC-2): Operations endpoints accept only client-credentials bearer JWTs validated for issuer, audience, lifetime and signature, and customer and linking endpoints accept only the cookie, so the wrong credential gets 401; a token without the role, or a credential not mapping to exactly one actor type, gets 403; `dispute.read` returns one dispute with no personal details beyond the snapshot; each action's audit entry carries the fields listed in FR-25.
+R22 (FR-26): The Worker escalates every dispute still Submitted or Under review at or after submission plus 240 hours, through the same domain operation as escalate (actor type `automation`), at least once a minute, in bounded batches that two Workers cannot double-claim, catching up after downtime and never writing a duplicate timeline entry; SLA time comes from `TimeProvider`.
+R23 (FR-27, FR-28): Raising publishes `disputedesk.dispute.raised.v1` and every successful action, including withdrawal and SLA escalation, publishes `disputedesk.dispute.status-changed.v1` with the fields listed in FR-28, as CloudEvents 1.0 structured JSON on one topic keyed by dispute ID with `traceparent` in the headers; events carry no personal data, are delivered at least once with a stable event ID in per-dispute commit order, and each type has a committed JSON Schema checked by a test.
+R24 (FR-29): A fresh `docker compose up` seeds customers A to D with about 90 days of start-up-relative transactions as FR-29 describes: A linked with a dispute in every status and outcome (one passing the SLA minutes after start-up), B linked and owning the dispute A gets 404 for, C unlinked and failing the SIM-swap check, D unlinked and able to complete linking; seeded disputes publish no events.
+R25 (NFR-ARC-1, NFR-ARC-5, NFR-CODE-2): An architecture test proves domain and application code reference no infrastructure; external systems are reached only through `ICoreBankingClient`, `ISimSwapCheck` and `ISmsSender`; the built-in .NET feature is used wherever one exists, with no MediatR, AutoMapper, Swashbuckle or Duende.
+R26 (NFR-ARC-2, NFR-ARC-3, NFR-ARC-4): The runtime units are exactly those in NFR-ARC-2, with one Api and one Worker; sessions, idempotency keys and the audit log live in PostgreSQL so the Api could scale out without session loss (rate-limit state is the stated exception); a second Worker would be harmless.
+R27 (NFR-RES-1, NFR-RES-5): The Api host and the Worker expose `/health/live` and `/health/ready`, which Compose health checks use, and shut down on SIGTERM within 30 seconds after finishing in-flight work.
+R28 (NFR-RES-3, NFR-RES-4, NFR-DATA-2): A dispute change commits with its timeline entry, audit entry and outbox event, or none of them commit; raising and actions keep working while Kafka is down and events publish in per-dispute order when it returns; a row the broker rejects permanently is marked failed after 5 attempts, counted and logged, and later events for that dispute wait for an operator per the README runbook.
+R29 (NFR-DATA-1, NFR-DATA-3, NFR-DATA-4, NFR-DATA-5, NFR-DATA-6, NFR-DATA-7): PostgreSQL holds every record NFR-DATA-1 lists and transactions are not copied apart from the snapshot; the allowed actions, disputability and amount rules live in the domain model; money is `numeric(19,2)` with ISO code ZAR and every timestamp is stored in UTC; each dispute carries a version and uniqueness is enforced by the indexes in NFR-DATA-5; schema changes are EF Core migrations applied on start-up; disputes and their audit entries are never deleted in v1.
+R30 (NFR-API-1, NFR-API-2, NFR-API-3, NFR-API-6): Every route is under `/api/v1`; the built-in OpenAPI document is committed as `openapi.json` and checked for drift in CI; every error is RFC 9457 ProblemDetails with a stable `type` and the `traceId`; lists use opaque keyset cursors; money travels as decimal strings and enum values as `snake_case`.
+R31 (NFR-SEC-5, NFR-OBS-2): ID numbers are never stored or logged, card numbers are kept and shown only as first 6 and last 4 digits, account numbers only as last 4; logs are structured, carry the trace ID, and logs, traces, metrics and events carry no personal data.
+R32 (NFR-SEC-7, NFR-SEC-9, NFR-SEC-11): The nginx gateway sets the security headers and the coarse per-IP limit in NFR-SEC-7; secrets come from the environment, never the repo; in AWS, Mailpit's web UI sits behind basic auth.
+R33 (NFR-SEC-8, NFR-INFRA-2, NFR-TEST-6): GitHub Actions builds every pull request, runs every suite and the scans in NFR-SEC-8, failing on any untriaged high or critical finding, and pushes images to GHCR on main; no test is weakened to pass.
+R34 (NFR-CODE-1, NFR-CODE-3, NFR-CODE-4, NFR-CODE-5): CI enforces nullable references, warnings as errors and `dotnet format` in .NET, and strict TypeScript with ESLint and Prettier; no suppression is added without a written reason; glossary terms are used in code, API and copy; the frontend is React and TypeScript with shadcn/ui on Tailwind and Orval-generated TanStack Query hooks never edited by hand, with design tokens in one theme file; every new package is verified and pinned exactly.
+R40 (NFR-CODE-6): The customer portal meets WCAG 2.2 AA (contrast, keyboard access, visible focus, labelled errors, reflow at 320px), proved by an automated accessibility scan in the E2E tests.
+R35 (NFR-TEST-1, NFR-TEST-2, NFR-TEST-3, NFR-TEST-4, NFR-TEST-5): Every FR consequence not tagged `[manual check]` maps to an automated test listed in its story's report: unit tests for every FR-24 cell, the D + 90 boundary, amounts and SLA timing; integration tests on real PostgreSQL in Testcontainers with no in-memory fakes; contract tests for `openapi.json` and each event schema; Playwright E2E for UJ-1, UJ-2, UJ-5a, UJ-5b and UJ-5d on the real stack.
+R36 (NFR-OBS-1, NFR-OBS-3, NFR-OBS-4): The SPA, Api host and Worker emit OpenTelemetry traces, metrics and logs, and one trace runs browser to API to outbox to Kafka to Worker with trace context injected by hand; the business metrics in NFR-OBS-3 are emitted; the Aspire Dashboard (locally) and CloudWatch (AWS) show them with no manual setup.
+R37 (NFR-INFRA-1): `docker compose up` starts the whole stack with zero clicks, including Zitadel configuration, seed data and migrations, from multi-stage images running as non-root.
+R38 (NFR-INFRA-3, NFR-INFRA-4, NFR-INFRA-5): Terraform modules build the one dev environment in NFR-INFRA-3 in a new AWS free-plan account, deployed through a GitHub OIDC role with no long-lived keys, with state in S3 under native locking, a budget alarm that excludes credits, and a clean `terraform destroy`.
+R39 (NFR-DOC-1, NFR-DOC-2, NFR-DOC-3, NFR-DOC-4, NFR-DOC-5): The README gives build, run and test steps, the seed identities, how to drive the operations endpoints from Scalar (the dev API viewer and stand-in operations tool), the research simplifications, and ends with the ten-area map; `docs/production-path.md` records every §6.2 deferral with a reason; `docs/decisions/` holds the decision records NFR-DOC-3 names.
+
+## Constraints
+
+- Each assessment area is shown once, done well; anything bigger is a `docs/production-path.md` note, not a requirement (prd §1).
+- Security is primary and testing important (prd §1).
+- Authentication is the identity provider's job and authorisation is DisputeDesk's, enforced in the API; Zitadel stands in for the bank's identity platform (prd §4.1, §7).
+- Actions are actor-agnostic: actor type and identity are recorded and never used to decide (prd §4.7).
+- Glossary terms are used verbatim, with no synonyms (prd §3).
+- Customers are never promised a resolution time; the SLA is internal (prd §7).
+
+## Done when
+
+- A fresh `docker compose up` runs UJ-1 to UJ-5 end to end on seeded data with zero clicks.
+- CI is green on main: every suite, the `openapi.json` and event-schema contract checks, and the security scans with no untriaged high or critical finding.
+- Every FR consequence not tagged `[manual check]` maps to a passing automated test, and the Playwright journeys pass on the real stack.
+- One trace from browser to Worker shows in the Aspire Dashboard, and the metrics behind SM-1 to SM-4 are emitted.
+- The dev environment deploys to AWS through Terraform and the GitHub OIDC role, and destroys cleanly.
+- The README ends with the ten-area map, and `docs/production-path.md` and the decision records exist.
+
+## Boundaries
+
+- Not a case-management system, not an identity platform, raises no chargebacks with card schemes (prd §7).
+- Out of scope, recorded in `docs/production-path.md`: everything in prd §6.2, including provisional credit, attachments, status-change notifications, self-unlink, scale-out, an event consumer and operations list or search.
+- Touch point: the merged P0 baseline (solution skeleton with health endpoints, Compose platform with zero-click Zitadel, OpenTelemetry baseline and security headers) — built on, not rebuilt; owner: assigned at slicing.
+- Tracer path: sign in, link, list transactions, raise a dispute, the raised event reaches Redpanda through the outbox, and the dispute shows on the customer's timeline.
+
+## References
+
+- prd — docs/prd/prd.md, §4 Features (FR-1 to FR-30), §5 Non-functional requirements, §2.4 Key journeys, §6 Scope, §8 Success metrics
+- brief — docs/product-brief/product-brief.md
+- research — docs/research/dispute-lifecycle/dispute-lifecycle.md, Recommendations
+- research — docs/research/event-versioning/event-versioning.md, Recommendations
+- glossary — docs/glossary.md
+
+## Notes
+
+- Assumption: the PRD governs where the research differs: a 90-day customer window (research recommendation 1 said 120 days) and `snake_case` enums with actor types `customer`, `operations` and `automation` (the research sample used PascalCase and Customer, Agent, System).
+- Assumption: the UX documents and `docs/architecture/architecture.md` are adopted as companions on a later update, once written.
+- Open question: FR-27 leaves the `raised.v1` payload fields unspecified (the research suggests dispute ID, reason, channel and time); architecture settles them within the no-personal-data rule.
+- Open question: PRD §3 adds ten terms not yet in `docs/glossary.md` (actor type, linking, OTP, authorisation state, role, customer endpoint, operations endpoint, Worker, dispute event, transaction date); should they be folded in? Njabulo decides.
+- Open question: the new AWS free-plan account does not exist yet; R38's deploy waits on it.

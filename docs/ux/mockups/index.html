@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockups · DisputeDesk</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<p class="mock-note"><a href="index.html">All screens</a></p>
+<main class="wrap stack-lg">
+<div class="stack"><h1 class="title">DisputeDesk mockups</h1>
+<p class="lede">Static, clickable screens for every surface and key state. Tokens: <a href="tokens.css">tokens.css</a>. Specs: <a href="../DESIGN.md">DESIGN.md</a> and <a href="../EXPERIENCE.md">EXPERIENCE.md</a>, which win on any conflict. Sample customer: Thandi, today Mon 26 Oct 2026. Try each page at 360px and 1280px.</p></div>
+<section class="surface stack"><h2 class="heading">Signed out</h2><ul class="stack" style="padding-left:var(--space-4);margin:0"><li><a href="start.html">Start page</a></li><li><a href="sign-in.html">Sign in (hosted, themed)</a></li><li><a href="sign-up.html">Create a login (hosted, themed)</a></li><li><a href="session-expired.html">Session ended</a></li></ul></section>
+<section class="surface stack"><h2 class="heading">Linking</h2><ul class="stack" style="padding-left:var(--space-4);margin:0"><li><a href="link.html">Link your login: details</a></li><li><a href="link-errors.html">Details with field errors</a></li><li><a href="link-otp.html">Enter your OTP</a></li><li><a href="link-otp-wrong.html">Wrong code (tries left)</a></li><li><a href="link-locked.html">Locked: we can't link you online</a></li><li><a href="link-rate-limited.html">Too many attempts (429)</a></li></ul></section>
+<section class="surface stack"><h2 class="heading">Transactions</h2><ul class="stack" style="padding-left:var(--space-4);margin:0"><li><a href="transactions.html">Transactions (every row type)</a></li><li><a href="transactions-after.html">Transactions after the R849.00 dispute</a></li><li><a href="transactions-loading.html">Loading</a></li><li><a href="transactions-empty.html">Empty</a></li><li><a href="transactions-error.html">Core banking unavailable (503)</a></li></ul></section>
+<section class="surface stack"><h2 class="heading">Raise a dispute</h2><ul class="stack" style="padding-left:var(--space-4);margin:0"><li><a href="dispute-new.html">Reason and note (try Wrong amount)</a></li><li><a href="dispute-new-wrong-amount.html">Wrong amount with a field error</a></li><li><a href="dispute-review.html">Review and submit</a></li><li><a href="dispute-review-retry.html">Submit could not be confirmed (safe retry)</a></li><li><a href="dispute-already-disputed.html">Already disputed (409)</a></li><li><a href="dispute-not-disputable.html">No longer disputable (422)</a></li></ul></section>
+<section class="surface stack"><h2 class="heading">Disputes</h2><ul class="stack" style="padding-left:var(--space-4);margin:0"><li><a href="disputes.html">Dispute history (open and closed)</a></li><li><a href="disputes-empty.html">No disputes yet</a></li><li><a href="dispute-submitted.html">Detail: Submitted (just submitted)</a></li><li><a href="dispute-under-review.html">Detail: Under review</a></li><li><a href="dispute-prioritised.html">Detail: Under review (prioritised)</a></li><li><a href="dispute-upheld.html">Detail: Resolved · Upheld</a></li><li><a href="dispute-rejected.html">Detail: Resolved · Rejected, with ombud guidance</a></li><li><a href="dispute-withdrawn.html">Detail: Withdrawn</a></li><li><a href="dispute-withdraw.html">Withdraw confirmation</a></li><li><a href="dispute-loading.html">Detail loading</a></li><li><a href="not-found.html">Dispute not found (404)</a></li><li><a href="error.html">Unexpected error with reference</a></li></ul></section>
+</main>
+<footer class="footer"><div class="footer__in">
+  <p>Demo data only. Every name, number and amount shown here is made up.</p>
+  <p>Your details are used only to show your transactions and handle your disputes.</p>
+</div></footer>
+</body>
+</html>
