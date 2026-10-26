@@ -1,0 +1,153 @@
+# Journeys proven on the stack, deployed and documented: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
+
+[[entry]]
+id = 1
+type = "story"
+title = "QA journey UJ-1 on the real stack with axe and ZAP"
+description = "Playwright runs UJ-1 end to end on a fresh stack per QA run and traces it through browser, network, database and events, with accessibility and ZAP baseline scans."
+verify = "`npx playwright test` in `e2e/` passes UJ-1 against a fresh stack (`docker compose down -v`, then `docker compose up --wait`); axe and ZAP report no untriaged high finding."
+covers = ["R35", "R40", "R33"]
+after = ["6.4", "3.6", "3.7", "2.5", "2.6", "4.1"]
+hitl = false
+risk = "high"
+owner = "qa"
+lane = "QA"
+high_stakes = false
+migration = false
+touches = ["e2e/ (new: package.json, playwright.config.ts, fixtures, journeys/uj-1.spec.ts)", "docs/verification/"]
+supervisor_checks = ["ZAP baseline against the running stack: no untriaged high or critical finding."]
+
+[[entry]]
+id = 2
+type = "story"
+title = "QA journeys UJ-2, UJ-5a, UJ-5b and UJ-5d"
+description = "Adds the withdraw, ownership, closed-dispute and unlinked-login journeys on seeded data to the suite."
+verify = "`npx playwright test` passes all five journeys with axe clean on a fresh stack per QA run."
+covers = ["R35", "R40"]
+after = [1, "5.4"]
+hitl = false
+risk = "medium"
+owner = "qa"
+lane = "QA"
+high_stakes = false
+migration = false
+touches = ["e2e/journeys/"]
+
+[[entry]]
+id = 3
+type = "story"
+title = "CI runs the journeys with ZAP and publishes images to GHCR"
+description = "Adds the `e2e` job (Compose up, Playwright with axe, ZAP baseline) and the main-only `publish` job (AD-32)."
+verify = "Workflow lint passes; reading `ci.yml` shows the `e2e` job on pull requests and the `publish` job gated to main with `packages: write` only there."
+covers = ["R33", "R35"]
+after = [2]
+hitl = false
+risk = "medium"
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = [".github/workflows/ci.yml (e2e, publish)", ".zap/ (triage file)"]
+supervisor_checks = ["Check the first green PR run and the GHCR package list after merge."]
+
+[[entry]]
+id = 4
+type = "story"
+title = "AWS Compose override and OpenTelemetry collector"
+description = "Adds `docker-compose.aws.yml` with required variables and memory limits, the collector replacing the Aspire Dashboard, and Mailpit basic auth, all testable without an AWS account."
+verify = "Reading `docker-compose.aws.yml`, the collector config and the AWS nginx template shows the criteria below."
+covers = ["R32", "R36", "R38"]
+after = [3, "5.1"]
+hitl = false
+risk = "medium"
+owner = "backend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["docker-compose.aws.yml", "infra/otel-collector/config.yaml", "infra/nginx/templates/ (Mailpit basic auth, origin header check)"]
+supervisor_checks = ["`docker compose -f docker-compose.yml -f docker-compose.aws.yml config` fails without the variables and validates with them."]
+
+[[entry]]
+id = 5
+type = "story"
+title = "Terraform dev environment and OIDC deploy"
+description = "Adds the Terraform modules and `envs/dev` (AD-28) and the manual `deploy.yml`; a person creates the AWS free-plan account, runs `terraform apply` and destroy from the maintainer's machine."
+verify = "`terraform fmt -check` and `terraform validate` pass; the criteria below hold on reading the code."
+covers = ["R38", "R32", "R36"]
+after = [4]
+hitl = true
+risk = "high"
+owner = "backend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["infra/terraform/modules/ (network, compute, database, edge, deploy-role, observability, budget)", "infra/terraform/envs/dev/", ".github/workflows/deploy.yml", ".github/workflows/ci.yml (terraform fmt and validate)", "infra/aws/deploy.sh"]
+supervisor_checks = ["Human step: create the AWS account, `terraform apply`, run `deploy.yml`, sign in over CloudFront, see traces in CloudWatch.", "Human step: `terraform destroy` removes everything except the state bucket (NFR-INFRA-5, manual check)."]
+unknown = "the AWS free-plan account does not exist yet; this story cannot start its human steps until it does."
+
+[[entry]]
+id = 6
+type = "story"
+title = "Decision records and the production path"
+description = "Writes decision records ad-001 to ad-008 (ad-004 exists) and `docs/production-path.md` with every prd §6.2 deferral and a reason; docs only."
+verify = "Each record named below exists with status, decision, options rejected and consequences; every prd §6.2 bullet appears in `docs/production-path.md` with a one-line reason."
+covers = ["R39"]
+after = []
+hitl = false
+risk = "low"
+owner = "docs"
+lane = "docs"
+high_stakes = false
+migration = false
+touches = ["docs/decisions/ad-001 to ad-008 (except ad-004)", "docs/production-path.md"]
+
+[[entry]]
+id = 7
+type = "story"
+title = "README, runbook and onboarding"
+description = "Writes the README that opens with `docker compose up`, plus a short runbook and a short onboarding page; docs only."
+verify = "The README sections below exist and every command in them runs on a fresh clone; the ten-area map links to real paths."
+covers = ["R39", "R28"]
+after = ["5.1", 3]
+hitl = false
+risk = "low"
+owner = "docs"
+lane = "docs"
+high_stakes = false
+migration = false
+touches = ["README.md", "docs/runbook.md", "docs/onboarding.md"]
+supervisor_checks = ["Fresh clone on a clean machine: the README's first command brings the stack up."]
+
+[[entry]]
+id = "8a"
+type = "story"
+title = "Closing refactor sweep: backend"
+description = "7.8a. The first of two sequential sweeps after everything else: in `backend/`, `contracts/` and `infra/`, remove duplication, dead code and unexplained suppressions and align glossary terms, with no behaviour change."
+verify = "Every suite, the contract checks and the E2E journeys stay green; the diff adds no feature and no package."
+covers = ["R34", "R33"]
+after = [2, 4, 6, 7, "5.3", "5.4", "6.4", "3.7"]
+hitl = false
+risk = "medium"
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["backend/", "contracts/", "infra/", "e2e/ (read-only unless a test name changes)"]
+supervisor_checks = ["The Playwright journeys pass on the stack after the sweep."]
+
+[[entry]]
+id = "8b"
+type = "story"
+title = "Closing refactor sweep: frontend"
+description = "7.8b. The second sequential sweep, after the backend sweep: in `frontend/`, remove duplication, dead code and unexplained suppressions and align glossary terms in code and copy, with no behaviour change."
+verify = "`npm run build`, `tsc --noEmit`, ESLint, Prettier, Vitest and the E2E journeys stay green; the diff adds no feature and no package."
+covers = ["R34", "R33"]
+after = ["8a"]
+hitl = false
+risk = "medium"
+owner = "frontend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["frontend/", "e2e/ (read-only unless a test name changes)"]
+supervisor_checks = ["The Playwright journeys pass on the stack after the sweep."]

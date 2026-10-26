@@ -86,7 +86,7 @@ Customers see two actor labels on the timeline: "You" for the customer and "The 
   - **Realised by:** FR-17 to FR-20 and FR-28.
 
 - **UJ-3. An operations tool reviews and resolves a dispute.**
-  - **Context:** an operations tool (Scalar in the demo) holds a client-credentials token with the roles `dispute.read`, `dispute.start_review` and `dispute.resolve`.
+  - **Context:** an operations tool (Scalar in the demo) holds a client-credentials token with the roles `dispute.read`, `dispute.startReview` and `dispute.resolve`.
   - **Path:**
     1. It reads the dispute named in a `raised` event.
     2. It calls start review.
@@ -132,12 +132,14 @@ This PRD adds:
 - **Linking:** the process by which a login proves it belongs to a customer. One login per customer, and one customer per login.
 - **OTP:** the 6-digit one-time code sent during linking.
 - **Authorisation state:** anonymous, authenticated but not linked, or linked.
-- **Role:** a permission on an actor's API credential: `dispute.read`, `dispute.start_review`, `dispute.escalate` or `dispute.resolve`.
+- **Role:** a permission on an actor's API credential: `dispute.read`, `dispute.startReview`, `dispute.escalate` or `dispute.resolve`. Role keys are camelCase after the `dispute.` prefix. Settled on 2026-10-26.
 - **Customer endpoint:** an endpoint called by the SPA with the BFF cookie. Withdraw is one.
 - **Operations endpoint:** an endpoint called with a bearer token: start review, escalate, resolve, and reading a dispute.
 - **Worker:** the background process that relays dispute events and runs the SLA sweep.
 - **Dispute event:** a message published to Kafka when a dispute is raised or its status changes.
 - **Transaction date:** the date the core-banking source gives as the date the transaction was made (the authorisation date), not the posting date. It stands in for the scheme's processing date (dispute-lifecycle research, section 1).
+
+The six technical terms above (actor type, authorisation state, role, customer endpoint, operations endpoint, Worker) stay in this PRD only and are not added to `docs/glossary.md`. Settled on 2026-10-26.
 
 ## 4. Features
 
@@ -397,7 +399,7 @@ Withdrawing a Resolved or Withdrawn dispute returns 409, and the SPA does not of
 
 #### FR-21: Start review
 
-An actor with the role `dispute.start_review` can move a Submitted dispute to Under review. Realises UJ-3.
+An actor with the role `dispute.startReview` can move a Submitted dispute to Under review. Realises UJ-3.
 
 #### FR-22: Escalate
 
@@ -504,9 +506,10 @@ Every successful action, including withdrawal and SLA escalation, publishes `dis
 - Customer A is linked and has a dispute in every status, including Resolved with each outcome. A's Submitted and Under review disputes are less than 10 days old, so the sweep does not escalate them on start-up. One Under review dispute is seeded to pass the SLA a few minutes after start-up, so that UJ-4 can be demonstrated [ASSUMPTION].
 - Customer B is linked and owns the dispute that customer A gets 404 for.
 - Customer C is not linked and fails the SIM-swap check.
-- Customer D is not linked and passes every check. D is the customer who completes linking in UJ-1 and its E2E test [ASSUMPTION: added so that linking can be demonstrated; E2E runs reset D's link].
+- Customer D is not linked and passes every check. D is the customer who completes linking in UJ-1 and its E2E test [ASSUMPTION: added so that linking can be demonstrated]. Each E2E (QA) run starts on a fresh stack (`docker compose down -v`, then `docker compose up --wait`), which resets D's link; no test-only database role is used. Settled on 2026-10-26.
 - The README lists the demo logins for A and B and the synthetic ID and account numbers for C and D.
 - Seeded disputes publish no events [ASSUMPTION].
+- The seeder changes a seeded dispute's status only through the same domain actions as FR-21 to FR-24 and FR-18, with a fixed seeding clock; it never sets a status directly. Settled on 2026-10-26.
 - A fresh `docker compose up` produces all of this with no manual steps.
 
 ## 5. Non-functional requirements
@@ -627,12 +630,17 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 
 - **NFR-DOC-1:** the README gives build, run and test steps, the demo logins and seed identities (FR-29), and how to drive the operations endpoints from Scalar. It ends with a map from each of the ten assessment areas to where it is addressed.
 - **NFR-DOC-2:** `docs/production-path.md` records everything deferred in §6.2, with a one-line reason for each.
-- **NFR-DOC-3:** key decisions are short decision records in `docs/decisions/`, covering at least:
-  - Zitadel as a stand-in for the bank's identity platform;
-  - the BFF;
-  - the SIM-swap check before the OTP is sent;
-  - the outbox;
-  - having no schema registry.
+- **NFR-DOC-3:** key decisions are short decision records in `docs/decisions/`, exactly these (settled on 2026-10-26):
+  - ad-001 Zitadel as the external identity provider, standing in for the bank's identity platform;
+  - ad-002 `IAppDbContext`;
+  - ad-003 Result types;
+  - ad-004 model roles;
+  - ad-005 QA data integrity;
+  - ad-006 actor-agnostic dispute actions;
+  - ad-007 the BFF session, with no tokens in the browser;
+  - ad-008 enrolment and account linking, including the SIM-swap check before the OTP is sent.
+
+  The outbox and having no schema registry are recorded in the architecture spine (AD-14, AD-17, AD-19).
 - **NFR-DOC-4:** Scalar is the API viewer in dev and demo, and stands in for another team's operations tool.
 - **NFR-DOC-5:** the README states plainly the simplifications the research identified:
   - the 90-day customer window counted from the transaction date, set against the scheme's 120 days from its processing date;
@@ -750,7 +758,7 @@ None open. Settled on 2026-10-25:
 **Events and seed data**
 - §4.9 FR-28: events leave out the customer ID and the amount.
 - §4.10 FR-29: one seeded dispute passes the SLA a few minutes after start-up.
-- §4.10 FR-29: customer D is added for linking, and E2E runs reset D's link.
+- §4.10 FR-29: customer D is added for linking; each E2E run starts on a fresh stack, which resets D's link.
 - §4.10 FR-29: seeded disputes publish no events.
 
 **Non-functional requirements**

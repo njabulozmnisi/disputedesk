@@ -8,7 +8,7 @@ description: Procedure for building one DisputeDesk story test-first in a worktr
 The input is a story file from `docs/tickets/` with Given/When/Then criteria tagged to requirement IDs.
 
 1. **Read first.** The story, the requirements it covers in `docs/initiative-disputedesk.md`, the relevant parts of `docs/architecture/architecture.md`, `docs/glossary.md`, and the code the story touches.
-2. **Test first.** For each criterion, write the failing test, then the smallest code that passes it.
+2. **Test first.** For each criterion, write the failing test, then the smallest, plainest code that passes it (AGENTS.md: stupid simple and logical). Before reporting, reread the whole diff and remove anything a first-time reader would not need.
    - Backend: domain unit tests for decisions (state machine, SLA, validation) with an injected `TimeProvider`; integration tests against real Postgres via Testcontainers for plumbing. Take the `testcontainers` lock: `scripts/test-lock.sh run testcontainers <story> -- dotnet test ...`.
    - Frontend: Vitest against the Orval-generated mocks.
 3. **Run every available check.**

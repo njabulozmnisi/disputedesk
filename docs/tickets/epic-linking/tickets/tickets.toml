@@ -1,0 +1,67 @@
+# Logins link to customers without revealing a match: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Unlinked login starts linking with a uniform response and an OTP sent after the SIM-swap check"
+description = "Adds `LinkingChallenges`, `POST /api/v1/linking/start` and the background job that matches, caps, runs the SIM-swap check and sends the OTP (AD-12)."
+verify = "Integration tests prove identical responses, the check order, the cap, fail-closed SIM swap and audit; no ID number appears in any table or log."
+covers = ["R4", "R5", "R6", "R7", "R9", "R10", "R31", "R36"]
+after = ["2.1", "2.3", "3.2"]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = true
+touches = ["backend/src/DisputeDesk.Application/Linking/StartLinking/", "backend/src/DisputeDesk.Infrastructure/Linking/ (job, conditional fill)", "backend/src/DisputeDesk.Infrastructure/Persistence/ (LinkingChallenge configuration, Migrations/)", "backend/src/DisputeDesk.Api/Linking/", "backend/src/DisputeDesk.Api/Program.cs", "backend/src/DisputeDesk.Api/appsettings.json", "docker-compose.yml (Linking__OtpHmacKey dev value)", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/"]
+supervisor_checks = ["Start linking as customer D's details through the gateway; the OTP email lands in Mailpit."]
+
+[[entry]]
+id = 2
+type = "story"
+title = "OTP verification links the login, with lockout and race safety"
+description = "Adds `POST /api/v1/linking/verify` with the atomic attempt counter, constant-time comparison, link insert and session re-issue (AD-12, AD-7)."
+verify = "Integration tests cover correct, wrong, expired, locked, parallel and racing verifications."
+covers = ["R5", "R7", "R10", "R36"]
+after = [1]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Application/Linking/VerifyOtp/", "backend/src/DisputeDesk.Infrastructure/Linking/ (attempt update)", "backend/src/DisputeDesk.Api/Linking/", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/"]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Linking rate limits and trusted forwarded headers"
+description = "Adds the chained built-in rate limiter on linking routes and restricts forwarded headers to the gateway (AD-12, AD-23)."
+verify = "Integration tests prove the limits, `Retry-After`, uncounted rejections, audit of the first rejection and spoofed headers being ignored."
+covers = ["R8", "R10"]
+after = [2]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Api/Linking/RateLimiting/", "backend/src/DisputeDesk.Api/Program.cs (ForwardedHeaders)", "backend/src/DisputeDesk.Api/appsettings.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/RateLimits/"]
+
+[[entry]]
+id = 4
+type = "story"
+title = "Linking screens for details, OTP, lockout and rate limits"
+description = "Adds the details and OTP screens with the locked and rate-limited states, routed by problem type."
+verify = "Vitest component tests pass, with API responses mocked from `openapi.json` shapes."
+covers = ["R4", "R7", "R8", "R9", "R40"]
+after = [3, "2.4", "3.7"]
+hitl = false
+risk = "medium"
+owner = "frontend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["frontend/src/features/linking/", "frontend/src/app/ (routes)", "frontend/src/api/generated/"]
+references = ["design — docs/ux/mockups/link.html", "design — docs/ux/mockups/link-otp.html", "design — docs/ux/mockups/link-locked.html", "design — docs/ux/mockups/link-rate-limited.html", "experience — docs/ux/EXPERIENCE.md, Copy deck"]
