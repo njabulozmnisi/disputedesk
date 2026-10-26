@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dispute a card transaction · DisputeDesk</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar__in topbar__in--wide">
+  <a class="brand" href="start.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="btn btn--secondary btn--compact topbar__end" href="sign-in.html">Sign in</a>
+</div></header>
+<p class="mock-note">Mockup: signed-out start page. The status card is a sample of the real dispute detail, built from the same tokens. <a href="index.html">All screens</a></p>
+<main>
+<section class="hero" aria-labelledby="start-h1">
+  <div class="hero__text">
+    <h1 class="display" id="start-h1">Something wrong with a card transaction?</h1>
+    <p class="lede">Dispute it online in a few steps, then follow its status on one timeline until the bank resolves it.</p>
+    <div class="actions">
+      <a class="btn btn--primary" href="sign-in.html">Sign in</a>
+      <a class="btn btn--secondary" href="sign-up.html">Create a login</a>
+    </div>
+  </div>
+  <figure class="hero__stage">
+    <div class="status-card" aria-hidden="true">
+      <div><p class="row__title">ZXP*GLOBALSVCS 0800</p><p class="caption">Unrecognised, card ending 3456</p></div>
+      <div class="status-card__amount"><p class="amount amount--hero">R849.00</p><span class="badge badge--review">Under review</span></div>
+      <ol class="timeline">
+        <li><p class="step">Submitted</p><p class="meta"><span class="actor">You</span>26 Oct 2026, 09:14 SAST</p></li>
+        <li class="is-current"><p class="step">Under review</p><p class="meta"><span class="actor">The bank</span>26 Oct 2026, 11:02 SAST</p></li>
+        <li class="is-upcoming"><p class="step">Resolved</p><p class="meta">The outcome is added here when the bank decides.</p></li>
+      </ol>
+    </div>
+    <figcaption>A sample dispute. Every dispute you raise gets a timeline like this one.</figcaption>
+  </figure>
+</section>
+<section class="how" aria-labelledby="how-h">
+  <div class="how__in">
+    <h2 class="heading" id="how-h">How it works</h2>
+    <ol class="steps">
+      <li><h3 class="subheading">Link your login</h3><p>Create a login, then prove you're a customer of the bank with your ID number, account number and a one-time code sent to your cellphone.</p></li>
+      <li><h3 class="subheading">Pick a card transaction</h3><p>Choose a card transaction from the last 90 days, say what's wrong and add a note if it helps.</p></li>
+      <li><h3 class="subheading">Follow its status</h3><p>Each change the bank makes shows on your dispute's timeline, with any note meant for you.</p></li>
+    </ol>
+  </div>
+</section>
+</main>
+<footer class="footer"><div class="footer__in footer__in--wide">
+  <p>Demo data only. Every name, number and amount shown here is made up.</p>
+  <p>Your details are used only to show your transactions and handle your disputes.</p>
+</div></footer>
+</body>
+</html>

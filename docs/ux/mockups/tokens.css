@@ -1,0 +1,122 @@
+/* DisputeDesk theme tokens. The single source of the brand (see ../DESIGN.md).
+   Mirrors frontend/src/theme/tokens.css; names follow shadcn/ui variables.
+   Style: friendly, high-contrast retail-banking style. One cobalt accent, navy display type, pill controls.
+   To rebrand: change values here and in the generated identity-provider label policy. */
+
+/* Nunito Sans (SIL Open Font License 1.1, see fonts/OFL.txt), self-hosted: CSP font-src 'self'. Latin subset. */
+@font-face { font-family: "Nunito Sans"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("fonts/nunito-sans-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Nunito Sans"; font-style: normal; font-weight: 600; font-display: swap;
+  src: url("fonts/nunito-sans-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Nunito Sans"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("fonts/nunito-sans-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Nunito Sans"; font-style: normal; font-weight: 800; font-display: swap;
+  src: url("fonts/nunito-sans-latin-800-normal.woff2") format("woff2"); }
+
+:root {
+  /* Colour: neutrals */
+  --background: #F4F5F7;        /* canvas */
+  --foreground: #1E2430;        /* body text */
+  --card: #FFFFFF;              /* surfaces */
+  --card-foreground: #1E2430;
+  --muted: #EEF0F3;             /* section bands, quiet fills */
+  --muted-foreground: #586070;  /* secondary text */
+  --border: #E1E4EA;            /* dividers */
+  --input: #848D9D;             /* field and control borders */
+  --heading: #14287A;           /* deep navy: display and page titles */
+
+  /* Colour: the one accent (cobalt) */
+  --primary: #2B57C9;
+  --primary-foreground: #FFFFFF;
+  --primary-hover: #2247AD;
+  --primary-pressed: #1B3A8F;
+  --primary-subtle: #E8EEFB;    /* selected fill, current nav item */
+  --ring: #2B57C9;
+
+  --destructive: #B42318;       /* errors and destructive actions only */
+  --destructive-foreground: #FFFFFF;
+
+  /* Colour: status tones (semantic, never the accent) */
+  --status-info-bg: #E2F2F5;      --status-info-fg: #0B4F5E;
+  --status-priority-bg: #FFF1D6;  --status-priority-fg: #7A4300;
+  --status-success-bg: #E3F4EA;   --status-success-fg: #156038;
+  --status-danger-bg: #FDECEA;    --status-danger-fg: #9A1C13;
+  --status-neutral-bg: #EEF0F3;   --status-neutral-fg: #454D5C;
+
+  /* Type */
+  --font-sans: "Nunito Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-display: 2.25rem;     /* 36px phone; 56px from 768px */
+  --text-display-lg: 3.5rem;   /* 56px */
+  --text-title: 2rem;          /* h1 32px */
+  --text-heading: 1.5rem;      /* h2 24px */
+  --text-subheading: 1.25rem;  /* h3 20px */
+  --text-body: 1rem;           /* 16px */
+  --text-label: 0.875rem;      /* small 14px */
+  --text-caption: 0.8125rem;   /* 13px */
+  --text-amount-hero: 2rem;    /* 32px */
+  --weight-regular: 400;
+  --weight-label: 600;
+  --weight-strong: 700;
+  --weight-title: 800;
+
+  /* Spacing (4-based) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;            /* desktop section spacing */
+  --tap-target: 44px;
+  --content-max: 880px;
+  --form-max: 560px;
+  --page-max: 1120px;          /* start page only: two-column hero */
+  --row-min: 64px;             /* list rows */
+
+  /* Radius */
+  /* Radius follows hierarchy: rows none, list panels and fields md, cards and form surfaces lg, controls full. */
+  --radius-sm: 8px;            /* focus outline, mock notes */
+  --radius-md: 12px;           /* list panels, text fields, reason group, OTP cells, notices, quote blocks */
+  --radius-lg: 24px;           /* elevated cards, form surfaces, empty states, dialogs */
+  --radius-full: 9999px;       /* buttons, badges, segmented nav, step numbers, timeline dots */
+  --radius: var(--radius-md);  /* shadcn default */
+
+  /* Elevation */
+  --shadow-card: 0 4px 16px rgb(20 40 122 / 0.08);
+  --shadow-overlay: 0 12px 32px rgb(20 40 122 / 0.18);
+  --overlay: rgb(20 40 122 / 0.35); /* dialog backdrop, navy scrim */
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #12171E;
+    --foreground: #EEF1F5;
+    --card: #1F2933;             /* slate */
+    --card-foreground: #EEF1F5;
+    --muted: #2A3441;
+    --muted-foreground: #A9B2C0;
+    --border: #323D4B;
+    --input: #7A8697;
+    --heading: #C9D6FF;
+    --primary: #8CAAF7;
+    --primary-foreground: #0B1838;
+    --primary-hover: #A9C0FA;
+    --primary-pressed: #C4D4FC;
+    --primary-subtle: #22355F;
+    --ring: #8CAAF7;
+    --destructive: #FF8A7E;
+    --destructive-foreground: #2A0B08;
+    --status-info-bg: #103A43;      --status-info-fg: #A6E0EA;
+    --status-priority-bg: #3F2D0C;  --status-priority-fg: #F5CF8A;
+    --status-success-bg: #123A26;   --status-success-fg: #9BDDB8;
+    --status-danger-bg: #4A1A16;    --status-danger-fg: #FFB4AB;
+    --status-neutral-bg: #2A3441;   --status-neutral-fg: #C8CED8;
+    --shadow-card: none;
+    --shadow-overlay: 0 12px 32px rgb(0 0 0 / 0.5);
+    --overlay: rgb(0 0 0 / 0.6);
+  }
+}

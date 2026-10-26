@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dispute this transaction · DisputeDesk</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar__in">
+  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <nav class="topnav" aria-label="Main"><a href="transactions.html" aria-current="page">Transactions</a><a href="disputes.html">Disputes</a></nav>
+  <a class="signout" href="start.html">Sign out</a>
+</div></header>
+<p class="mock-note">Mockup: choose Wrong amount to see the Expected amount field appear (CSS only). <a href="index.html">All screens</a></p>
+<main class="wrap wrap--form stack-lg">
+<div><a class="back" href="transactions.html">Back to transactions</a><h1 class="title">Dispute this transaction</h1></div>
+<form class="surface" action="dispute-review.html">
+<div class="surface__part txn"><div><p class="row__title">ZXP*GLOBALSVCS 0800</p><p class="caption">Mon 26 Oct 2026, card ending 3456</p></div><span class="amount" aria-label="R849.00 out">R849.00</span></div>
+<div class="surface__part stack-lg">
+<fieldset><legend class="legend">Why are you disputing it?</legend>
+<div class="reasons"><label class="reason"><input type="radio" name="reason" id="reason-unrecognised" checked><span><strong>Unrecognised</strong><span class="caption">I don't recognise this transaction.</span></span></label>
+<label class="reason"><input type="radio" name="reason" id="reason-duplicate"><span><strong>Duplicate charge</strong><span class="caption">I was charged more than once for the same thing.</span></span></label>
+<label class="reason"><input type="radio" name="reason" id="reason-wrong"><span><strong>Wrong amount</strong><span class="caption">The amount is different from what I agreed to pay.</span></span></label>
+<label class="reason"><input type="radio" name="reason" id="reason-notreceived"><span><strong>Not received</strong><span class="caption">I paid but never got the goods or service.</span></span></label>
+<label class="reason"><input type="radio" name="reason" id="reason-subscription"><span><strong>Cancelled subscription</strong><span class="caption">I cancelled, but was still charged.</span></span></label>
+<label class="reason"><input type="radio" name="reason" id="reason-refund"><span><strong>Refund not processed</strong><span class="caption">I was promised a refund that hasn't arrived.</span></span></label></div></fieldset>
+<div class="field expected"><label for="exp">Expected amount</label>
+<div class="prefix"><span aria-hidden="true">R</span><input class="input" id="exp" inputmode="decimal" value="" aria-describedby="exp-help"></div><p class="help" id="exp-help">What you agreed to pay. You're disputing the difference.</p></div>
+<div class="field"><label for="note">Note (optional)</label>
+<textarea class="textarea" id="note" maxlength="1000" aria-describedby="note-count">I've never bought from this merchant.</textarea>
+<p class="counter" id="note-count">37 / 1,000</p></div>
+<div class="actions"><button class="btn btn--primary btn--block" type="submit">Continue</button><a class="btn btn--secondary btn--block" href="transactions.html">Cancel</a></div>
+</div>
+</form>
+</main>
+<footer class="footer"><div class="footer__in">
+  <p>Demo data only. Every name, number and amount shown here is made up.</p>
+  <p>Your details are used only to show your transactions and handle your disputes.</p>
+</div></footer>
+<nav class="tabbar" aria-label="Main (phone)">
+  <a href="transactions.html" aria-current="page"><span aria-hidden="true">☰</span>Transactions</a>
+  <a href="disputes.html"><span aria-hidden="true">⚑</span>Disputes</a>
+</nav>
+</body>
+</html>

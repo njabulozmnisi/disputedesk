@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enter your OTP · DisputeDesk</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar__in">
+  <a class="brand" href="link.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="signout" href="start.html">Sign out</a>
+</div></header>
+<p class="mock-note">Mockup: identical for a wrong code, an expired code, and a login with no active challenge. Nothing reveals which. <a href="index.html">All screens</a></p>
+<main class="wrap wrap--form stack-lg">
+<div class="stack"><h1 class="title">Enter your OTP</h1>
+<p class="notice notice--info">If these details match our records, we've sent a code to the cellphone number we hold for you.</p></div>
+<div class="notice notice--danger" role="alert"><strong>That code didn't work.</strong><span>You have 2 tries left.</span></div>
+<form class="surface stack" action="transactions.html">
+<div class="field"><label for="otp">6-digit one-time code</label>
+<div class="otp" aria-hidden="true"><span class="is-active"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span></div>
+<input class="sr-only" id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+<p class="help">The code expires 5 minutes after we send it.</p></div>
+<button class="btn btn--primary btn--block" type="submit">Verify</button>
+</form>
+<p class="caption">Didn't get a code? <a href="link.html">Start again</a>. Can't link online? Contact the bank.</p>
+</main>
+<footer class="footer"><div class="footer__in">
+  <p>Demo data only. Every name, number and amount shown here is made up.</p>
+  <p>Your details are used only to show your transactions and handle your disputes.</p>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Withdraw dispute · DisputeDesk</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar__in">
+  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <nav class="topnav" aria-label="Main"><a href="transactions.html">Transactions</a><a href="disputes.html" aria-current="page">Disputes</a></nav>
+  <a class="signout" href="start.html">Sign out</a>
+</div></header>
+<p class="mock-note">Mockup: AlertDialog: focus starts on the note, Esc keeps the dispute. <a href="index.html">All screens</a></p>
+<main class="wrap stack-lg" aria-hidden="true">
+<div><a class="back" href="disputes.html">Back to disputes</a></div>
+<section class="card stack"><h1 class="title">Lekker Eats, Durban</h1><div><span class="badge badge--review">Under review</span></div>
+<p class="amount amount--hero">R312.50</p></section>
+</main>
+<footer class="footer"><div class="footer__in">
+  <p>Demo data only. Every name, number and amount shown here is made up.</p>
+  <p>Your details are used only to show your transactions and handle your disputes.</p>
+</div></footer>
+<div class="backdrop">
+<div class="dialog stack" role="alertdialog" aria-modal="true" aria-labelledby="wd-t" aria-describedby="wd-d">
+<h2 class="heading" id="wd-t">Withdraw this dispute?</h2>
+<p id="wd-d">You can't dispute this transaction again after you withdraw.</p>
+<div class="field"><label for="wn">Note (optional)</label><textarea class="textarea" id="wn" maxlength="500" aria-describedby="wn-c">The merchant refunded me.</textarea><p class="counter" id="wn-c">25 / 500</p></div>
+<div class="actions"><a class="btn btn--destructive btn--block" href="dispute-withdrawn.html">Withdraw dispute</a><a class="btn btn--secondary btn--block" href="dispute-under-review.html">Keep dispute</a></div>
+</div></div>
+<nav class="tabbar" aria-label="Main (phone)">
+  <a href="transactions.html"><span aria-hidden="true">☰</span>Transactions</a>
+  <a href="disputes.html" aria-current="page"><span aria-hidden="true">⚑</span>Disputes</a>
+</nav>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Link your login · DisputeDesk</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar__in">
+  <a class="brand" href="link.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="signout" href="start.html">Sign out</a>
+</div></header>
+<p class="mock-note">Mockup: unlinked logins can reach only linking. The response after Continue is the same whether or not the details match. <a href="index.html">All screens</a></p>
+<main class="wrap wrap--form stack-lg">
+<div class="stack"><h1 class="title">Link your login</h1>
+<p class="lede">Before you can see your transactions, prove you're a customer of the bank. We'll send a one-time code to the cellphone number the bank holds for you.</p></div>
+<form class="surface stack" action="link-otp.html">
+<div class="field"><label for="idn">ID number</label><input class="input" id="idn" inputmode="numeric" autocomplete="off" maxlength="13" placeholder=""><p class="help">Your 13-digit South African ID number.</p></div>
+<div class="field"><label for="acc">Account number</label><input class="input" id="acc" inputmode="numeric" autocomplete="off"><p class="help">Any account you hold with the bank.</p></div>
+<button class="btn btn--primary btn--block" type="submit">Continue</button>
+</form>
+<p class="caption">Can't link online? Contact the bank.</p>
+</main>
+<footer class="footer"><div class="footer__in">
+  <p>Demo data only. Every name, number and amount shown here is made up.</p>
+  <p>Your details are used only to show your transactions and handle your disputes.</p>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Disputes · DisputeDesk</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar__in">
+  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <nav class="topnav" aria-label="Main"><a href="transactions.html">Transactions</a><a href="disputes.html" aria-current="page">Disputes</a></nav>
+  <a class="signout" href="start.html">Sign out</a>
+</div></header>
+<p class="mock-note">Mockup: the amount is the disputed amount (the difference for Wrong amount). Works while the core-banking source is down. <a href="index.html">All screens</a></p>
+<main class="wrap">
+<div class="stack"><h1 class="title">Disputes</h1><p class="lede">Every dispute you've raised, newest first.</p></div>
+<h2 class="list-heading">Open</h2>
+<ul class="list panel">
+<li class="row">
+  <div class="row__main"><p class="row__title"><a href="dispute-submitted.html">ZXP*GLOBALSVCS 0800</a></p><p class="caption">Unrecognised, raised 26 Oct 2026</p></div>
+  <div class="row__side"><span class="amount">R849.00</span><span class="badge badge--submitted"><span class="sr-only">Status: </span>Submitted</span></div>
+</li>
+<li class="row">
+  <div class="row__main"><p class="row__title"><a href="dispute-under-review.html">Lekker Eats, Durban</a></p><p class="caption">Duplicate charge, raised 21 Oct 2026</p></div>
+  <div class="row__side"><span class="amount">R312.50</span><span class="badge badge--review"><span class="sr-only">Status: </span>Under review</span></div>
+</li>
+<li class="row">
+  <div class="row__main"><p class="row__title"><a href="dispute-prioritised.html">Online Gadgets ZA</a></p><p class="caption">Not received, raised 12 Oct 2026</p></div>
+  <div class="row__side"><span class="amount">R4&#8239;299.00</span><span class="badge badge--priority"><span class="sr-only">Status: </span>Under review (prioritised)</span></div>
+</li>
+</ul>
+<h2 class="list-heading">Closed</h2>
+<ul class="list panel">
+<li class="row">
+  <div class="row__main"><p class="row__title"><a href="dispute-upheld.html">Ocean Gym Club</a></p><p class="caption">Cancelled subscription, raised 2 Oct 2026</p></div>
+  <div class="row__side"><span class="amount">R499.00</span><span class="badge badge--upheld"><span class="sr-only">Status: </span>Resolved · Upheld</span></div>
+</li>
+<li class="row">
+  <div class="row__main"><p class="row__title"><a href="dispute-rejected.html">Karoo Fuel Stop, Pinetown</a></p><p class="caption">Wrong amount, raised 16 Sep 2026</p></div>
+  <div class="row__side"><span class="amount">R500.00</span><span class="badge badge--rejected"><span class="sr-only">Status: </span>Resolved · Rejected</span></div>
+</li>
+<li class="row">
+  <div class="row__main"><p class="row__title"><a href="dispute-withdrawn.html">TechNova Online</a></p><p class="caption">Not received, raised 5 Sep 2026</p></div>
+  <div class="row__side"><span class="amount">R1&#8239;899.00</span><span class="badge badge--withdrawn"><span class="sr-only">Status: </span>Withdrawn</span></div>
+</li>
+</ul>
+</main>
+<footer class="footer"><div class="footer__in">
+  <p>Demo data only. Every name, number and amount shown here is made up.</p>
+  <p>Your details are used only to show your transactions and handle your disputes.</p>
+</div></footer>
+<nav class="tabbar" aria-label="Main (phone)">
+  <a href="transactions.html"><span aria-hidden="true">☰</span>Transactions</a>
+  <a href="disputes.html" aria-current="page"><span aria-hidden="true">⚑</span>Disputes</a>
+</nav>
+</body>
+</html>

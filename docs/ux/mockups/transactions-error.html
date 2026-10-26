@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transactions · DisputeDesk</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar__in">
+  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <nav class="topnav" aria-label="Main"><a href="transactions.html" aria-current="page">Transactions</a><a href="disputes.html">Disputes</a></nav>
+  <a class="signout" href="start.html">Sign out</a>
+</div></header>
+<p class="mock-note">Mockup: 503 when the core-banking source is down after retries. Dispute history keeps working. <a href="index.html">All screens</a></p>
+<main class="wrap stack-lg">
+<div class="stack"><h1 class="title">Transactions</h1><p class="lede">Your card and account transactions, newest first.</p></div>
+<div class="notice notice--danger" role="alert"><strong>We can't load your transactions right now.</strong><span>Your disputes are still available.</span>
+<p class="caption" style="color:inherit">If this keeps happening, contact the bank and quote this reference:<br><span class="ref">4bf92f3577b34da6a3ce929d0e0e4736</span><button class="copy" type="button">Copy</button></p></div>
+<div class="actions"><a class="btn btn--primary btn--block" href="transactions.html">Try again</a><a class="btn btn--secondary btn--block" href="disputes.html">View disputes</a></div>
+</main>
+<footer class="footer"><div class="footer__in">
+  <p>Demo data only. Every name, number and amount shown here is made up.</p>
+  <p>Your details are used only to show your transactions and handle your disputes.</p>
+</div></footer>
+<nav class="tabbar" aria-label="Main (phone)">
+  <a href="transactions.html" aria-current="page"><span aria-hidden="true">☰</span>Transactions</a>
+  <a href="disputes.html"><span aria-hidden="true">⚑</span>Disputes</a>
+</nav>
+</body>
+</html>
