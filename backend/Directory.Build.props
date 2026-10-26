@@ -8,5 +8,8 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <!-- Required for IDE0005 (unused usings) to run in the build; also feeds XML comments into OpenAPI. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- NuGetAudit is the vulnerable-package gate: with TreatWarningsAsErrors, restore fails on a High or Critical
+         advisory. NuGetAuditMode defaults to `all` (transitive packages too) for net10.0. -->
+    <NuGetAuditLevel>high</NuGetAuditLevel>
   </PropertyGroup>
 </Project>

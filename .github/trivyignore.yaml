@@ -1,0 +1,9 @@
+# Triaged Trivy findings (NFR-SEC-8: a High or Critical finding fails the build unless triaged here).
+# Each entry is scoped to one path and says why it is accepted.
+misconfigurations:
+  - id: DS-0002
+    paths:
+      - "infra/zitadel/provision/Dockerfile"
+    statement: >-
+      Local Compose only, one-shot and never deployed. The provisioner runs as root on purpose: it chowns the
+      generated client file to the .NET images' non-root user (see provision.sh).

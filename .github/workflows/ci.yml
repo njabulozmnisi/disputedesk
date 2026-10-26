@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege: every job reads the repo and nothing more.
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its older run. Pushes have no head_ref, so each run gets its own group
+# (the run ID) and every main commit gets a result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: backend/global.json
+
+      - run: dotnet restore DisputeDesk.slnx
+
+      # Warnings are errors through Directory.Build.props (TreatWarningsAsErrors), so CI and local builds agree.
+      - run: dotnet build DisputeDesk.slnx --no-restore
+
+      # The build regenerates openapi.json. Any difference from the committed file is contract drift.
+      # The path is relative to the working directory (backend/).
+      - name: OpenAPI drift
+        run: git diff --exit-code -- openapi.json
+
+      # IDE0003 and IDE0049 never run in `dotnet build`; this is where they are enforced.
+      - name: Code style
+        run: dotnet format style DisputeDesk.slnx --verify-no-changes --no-restore
+
+      # Integration tests start Postgres with Testcontainers on the runner's Docker.
+      - run: dotnet test --solution DisputeDesk.slnx --no-build
+
+  platform:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compose file is valid
+        run: docker compose config --quiet
+
+  floor-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - run: scripts/floor-guard.sh
+
+      # Same rule as the pre-commit hook: whole-word, case-insensitive, one term per line, # comments allowed.
+      # Only file:line is printed, never the matching text, so the terms stay out of the log.
+      - name: Forbidden terms
+        env:
+          FORBIDDEN_TERMS: ${{ secrets.FORBIDDEN_TERMS }}
+        run: |
+          terms="$RUNNER_TEMP/forbidden-terms"
+          printf '%s\n' "$FORBIDDEN_TERMS" | tr -d '\r' | grep -v '^[[:space:]]*#' | sed '/^[[:space:]]*$/d' > "$terms" || true
+          if [[ ! -s "$terms" ]]; then
+            echo "::notice::The FORBIDDEN_TERMS secret is not set; the forbidden-terms check was skipped."
+            exit 0
+          fi
+          matches=$(git grep -n -I -i -w -F -f "$terms") && status=0 || status=$?
+          rm -f "$terms" # hosted runners are discarded, but a self-hosted runner would keep the terms on disk
+
+          if [[ $status -eq 0 ]]; then
+            echo "::error::Forbidden terms found (matching text withheld):"
+            printf '%s\n' "$matches" | cut -d: -f1,2
+            exit 1
+          elif [[ $status -gt 1 ]]; then
+            echo "::error::git grep failed (exit $status)."
+            exit 1
+          fi
+          echo "No forbidden terms."
