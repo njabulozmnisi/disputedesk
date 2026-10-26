@@ -232,7 +232,7 @@ shadcn/ui is the component vocabulary. This file specifies only the brand layer 
 
 One accent, everything else neutral or semantic.
 
-- **Cobalt `{colors.primary}` (#2B57C9; hover #2247AD, pressed #1B3A8F; dark #8CAAF7)** is the only brand colour and it means "you can act here": filled primary buttons, secondary-button outlines and labels, links, the active nav segment, the focus ring, the selected reason card, the current timeline dot. It is never used for status or decoration. `{colors.primary-subtle}` (#E8EEFB) is its tint for selected fills and secondary-button hover.
+- **Cobalt `{colors.primary}` (#2B57C9; hover #2247AD, pressed #1B3A8F; dark #8CAAF7)** is the only brand colour and it means "an action is available here": filled primary buttons, secondary-button outlines and labels, links, the active nav segment, the focus ring, the selected reason card, the current timeline dot. It is never used for status or decoration. `{colors.primary-subtle}` (#E8EEFB) is its tint for selected fills and secondary-button hover.
 - **Navy `{colors.heading}` (#14287A; dark #C9D6FF)** is a text colour only: the display headline, page titles and hero amounts. It gives the large type weight without adding a second accent.
 - **Canvas `{colors.background}` (#F4F5F7)** is a light grey; **surfaces `{colors.card}`** are white; **quiet fills `{colors.muted}`** (#EEF0F3) for skeletons, quote blocks and the start page's step numbers; **dividers `{colors.border}`** (#E1E4EA).
 - **Text `{colors.foreground}` (#1E2430)** is near-black; **secondary text `{colors.muted-foreground}` (#586070)** is mid grey.

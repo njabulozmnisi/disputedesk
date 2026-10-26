@@ -16,7 +16,7 @@ Run the scanners that apply and read the diff against this list.
 
 ## Report
 
-Severity per finding (high, medium, low). Any high finding goes to Njabulo before merge.
+Severity per finding (high, medium, low). Any high finding is escalated for a decision before merge.
 
 ```json
 {"status": "pass", "findings": [], "scanners": {}, "assumptions": [], "open_questions": [], "conflicts": []}

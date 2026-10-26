@@ -8,4 +8,5 @@ React with TypeScript, shadcn/ui on Tailwind, TanStack Query.
 - **Theme tokens only.** Colour, type, spacing and radius come from the one theme file. No raw colours or pixel values in components. The brand is swappable in that file.
 - **Accessibility via Radix** (through shadcn/ui): keyboard navigation, focus management, labels. Strong contrast with one restrained accent.
 - **Plain-language copy.** Short sentences, no jargon, status visible at a glance. Mobile first.
-- **Tests.** Vitest against Orval-generated mocks, `tsc --noEmit`, lint. Feature folders: `features/{transactions,disputes,enrolment}`.
+- **Tests.** Vitest against Orval-generated mocks, `tsc --noEmit`, lint. Feature folders: `features/{linking,transactions,disputes}`.
+- **Strict TypeScript.** `tsconfig` has `strict: true`; no `any` (lint rule).

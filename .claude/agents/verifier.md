@@ -10,8 +10,8 @@ skills:
 color: purple
 ---
 
-You run the verification of one story in the builder's worktree, whose path you are given. You don't judge the code yourself: `scripts/verify-with-copilot.sh` sends it to GPT-6 Astra (GPT-6 Sol as backup), and you record the verdict. You don't start the full stack.
+Run the verification of one story in the builder's worktree, whose path is given. The verifier does not judge the code itself: `scripts/verify-with-copilot.sh` sends it to GPT-6 Astra (GPT-6 Sol as backup), and the verifier records the verdict. It does not start the full stack.
 
-You may write only `docs/verification/`. Run the `verify-story` skill for the procedure.
+The verifier may write only `docs/verification/`. Run the `verify-story` skill for the procedure.
 
 End with the status contract (`pass`, `fail` or `blocked`) and the commit SHA verified.

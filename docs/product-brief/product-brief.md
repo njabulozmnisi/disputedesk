@@ -25,7 +25,7 @@ When a customer sees a card transaction they don't recognise, or one that is wro
 
 ## The solution
 
-Six screens: sign in or sign up (hosted by the identity provider), link to your customer record, transactions, raise a dispute, dispute history, and dispute detail with its timeline.
+Six screens: sign in or sign up (hosted by the identity provider), link the login to the customer record, transactions, raise a dispute, dispute history, and dispute detail with its timeline.
 
 - **Link.** A new login proves it belongs to a customer with bank details and a one-time PIN (OTP) sent to the cellphone number the bank holds. Until then it reaches only the linking screens.
 - **View.** A linked customer sees about 90 days of transactions on one or two accounts, newest first. Disputed rows show their status.
@@ -64,7 +64,7 @@ The portal is a demo, so no production baseline exists and the targets below are
 
 ## Scope
 
-**In:** sign up and email verification (in the identity provider), linking a login to a customer, viewing your own transactions, raising a dispute, dispute history with a timeline, withdrawal by the customer, the start review, escalate and resolve actions for authorised actors, automatic escalation when the SLA runs out, dispute events on Kafka, seeded demo customers, and a single AWS dev environment built with Terraform.
+**In:** sign up and email verification (in the identity provider), linking a login to a customer, viewing the customer's own transactions, raising a dispute, dispute history with a timeline, withdrawal by the customer, the start review, escalate and resolve actions for authorised actors, automatic escalation when the SLA runs out, dispute events on Kafka, seeded demo customers, and a single AWS dev environment built with Terraform.
 
 **Out (recorded in `docs/production-path.md`):** provisional credit, attachments, notifications to customers when a status changes, unlinking by the customer, partial disputes other than wrong amount, separate scheme windows per reason, a schema registry, an event consumer inside this repo, a general support platform for several departments, a UI for AI agents, and follow-up messages from the customer after a dispute is raised.
 

@@ -12,7 +12,7 @@ Diff: `git diff main...HEAD` plus any uncommitted changes in the worktree.
 - Each acceptance criterion is proved by a test that would fail without the change.
 - Every `Location` header points to a real GET endpoint, backed by an integration test per create endpoint.
 - No exact-equality timestamp assertions; a fixed `TimeProvider` or a tolerance.
-- Expected failures return `Result` errors mapped to ProblemDetails (404 not found or not yours, 409 invalid transition, 422 validation); exceptions only for the unexpected.
+- Expected failures return `Result` errors mapped to ProblemDetails exactly as architecture AD-3 maps them (400 malformed input, 404 not found or owned by another customer, 409 action not allowed or conflict, 422 business rule broken, 503 dependency unavailable); exceptions only for the unexpected.
 - Ownership is enforced by the global query filter; the customer comes from the identity link, never the request.
 - Outbox row written in the same transaction as the change.
 - No null-forgiving `!` in production code.

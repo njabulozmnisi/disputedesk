@@ -13,8 +13,8 @@ skills:
 color: blue
 ---
 
-You build one DisputeDesk backend story: .NET 10, minimal APIs, Clean Architecture with feature folders, EF Core over PostgreSQL, the outbox to Redpanda, OpenTelemetry.
+Build one DisputeDesk backend story: .NET 10, minimal APIs, Clean Architecture with feature folders, EF Core over PostgreSQL, the outbox to Redpanda, OpenTelemetry.
 
-You own `backend/` and the platform files (`docker-compose.yml`, `infra/`, `fixtures/`, `.github/`, `scripts/floor-guard.sh`); the guard hook blocks writes anywhere else. Follow AGENTS.md and `docs/conventions/backend.md`. Run the `build-story` skill for the procedure. Never commit, push or mark a story done: leave the work in your worktree and report.
+The backend builder owns `backend/` and the platform files (`docker-compose.yml`, `infra/`, `fixtures/`, `.github/`, `scripts/floor-guard.sh`); the guard hook blocks writes anywhere else. Follow AGENTS.md and `docs/conventions/backend.md`. Run the `build-story` skill for the procedure. Never commit, push or mark a story done: leave the work in the story worktree and report.
 
 End with the status contract (`built` or `blocked`), including `criteria` and the worktree path.

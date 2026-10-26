@@ -2,10 +2,9 @@
 title: DisputeDesk
 status: final
 created: 2026-10-25
-updated: 2026-10-25
+updated: 2026-10-26
 inputs:
   - docs/product-brief/product-brief.md
-  - docs/product-brief/addendum.md
   - docs/glossary.md
   - docs/research/dispute-lifecycle/dispute-lifecycle.md
   - docs/research/event-versioning/event-versioning.md
@@ -15,17 +14,17 @@ inputs:
 
 ## 0. Document purpose
 
-This PRD is for Njabulo (architect and product owner), for the downstream planning skills (Sofia, UX, architecture), and for the builder, verifier, QA and reviewer agents. It turns the product brief (`docs/product-brief/product-brief.md` and its addendum) into requirements that can be tested.
+This PRD serves the downstream planning skills (Sofia, UX, architecture) and the builder, verifier, QA and reviewer agents. It turns the product brief (`docs/product-brief/product-brief.md`) into requirements that can be tested. The brief's settled technical constraints, identity design and seed data are folded into this PRD: the features in §4 (seed detail in FR-29) and the non-functional requirements in §5.
 
 Conventions:
 
 - Vocabulary comes from `docs/glossary.md`, which §3 repeats and extends.
 - Features are grouped, with globally numbered FRs nested under each one. FR IDs are stable, so a gap in the numbering is never reused.
 - Non-functional requirements sit in §5 under the ten assessment areas, with IDs `NFR-<AREA>-<n>`.
-- Inferences that Njabulo has not confirmed are tagged `[ASSUMPTION]` inline and indexed in §10.
+- Unconfirmed inferences are tagged `[ASSUMPTION]` inline and indexed in §10.
 - Consequences that cannot be automated are tagged `[manual check]`.
 
-Two research reports calibrate the rules. `docs/research/dispute-lifecycle/dispute-lifecycle.md` covers the dispute window, the SLA framing, the reasons and statuses customers see, and POPIA. `docs/research/event-versioning/event-versioning.md` covers the event envelope, versioning, trace propagation and consumer dedupe. Mechanism detail and rationale live in `docs/prd/addendum.md`.
+Two research reports calibrate the rules. `docs/research/dispute-lifecycle/dispute-lifecycle.md` covers the dispute window, the SLA framing, the reasons and statuses customers see, and POPIA. `docs/research/event-versioning/event-versioning.md` covers the event envelope, versioning, trace propagation and consumer dedupe. Mechanism detail and rationale live in `docs/architecture/architecture.md`.
 
 ## 1. Vision
 
@@ -37,9 +36,9 @@ It answers a take-home brief: "Create a system (front end and back end) for cust
 
 ### 2.1 Jobs to be done
 
-- **Customer:** "When I see a card transaction I don't recognise or that is wrong, I want to dispute it in a couple of minutes and then see where it stands, without phoning the bank." They also want to be confident that nobody else can see their transactions or disputes.
-- **Operations tool or automation (actor):** "When a dispute arrives, I want to read it, start review on it, escalate it or resolve it through a stable, authorised API, and have every change audited and published."
-- **Interview reviewer (audience):** "I want to see within minutes how each assessment area is handled, run it with one command, and trust the tests."
+- **Customer:** When a card transaction is unrecognised or wrong, the customer wants to dispute it in a couple of minutes and then see where it stands, without phoning the bank. They also want to be confident that nobody else can see their transactions or disputes.
+- **Operations tool or automation (actor):** When a dispute arrives, the actor needs to read it, start review on it, escalate it or resolve it through a stable, authorised API, and have every change audited and published.
+- **Interview reviewer (audience):** The reviewer wants to see within minutes how each assessment area is handled, run it with one command, and trust the tests.
 
 ### 2.2 Non-users (v1)
 
@@ -66,23 +65,23 @@ A signed-out visitor lands on a minimal start page with a sign-in button [ASSUMP
 
 Customers see two actor labels on the timeline: "You" for the customer and "The bank" for operations tools and automated processes alike, so an automatic escalation does not reveal the internal SLA.
 
-- **UJ-1. Thandi signs up, links and disputes a transaction she doesn't recognise.**
-  - **Persona and context:** Thandi, a teacher in Durban, sees an R849.00 card debit from a merchant she has never heard of. She has never used DisputeDesk.
+- **UJ-1. Thandi signs up, links and disputes an unrecognised transaction.**
+  - **Persona and context:** Thandi, a teacher in Durban, sees an R849.00 card debit from a merchant Thandi has never heard of, and has never used DisputeDesk.
   - **Entry state:** anonymous, on the start page.
   - **Path:**
-    1. She signs up on the identity provider's hosted, DisputeDesk-themed page and verifies her email from her inbox (Mailpit in the demo).
-    2. Back in DisputeDesk her login is not linked, so she can reach only the linking screen. She enters her ID number and an account number.
-    3. She sees a neutral message: "If these details match our records, we've sent a code to the cellphone number we hold for you."
-    4. She enters the 6-digit OTP, and her login becomes a linked customer.
-    5. She lands on Transactions, newest first. She opens the R849.00 row, chooses Dispute, picks the reason "unrecognised", adds a short note and submits.
-  - **Climax:** the transaction row shows the badge "Submitted". Her dispute history lists the dispute, and its timeline has one entry: Submitted, the time in South African time, actor "You".
-  - **Resolution:** she signs out, which ends both the DisputeDesk session and the identity provider session.
+    1. Thandi signs up on the identity provider's hosted, DisputeDesk-themed page and verifies the email address from the inbox (Mailpit in the demo).
+    2. Back in DisputeDesk the login is not linked, so only the linking screen is reachable. Thandi enters an ID number and an account number.
+    3. Thandi sees a neutral message: "If these details match our records, we've sent a code to the cellphone number we hold for you."
+    4. Thandi enters the 6-digit OTP, and the login becomes a linked customer.
+    5. Thandi lands on Transactions, newest first, and opens the R849.00 row, chooses Dispute, picks the reason "unrecognised", adds a short note and submits.
+  - **Climax:** the transaction row shows the badge "Submitted". Thandi's dispute history lists the dispute, and its timeline has one entry: Submitted, the time in South African time, actor "You".
+  - **Resolution:** Thandi signs out, which ends both the DisputeDesk session and the identity provider session.
   - **Edge case:** a pending transaction shows as not disputable and has no Dispute control.
   - **Realised by:** FR-1 to FR-17 and FR-27.
 
-- **UJ-2. Sipho withdraws a dispute he no longer needs.**
+- **UJ-2. Sipho withdraws a dispute that is no longer needed.**
   - **Persona and context:** Sipho, a linked customer, raised a "not received" dispute. Then the parcel arrives.
-  - **Path:** he opens the dispute detail (status Under review), chooses Withdraw, adds the optional note "Parcel arrived", and confirms.
+  - **Path:** Sipho opens the dispute detail (status Under review), chooses Withdraw, adds the optional note "Parcel arrived", and confirms.
   - **Resolution:** the timeline shows Withdrawn, actor "You". The transaction can never be disputed again.
   - **Realised by:** FR-17 to FR-20 and FR-28.
 
@@ -119,7 +118,7 @@ The terms from `docs/glossary.md` are used verbatim. No synonyms appear anywhere
 - **Transaction:** a settled or pending movement on an account, read from the bank's core banking system.
 - **Disputable transaction:** a settled card debit made within the last 90 days that has never been disputed.
 - **Dispute:** a customer's claim that a transaction was wrong. It is raised for the full amount, or for the difference when the reason is wrong amount. One per transaction, ever.
-- **Reason:** why the customer disputes. One of unrecognised, duplicate charge, wrong amount, not received, cancelled subscription, refund not processed.
+- **Reason:** why the customer disputes. One of unrecognised, duplicate charge, wrong amount, not received, cancelled subscription, refund not processed. Refund not processed follows the dispute-lifecycle research (recommendation 6). ATM cash not dispensed is not a reason: an ATM withdrawal is not a card debit to a merchant in this product.
 - **Status:** where a dispute is: Submitted, Under review, Escalated, Resolved or Withdrawn. Customers see Escalated as "Under review (prioritised)".
 - **Outcome:** the result of a resolved dispute: Upheld or Rejected.
 - **Action:** a named change to a dispute's status: start review, escalate, resolve, withdraw.
@@ -443,6 +442,7 @@ Operations endpoints accept only bearer JWTs issued through client credentials. 
 - A credential that does not map to exactly one known actor type returns 403. The mapping is one Zitadel service account per actor type [ASSUMPTION].
 - An action on a dispute ID that does not exist returns 404.
 - The audit entry records the time, dispute ID, action, from-status, to-status, actor type, actor identity (the service account's ID) and trace ID.
+- A rejected operations attempt after authentication (403, 404 or 409) is also audited, with its actor, action and result.
 
 #### FR-30: Read a dispute (operations)
 
@@ -490,7 +490,7 @@ Every successful action, including withdrawal and SLA escalation, publishes `dis
 - Each event is written to the outbox in the same database transaction as the change it describes. If that transaction rolls back, nothing is published.
 - Events carry no personal data: no names, ID numbers, account or card numbers, amounts, notes, customer ID or actor identity [ASSUMPTION: customer ID and amount are also left out; consumers read detail through FR-30].
 - Delivery is at least once. The event ID is set when the outbox row is written and stays the same across redelivery. Events for one dispute are published in the order they were committed.
-- Enum values (status, action, reason, outcome, actor type) use one wire casing, `snake_case` (for example `under_review`), in both the API and the events [ASSUMPTION].
+- Enum values (status, action, reason, outcome, actor type) use one wire casing, camelCase (for example `underReview`, `startReview`, `duplicateCharge`), in both the API and the events, serialised by `JsonStringEnumConverter(JsonNamingPolicy.CamelCase)`. C# enum members are PascalCase, and Postgres stores the member names. Settled on 2026-10-26.
 - Each type has a committed JSON Schema. A test checks serialised samples against it, and checks that v1 sample JSON still deserialises.
 
 ### 4.10 Demo seed data
@@ -517,15 +517,15 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 
 - **NFR-ARC-1:** the backend is .NET 10 minimal APIs in Clean Architecture. Domain and application code reference no infrastructure, and an architecture test enforces this.
 - **NFR-ARC-2:** the runtime units are as follows. Nothing else is added.
-  - **Locally:** an nginx gateway serving the SPA, the Api host (BFF and REST), the Worker (outbox relay and SLA sweep), PostgreSQL, Redpanda, Zitadel, Mailpit and the Aspire Dashboard.
-  - **In AWS:** the same Compose stack, except that RDS replaces the PostgreSQL container and CloudWatch receives the telemetry.
+  - **Locally:** an nginx gateway serving the SPA, the Api host (BFF and REST), the Worker (outbox relay and SLA sweep), PostgreSQL, Redpanda, Zitadel, Mailpit, the Aspire Dashboard and the core-banking stub service (a stand-in for the bank's core banking, behind `ICoreBankingClient` and `ISimSwapCheck`).
+  - **In AWS:** the same Compose stack, except that RDS replaces the PostgreSQL container and CloudWatch receives the telemetry through an OpenTelemetry Collector (CloudWatch's OTLP endpoints need SigV4 signing, which the .NET exporter can't do).
 - **NFR-ARC-3:** v1 runs one Api instance and one Worker instance. Sessions, idempotency keys and the audit log are in PostgreSQL, so the Api scales out without session loss. In-memory rate-limit state is the one exception (FR-8). Scale-out itself is a production-path note.
 - **NFR-ARC-4:** a second Worker instance would be harmless. The relay holds a PostgreSQL advisory lock, so only one relay publishes and per-dispute order is kept. The SLA sweep uses `SKIP LOCKED` (FR-26).
-- **NFR-ARC-5:** external systems are reached only through the ports `ICoreBankingClient`, `ISimSwapCheck` and `ISmsSender`. These are the only single-implementation interfaces allowed.
+- **NFR-ARC-5:** external systems are reached only through the ports `ICoreBankingClient`, `ISimSwapCheck` and `ISmsSender`. The only single-implementation interfaces allowed are these three and `IAppDbContext`, the persistence seam the architecture tests enforce.
 
 ### 5.2 Resilience and operational readiness
 
-- **NFR-RES-1:** the Api host and the Worker expose `/health/live` (the process is up) and `/health/ready` (dependencies are reachable: PostgreSQL for both, and Kafka for the Worker). Compose health checks use them.
+- **NFR-RES-1:** the Api host exposes `/health/live` (the process is up) and `/health/ready` (dependencies are reachable, PostgreSQL included). The Worker exposes no HTTP: its outbox relay and SLA sweep each touch a heartbeat file every loop, and the Compose health check fails when either file is stale. Compose health checks use both.
 - **NFR-RES-2:** calls to `ICoreBankingClient` go through the standard resilience handler: a timeout, retries with jitter on idempotent reads, and a circuit breaker. Once the policies are exhausted, the caller gets 503 ProblemDetails.
 - **NFR-RES-3:** raising a dispute and taking actions keep working while Kafka is down. Events wait in the outbox and are published, in order per dispute, when Kafka returns. The relay retries with backoff and stops at the first failure in each dispute's sequence.
 - **NFR-RES-4:** an outbox row the broker rejects permanently (not a transient failure) is marked failed after 5 attempts. It is counted in a metric and logged with its event ID. Later events for that dispute wait until an operator acts, as described in the README runbook [ASSUMPTION: a failed state in the outbox, not a dead-letter topic; see §9 Q4].
@@ -557,7 +557,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - **NFR-API-3:** lists use keyset pagination with opaque cursors.
 - **NFR-API-4:** each action has its own endpoint, named after the action. There is no generic "update status" endpoint.
 - **NFR-API-5:** customer endpoint responses never contain an actor's identity or an SLA, and Escalated is mapped as FR-17 describes.
-- **NFR-API-6:** money travels as decimal strings, and enum values use `snake_case` (FR-28).
+- **NFR-API-6:** money travels as decimal strings, and enum values use camelCase (FR-28).
 
 ### 5.5 Security (primary)
 
@@ -636,7 +636,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - **NFR-DOC-4:** Scalar is the API viewer in dev and demo, and stands in for another team's operations tool.
 - **NFR-DOC-5:** the README states plainly the simplifications the research identified:
   - the 90-day customer window counted from the transaction date, set against the scheme's 120 days from its processing date;
-  - the SLA as an internal trigger, not a promise;
+  - the SLA as an internal trigger, not a promise (the National Financial Ombud Scheme gives banks 21 working days on referral, and the Conduct Standard asks for a reasonable time; dispute-lifecycle research, recommendation 2);
   - the fact that the primary scheme rule texts were not read (dispute-lifecycle research, caveat).
 
 ## 6. Scope
@@ -646,7 +646,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - Sign up and email verification, in the identity provider.
 - Sign in and sign out through the BFF.
 - Linking with an OTP.
-- Viewing your own transactions.
+- Viewing the customer's own transactions.
 - Raising a dispute.
 - Dispute history with a timeline.
 - Customer withdrawal.
@@ -708,7 +708,7 @@ There is no production baseline, so the targets are illustrative for the demo [A
 
 ## 9. Open questions
 
-None open. Settled by the product owner on 2026-10-25:
+None open. Settled on 2026-10-25:
 1. A linked login calling a linking endpoint gets a 403 "already linked", which the SPA uses to redirect (FR-9).
 2. Start review and escalate take no note; only resolve (required) and withdraw (optional) carry customer-visible notes (FR-24).
 3. Timeline actor labels are "You" and "The bank" (§2.4).
@@ -749,7 +749,6 @@ None open. Settled by the product owner on 2026-10-25:
 
 **Events and seed data**
 - §4.9 FR-28: events leave out the customer ID and the amount.
-- §4.9 FR-28: `snake_case` enum values on the wire.
 - §4.10 FR-29: one seeded dispute passes the SLA a few minutes after start-up.
 - §4.10 FR-29: customer D is added for linking, and E2E runs reset D's link.
 - §4.10 FR-29: seeded disputes publish no events.

@@ -45,9 +45,9 @@ BASH_DENY = [
 ]
 BASH_ASK = [
     (r"\bgit\b[^;&|\n]*\s(commit|push|merge)\b|\bgh\s+pr\s+merge\b",
-     "Njabulo approves every commit, push and merge explicitly."),
-    (r"\bterraform\s+(apply|destroy|import)\b", "Infrastructure changes are irreversible: needs Njabulo."),
-    (r"(^|[\s;&|])aws\s", "AWS calls need Njabulo (the account is his and may not exist yet)."),
+     "Every commit, push and merge requires explicit approval."),
+    (r"\bterraform\s+(apply|destroy|import)\b", "Infrastructure changes are irreversible: requires explicit approval."),
+    (r"(^|[\s;&|])aws\s", "AWS calls require explicit approval (the target account may not exist yet)."),
 ]
 
 

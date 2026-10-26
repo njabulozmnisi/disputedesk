@@ -14,7 +14,7 @@ out="$root/docs/verification/$story-verify.md"
 mkdir -p "$(dirname "$out")"
 
 prompt=$(cat <<PROMPT
-You are an independent verifier. You did not write this code. Check code only.
+Act as an independent verifier that did not write this code. Check code only.
 The work is deliberately uncommitted: treat every file in this worktree, including untracked ones, as the change under review.
 Story file: $story_file. Read it, then:
 1. Build: dotnet build backend (warnings are errors) and/or npm run build in frontend, whichever the diff touches.

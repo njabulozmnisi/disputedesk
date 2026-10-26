@@ -12,7 +12,7 @@ Correctness, then security, then data integrity, then maintainability, then perf
 
 - Read before writing. Make the smallest change that satisfies the acceptance criteria. Leave the tree green.
 - Framework first: check the .NET 10 docs (Microsoft Learn MCP, or `npx @microsoft/learn-cli`) before writing any abstraction. Use the built-in way where one exists: minimal API validation, ProblemDetails, `TimeProvider`, built-in OpenAPI, the built-in OIDC and cookie handlers, the built-in rate limiter.
-- Every abstraction earns its place. No MediatR, AutoMapper, Swashbuckle or Duende; no single-implementation interfaces except `ICoreBankingClient`, `ISimSwapCheck` and `ISmsSender`.
+- Every abstraction earns its place. No MediatR, AutoMapper, Swashbuckle or Duende; no single-implementation interfaces except `ICoreBankingClient`, `ISimSwapCheck`, `ISmsSender` and `IAppDbContext`.
 - Over-engineering is the standing risk. Show each assessment area once and well; anything bigger goes in `docs/production-path.md`. Mark a deliberate shortcut in code with `// shortcut: <the limit>, <when to upgrade>`.
 - Use the terms in [docs/glossary.md](docs/glossary.md). Don't invent synonyms.
 
@@ -23,7 +23,7 @@ Correctness, then security, then data integrity, then maintainability, then perf
 | Trivial | typo, comment | Change, run the affected check |
 | Small | one endpoint field, one component state | Test first, full area checks |
 | Feature | a story | The full story flow: builder, verifier, QA, reviewer |
-| High-stakes | auth, identity and account linking, customer data, money, migrations | Feature flow plus the security agent, and Njabulo reads the diff |
+| High-stakes | auth, identity and account linking, customer data, money, migrations | Feature flow plus the security agent and a human review of the diff |
 
 ## Dependency verification
 

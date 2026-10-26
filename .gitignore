@@ -55,3 +55,4 @@ docs/research/*/digests/
 docs/**/review-*.md
 docs/**/reconcile-*.md
 docs/**/addendum.md
+docs/**/reviews/

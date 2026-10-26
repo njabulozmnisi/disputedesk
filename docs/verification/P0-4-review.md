@@ -21,6 +21,6 @@
 |---|---|---|---|
 | 1 | Medium | NuGetAudit + warnings-as-errors failed restore on any advisory severity, so the `dotnet list --vulnerable` + jq step could never run | `NuGetAuditLevel=high` in `backend/Directory.Build.props`; the job is a plain `dotnet restore`. Proved: Moderate restores, direct and transitive High fail with NU1903 |
 | 2 | Low | Concurrency comment claimed main runs are never cancelled | Group `workflow-head_ref\|\|run_id` with cancel-in-progress: every push gets its own run |
-| 3 | Low | CodeQL and these jobs only block merges as required checks | Comment at the top of `security.yml`; Njabulo sets the branch ruleset |
+| 3 | Low | CodeQL and these jobs only block merges as required checks | Comment at the top of `security.yml`; the branch ruleset is configured in the repository settings |
 | 4 | Low | Floor guard omitted banned packages and warnings-as-errors switches | Two rules added; 8 planted hits reported, exit 1 |
 | 5 | Nit | `rm -f` of the terms file | Kept, with a comment (self-hosted runners keep files) |
