@@ -1,3 +1,4 @@
+using System.Reflection;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Exporter;
@@ -5,15 +6,15 @@ using OpenTelemetry.Exporter;
 namespace DisputeDesk.Api.IntegrationTests;
 
 /// <summary>
-/// Proves the on/off decision our code owns: OTEL_EXPORTER_OTLP_ENDPOINT alone switches the OTLP exporter on.
-/// What the exporter sends once switched on is the OpenTelemetry library's behaviour, not ours.
+/// Proves the on/off decision DisputeDesk code owns: OTEL_EXPORTER_OTLP_ENDPOINT alone switches the OTLP exporter on.
+/// What the exporter sends once switched on is the OpenTelemetry library's behaviour, not DisputeDesk's.
 /// </summary>
 public class OtlpExportTests
 {
     [Theory]
     [InlineData("", false)] // blank, not merely absent, so a developer's own variable can't leak into the run
     [InlineData("http://127.0.0.1:4317", true)]
-    public void The_OTLP_exporter_is_registered_only_when_an_endpoint_is_set(string endpoint, bool expected)
+    public void AddDisputeDeskTelemetry_OtlpEndpoint_RegistersExporterOnlyWhenSet(string endpoint, bool expected)
     {
         ServiceDescriptor[] registrations = [];
         using var factory = new ApiFactory(
@@ -29,7 +30,7 @@ public class OtlpExportTests
     /// <summary>A service, implementation or options type from the OTLP exporter's own assembly.</summary>
     public static bool FromOtlpExporter(ServiceDescriptor descriptor)
     {
-        var otlp = typeof(OtlpExporterOptions).Assembly;
+        Assembly otlp = typeof(OtlpExporterOptions).Assembly;
         Type?[] types = [descriptor.ServiceType, descriptor.ImplementationType, .. descriptor.ServiceType.GenericTypeArguments];
         return types.Any(type => type?.Assembly == otlp);
     }

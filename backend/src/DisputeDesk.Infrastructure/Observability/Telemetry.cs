@@ -27,7 +27,7 @@ public static class Telemetry
         string serviceName,
         Assembly hostAssembly)
     {
-        var telemetry = builder.Services.AddOpenTelemetry()
+        OpenTelemetryBuilder telemetry = builder.Services.AddOpenTelemetry()
             // A later resource wins a collision, so the environment detector runs again after AddService:
             // OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES keep the last word over the code's defaults.
             .ConfigureResource(resource => resource
@@ -39,7 +39,8 @@ public static class Telemetry
             .WithMetrics(metrics => metrics
                 .AddHttpClientInstrumentation()
                 .AddNpgsqlInstrumentation()
-                .AddMeter("System.Runtime")) // the runtime's built-in meter (.NET 9+): GC, thread pool, exceptions
+                // The runtime's built-in meter (.NET 9+): GC, thread pool, exceptions.
+                .AddMeter("System.Runtime"))
             // The log record carries the current Activity's trace and span IDs; the formatted message is kept
             // alongside the template and its attributes so a viewer can show the line as written.
             .WithLogging(configureBuilder: null, configureOptions: options => options.IncludeFormattedMessage = true);

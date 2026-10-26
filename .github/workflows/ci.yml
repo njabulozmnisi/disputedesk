@@ -41,9 +41,22 @@ jobs:
       - name: OpenAPI drift
         run: git diff --exit-code -- openapi.json
 
-      # IDE0003 and IDE0049 never run in `dotnet build`; this is where they are enforced.
+      # IDE0003, IDE0049 and the var rules (IDE0007, IDE0008) never run in `dotnet build`; this is where they are enforced.
       - name: Code style
         run: dotnet format style DisputeDesk.slnx --verify-no-changes --no-restore
+
+      # The build enforces indentation and spacing (IDE0055); the file-level .editorconfig rules
+      # (final newline, line endings, charset) are only checked here.
+      - name: Whitespace
+        run: dotnet format whitespace DisputeDesk.slnx --verify-no-changes --no-restore
+
+      # dotnet-ef is pinned in .config/dotnet-tools.json. Fails when an entity or configuration changed without a
+      # migration. With no migrations yet it passes on the empty model and fails as soon as one is mapped.
+      - name: EF model drift
+        run: |
+          dotnet tool restore
+          dotnet ef migrations has-pending-model-changes --no-build \
+            --project src/DisputeDesk.Infrastructure --startup-project src/DisputeDesk.Api
 
       # Integration tests start Postgres with Testcontainers on the runner's Docker.
       - run: dotnet test --solution DisputeDesk.slnx --no-build
