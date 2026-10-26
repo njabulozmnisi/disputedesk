@@ -17,6 +17,11 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <!-- dotnet-ef needs this in the startup project's build output; Publish="false" keeps it (and Roslyn) out of the image. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Publish="false">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
     <PackageReference Include="Scalar.AspNetCore" />

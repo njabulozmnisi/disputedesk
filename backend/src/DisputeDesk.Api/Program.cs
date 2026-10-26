@@ -9,7 +9,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel(kestrel => kestrel.AddServerHeader = false);
 builder.AddDisputeDeskTelemetry("disputedesk-api", typeof(Program).Assembly)
@@ -24,7 +24,7 @@ builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddDisputeDeskHealthChecks();
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 app.UseSecurityHeaders();
 app.UseExceptionHandler();
