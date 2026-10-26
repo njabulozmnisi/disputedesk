@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Floor guard: fails when a change lowers the quality floor (warning suppressions, the system clock in
+# production code, fake databases, exact timestamp assertions). The guard hook blocks these at write time;
+# this script catches anything that got in another way. Runs locally and in CI: scripts/floor-guard.sh
+#
+# git grep searches tracked files only (the same set as `git ls-files`), so build output and untracked
+# scratch files are never scanned. Each hit prints as file:line:text; any hit exits 1.
+# Patterns are POSIX extended regexes with no \b, which macOS and Linux git grep read the same way.
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 2
+
+failed=0
+
+# check <message> <git grep pattern and pathspec arguments...>
+check() {
+  local message=$1 hits status
+  shift
+  hits=$(git grep -n -I -E "$@")
+  status=$?
+  if [[ $status -eq 0 ]]; then
+    echo "floor-guard: $message"
+    printf '%s\n' "$hits" | sed 's/^/  /'
+    failed=1
+  elif [[ $status -gt 1 ]]; then
+    echo "floor-guard: git grep failed (exit $status) for: $message"
+    failed=1
+  fi
+}
+
+msbuild=('*.csproj' '*.props' '*.targets')
+
+check "analyser severity set to none; fix the cause" \
+  -e 'severity[[:space:]]*=[[:space:]]*none' -- '*.editorconfig' '*.globalconfig'
+
+check "#pragma warning disable; fix the cause" \
+  -e '#pragma[[:space:]]+warning[[:space:]]+disable' -- '*.cs'
+
+check "SuppressMessage; fix the cause" \
+  -e 'SuppressMessage' -- '*.cs' "${msbuild[@]}"
+
+check "NoWarn (element or attribute); fix the cause" \
+  -e 'NoWarn' -- "${msbuild[@]}"
+
+check "warnings no longer fail the build; fix the cause" \
+  -i -e 'WarningsNotAsErrors|<TreatWarningsAsErrors>[[:space:]]*false' -- "${msbuild[@]}"
+
+# Prefix match, so it also catches Swashbuckle.*, Duende.* and EF Core's Sqlite.Core (AGENTS.md bans them).
+check "banned package (MediatR, AutoMapper, Swashbuckle, Duende, EF Core InMemory or Sqlite)" \
+  -e 'Include="(MediatR|AutoMapper|Swashbuckle|Duende|Microsoft\.EntityFrameworkCore\.(InMemory|Sqlite))' \
+  -- "${msbuild[@]}"
+
+check "// ! justification comment; it silences the null-forgiving analyser" \
+  -e '^[[:space:]]*//[[:space:]]*!' -- 'backend/src/*.cs'
+
+check "system clock read; inject TimeProvider" \
+  -e 'DateTime\.(Now|UtcNow|Today)|DateTimeOffset\.(Now|UtcNow)' -- 'backend/src/*.cs'
+
+check "fake database; use Postgres via Testcontainers" \
+  -e 'UseInMemoryDatabase|UseSqlite' -- '*.cs'
+
+# Exact-equality assertion against the live clock. A heuristic with known limits:
+# - it sees one line only, so a clock value captured in a variable first is missed;
+# - it knows xUnit's Assert.Equal only;
+# - a TimeSpan on the line is read as xUnit's precision argument (a tolerance) and allowed;
+# - values from a fixed TimeProvider are allowed, as the backend conventions say, so a plain
+#   GetUtcNow() is not flagged; TimeProvider.System is.
+check "exact-equality timestamp assertion against the live clock; use a fixed TimeProvider or a tolerance" \
+  -e 'Assert\.Equal\(' \
+  --and -e 'DateTime\.(Now|UtcNow|Today)|DateTimeOffset\.(Now|UtcNow)|TimeProvider\.System' \
+  --and --not -e 'TimeSpan' \
+  -- 'backend/tests/*.cs'
+
+if [[ $failed -ne 0 ]]; then
+  echo "floor-guard: failed"
+  exit 1
+fi
+echo "floor-guard: clean"
