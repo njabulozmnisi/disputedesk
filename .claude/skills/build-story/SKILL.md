@@ -12,7 +12,7 @@ The input is a story file from `docs/tickets/` with Given/When/Then criteria tag
    - Backend: domain unit tests for decisions (state machine, SLA, validation) with an injected `TimeProvider`; integration tests against real Postgres via Testcontainers for plumbing. Take the `testcontainers` lock: `scripts/test-lock.sh run testcontainers <story> -- dotnet test ...`.
    - Frontend: Vitest against the Orval-generated mocks.
 3. **Run every available check.**
-   - Backend: `dotnet build` (warnings are errors), unit, integration and architecture tests, the OpenAPI drift check.
+   - Backend: `dotnet build` (warnings are errors), unit, integration and architecture tests, the OpenAPI drift check, `scripts/floor-guard.sh`.
    - Frontend: Vitest, `tsc --noEmit`, lint.
 4. **Developer smoke check, before reporting `built`.**
    - Backend: start the API, its Postgres and the shared dev Zitadel; sign in a seeded user with `scripts/dev-login.sh`; call the endpoints with the committed `backend/http/*.http` requests; confirm the rows landed. No browser, no shared lock except during sign-in.
