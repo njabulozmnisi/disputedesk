@@ -23,6 +23,10 @@ Diff: `git diff main...HEAD` plus any uncommitted changes in the worktree.
 
 Then the standards check (AGENTS.md, "Use established standards; do not invent mechanisms"): for each mechanism the diff adds, name the documented framework mechanism or industry standard it should use (Microsoft Learn, the RFC, OWASP) and flag any home-grown replacement, with the link. Flag any part that can't be explained in a sentence or two.
 
+## Re-reviews
+
+On a re-review, review only the delta since the approved version and say for each earlier finding whether it is closed. Report lows and nits as one batch; they never trigger a separate round on their own.
+
 ## Report
 
 Rank findings by severity with file and line.
