@@ -7,6 +7,9 @@
     <Project Path="src/DisputeDesk.Api/DisputeDesk.Api.csproj" />
     <Project Path="src/DisputeDesk.Worker/DisputeDesk.Worker.csproj" />
   </Folder>
+  <Folder Name="/stubs/">
+    <Project Path="stubs/DisputeDesk.CoreBankingStub/DisputeDesk.CoreBankingStub.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DisputeDesk.Domain.Tests/DisputeDesk.Domain.Tests.csproj" />
     <Project Path="tests/DisputeDesk.ArchitectureTests/DisputeDesk.ArchitectureTests.csproj" />

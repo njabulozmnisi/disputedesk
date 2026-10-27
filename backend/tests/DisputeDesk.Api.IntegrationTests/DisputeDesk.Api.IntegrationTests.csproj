@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\..\src\DisputeDesk.Api\DisputeDesk.Api.csproj" />
+    <!-- Both web projects generate a public Program class; the alias keeps the stub's types out of the global namespace. -->
+    <ProjectReference Include="..\..\stubs\DisputeDesk.CoreBankingStub\DisputeDesk.CoreBankingStub.csproj" Aliases="CoreBankingStub" />
   </ItemGroup>
 
   <ItemGroup>
