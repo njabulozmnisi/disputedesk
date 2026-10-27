@@ -14,7 +14,7 @@ namespace DisputeDesk.Api.IntegrationTests.CoreBanking;
 
 /// <summary>
 /// The real core-banking stub on a loopback port, reading the real <c>fixtures/local.json</c>, with its clock fixed at
-/// <see cref="Now"/>. Everything it logs is captured in <see cref="Logs"/>.
+/// <see cref="ClockNow"/>. Everything it logs is captured in <see cref="Logs"/>.
 /// </summary>
 public sealed class CoreBankingStubFactory : WebApplicationFactory<Bank>
 {
@@ -27,6 +27,9 @@ public sealed class CoreBankingStubFactory : WebApplicationFactory<Bank>
     public CoreBankingStubFactory() => UseKestrel(0);
 
     public LogCapture Logs { get; } = new();
+
+    /// <summary>The instant the stub's clock reads: <see cref="Now"/> unless set.</summary>
+    public DateTimeOffset ClockNow { get; init; } = Now;
 
     public Uri BaseUrl
     {
@@ -41,6 +44,6 @@ public sealed class CoreBankingStubFactory : WebApplicationFactory<Bank>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.ConfigureLogging(logging => logging.AddProvider(Logs).AddFilter<LogCapture>(category: null, LogLevel.Trace));
-        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(new FixedTimeProvider(Now)));
+        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(new FixedTimeProvider(ClockNow)));
     }
 }

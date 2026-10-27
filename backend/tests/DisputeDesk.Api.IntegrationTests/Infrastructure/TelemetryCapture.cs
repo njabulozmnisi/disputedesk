@@ -28,6 +28,9 @@ public sealed class TelemetryCapture
 
     public IReadOnlyList<LogRecord> Logs => _logs.Snapshot();
 
+    /// <summary>The spans exported so far for one trace.</summary>
+    public IReadOnlyList<Activity> Spans(ActivityTraceId traceId) => [.. _spans.Snapshot().Where(span => span.TraceId == traceId)];
+
     /// <summary>
     /// The server span is exported when the request activity stops, which can be just after the client
     /// has the response, so wait for it.

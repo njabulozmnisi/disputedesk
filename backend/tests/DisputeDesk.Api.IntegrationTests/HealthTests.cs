@@ -66,10 +66,12 @@ public class HealthTests(PostgresFixture postgres)
 
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(emptyDatabase).Options);
         Assert.Empty(await db.Database.GetPendingMigrationsAsync(TestContext.Current.CancellationToken));
-        Assert.Single(await db.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken), "20261026115752_AddSessionsAndDataProtectionKeys");
-        // Both tables exist: these queries throw when a table is missing.
+        // Each migration is recorded once, in order.
+        Assert.Equal(db.Database.GetMigrations(), await db.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken));
+        // The tables exist: these queries throw when a table is missing.
         await db.Set<Session>().CountAsync(TestContext.Current.CancellationToken);
         await db.DataProtectionKeys.CountAsync(TestContext.Current.CancellationToken);
+        await db.Set<CustomerLink>().CountAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -96,7 +98,7 @@ public class HealthTests(PostgresFixture postgres)
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
-    private static async Task WaitUntilReadyAsync(HttpClient client)
+    internal static async Task WaitUntilReadyAsync(HttpClient client)
     {
         for (int attempt = 0; attempt < 100; attempt++)
         {
