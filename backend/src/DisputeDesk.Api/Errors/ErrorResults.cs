@@ -1,5 +1,7 @@
+using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Domain;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 
 namespace DisputeDesk.Api.Errors;
 
@@ -9,10 +11,21 @@ namespace DisputeDesk.Api.Errors;
 /// </summary>
 public static class ErrorResults
 {
-    public static ProblemHttpResult ToProblem(this Error error) => TypedResults.Problem(
-        statusCode: StatusCodeFor(error.Kind),
-        detail: error.Message,
-        extensions: new Dictionary<string, object?> { ["code"] = error.Code });
+    public static ProblemHttpResult ToProblem(this Error error)
+    {
+        ProblemDetails problem = error.FieldErrors.Count > 0
+            ? new HttpValidationProblemDetails(error.FieldErrors.ToDictionary())
+            : new ProblemDetails();
+        problem.Status = StatusCodeFor(error.Kind);
+        problem.Type = ProblemType.For(error.Code);
+        problem.Detail = error.Message;
+        foreach ((string name, object? value) in error.Extensions)
+        {
+            problem.Extensions[name] = value;
+        }
+
+        return TypedResults.Problem(problem);
+    }
 
     public static int StatusCodeFor(ErrorKind kind) => kind switch
     {

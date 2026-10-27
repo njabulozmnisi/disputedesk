@@ -1,0 +1,61 @@
+# The platform baseline runs, is tested and is scanned: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
+
+[[entry]]
+id = 1
+type = "story"
+title = "P0-1 backend solution skeleton, quality gates and health endpoints"
+description = "Six projects, layer tests, analyzers as errors, `/health/live` and `/health/ready` (merged 6d8db68)."
+verify = "docs/verification/P0-1-verify.md and P0-1-review.md record the pass."
+covers = ["R25", "R27", "R34"]
+after = []
+hitl = false
+risk = "low"
+owner = "backend"
+
+[[entry]]
+id = 2
+type = "story"
+title = "P0-2 local Compose platform with zero-click Zitadel"
+description = "Gateway, api, worker, postgres, redpanda, zitadel, provision, mailpit and aspire-dashboard start with no clicks (merged 47bbb75)."
+verify = "docs/verification/P0-2-verify.md and P0-2-smoke.log record the pass."
+covers = ["R37"]
+after = []
+hitl = false
+risk = "low"
+owner = "backend"
+
+[[entry]]
+id = 3
+type = "story"
+title = "P0-3 OpenTelemetry baseline and security headers"
+description = "OTLP export to the Aspire Dashboard and the Api security headers (merged 9cc348a)."
+verify = "docs/verification/P0-3-verify.md records the pass."
+covers = ["R36"]
+after = [1]
+hitl = false
+risk = "low"
+owner = "backend"
+
+[[entry]]
+id = 4
+type = "story"
+title = "P0-4 CI, security scanning and floor guard"
+description = "`ci.yml` backend and platform jobs, `security.yml` with gitleaks, CodeQL, vulnerable packages and Trivy (merged d314265)."
+verify = "docs/verification/P0-4-verify.md records the pass."
+covers = ["R30", "R33"]
+after = [1]
+hitl = false
+risk = "low"
+owner = "backend"
+
+[[entry]]
+id = 5
+type = "story"
+title = "P0-5 Microsoft Learn conventions, AD-3 error kinds and EF drift check"
+description = "Naming and style rules, the AD-3 `ErrorKind` set and `has-pending-model-changes` in CI (merged f137575)."
+verify = "docs/verification/P0-5-verify.md records the pass."
+covers = ["R30", "R34"]
+after = [4]
+hitl = false
+risk = "low"
+owner = "backend"

@@ -1,0 +1,104 @@
+# Linked customers sign in and see their transactions: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Core-banking stub and the three ports with the resilience handler"
+description = "Ships the whole core-banking port and stub (AD-21) before linking, transactions and raise use it, with fixtures for customers A to D."
+verify = "Stub and client integration tests pass; with the stub stopped, the client returns Unavailable within 5 seconds."
+covers = ["R4", "R5", "R11", "R24", "R25", "R26", "R31"]
+after = ["1.2"]
+hitl = false
+risk = "medium"
+owner = "backend"
+lane = "B"
+high_stakes = true
+migration = false
+touches = ["backend/stubs/DisputeDesk.CoreBankingStub/", "backend/src/DisputeDesk.Application/Abstractions/ (ICoreBankingClient, ISimSwapCheck, ISmsSender)", "backend/src/DisputeDesk.Infrastructure/CoreBanking/", "backend/src/DisputeDesk.Infrastructure/Sms/", "backend/src/DisputeDesk.Infrastructure/DependencyInjection.cs", "backend/Directory.Packages.props", "backend/DisputeDesk.slnx", "backend/Dockerfile (core-banking target)", "backend/tests/DisputeDesk.ArchitectureTests/LayerTests.cs", "backend/tests/DisputeDesk.Api.IntegrationTests/CoreBanking/", "fixtures/local.json", "fixtures/README.md", "docker-compose.yml (core-banking service)"]
+supervisor_checks = ["`docker compose up` shows `core-banking` healthy and running as non-root.", "`docker compose stop core-banking`, then a client call returns Unavailable within about 5 seconds."]
+
+[[entry]]
+id = 2
+type = "story"
+title = "Sign in and sign out through the BFF, with one ProblemDetails contract"
+description = "The Api becomes the confidential client with a server-side session (AD-7), and every API error follows the rest of AD-3; this is the first endpoint story and the least certain one on the tracer path."
+verify = "BFF and ProblemDetails integration tests pass."
+covers = ["R1", "R2", "R3", "R21", "R26", "R27", "R29", "R30"]
+after = ["1.2", "1.5"]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = true
+touches = ["backend/src/DisputeDesk.Api/Bff/", "backend/src/DisputeDesk.Api/Program.cs", "backend/src/DisputeDesk.Api/appsettings.json", "backend/src/DisputeDesk.Api/Errors/", "backend/src/DisputeDesk.Api/Health/", "backend/src/DisputeDesk.Contracts/Problems/", "backend/src/DisputeDesk.Contracts/Json/", "backend/src/DisputeDesk.Domain/ErrorKind.cs, Error.cs", "backend/src/DisputeDesk.Infrastructure/Sessions/", "backend/src/DisputeDesk.Infrastructure/Persistence/ (AppDbContext, Migrations/)", "backend/src/DisputeDesk.Infrastructure/DependencyInjection.cs", "backend/Directory.Packages.props", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Bff/, ProblemDetailsTests.cs", "infra/zitadel/provision/provision.sh", "docker-compose.yml (api Zitadel settings)", "scripts/dev-login.sh"]
+supervisor_checks = ["`scripts/dev-login.sh` for login A writes a cookie jar that `GET /api/v1/bff/session` answers `linked` for once story 3 is merged (`unlinked` before).", "Browser sign-in for login A on `http://localhost:8080`, then sign-out lands on `/` and Zitadel shows no session.", "`docker compose down -v && docker compose up` re-provisions with the camelCase role keys."]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Linked customer lists their own transactions"
+description = "Adds `CustomerLinks`, the three authorisation states, `CurrentCustomer` and `GET /api/v1/transactions`, the API half of the tracer bullet, and merges the contract the SPA needs."
+verify = "Integration tests cover every authorisation state, paging, disputability and the outage; domain tests pin the D + 90 boundary."
+covers = ["R9", "R11", "R12", "R24", "R29", "R30", "R31"]
+after = [1, 2]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = true
+touches = ["backend/src/DisputeDesk.Domain/Transactions/ (disputability)", "backend/src/DisputeDesk.Application/Abstractions/CurrentCustomer.cs", "backend/src/DisputeDesk.Application/Transactions/", "backend/src/DisputeDesk.Contracts/Transactions/", "backend/src/DisputeDesk.Api/Authorization/", "backend/src/DisputeDesk.Api/Transactions/", "backend/src/DisputeDesk.Api/Program.cs (AddCoreBanking and AddSmsSender wiring from story 2)", "docker-compose.yml (api CoreBanking__BaseUrl, Sms__Host, Sms__Port, Sms__UseTls, depends_on core-banking)", "backend/tests/DisputeDesk.Api.IntegrationTests/ApiFactory.cs (CoreBanking and Sms settings)", "backend/src/DisputeDesk.Infrastructure/Persistence/ (CustomerLink configuration, Migrations/)", "backend/src/DisputeDesk.Infrastructure/Seeding/", "backend/openapi.json", "backend/tests/DisputeDesk.Domain.Tests/Transactions/", "backend/tests/DisputeDesk.Api.IntegrationTests/Transactions/"]
+supervisor_checks = ["`scripts/dev-login.sh` for A then curl `/api/v1/transactions` through the gateway returns rows.", "With `core-banking` stopped the same call returns 503 within about 5 seconds."]
+
+[[entry]]
+id = 4
+type = "story"
+title = "SPA shell, session routing and the transactions screen"
+description = "Scaffolds the SPA (AD-31) with the start page, session-driven routing, navigation, sign-out and the transactions screen in every state from the mockups; the SPA half of the tracer bullet."
+verify = "`npm run build`, `tsc --noEmit`, ESLint, Prettier and Vitest pass."
+covers = ["R2", "R3", "R9", "R11", "R12", "R34", "R40"]
+after = [3]
+hitl = false
+risk = "medium"
+owner = "frontend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["frontend/ (new: package.json, vite.config.ts, tsconfig, eslint and prettier config, orval.config.ts)", "frontend/src/api/generated/", "frontend/src/api/mutator.ts", "frontend/src/theme/tokens.css", "frontend/src/app/ (router, layout, nav)", "frontend/src/features/transactions/", "frontend/src/pages/ (start, signed-out, not-found)"]
+supervisor_checks = ["Through the gateway after story 5, customer A signs in and sees the screen matching `docs/ux/mockups/transactions.html`."]
+references = ["design — docs/ux/mockups/start.html", "design — docs/ux/mockups/transactions.html", "design — docs/ux/mockups/transactions-loading.html", "design — docs/ux/mockups/transactions-empty.html", "design — docs/ux/mockups/transactions-error.html", "design — docs/ux/mockups/not-found.html", "experience — docs/ux/EXPERIENCE.md, Copy deck"]
+
+[[entry]]
+id = 5
+type = "story"
+title = "Gateway serves the SPA with the edge rules, and CI checks the frontend"
+description = "Builds the SPA into the gateway image in a Node stage, templates nginx from the environment with the AD-23 edge rules and the `/otlp/` proxy, and adds the CI `frontend` job; completes the tracer bullet."
+verify = "Reading the gateway Dockerfile, nginx templates and `ci.yml` shows the criteria below; `docker compose config` is a supervisor check."
+covers = ["R32", "R34", "R36", "R37"]
+after = [4]
+hitl = false
+risk = "medium"
+owner = "backend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["infra/nginx/ (Dockerfile with Node stage, templates/, html/ placeholder removed)", "docker-compose.yml (gateway build and template variables)", ".github/workflows/ci.yml (frontend job)", ".nvmrc"]
+supervisor_checks = ["`docker compose config` validates.", "`curl -I http://localhost:8080/` shows the headers; 40 rapid requests to `/api/health/live` get some 429s.", "Customer A signs in through the gateway and sees transactions: the tracer bullet demo."]
+
+[[entry]]
+id = 6
+type = "story"
+title = "Hosted login pages themed from the design tokens"
+description = "Generates the Zitadel label policy from `frontend/src/theme/tokens.css` at provisioning time so sign-up, sign-in and verification pages match DisputeDesk (FR-1, AD-6)."
+verify = "A provisioning dry run prints label-policy JSON whose colours and font equal the token values; a script test compares them."
+covers = ["R1"]
+after = [4, 2]
+hitl = false
+risk = "low"
+owner = "backend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["infra/zitadel/provision/ (label policy generation, provision.sh)", "infra/zitadel/provision/Dockerfile", "docker-compose.yml (provision mounts tokens.css)"]
+supervisor_checks = ["Screenshot the hosted sign-up page beside `docs/ux/mockups/start.html`; sign up a new login and find the verification email in Mailpit.", "Run provisioning twice: the label policy is unchanged and the second run exits 0."]

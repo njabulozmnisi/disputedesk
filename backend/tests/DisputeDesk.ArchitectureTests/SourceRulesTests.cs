@@ -25,30 +25,11 @@ public partial class SourceRulesTests
         Assert.Contains(ProductionSourceFiles(), file => file.EndsWith("Result.cs", StringComparison.Ordinal));
     }
 
-    private static string SourceRoot { get; } = Path.Combine(FindBackendRoot(), "src");
+    private static string SourceRoot => SourceRoots.Src;
 
     private static IEnumerable<string> ProductionSourceFiles() =>
         Directory.EnumerateFiles(SourceRoot, "*.cs", SearchOption.AllDirectories)
-            .Where(file => !IsBuildOutput(file));
-
-    private static bool IsBuildOutput(string file)
-    {
-        string[] parts = Path.GetRelativePath(SourceRoot, file).Split(Path.DirectorySeparatorChar);
-        return parts.Contains("bin") || parts.Contains("obj");
-    }
-
-    private static string FindBackendRoot()
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "DisputeDesk.slnx")))
-            {
-                return directory.FullName;
-            }
-        }
-
-        throw new InvalidOperationException("Could not find backend/DisputeDesk.slnx above the test output directory.");
-    }
+            .Where(file => !SourceRoots.IsBuildOutput(file));
 
     [GeneratedRegex(@"^\s*//\s*!")]
     private static partial Regex NullForgivingJustification();

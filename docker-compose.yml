@@ -83,7 +83,7 @@ services:
     environment:
       ZITADEL_EXTERNALDOMAIN: auth.localhost
       ZITADEL_EXTERNALPORT: "8080"
-      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_EXTERNALSECURE: ${ZITADEL_EXTERNALSECURE:-false}   # true behind HTTPS in AWS (AD-24)
       ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY:-DevOnlyMasterKeyNotForProduction}   # exactly 32 characters
       ZITADEL_PORT: "8080"
       ZITADEL_TLS_ENABLED: "false"
@@ -148,6 +148,7 @@ services:
       OUT_UID: "1654"                              # APP_UID of the .NET chiseled images
       FIXTURES_FILE: /fixtures/local.json
       APP_ORIGINS: http://localhost:8080 http://localhost:5101 http://localhost:5102
+      BFF_DEVELOPMENT_MODE: ${BFF_DEVELOPMENT_MODE:-true}   # allows the plain-http origins; false in AWS (AD-24)
     volumes:
       - zitadel-bootstrap:/zitadel/bootstrap:ro
       - zitadel-clients:/out
@@ -216,8 +217,13 @@ services:
       <<: *app-config
       ASPNETCORE_ENVIRONMENT: Development
       OTEL_SERVICE_NAME: disputedesk-api
+      # Local plain-http values (AD-24); appsettings.json holds the AWS ones (__Host- names, Secure always).
+      Bff__SessionCookie__Name: disputedesk-session
+      Bff__AntiforgeryCookie__Name: disputedesk-antiforgery
+      Bff__Cookie__SecurePolicy: SameAsRequest
+      Zitadel__RequireHttpsMetadata: "false"       # the local issuer is http://auth.localhost:8080
     volumes:
-      - zitadel-clients:/run/zitadel:ro            # zitadel-clients.json (Authority, client IDs and secrets)
+      - zitadel-clients:/run/zitadel:ro            # zitadel-clients.json (the Zitadel:* keys, client IDs and secrets)
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
       interval: 5s
