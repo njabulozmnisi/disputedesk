@@ -10,10 +10,20 @@
       "linked": true,
       "recentSimSwap": false,
       "login": "customer-a",
-      "purpose": "Linked customer. Later stories give this customer disputes in every status.",
+      "purpose": "Linked customer with two accounts. Later stories give this customer disputes in every status.",
       "accounts": [
-        { "accountNumber": "1000000011", "type": "cheque", "currency": "ZAR" },
-        { "accountNumber": "1000000012", "type": "savings", "currency": "ZAR" }
+        {
+          "accountRef": "ACC-A-1",
+          "accountNumber": "1000000011",
+          "type": "cheque",
+          "currency": "ZAR"
+        },
+        {
+          "accountRef": "ACC-A-2",
+          "accountNumber": "1000000012",
+          "type": "savings",
+          "currency": "ZAR"
+        }
       ]
     },
     {
@@ -27,7 +37,12 @@
       "login": "customer-b",
       "purpose": "Linked customer. Used for the check that another customer's dispute returns 404.",
       "accounts": [
-        { "accountNumber": "1000000021", "type": "cheque", "currency": "ZAR" }
+        {
+          "accountRef": "ACC-B-1",
+          "accountNumber": "1000000021",
+          "type": "cheque",
+          "currency": "ZAR"
+        }
       ]
     },
     {
@@ -41,14 +56,159 @@
       "login": "customer-c",
       "purpose": "Has a login but is not linked. The SIM-swap check fails for this customer's number, so linking is refused.",
       "accounts": [
-        { "accountNumber": "1000000031", "type": "cheque", "currency": "ZAR" }
+        {
+          "accountRef": "ACC-C-1",
+          "accountNumber": "1000000031",
+          "type": "cheque",
+          "currency": "ZAR"
+        }
+      ]
+    },
+    {
+      "key": "D",
+      "customerId": "CUS-000004",
+      "displayName": "Sipho Dlamini",
+      "idNumber": "8804125123080",
+      "cellphone": "+27820000004",
+      "linked": false,
+      "recentSimSwap": false,
+      "login": null,
+      "purpose": "Not linked and has no fixture login. Passes every check, so a new login links to this customer in the linking demo and its E2E test.",
+      "accounts": [
+        {
+          "accountRef": "ACC-D-1",
+          "accountNumber": "1000000041",
+          "type": "cheque",
+          "currency": "ZAR"
+        },
+        {
+          "accountRef": "ACC-D-2",
+          "accountNumber": "1000000042",
+          "type": "savings",
+          "currency": "ZAR"
+        }
       ]
     }
   ],
-  "transactions": {
-    "about": "Not part of P0-2. The core-banking story adds transactions here, keyed by accountNumber.",
-    "items": []
-  },
+  "transactions": [
+    {"transactionId": "TXN-A-0001", "accountRef": "ACC-A-1", "daysAgo": 95, "time": "16:42:00", "description": "Woolworths Food Rosebank", "amount": "247.65", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0002", "accountRef": "ACC-A-1", "daysAgo": 85, "time": "15:48:00", "description": "Salary", "amount": "28450.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-A-0003", "accountRef": "ACC-A-1", "daysAgo": 84, "time": "13:48:00", "description": "Steers Braamfontein", "amount": "85.30", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0004", "accountRef": "ACC-A-1", "daysAgo": 81, "time": "11:37:00", "description": "Woolworths Food Rosebank", "amount": "807.37", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0005", "accountRef": "ACC-A-1", "daysAgo": 80, "time": "16:42:00", "description": "Vida e Caffe", "amount": "65.95", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0006", "accountRef": "ACC-A-1", "daysAgo": 78, "time": "15:48:00", "description": "Takealot.com", "amount": "599.31", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0007", "accountRef": "ACC-A-1", "daysAgo": 77, "time": "19:00:00", "description": "Engen Garage Sandton", "amount": "643.36", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0008", "accountRef": "ACC-A-1", "daysAgo": 75, "time": "16:18:00", "description": "Ster-Kinekor Online", "amount": "191.33", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0009", "accountRef": "ACC-A-1", "daysAgo": 73, "time": "19:12:00", "description": "Netflix.com", "amount": "199.00", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0010", "accountRef": "ACC-A-1", "daysAgo": 72, "time": "20:00:00", "description": "Clicks Menlyn", "amount": "239.76", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0011", "accountRef": "ACC-A-1", "daysAgo": 67, "time": "18:48:00", "description": "Checkers Sixty60", "amount": "605.56", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0012", "accountRef": "ACC-A-1", "daysAgo": 66, "time": "21:05:00", "description": "Checkers Sixty60", "amount": "501.19", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0013", "accountRef": "ACC-A-1", "daysAgo": 64, "time": "18:55:00", "description": "Engen Garage Sandton", "amount": "601.32", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0014", "accountRef": "ACC-A-1", "daysAgo": 58, "time": "13:42:00", "description": "Pick n Pay Clearwater", "amount": "572.06", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0015", "accountRef": "ACC-A-1", "daysAgo": 55, "time": "09:42:00", "description": "Clicks Menlyn", "amount": "310.75", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0016", "accountRef": "ACC-A-1", "daysAgo": 55, "time": "18:42:00", "description": "Salary", "amount": "28450.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-A-0017", "accountRef": "ACC-A-1", "daysAgo": 48, "time": "13:18:00", "description": "Payment to N Mokoena", "amount": "907.63", "currency": "ZAR", "direction": "debit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-A-0018", "accountRef": "ACC-A-1", "daysAgo": 38, "time": "21:18:00", "description": "Engen Garage Sandton", "amount": "417.32", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0019", "accountRef": "ACC-A-1", "daysAgo": 32, "time": "20:05:00", "description": "Clicks Menlyn", "amount": "189.10", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0020", "accountRef": "ACC-A-2", "daysAgo": 31, "time": "14:48:00", "description": "Interest", "amount": "18.42", "currency": "ZAR", "direction": "credit", "kind": "other", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-A-0021", "accountRef": "ACC-A-1", "daysAgo": 30, "time": "11:24:00", "description": "Monthly account fee", "amount": "69.00", "currency": "ZAR", "direction": "debit", "kind": "other", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-A-0022", "accountRef": "ACC-A-1", "daysAgo": 30, "time": "17:42:00", "description": "Spotify", "amount": "69.99", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0023", "accountRef": "ACC-A-1", "daysAgo": 25, "time": "19:37:00", "description": "Salary", "amount": "28450.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-A-0024", "accountRef": "ACC-A-1", "daysAgo": 24, "time": "07:00:00", "description": "Transfer to savings", "amount": "2000.00", "currency": "ZAR", "direction": "debit", "kind": "ownAccountTransfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-A-0025", "accountRef": "ACC-A-2", "daysAgo": 24, "time": "09:55:00", "description": "Transfer from cheque", "amount": "2000.00", "currency": "ZAR", "direction": "credit", "kind": "ownAccountTransfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-A-0026", "accountRef": "ACC-A-1", "daysAgo": 16, "time": "17:42:00", "description": "Netflix.com", "amount": "199.00", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0027", "accountRef": "ACC-A-1", "daysAgo": 15, "time": "18:48:00", "description": "Checkers Sixty60", "amount": "401.23", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0028", "accountRef": "ACC-A-1", "daysAgo": 12, "time": "11:48:00", "description": "Mr D Food", "amount": "259.70", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0029", "accountRef": "ACC-A-1", "daysAgo": 2, "time": "13:24:00", "description": "Steers Braamfontein", "amount": "87.23", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-A-0030", "accountRef": "ACC-A-1", "daysAgo": 1, "time": "21:42:00", "description": "Checkers Sixty60", "amount": "487.57", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "pending", "maskedCard": "492181******4417"},
+    {"transactionId": "TXN-B-0001", "accountRef": "ACC-B-1", "daysAgo": 95, "time": "16:48:00", "description": "Woolworths Food Rosebank", "amount": "343.97", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0002", "accountRef": "ACC-B-1", "daysAgo": 86, "time": "11:05:00", "description": "Vida e Caffe", "amount": "53.19", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0003", "accountRef": "ACC-B-1", "daysAgo": 85, "time": "16:55:00", "description": "Salary", "amount": "35120.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-B-0004", "accountRef": "ACC-B-1", "daysAgo": 73, "time": "13:12:00", "description": "Spotify", "amount": "69.99", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0005", "accountRef": "ACC-B-1", "daysAgo": 67, "time": "21:12:00", "description": "Takealot.com", "amount": "340.39", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0006", "accountRef": "ACC-B-1", "daysAgo": 65, "time": "19:55:00", "description": "Clicks Menlyn", "amount": "359.82", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0007", "accountRef": "ACC-B-1", "daysAgo": 64, "time": "11:48:00", "description": "Pick n Pay Clearwater", "amount": "337.17", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0008", "accountRef": "ACC-B-1", "daysAgo": 63, "time": "13:37:00", "description": "Woolworths Food Rosebank", "amount": "250.97", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0009", "accountRef": "ACC-B-1", "daysAgo": 61, "time": "19:12:00", "description": "Spotify", "amount": "69.99", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0010", "accountRef": "ACC-B-1", "daysAgo": 60, "time": "15:18:00", "description": "Mr D Food", "amount": "257.58", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0011", "accountRef": "ACC-B-1", "daysAgo": 59, "time": "13:00:00", "description": "Steers Braamfontein", "amount": "83.72", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0012", "accountRef": "ACC-B-1", "daysAgo": 58, "time": "08:37:00", "description": "Vodacom Airtime", "amount": "82.67", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0013", "accountRef": "ACC-B-1", "daysAgo": 57, "time": "21:05:00", "description": "Checkers Sixty60", "amount": "541.28", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0014", "accountRef": "ACC-B-1", "daysAgo": 56, "time": "07:31:00", "description": "Vodacom Airtime", "amount": "176.54", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0015", "accountRef": "ACC-B-1", "daysAgo": 55, "time": "19:12:00", "description": "Salary", "amount": "35120.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-B-0016", "accountRef": "ACC-B-1", "daysAgo": 48, "time": "15:18:00", "description": "Payment to N Mokoena", "amount": "867.58", "currency": "ZAR", "direction": "debit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-B-0017", "accountRef": "ACC-B-1", "daysAgo": 42, "time": "17:31:00", "description": "Engen Garage Sandton", "amount": "867.93", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0018", "accountRef": "ACC-B-1", "daysAgo": 39, "time": "21:00:00", "description": "Vida e Caffe", "amount": "58.36", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0019", "accountRef": "ACC-B-1", "daysAgo": 35, "time": "07:48:00", "description": "Woolworths Food Rosebank", "amount": "421.35", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0020", "accountRef": "ACC-B-1", "daysAgo": 30, "time": "13:55:00", "description": "Monthly account fee", "amount": "69.00", "currency": "ZAR", "direction": "debit", "kind": "other", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-B-0021", "accountRef": "ACC-B-1", "daysAgo": 27, "time": "14:31:00", "description": "Mr D Food", "amount": "265.06", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0022", "accountRef": "ACC-B-1", "daysAgo": 25, "time": "09:55:00", "description": "Salary", "amount": "35120.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-B-0023", "accountRef": "ACC-B-1", "daysAgo": 25, "time": "17:24:00", "description": "Ster-Kinekor Online", "amount": "309.99", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0024", "accountRef": "ACC-B-1", "daysAgo": 24, "time": "12:42:00", "description": "Transfer to own notice deposit", "amount": "1500.00", "currency": "ZAR", "direction": "debit", "kind": "ownAccountTransfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-B-0025", "accountRef": "ACC-B-1", "daysAgo": 14, "time": "14:31:00", "description": "Spotify", "amount": "69.99", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0026", "accountRef": "ACC-B-1", "daysAgo": 10, "time": "21:05:00", "description": "Clicks Menlyn", "amount": "312.17", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0027", "accountRef": "ACC-B-1", "daysAgo": 6, "time": "14:42:00", "description": "Pick n Pay Clearwater", "amount": "390.19", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-B-0028", "accountRef": "ACC-B-1", "daysAgo": 1, "time": "16:18:00", "description": "Checkers Sixty60", "amount": "209.05", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "pending", "maskedCard": "535678******2210"},
+    {"transactionId": "TXN-C-0001", "accountRef": "ACC-C-1", "daysAgo": 95, "time": "15:55:00", "description": "Woolworths Food Rosebank", "amount": "471.40", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0002", "accountRef": "ACC-C-1", "daysAgo": 88, "time": "19:48:00", "description": "Pick n Pay Clearwater", "amount": "453.67", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0003", "accountRef": "ACC-C-1", "daysAgo": 85, "time": "09:24:00", "description": "Salary", "amount": "22800.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-C-0004", "accountRef": "ACC-C-1", "daysAgo": 84, "time": "10:05:00", "description": "Pick n Pay Clearwater", "amount": "304.48", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0005", "accountRef": "ACC-C-1", "daysAgo": 72, "time": "16:24:00", "description": "Netflix.com", "amount": "199.00", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0006", "accountRef": "ACC-C-1", "daysAgo": 71, "time": "15:55:00", "description": "Dis-Chem Pharmacy", "amount": "265.13", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0007", "accountRef": "ACC-C-1", "daysAgo": 69, "time": "18:18:00", "description": "Checkers Sixty60", "amount": "391.41", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0008", "accountRef": "ACC-C-1", "daysAgo": 68, "time": "16:24:00", "description": "Pick n Pay Clearwater", "amount": "279.24", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0009", "accountRef": "ACC-C-1", "daysAgo": 63, "time": "16:24:00", "description": "Engen Garage Sandton", "amount": "724.74", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0010", "accountRef": "ACC-C-1", "daysAgo": 59, "time": "17:48:00", "description": "Vodacom Airtime", "amount": "249.05", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0011", "accountRef": "ACC-C-1", "daysAgo": 55, "time": "11:05:00", "description": "Salary", "amount": "22800.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-C-0012", "accountRef": "ACC-C-1", "daysAgo": 53, "time": "09:05:00", "description": "Engen Garage Sandton", "amount": "727.39", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0013", "accountRef": "ACC-C-1", "daysAgo": 48, "time": "20:24:00", "description": "Payment to N Mokoena", "amount": "722.34", "currency": "ZAR", "direction": "debit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-C-0014", "accountRef": "ACC-C-1", "daysAgo": 30, "time": "13:00:00", "description": "Monthly account fee", "amount": "69.00", "currency": "ZAR", "direction": "debit", "kind": "other", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-C-0015", "accountRef": "ACC-C-1", "daysAgo": 29, "time": "19:24:00", "description": "Takealot.com", "amount": "1304.08", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0016", "accountRef": "ACC-C-1", "daysAgo": 27, "time": "08:37:00", "description": "Spotify", "amount": "69.99", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0017", "accountRef": "ACC-C-1", "daysAgo": 26, "time": "09:05:00", "description": "Checkers Sixty60", "amount": "482.17", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0018", "accountRef": "ACC-C-1", "daysAgo": 25, "time": "07:37:00", "description": "Salary", "amount": "22800.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-C-0019", "accountRef": "ACC-C-1", "daysAgo": 24, "time": "07:05:00", "description": "Transfer to own notice deposit", "amount": "1500.00", "currency": "ZAR", "direction": "debit", "kind": "ownAccountTransfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-C-0020", "accountRef": "ACC-C-1", "daysAgo": 24, "time": "17:00:00", "description": "Dis-Chem Pharmacy", "amount": "431.57", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0021", "accountRef": "ACC-C-1", "daysAgo": 19, "time": "19:31:00", "description": "Steers Braamfontein", "amount": "84.93", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0022", "accountRef": "ACC-C-1", "daysAgo": 18, "time": "18:12:00", "description": "Uber Trip", "amount": "94.74", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0023", "accountRef": "ACC-C-1", "daysAgo": 10, "time": "17:05:00", "description": "Checkers Sixty60", "amount": "703.53", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0024", "accountRef": "ACC-C-1", "daysAgo": 8, "time": "15:31:00", "description": "Vida e Caffe", "amount": "56.84", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0025", "accountRef": "ACC-C-1", "daysAgo": 7, "time": "11:55:00", "description": "Dis-Chem Pharmacy", "amount": "425.74", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0026", "accountRef": "ACC-C-1", "daysAgo": 6, "time": "20:05:00", "description": "Steers Braamfontein", "amount": "163.87", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0027", "accountRef": "ACC-C-1", "daysAgo": 4, "time": "11:31:00", "description": "Pick n Pay Clearwater", "amount": "618.66", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-C-0028", "accountRef": "ACC-C-1", "daysAgo": 1, "time": "10:00:00", "description": "Checkers Sixty60", "amount": "220.54", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "pending", "maskedCard": "410023******9087"},
+    {"transactionId": "TXN-D-0001", "accountRef": "ACC-D-1", "daysAgo": 95, "time": "19:37:00", "description": "Woolworths Food Rosebank", "amount": "323.97", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0002", "accountRef": "ACC-D-1", "daysAgo": 88, "time": "17:18:00", "description": "Vida e Caffe", "amount": "93.53", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0003", "accountRef": "ACC-D-1", "daysAgo": 85, "time": "17:18:00", "description": "Salary", "amount": "31600.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-D-0004", "accountRef": "ACC-D-1", "daysAgo": 85, "time": "19:12:00", "description": "Engen Garage Sandton", "amount": "672.33", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0005", "accountRef": "ACC-D-1", "daysAgo": 82, "time": "09:48:00", "description": "Steers Braamfontein", "amount": "112.41", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0006", "accountRef": "ACC-D-1", "daysAgo": 80, "time": "07:48:00", "description": "Clicks Menlyn", "amount": "310.31", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0007", "accountRef": "ACC-D-1", "daysAgo": 79, "time": "17:48:00", "description": "Ster-Kinekor Online", "amount": "124.73", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0008", "accountRef": "ACC-D-1", "daysAgo": 78, "time": "13:24:00", "description": "Clicks Menlyn", "amount": "175.69", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0009", "accountRef": "ACC-D-1", "daysAgo": 75, "time": "19:12:00", "description": "Clicks Menlyn", "amount": "395.40", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0010", "accountRef": "ACC-D-1", "daysAgo": 73, "time": "10:00:00", "description": "Vodacom Airtime", "amount": "276.28", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0011", "accountRef": "ACC-D-1", "daysAgo": 66, "time": "07:24:00", "description": "Engen Garage Sandton", "amount": "937.53", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0012", "accountRef": "ACC-D-1", "daysAgo": 61, "time": "15:42:00", "description": "Takealot.com", "amount": "1455.18", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0013", "accountRef": "ACC-D-1", "daysAgo": 60, "time": "13:24:00", "description": "Woolworths Food Rosebank", "amount": "597.46", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0014", "accountRef": "ACC-D-1", "daysAgo": 56, "time": "12:12:00", "description": "Takealot.com", "amount": "570.18", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0015", "accountRef": "ACC-D-1", "daysAgo": 55, "time": "14:00:00", "description": "Salary", "amount": "31600.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-D-0016", "accountRef": "ACC-D-1", "daysAgo": 53, "time": "17:55:00", "description": "Woolworths Food Rosebank", "amount": "735.69", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0017", "accountRef": "ACC-D-1", "daysAgo": 49, "time": "08:12:00", "description": "Checkers Sixty60", "amount": "252.14", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0018", "accountRef": "ACC-D-1", "daysAgo": 48, "time": "20:12:00", "description": "Payment to N Mokoena", "amount": "798.36", "currency": "ZAR", "direction": "debit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-D-0019", "accountRef": "ACC-D-1", "daysAgo": 46, "time": "15:00:00", "description": "Checkers Sixty60", "amount": "224.52", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0020", "accountRef": "ACC-D-1", "daysAgo": 42, "time": "17:48:00", "description": "Pick n Pay Clearwater", "amount": "377.42", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0021", "accountRef": "ACC-D-2", "daysAgo": 31, "time": "15:24:00", "description": "Interest", "amount": "18.42", "currency": "ZAR", "direction": "credit", "kind": "other", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-D-0022", "accountRef": "ACC-D-1", "daysAgo": 30, "time": "21:37:00", "description": "Monthly account fee", "amount": "69.00", "currency": "ZAR", "direction": "debit", "kind": "other", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-D-0023", "accountRef": "ACC-D-1", "daysAgo": 29, "time": "20:24:00", "description": "Mr D Food", "amount": "284.93", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0024", "accountRef": "ACC-D-1", "daysAgo": 25, "time": "10:48:00", "description": "Salary", "amount": "31600.00", "currency": "ZAR", "direction": "credit", "kind": "transfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-D-0025", "accountRef": "ACC-D-1", "daysAgo": 24, "time": "18:31:00", "description": "Transfer to savings", "amount": "2000.00", "currency": "ZAR", "direction": "debit", "kind": "ownAccountTransfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-D-0026", "accountRef": "ACC-D-2", "daysAgo": 24, "time": "19:18:00", "description": "Transfer from cheque", "amount": "2000.00", "currency": "ZAR", "direction": "credit", "kind": "ownAccountTransfer", "state": "settled", "maskedCard": null},
+    {"transactionId": "TXN-D-0027", "accountRef": "ACC-D-1", "daysAgo": 17, "time": "12:48:00", "description": "Vida e Caffe", "amount": "55.23", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0028", "accountRef": "ACC-D-1", "daysAgo": 14, "time": "19:31:00", "description": "Netflix.com", "amount": "199.00", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0029", "accountRef": "ACC-D-1", "daysAgo": 6, "time": "07:00:00", "description": "Mr D Food", "amount": "144.10", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0030", "accountRef": "ACC-D-1", "daysAgo": 3, "time": "12:18:00", "description": "ZX Digital Services", "amount": "849.00", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
+    {"transactionId": "TXN-D-0031", "accountRef": "ACC-D-1", "daysAgo": 1, "time": "12:31:00", "description": "Checkers Sixty60", "amount": "319.73", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "pending", "maskedCard": "476173******5530"}
+  ],
   "logins": [
     {
       "key": "customer-a",
