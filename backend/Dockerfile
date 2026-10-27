@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Build context: backend/. Targets: `api` (default, last stage), `worker`, and `api-local` (Compose only).
+# Build context: backend/. Targets: `api` (default, last stage), `worker`, `api-local` (Compose only) and `core-banking`.
 #   docker build -t disputedesk-api backend
 #   docker build -t disputedesk-worker --target worker backend
 # Images are pinned by tag and by multi-arch index digest. The SDK tag matches global.json.
@@ -51,6 +51,26 @@ ENTRYPOINT ["dotnet", "DisputeDesk.Api.dll"]
 FROM ${PROBE_IMAGE} AS probe
 FROM api AS api-local
 COPY --from=probe /bin/busybox /usr/local/bin/wget
+
+# The core-banking stub (AD-21): its own restore and publish, since it references no DisputeDesk project. It reads
+# fixtures/local.json, which Compose mounts at runtime. It only exists for local and demo stacks, so the image
+# carries the same wget probe as api-local for its Compose healthcheck.
+FROM ${SDK_IMAGE} AS publish-core-banking
+WORKDIR /src
+COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
+COPY stubs/DisputeDesk.CoreBankingStub/DisputeDesk.CoreBankingStub.csproj stubs/DisputeDesk.CoreBankingStub/
+RUN dotnet restore stubs/DisputeDesk.CoreBankingStub/DisputeDesk.CoreBankingStub.csproj
+COPY stubs/DisputeDesk.CoreBankingStub/ stubs/DisputeDesk.CoreBankingStub/
+RUN dotnet publish stubs/DisputeDesk.CoreBankingStub/DisputeDesk.CoreBankingStub.csproj -c Release --no-restore -o /app
+
+FROM ${ASPNET_IMAGE} AS core-banking
+WORKDIR /app
+COPY --from=publish-core-banking /app .
+COPY --from=probe /bin/busybox /usr/local/bin/wget
+USER $APP_UID
+ENV ASPNETCORE_HTTP_PORTS=8080
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "DisputeDesk.CoreBankingStub.dll"]
 
 # Keep `api` the default target: the last stage is the production image.
 FROM api

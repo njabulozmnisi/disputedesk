@@ -16,8 +16,12 @@ public class LayerTests
     private static readonly Assembly ApiAssembly = Assembly.Load("DisputeDesk.Api");
     private static readonly Assembly WorkerAssembly = Assembly.Load("DisputeDesk.Worker");
 
+    private static readonly Assembly CoreBankingStubAssembly = Assembly.Load("DisputeDesk.CoreBankingStub");
+
     private static readonly Assembly[] SolutionAssemblies =
         [DomainAssembly, ApplicationAssembly, InfrastructureAssembly, ContractsAssembly, ApiAssembly, WorkerAssembly];
+
+    public static TheoryData<Type> ExternalSystemPorts => [typeof(ICoreBankingClient), typeof(ISimSwapCheck), typeof(ISmsSender)];
 
     [Fact]
     public void DomainAssembly_References_NoOtherSolutionAssembly()
@@ -48,6 +52,29 @@ public class LayerTests
         Assert.All(implementations, type => Assert.True(
             type.Assembly == InfrastructureAssembly,
             $"{type.FullName} implements {nameof(IAppDbContext)} outside Infrastructure."));
+    }
+
+    [Theory]
+    [MemberData(nameof(ExternalSystemPorts))]
+    public void ExternalSystemPort_IsDeclaredInApplication_AndImplementedOnlyInInfrastructure(Type port)
+    {
+        Assert.Equal(ApplicationAssembly, port.Assembly);
+
+        var implementations = SolutionAssemblies
+            .SelectMany(assembly => assembly.GetTypes())
+            .Where(type => type is { IsClass: true, IsAbstract: false } && type.IsAssignableTo(port))
+            .ToList();
+
+        Assert.NotEmpty(implementations);
+        Assert.All(implementations, type => Assert.True(
+            type.Assembly == InfrastructureAssembly,
+            $"{type.FullName} implements {port.Name} outside Infrastructure."));
+    }
+
+    [Fact]
+    public void CoreBankingStubAssembly_References_NoSolutionAssembly()
+    {
+        AssertReferencesNone(CoreBankingStubAssembly, SolutionAssemblies.Select(NameOf));
     }
 
     [Fact]
