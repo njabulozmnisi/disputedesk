@@ -10,4 +10,15 @@ namespace DisputeDesk.Api;
 public static class BuildTimeOpenApi
 {
     public static bool IsRunning { get; } = Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
+
+    /// <summary>
+    /// Stand-ins for the settings Infrastructure validates at start-up, which that run does not have. Nothing is
+    /// called during the run, so the values are never used.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string?> StandInSettings { get; } = new Dictionary<string, string?>
+    {
+        ["CoreBanking:BaseUrl"] = "https://core-banking.invalid",
+        ["Sms:Host"] = "sms.invalid",
+        ["Sms:Port"] = "25",
+    };
 }

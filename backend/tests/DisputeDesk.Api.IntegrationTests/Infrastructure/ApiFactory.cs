@@ -31,6 +31,10 @@ public sealed class ApiFactory(
         ["Authentication:SessionCookie:Name"] = SessionCookieName,
         ["Authentication:AntiforgeryCookie:Name"] = AntiforgeryCookieName,
         ["Authentication:Cookie:SecurePolicy"] = "SameAsRequest",
+        // Nothing listens on port 1. Tests that reach core banking or send an SMS set their own address.
+        ["CoreBanking:BaseUrl"] = "http://127.0.0.1:1",
+        ["Sms:Host"] = "127.0.0.1",
+        ["Sms:Port"] = "1",
     };
 
     public FakeZitadel Zitadel { get; } = new();

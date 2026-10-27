@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <ProjectReference Include="..\DisputeDesk.Contracts\DisputeDesk.Contracts.csproj" />
     <ProjectReference Include="..\DisputeDesk.Domain\DisputeDesk.Domain.csproj" />
   </ItemGroup>
 </Project>
