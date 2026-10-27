@@ -8,7 +8,7 @@
 - **ORM first.** Raw SQL only with evidence (a measured problem or a feature EF can't express, such as `FOR UPDATE SKIP LOCKED`), in one named method in Infrastructure with the justification in a comment. Use `FromSql` / `ExecuteSql` / `SqlQuery` (interpolated, auto-parameterised); never the `*Raw` variants with concatenated input. No repository layer for it.
 - **Money is `decimal` with an ISO currency code,** never a float.
 - **Enum casing.** C# enum members are PascalCase. API JSON and event payloads use camelCase values through `JsonStringEnumConverter(JsonNamingPolicy.CamelCase)`; URL segments and problem `type` slugs are kebab-case.
-- **Results for expected failures, exceptions for the unexpected.** The hand-written `Result`/`Error` type in Domain. 400 for malformed input (built-in minimal API validation), 404 for not found or owned by another customer, 409 for an action not allowed in the current status, 422 for a well-formed request that breaks a business rule; a global handler returns a clean 500 without a stack trace.
+- **Results for expected failures, exceptions for the unexpected.** The hand-written `Result`/`Error` type in Domain. 400 for malformed input (built-in minimal API validation), 404 for not found or owned by another customer, 409 for an action not allowed in the current status, 422 for a well-formed request that breaks a business rule; the built-in exception handler (`UseExceptionHandler` with an `IExceptionHandler`) returns a clean 500 ProblemDetails without a stack trace.
 - **Methods returning `Task`/`ValueTask` end in `Async`** (test methods exempt).
 - **One top-level type per file.**
 - **SOLID and patterns with judgement.** No factories DI already provides. (Framework-first and the allowed interfaces are in AGENTS.md.)
@@ -17,7 +17,7 @@
 ## Data integrity
 
 - The outbox row is written in the same transaction as the change it describes. A single relay runs under a Postgres advisory lock, retries with backoff, and sets a `Failed` status after 5 attempts; there is no dead-letter topic (architecture AD-17). `SKIP LOCKED` is used by the SLA sweep, not the relay. The Kafka key is the dispute ID.
-- `Idempotency-Key` on POST dispute. Optimistic concurrency on the Dispute aggregate.
+- `Idempotency-Key` on POST dispute, following the IETF Idempotency-Key header draft exactly (architecture AD-16): the value is an RFC 9651 Structured Field String, so it is quoted (`Idempotency-Key: "<uuid>"`), and any other form gets 400 `validation`. Optimistic concurrency on the Dispute aggregate.
 - Migrations follow expand, migrate, contract. Migrations are always high-stakes and never run in parallel stories.
 - Everything is stored in UTC. Inject `TimeProvider`; never read the system clock (the guard hook blocks it).
 - The customer is resolved from the identity link table, never from a request field or a client-controlled claim. Ownership is the EF Core 10 named query filter `"Ownership"`; bypasses use `IgnoreQueryFilters(["Ownership"])` in the two named places only (the `Operations/` feature folder and the Worker's sweep).
@@ -44,7 +44,7 @@ PascalCase throughout, which is what EF Core and Npgsql generate by default (dec
 
 ## Security and privacy
 
-- OWASP basics: validate input at the edge, encode output, least privilege, no secrets in code or logs.
+- OWASP ASVS (the security review maps each mechanism to it): validate input at the edge, encode output, least privilege, no secrets in code or logs.
 - POPIA: never store or log ID numbers; no personal data in logs, traces or metrics labels. Audit link, unlink and failed attempts.
 
 ## Reliability and observability
@@ -56,6 +56,7 @@ PascalCase throughout, which is what EF Core and Npgsql generate by default (dec
 ## API and contract
 
 - `/api/v1`, keyset pagination, ProblemDetails for every error.
+- Problem `type` values are resolvable URLs, `https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/<slug>.md`, with one page per slug under `docs/problems/` (RFC 9457 §3.1.1 encourages resolvable type URIs; architecture AD-3). Event `dataschema` values point the same way at `contracts/events/` (AD-19).
 - Code-first OpenAPI; `openapi.json` is committed and CI fails on drift. Scalar is the viewer (dev and demo only).
 - Every `Location` header points to a real GET endpoint, proved by an integration test.
 
@@ -63,7 +64,7 @@ PascalCase throughout, which is what EF Core and Npgsql generate by default (dec
 
 - **Never mock the database.** No EF InMemory, no SQLite. The guard hook blocks both.
 - Tier 1: pure unit tests for decisions (state machine, SLA escalation, validation) with an injected clock.
-- Tier 2: integration tests against real Postgres via Testcontainers and `WebApplicationFactory`, one container per run, reset with Respawn. Every endpoint is called in every authorisation state.
+- Tier 2: integration tests against real Postgres via Testcontainers and `WebApplicationFactory`, one container per run, a fresh database per test. Every endpoint is called in every authorisation state.
 - Unit-test the decisions, integration-test the plumbing.
 - Test method names follow Microsoft's `Method_Scenario_Expected` convention (`Withdraw_WhenResolved_Returns409`); CA1707 is relaxed for tests only.
 - No exact-equality timestamp assertions: a fixed `TimeProvider` or a tolerance.
@@ -79,4 +80,3 @@ PascalCase throughout, which is what EF Core and Npgsql generate by default (dec
 - Test method names use underscores (`Method_Scenario_Expected`), so CA1707 is relaxed for tests.
 - Constants and static readonly fields are PascalCase at every accessibility; other private fields, static or not, are `_camelCase` (Microsoft uses `s_` for private statics).
 - Migrations run at Api start-up; migration bundles are a production-path note.
-- Problem `type` values are tag URIs, not resolvable URLs.

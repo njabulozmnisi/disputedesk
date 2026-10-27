@@ -22,3 +22,4 @@ Domain terms, settled during grilling. Use these words; avoid the synonyms liste
 | **SLA** | The 10 calendar days from submission after which an unresolved dispute is escalated automatically. Internal only: never promised to customers. | deadline, TAT |
 | **Dispute event** | A fact the bank publishes when a dispute is raised or its status changes, for other systems to react to. Carries no personal data. | message, notification, webhook |
 | **Timeline** | The ordered history of a dispute's status changes, with notes meant for the customer. | audit log (that is internal), activity feed |
+| **Quality area** | One of the ten areas the solution must meet: architecture and scalability; resilience and operational readiness; data and domain modelling; API design; security (primary); code quality and maintainability; testing; observability; infrastructure and DevOps; documentation and communication. | assessment area, criterion |

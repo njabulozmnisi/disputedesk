@@ -15,7 +15,7 @@ lane = "QA"
 high_stakes = false
 migration = false
 touches = ["e2e/ (new: package.json, playwright.config.ts, fixtures, journeys/uj-1.spec.ts)", "docs/verification/"]
-supervisor_checks = ["ZAP baseline against the running stack: no untriaged high or critical finding."]
+supervisor_checks = ["ZAP baseline (`zap-baseline.py`) against the running stack: no untriaged high finding."]
 
 [[entry]]
 id = 2
@@ -38,7 +38,7 @@ id = 3
 type = "story"
 title = "CI runs the journeys with ZAP and publishes images to GHCR"
 description = "Adds the `e2e` job (Compose up, Playwright with axe, ZAP baseline) and the main-only `publish` job (AD-32)."
-verify = "Workflow lint passes; reading `ci.yml` shows the `e2e` job on pull requests and the `publish` job gated to main with `packages: write` only there."
+verify = "`actionlint` passes; reading `ci.yml` shows the `e2e` job on pull requests and the `publish` job gated to main with `packages: write` only there."
 covers = ["R33", "R35"]
 after = [2]
 hitl = false
@@ -47,7 +47,7 @@ owner = "backend"
 lane = "A"
 high_stakes = false
 migration = false
-touches = [".github/workflows/ci.yml (e2e, publish)", ".zap/ (triage file)"]
+touches = [".github/workflows/ci.yml (e2e, publish)", ".zap/rules.tsv (ZAP baseline config)"]
 supervisor_checks = ["Check the first green PR run and the GHCR package list after merge."]
 
 [[entry]]
@@ -55,16 +55,16 @@ id = 4
 type = "story"
 title = "AWS Compose override and OpenTelemetry collector"
 description = "Adds `docker-compose.aws.yml` with required variables and memory limits, the collector replacing the Aspire Dashboard, and Mailpit basic auth, all testable without an AWS account."
-verify = "Reading `docker-compose.aws.yml`, the collector config and the AWS nginx template shows the criteria below."
+verify = "Reading `docker-compose.aws.yml`, the collector config, the AWS nginx template and the Api's Data Protection registration shows the criteria below."
 covers = ["R32", "R36", "R38"]
 after = [3, "5.1"]
 hitl = false
 risk = "medium"
 owner = "backend"
 lane = "B"
-high_stakes = false
+high_stakes = true
 migration = false
-touches = ["docker-compose.aws.yml", "infra/otel-collector/config.yaml", "infra/nginx/templates/ (Mailpit basic auth, origin header check)"]
+touches = ["docker-compose.aws.yml", "infra/otel-collector/config.yaml", "infra/nginx/templates/ (Mailpit basic auth, origin header check)", "backend/src/DisputeDesk.Api/Program.cs (Data Protection key storage by configuration)", "backend/Directory.Packages.props"]
 supervisor_checks = ["`docker compose -f docker-compose.yml -f docker-compose.aws.yml config` fails without the variables and validates with them."]
 
 [[entry]]
@@ -81,7 +81,7 @@ owner = "backend"
 lane = "B"
 high_stakes = false
 migration = false
-touches = ["infra/terraform/modules/ (network, compute, database, edge, deploy-role, observability, budget)", "infra/terraform/envs/dev/", ".github/workflows/deploy.yml", ".github/workflows/ci.yml (terraform fmt and validate)", "infra/aws/deploy.sh"]
+touches = ["infra/terraform/modules/ (network, compute, database, edge, deploy-role, observability, budget)", "infra/terraform/envs/dev/", "infra/terraform/envs/dev/tests/ (terraform test with mock_provider)", ".github/workflows/deploy.yml", ".github/workflows/ci.yml (terraform fmt and validate)", "infra/aws/deploy.sh"]
 supervisor_checks = ["Human step: create the AWS account, `terraform apply`, run `deploy.yml`, sign in over CloudFront, see traces in CloudWatch.", "Human step: `terraform destroy` removes everything except the state bucket (NFR-INFRA-5, manual check)."]
 unknown = "the AWS free-plan account does not exist yet; this story cannot start its human steps until it does."
 
@@ -90,7 +90,7 @@ id = 6
 type = "story"
 title = "Decision records and the production path"
 description = "Writes decision records ad-001 to ad-008 (ad-004 exists) and `docs/production-path.md` with every prd §6.2 deferral and a reason; docs only."
-verify = "Each record named below exists with status, decision, options rejected and consequences; every prd §6.2 bullet appears in `docs/production-path.md` with a one-line reason."
+verify = "Each new record named below follows the Nygard ADR form (status, context, decision, consequences) plus options rejected; every prd §6.2 bullet appears in `docs/production-path.md` with a one-line reason."
 covers = ["R39"]
 after = []
 hitl = false
@@ -119,13 +119,30 @@ touches = ["README.md", "docs/runbook.md", "docs/onboarding.md"]
 supervisor_checks = ["Fresh clone on a clean machine: the README's first command brings the stack up."]
 
 [[entry]]
+id = 9
+type = "story"
+title = "Standards hardening (backend)"
+description = "Replaces the remaining hand-made or missing backend mechanisms with their documented standard forms: deny by default, host filtering, sign-out through the OIDC handler, the standard resilience handler's total timeout, and security tests in the Production environment. Built before the closing sweep, which then changes no behaviour."
+verify = "Integration tests for the fallback policy, sign-out and the core-banking outage pass, and the security and error-shape tests pass in both the Development and Production environments."
+covers = ["R9", "R3", "R11", "R30", "R32", "R35"]
+after = ["2.1", "2.2", "2.3", "3.4", "5.2", "6.3"]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Api/Program.cs (fallback policy, AllowAnonymous on OpenAPI and Scalar)", "backend/src/DisputeDesk.Api/Bff/ (AllowAnonymous, sign-out through SignOutAsync)", "backend/src/DisputeDesk.Api/Health/ (AllowAnonymous)", "backend/src/DisputeDesk.Infrastructure/CoreBanking/ (TotalRequestTimeout)", "backend/tests/DisputeDesk.Api.IntegrationTests/ (endpoint enumeration, host filtering, sign-out, Production-environment runs)", ]
+supervisor_checks = ["Browser sign-out for login A lands on `/`, Zitadel shows no session, and the end-session request carries `state`.", "Remove `AllowAnonymous` from `/health/live` in a throwaway copy: the endpoint enumeration test fails."]
+
+[[entry]]
 id = "8a"
 type = "story"
 title = "Closing refactor sweep: backend"
 description = "7.8a. The first of two sequential sweeps after everything else: in `backend/`, `contracts/` and `infra/`, remove duplication, dead code and unexplained suppressions and align glossary terms, with no behaviour change."
 verify = "Every suite, the contract checks and the E2E journeys stay green; the diff adds no feature and no package."
 covers = ["R34", "R33"]
-after = [2, 4, 6, 7, "5.3", "5.4", "6.4", "3.7"]
+after = [2, 4, 6, 7, 9, "5.3", "5.4", "6.4", "3.7"]
 hitl = false
 risk = "medium"
 owner = "backend"

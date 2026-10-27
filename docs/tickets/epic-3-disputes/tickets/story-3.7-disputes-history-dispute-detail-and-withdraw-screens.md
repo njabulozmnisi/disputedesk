@@ -22,17 +22,18 @@ Verify: Vitest component tests pass, with API responses mocked from `openapi.jso
 1. **History grouped open and closed** (R16; FR-16)
    **Given** loaded pages of disputes
    **When** the Disputes screen renders
-   **Then** open and closed groups show newest first with reason, amount, status badge and outcome, with Load more
+   **Then** open and closed groups show newest first with reason, amount, status badge and outcome, with Load more on `useInfiniteQuery`, focus moved to the first new row and the new rows announced politely (WCAG 2.2 SC 2.4.3, 4.1.3)
 
 2. **Timeline as the customer sees it** (R16, R18; FR-17, NFR-API-5)
    **Given** a dispute detail
    **When** it renders
-   **Then** entries show oldest first with the status label, South African time, "You" or "The bank" and any note, and `underReviewPrioritised` reads "Under review (prioritised)"
+   **Then** entries show oldest first in an ordered list, each with the status label, South African time in a `<time datetime>` holding the UTC instant, "You" or "The bank" and any note, and `underReviewPrioritised` reads "Under review (prioritised)"
 
 3. **Withdraw offered only while open** (R19; FR-18, FR-20)
    **Given** disputes in each customer status
    **When** the detail renders
    **Then** Withdraw appears for Submitted, Under review and Under review (prioritised) only, and confirming sends an optional note of up to 500 characters
+   **And** success invalidates the dispute and list queries and announces "Dispute withdrawn"; a 409 `action-not-allowed` with `customerStatus` `withdrawn` counts as success (FR-18), and any other 409 shows the status from `customerStatus`
 
 4. **Rejected guidance** (R16; FR-17)
    **Given** a dispute resolved Rejected
@@ -45,9 +46,9 @@ Verify: Vitest component tests pass, with API responses mocked from `openapi.jso
    **Then** the same not-found screen shows for both
 
 6. **Accessible dialog** (R40; NFR-CODE-6)
-   **Given** the withdraw dialog
-   **When** it opens and closes by keyboard
-   **Then** focus is trapped inside and returns to Withdraw on close
+   **Given** the withdraw dialog, a shadcn/ui `AlertDialog` (WAI-ARIA APG alert dialog pattern)
+   **When** it opens, and closes by Escape or "Keep dispute"
+   **Then** focus moves into it, stays inside, and returns to Withdraw on close
 
 ## Supervisor checks
 

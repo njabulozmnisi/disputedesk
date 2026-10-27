@@ -31,8 +31,9 @@ Verify: `npx playwright test` in `e2e/` passes UJ-1 against a fresh stack (`dock
 
 3. **Accessibility** (R40; NFR-CODE-6)
    **Given** every screen visited
-   **When** axe runs at 1280px and 320px
+   **When** `@axe-core/playwright` runs at 1280px and 320px with the tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` and `wcag22aa`
    **Then** no WCAG 2.2 AA violation is reported
+   **And** a manual keyboard pass over the same screens (Tab order, visible focus, no keyboard trap; WCAG 2.2 SC 2.1.1, 2.1.2, 2.4.7) is recorded in `docs/verification/7.1-qa.md`, because axe checks only part of WCAG 2.2 AA
 
 4. **Customer D reset by a fresh stack** (R35; FR-29)
    **Given** repeated QA runs
@@ -43,7 +44,7 @@ Verify: `npx playwright test` in `e2e/` passes UJ-1 against a fresh stack (`dock
 
 Deliberate-break proofs and Docker checks, run by the supervisor, not the verifier.
 
-- ZAP baseline against the running stack: no untriaged high or critical finding.
+- ZAP baseline (`zap-baseline.py`) against the running stack: no untriaged high finding.
 
 ## Build facts
 
@@ -59,4 +60,5 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Decision: 2026-10-26 — Gate 2: QA resets customer D by starting a fresh stack per QA run (`docker compose down -v`, then `up --wait`), not through a test-only database role; `qa_readonly` stays read-only for inspection.
+- Decision: 2026-10-27 — WCAG 2.2 AA is checked by axe plus a recorded manual keyboard pass, not proved by axe alone (R40).
 - Risk high: the main demo path; beyond the criteria, the run is repeated twice, each on a fresh stack, to prove the D reset.

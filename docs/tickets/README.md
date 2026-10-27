@@ -1,6 +1,6 @@
 # Build order
 
-Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, and 3.5 moved to 5.4).
+Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, and 7.9 before 7.8a).
 
 Status: done (merged on main), in progress, or planned. The supervisor updates it when a story merges.
 
@@ -23,6 +23,7 @@ Needs: epic 1 (the merged P0 baseline).
 | 2.1 | [Core-banking stub and the three ports with the resilience handler](epic-2-transactions/tickets/story-2.1-core-banking-stub-and-the-three-ports-with-the-resilience-ha.md) | backend | done |
 | 2.2 | [Sign in and sign out through the BFF, with one ProblemDetails contract](epic-2-transactions/tickets/story-2.2-sign-in-and-sign-out-through-the-bff-with-one-problemdetails.md) | backend | done |
 | 2.3 | [Linked customer lists their own transactions](epic-2-transactions/tickets/story-2.3-linked-customer-lists-their-own-transactions.md) | backend | in progress |
+| 2.7 | [Problem types resolve to documentation pages](epic-2-transactions/tickets/story-2.7-problem-types-resolve-to-documentation-pages.md) | backend | planned |
 | 2.4 | [SPA shell, session routing and the transactions screen](epic-2-transactions/tickets/story-2.4-spa-shell-session-routing-and-the-transactions-screen.md) | frontend | planned |
 | 2.5 | [Gateway serves the SPA with the edge rules, and CI checks the frontend](epic-2-transactions/tickets/story-2.5-gateway-serves-the-spa-with-the-edge-rules-and-ci-checks-the.md) | backend | planned |
 | 2.6 | [Hosted login pages themed from the design tokens](epic-2-transactions/tickets/story-2.6-hosted-login-pages-themed-from-the-design-tokens.md) | backend | planned |
@@ -83,5 +84,6 @@ Needs: epic 2 (the themed hosted login for UJ-1); epic 3 (dispute screens for UJ
 | 7.5 | [Terraform dev environment and OIDC deploy](epic-7-release/tickets/story-7.5-terraform-dev-environment-and-oidc-deploy.md) | backend | planned |
 | 7.6 | [Decision records and the production path](epic-7-release/tickets/story-7.6-decision-records-and-the-production-path.md) | docs | planned |
 | 7.7 | [README, runbook and onboarding](epic-7-release/tickets/story-7.7-readme-runbook-and-onboarding.md) | docs | planned |
+| 7.9 | [Standards hardening (backend)](epic-7-release/tickets/story-7.9-standards-hardening-backend.md) | backend | planned |
 | 7.8a | [Closing refactor sweep: backend](epic-7-release/tickets/story-7.8a-closing-refactor-sweep-backend.md) | backend | planned |
 | 7.8b | [Closing refactor sweep: frontend](epic-7-release/tickets/story-7.8b-closing-refactor-sweep-frontend.md) | frontend | planned |

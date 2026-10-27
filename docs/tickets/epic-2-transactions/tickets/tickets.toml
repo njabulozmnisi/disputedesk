@@ -52,21 +52,38 @@ touches = ["backend/src/DisputeDesk.Domain/Transactions/ (disputability)", "back
 supervisor_checks = ["`scripts/dev-login.sh` for A then curl `/api/v1/transactions` through the gateway returns rows.", "With `core-banking` stopped the same call returns 503 within about 5 seconds."]
 
 [[entry]]
+id = 7
+type = "story"
+title = "Problem types resolve to documentation pages"
+description = "Moves every problem `type` from the tag URI to the resolvable URL of its page under `docs/problems/` (AD-3; RFC 9457 §3.1.1 encourages resolvable type URIs). Built after 2.3 and before 2.4, so the SPA routes on the final form from its first story."
+verify = "The ProblemDetails and slug catalogue tests pass; every slug in the catalogue has its page under `docs/problems/`."
+covers = ["R30"]
+after = [3]
+hitl = false
+risk = "medium"
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["backend/src/DisputeDesk.Contracts/Problems/ProblemType.cs", "docs/problems/ (new: one page per slug)", "backend/tests/DisputeDesk.Api.IntegrationTests/ProblemDetailsTests.cs", "backend/tests/DisputeDesk.Api.IntegrationTests/Bff/AntiforgeryTests.cs", "the slug catalogue test", "backend/openapi.json"]
+supervisor_checks = ["After merge, `https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/not-found.md` opens the not-found page."]
+
+[[entry]]
 id = 4
 type = "story"
 title = "SPA shell, session routing and the transactions screen"
 description = "Scaffolds the SPA (AD-31) with the start page, session-driven routing, navigation, sign-out and the transactions screen in every state from the mockups; the SPA half of the tracer bullet."
 verify = "`npm run build`, `tsc --noEmit`, ESLint, Prettier and Vitest pass."
 covers = ["R2", "R3", "R9", "R11", "R12", "R34", "R40"]
-after = [3]
+after = [3, 7]
 hitl = false
 risk = "medium"
 owner = "frontend"
 lane = "B"
 high_stakes = false
 migration = false
-touches = ["frontend/ (new: package.json, vite.config.ts, tsconfig, eslint and prettier config, orval.config.ts)", "frontend/src/api/generated/", "frontend/src/api/mutator.ts", "frontend/src/theme/tokens.css", "frontend/src/app/ (router, layout, nav)", "frontend/src/features/transactions/", "frontend/src/pages/ (start, signed-out, not-found)"]
-supervisor_checks = ["Through the gateway after story 5, customer A signs in and sees the screen matching `docs/ux/mockups/transactions.html`."]
+touches = ["frontend/ (new: package.json, vite.config.ts, tsconfig, eslint and prettier config, orval.config.ts)", "frontend/src/api/generated/", "frontend/src/api/mutator.ts", "frontend/src/theme/tokens.css", "frontend/src/app/ (TanStack Router route tree, layout, nav, inactivity warning)", "frontend/src/features/transactions/", "frontend/src/pages/ (start, signed-out, not-found)"]
+supervisor_checks = ["Through the gateway after story 5, customer A signs in and sees the screen matching `docs/ux/mockups/transactions.html`.", "In Playwright at 320 CSS px wide, the shell and transactions screen have no horizontal scroll, and every focused control shows a visible focus indicator not hidden by the tab bar (WCAG 2.2 SC 1.4.10, 2.4.7, 2.4.11)."]
 references = ["design — docs/ux/mockups/start.html", "design — docs/ux/mockups/transactions.html", "design — docs/ux/mockups/transactions-loading.html", "design — docs/ux/mockups/transactions-empty.html", "design — docs/ux/mockups/transactions-error.html", "design — docs/ux/mockups/not-found.html", "experience — docs/ux/EXPERIENCE.md, Copy deck"]
 
 [[entry]]
@@ -74,24 +91,24 @@ id = 5
 type = "story"
 title = "Gateway serves the SPA with the edge rules, and CI checks the frontend"
 description = "Builds the SPA into the gateway image in a Node stage, templates nginx from the environment with the AD-23 edge rules and the `/otlp/` proxy, and adds the CI `frontend` job; completes the tracer bullet."
-verify = "Reading the gateway Dockerfile, nginx templates and `ci.yml` shows the criteria below; `docker compose config` is a supervisor check."
+verify = "Reading the gateway Dockerfile, nginx templates and `ci.yml` shows the criteria below; the Api security-header integration tests pass; `docker compose config` is a supervisor check."
 covers = ["R32", "R34", "R36", "R37"]
 after = [4]
 hitl = false
 risk = "medium"
 owner = "backend"
 lane = "B"
-high_stakes = false
+high_stakes = true
 migration = false
-touches = ["infra/nginx/ (Dockerfile with Node stage, templates/, html/ placeholder removed)", "docker-compose.yml (gateway build and template variables)", ".github/workflows/ci.yml (frontend job)", ".nvmrc"]
-supervisor_checks = ["`docker compose config` validates.", "`curl -I http://localhost:8080/` shows the headers; 40 rapid requests to `/api/health/live` get some 429s.", "Customer A signs in through the gateway and sees transactions: the tracer bullet demo."]
+touches = ["infra/nginx/ (Dockerfile with Node stage, templates/, html/ placeholder removed)", ".dockerignore", "docker-compose.yml (gateway build context and template variables)", "backend/src/DisputeDesk.Api/Security/SecurityHeaders.cs (drop the duplicated headers)", "backend/tests/DisputeDesk.Api.IntegrationTests/SecurityHeadersTests.cs", ".github/workflows/ci.yml (frontend job)", ".nvmrc"]
+supervisor_checks = ["`docker compose config` validates.", "`curl -I` on `http://localhost:8080/` and on `/api/health/live` shows each security header exactly once; 40 rapid requests to `/api/health/live` get some 429s.", "Customer A signs in through the gateway and sees transactions: the tracer bullet demo."]
 
 [[entry]]
 id = 6
 type = "story"
 title = "Hosted login pages themed from the design tokens"
 description = "Generates the Zitadel label policy from `frontend/src/theme/tokens.css` at provisioning time so sign-up, sign-in and verification pages match DisputeDesk (FR-1, AD-6)."
-verify = "A provisioning dry run prints label-policy JSON whose colours and font equal the token values; a script test compares them."
+verify = "A provisioning dry run prints label-policy JSON whose colours, logo and font equal the design system's values; a script test compares them."
 covers = ["R1"]
 after = [4, 2]
 hitl = false
@@ -100,5 +117,5 @@ owner = "backend"
 lane = "B"
 high_stakes = false
 migration = false
-touches = ["infra/zitadel/provision/ (label policy generation, provision.sh)", "infra/zitadel/provision/Dockerfile", "docker-compose.yml (provision mounts tokens.css)"]
+touches = ["infra/zitadel/provision/ (label policy generation, provision.sh)", "infra/zitadel/provision/Dockerfile", "docker-compose.yml (provision mounts tokens.css and the font file)"]
 supervisor_checks = ["Screenshot the hosted sign-up page beside `docs/ux/mockups/start.html`; sign up a new login and find the verification email in Mailpit.", "Run provisioning twice: the label policy is unchanged and the second run exits 0."]

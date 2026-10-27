@@ -15,7 +15,7 @@ lane = "B"
 high_stakes = true
 migration = false
 touches = ["backend/src/DisputeDesk.Api/Operations/", "backend/src/DisputeDesk.Application/Operations/ReadDispute/", "backend/src/DisputeDesk.Api/Program.cs", "backend/src/DisputeDesk.Api/appsettings.json", "infra/zitadel/provision/provision.sh (Operations:Actors, dispute.read grant)", "infra/nginx/templates/ (Scalar CSP)", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Operations/"]
-supervisor_checks = ["From `/scalar/`, obtain a client-credentials token and read a seeded dispute."]
+supervisor_checks = ["From `/scalar/`, obtain a client-credentials token and read a dispute customer A raised through the customer API."]
 
 [[entry]]
 id = 2

@@ -22,7 +22,7 @@ Verify: Domain unit tests and Testcontainers integration tests pass; raising for
 1. **Raise succeeds** (R13; FR-13)
    **Given** a linked customer and their disputable transaction
    **When** they post a reason and an optional note of up to 1,000 characters
-   **Then** the response is 201 with status `submitted`, one timeline entry with action `raise` and actor `you`, and a `Location` that a GET serves
+   **Then** the response is 201 with status `submitted`, one timeline entry with action `raise` and actor `you`, and `Location: /api/v1/disputes/<disputeId>` (RFC 9110); story 3.3 proves a GET serves it
    **And** the snapshot comes from a fresh core-banking read, and any amount, date or description in the request is ignored
 
 2. **Raise refusals in order** (R13; FR-13, NFR-API-2)
@@ -30,6 +30,7 @@ Verify: Domain unit tests and Testcontainers integration tests pass; raising for
    **When** each is raised
    **Then** they get 404 `not-found`, 409 `already-disputed` and 422 `not-disputable` with `reason`, in that check order
    **And** a note over 1,000 characters after trimming gets 400 `validation`
+   **And** an anonymous caller or a bearer token, an unlinked login, and a cookie without `X-XSRF-TOKEN` get 401 `unauthorized`, 403 `linking-required` and 400 `validation`, the first two before any body validation, because the route is on the customer routes group (`RequireAuthorization("Linked")`, AD-10)
 
 3. **One dispute per transaction under concurrency** (R13, R29; FR-13, NFR-DATA-5, NFR-TEST-3)
    **Given** two parallel raises for the same transaction
@@ -56,18 +57,19 @@ Verify: Domain unit tests and Testcontainers integration tests pass; raising for
 7. **Raised event in the outbox** (R23; FR-27, NFR-SEC-5, NFR-TEST-4)
    **Given** a successful raise
    **When** the outbox row is read
-   **Then** its `Payload` is a CloudEvents 1.0 structured `disputedesk.dispute.raised.v1` whose data is exactly `disputeId`, `reason`, `status`, `occurredAt` and `disputeVersion` 1, with `TraceParent` stored
+   **Then** its `Payload` is a CloudEvents 1.0 structured JSON event with `specversion` `1.0`, `id`, `source`, `type` `disputedesk.dispute.raised.v1` and the AD-19 `subject`, `time`, `datacontenttype` and `dataschema`, whose data is exactly `disputeId`, `reason`, `status`, `occurredAt` and `disputeVersion` 1, with `TraceParent` stored
    **And** a contract test validates it against the committed JSON Schema
 
 8. **Data model rules** (R29; NFR-DATA-1, NFR-DATA-4, NFR-DATA-5, NFR-DATA-7)
    **Given** the migration
    **When** it is applied
-   **Then** money columns are `numeric(19,2)` with `Currency`, instants are `timestamptz` ending in `Utc`, `Disputes` maps `xmin` and a `Version`, the partial `IX_Disputes_SlaDueAtUtc` exists, `OutboxMessages` has every AD-22 column the relay needs (`Status`, `Attempts`, `NextAttemptAtUtc`, `SentAtUtc`, `LastError`), and names follow AD-22
+   **Then** money columns are `numeric(19,2)` with `Currency`, instants are `timestamptz` ending in `Utc`, `Disputes` maps `xmin` as a `uint` row version (`IsRowVersion()`, the Npgsql concurrency token) and a `Version`, the partial `IX_Disputes_SlaDueAtUtc` exists, `OutboxMessages` has every AD-22 column the relay needs (`Status`, `Attempts`, `NextAttemptAtUtc`, `SentAtUtc`, `LastError`), and names follow AD-22
 
 9. **Ownership filter and bypass rule** (R17; NFR-SEC-6)
    **Given** the solution
    **When** the architecture tests run
    **Then** `IgnoreQueryFilters(["Ownership"])` appears only under `Operations/` and `Sla/`, `AddDbContextPool` is absent, and with no current customer the filter matches nothing
+   **And** `TimelineEntry` carries the matching `Ownership` filter through its dispute, as EF Core advises for filters on required navigations
 
 10. **Rows show their dispute** (R12; FR-12)
    **Given** a transaction with any dispute, in any status

@@ -17,7 +17,7 @@ Adds `docker-compose.aws.yml` with required variables and memory limits, the col
 
 ## Requirements
 
-Verify: Reading `docker-compose.aws.yml`, the collector config and the AWS nginx template shows the criteria below.
+Verify: Reading `docker-compose.aws.yml`, the collector config, the AWS nginx template and the Api's Data Protection registration shows the criteria below.
 
 1. **No inline defaults** (R32; NFR-SEC-9)
    **Given** the override
@@ -32,12 +32,18 @@ Verify: Reading `docker-compose.aws.yml`, the collector config and the AWS nginx
 3. **Mailpit and origin protection** (R32, R38; NFR-SEC-11, NFR-INFRA-3)
    **Given** the AWS nginx template
    **When** it renders
-   **Then** Mailpit's UI needs basic auth and requests without the origin-verify header are rejected
+   **Then** Mailpit's UI needs basic auth and requests without the CloudFront origin-verify custom header are rejected
 
 4. **Fits the instance** (R38; NFR-INFRA-3)
    **Given** the override's memory limits
    **When** they are summed
    **Then** they total about 3.4 GiB with Redpanda at 512M
+
+5. **Data Protection keys encrypted at rest in AWS** (R32, R2; NFR-SEC-9, NFR-SEC-1)
+   **Given** the Api under the AWS override
+   **When** it starts
+   **Then** the Data Protection key ring is stored with AWS's documented `Amazon.AspNetCore.DataProtection.SSM` package (`PersistKeysToAWSSystemsManager`) as SSM Parameter Store SecureStrings encrypted with KMS, chosen by configuration, while local development keeps the keys in Postgres (`DataProtectionKeys`)
+   **And** the builder verifies the package (publisher, download count, repository, latest stable version) and pins it exactly (AGENTS.md, Dependency verification)
 
 ## Supervisor checks
 
@@ -48,9 +54,9 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Build facts
 
 - Owner: backend (backend-builder).
-- Flags: none.
+- Flags: high-stakes (Data Protection key ring in AWS).
 - Lane: B.
-- Touches: `docker-compose.aws.yml`; `infra/otel-collector/config.yaml`; infra/nginx/templates/ (Mailpit basic auth, origin header check).
+- Touches: `docker-compose.aws.yml`; `infra/otel-collector/config.yaml`; infra/nginx/templates/ (Mailpit basic auth, origin header check); backend/src/DisputeDesk.Api/Program.cs (Data Protection key storage by configuration); `backend/Directory.Packages.props`.
 
 ## References
 
@@ -59,3 +65,5 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Gold-plating watch: no extra services beyond the collector.
+- Decision: 2026-10-27 — Data Protection keys are encrypted at rest in AWS through `Amazon.AspNetCore.DataProtection.SSM` (AD-7); this item moved here from 7.8a and leaves the architecture Deferred table.
+- The instance role's SSM and KMS permissions for the key-ring parameter path belong to the Terraform compute module (7.5).

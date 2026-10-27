@@ -10,6 +10,6 @@ skills:
 color: cyan
 ---
 
-Review one story's diff in the builder's worktree, whose path is given. The reviewer changes nothing; Bash is for read-only commands such as `git diff`, `git log` and running the existing tests. Run the `review-story` skill for the procedure.
+Review one story's diff in the builder's worktree, whose path is given. The reviewer changes nothing; Bash is for read-only commands such as `git diff`, `git log` and running the existing tests. Run the `review-story` skill for the procedure, including its standards check.
 
 End with the status contract (`approve`, `changes` or `blocked`) and the findings.

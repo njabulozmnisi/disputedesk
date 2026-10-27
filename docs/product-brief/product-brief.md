@@ -15,9 +15,9 @@ inputs:
 
 DisputeDesk is a transaction dispute portal for a South African retail bank. A customer signs in, links their login to their customer record at the bank, sees their recent transactions, disputes a transaction that looks wrong, and follows each dispute through a timeline until it is resolved or withdrawn. Behind the portal, the bank's operations tooling and automated processes move disputes forward through the same API, and every change is published as an event for the rest of the bank.
 
-It answers a take-home brief: "Create a system (front end and back end) for customers to view transactions and dispute them. There must be a historic view of disputed transactions." It is built solo for a senior full-stack role, to production standards, and runs locally with one `docker compose up`.
+It meets this business requirement: "The bank requires a customer-facing web application, with the back-end services that support it, through which customers can view their account transactions and raise a dispute against any transaction they believe is incorrect. Customers must also be able to view the history of their disputed transactions, including the current status of each dispute." It is built to production standards and runs locally with one `docker compose up`.
 
-It is deliberately small: each of the ten assessment areas is shown once, done well, and anything bigger goes to `docs/production-path.md`.
+It is deliberately small: each of the ten quality areas is met once, done well, and anything bigger goes to `docs/production-path.md`.
 
 ## The problem
 
@@ -27,7 +27,7 @@ When a customer sees a card transaction they don't recognise, or one that is wro
 
 Six screens: sign in or sign up (hosted by the identity provider), link the login to the customer record, transactions, raise a dispute, dispute history, and dispute detail with its timeline.
 
-- **Link.** A new login proves it belongs to a customer with bank details and a one-time PIN (OTP) sent to the cellphone number the bank holds. Until then it reaches only the linking screens.
+- **Link.** A new login proves it belongs to a customer with bank details and a one-time code (OTP) sent to the cellphone number the bank holds. Until then it reaches only the linking screens.
 - **View.** A linked customer sees about 90 days of transactions on one or two accounts, newest first. Disputed rows show their status.
 - **Dispute.** For a disputable transaction (a settled card debit from the last 90 days that has never been disputed) the customer picks one of six reasons, adds an optional note, and disputes the full amount (or the difference, for wrong amount).
 - **Follow.** The dispute history lists every dispute the customer has raised. Each one has a timeline that shows each status change, when it happened (South African time), which type of actor made the change, and any note meant for the customer.
@@ -46,7 +46,7 @@ There is no moat here, and the brief does not pretend otherwise. The differences
 
 - **Bank customers** (the people using the portal). They want to dispute a transaction in under two minutes without phoning anyone, and to see at any time where their dispute stands.
 - **Operations and automation** (actors calling the API). Support tooling, LLM agents and scheduled processes that review, escalate and resolve disputes. For the demo, the Scalar API viewer stands in for another team's operations tool.
-- **Interview reviewers** (the audience). They weigh security first and testing a close second, and mark down over-engineering as readily as missing rigour. They need to see within minutes how each area is handled: every acceptance criterion proved by a test, one trace from browser to Worker, clean security scans, and a README that ends with a map from each area to where it is addressed.
+- **Engineers who maintain or review the solution.** The requirements put security first and testing a close second, and treat over-engineering as a defect as serious as missing rigour. They need to see within minutes how each area is handled: every acceptance criterion proved by a test, one trace from browser to Worker, clean security scans, and a README that ends with a map from each area to where it is addressed.
 
 ## Success criteria
 

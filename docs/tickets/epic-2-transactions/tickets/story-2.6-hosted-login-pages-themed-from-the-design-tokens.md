@@ -17,17 +17,18 @@ Generates the Zitadel label policy from `frontend/src/theme/tokens.css` at provi
 
 ## Requirements
 
-Verify: A provisioning dry run prints label-policy JSON whose colours and font equal the token values; a script test compares them.
+Verify: A provisioning dry run prints label-policy JSON whose colours, logo and font equal the design system's values; a script test compares them.
 
 1. **Label policy from tokens** (R1; FR-1)
    **Given** the theme file
    **When** provisioning runs
    **Then** the Zitadel label policy's primary, background, warning and font colours and the logo come from the token values, and the policy is activated
+   **And** the design system's font (Nunito Sans, the file the SPA self-hosts) is uploaded to the label policy through Zitadel's font upload, so the hosted pages use it
 
 2. **Email verification required** (R1; FR-1)
-   **Given** the login policy set by `provision.sh`
+   **Given** `docker-compose.yml`
    **When** it is read
-   **Then** it requires email verification before sign-in and points SMTP at Mailpit
+   **Then** `zitadel-login` sets `EMAIL_VERIFICATION: "true"` and the default-instance SMTP configuration points at Mailpit (AD-6)
 
 ## Supervisor checks
 
@@ -41,7 +42,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Owner: backend (backend-builder).
 - Flags: none.
 - Lane: B.
-- Touches: infra/zitadel/provision/ (label policy generation, provision.sh); `infra/zitadel/provision/Dockerfile`; docker-compose.yml (provision mounts tokens.css).
+- Touches: infra/zitadel/provision/ (label policy generation, provision.sh); `infra/zitadel/provision/Dockerfile`; docker-compose.yml (provision mounts tokens.css and the font file).
 
 ## References
 
@@ -50,3 +51,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Gold-plating watch: theming beyond colours, font and logo is out.
+- Decision: 2026-10-27 — the hosted login pages also use the design system's font, uploaded to Zitadel's label policy; the builder checks the font format Zitadel accepts in its documentation.

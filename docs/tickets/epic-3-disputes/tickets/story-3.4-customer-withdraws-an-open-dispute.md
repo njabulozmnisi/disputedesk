@@ -23,6 +23,8 @@ Verify: Domain unit tests for the withdraw cells and integration tests for withd
    **Given** the owner and a Submitted, Under review or Escalated dispute
    **When** they withdraw with an optional note of up to 500 characters
    **Then** the status is Withdrawn, one timeline entry with actor `you` is added, and one audit entry is written
+   **And** success is 200 with the updated customer view of the dispute, the same shape as `GET /api/v1/disputes/<disputeId>`
+   **And** a note over 500 characters after trimming gets 400 `validation`, and an unknown ID with such a note gets 404 first, because the endpoint calls `.DisableValidation()` and validates after loading (AD-8)
 
 2. **Withdrawn is final** (R19; FR-19)
    **Given** a Withdrawn dispute
@@ -35,9 +37,9 @@ Verify: Domain unit tests for the withdraw cells and integration tests for withd
    **Then** the response is 409 `action-not-allowed` with `customerStatus`
 
 4. **Customer credential only** (R19; NFR-SEC-2, NFR-SEC-1)
-   **Given** a bearer token, and a cookie without the antiforgery header
+   **Given** a bearer token, an unlinked login, and a cookie without the antiforgery header
    **When** each calls withdraw
-   **Then** they get 401 and 400 respectively
+   **Then** they get 401 `unauthorized`, 403 `linking-required` and 400 `validation` respectively
 
 5. **Identical 404 on withdraw** (R17; NFR-SEC-6, NFR-TEST-3)
    **Given** customer A, a dispute of customer B and an unknown ID
@@ -53,12 +55,12 @@ Verify: Domain unit tests for the withdraw cells and integration tests for withd
 7. **Status-changed event** (R23; FR-28, NFR-TEST-4)
    **Given** a successful withdraw
    **When** the outbox row is read
-   **Then** it is `disputedesk.dispute.status-changed.v1` with `disputeId`, `fromStatus`, `toStatus` `withdrawn`, `action` `withdraw`, `actorType` `customer`, `occurredAt` and `disputeVersion`, valid against the committed schema
+   **Then** it is a CloudEvents 1.0 structured `disputedesk.dispute.status-changed.v1` with the AD-19 attributes and data `disputeId`, `fromStatus`, `toStatus` `withdrawn`, `action` `withdraw`, `actorType` `customer`, `occurredAt` and `disputeVersion`, valid against the committed schema
 
 8. **Withdraw metrics** (R36; NFR-OBS-3)
    **Given** a withdraw
    **When** metrics are collected
-   **Then** `disputedesk.dispute_actions` counts it by action and actor type and `disputedesk.disputes.withdraw_age` records its age
+   **Then** `disputedesk.dispute_actions` counts it by action and actor type and `disputedesk.disputes.withdraw_age` records its age in seconds (unit `s`, OpenTelemetry semantic conventions)
 
 ## Supervisor checks
 
@@ -79,4 +81,5 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 ## Notes
 
+- Decision: 2026-10-27 — withdraw success is 200 with the updated customer view of the dispute, so the SPA needs no second read.
 - Risk high: a final status set wrongly; beyond the criteria, QA checks the transaction row stays not disputable after withdraw.

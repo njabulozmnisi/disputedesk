@@ -16,9 +16,10 @@ description: Procedure for data-integrity and data-movement QA of one story on t
    - Network: the right endpoint and status, no extra fields, no other customer's data.
    - Database, via the read-only role in `infra/db/`: the dispute row, the history row and the outbox row, written in one transaction.
    - Events: the right shape and key on the topic, trace context in the headers.
-5. **ZAP baseline scan** against the running stack; record new alerts.
-6. **Evidence** to `docs/verification/<story>-qa.md`, keyed by commit SHA. Scrub `Authorization` headers, cookies, ID numbers and other personal data first (POPIA).
-7. **Passing walkthroughs become committed Playwright tests** in `e2e/`. A failing one blocks the merge.
+5. **Standards.** Check observed behaviour against the governing standard: HTTP semantics and status codes (RFC 9110), problem details (RFC 9457), cookie attributes (RFC 6265bis), caching (RFC 9111), OWASP guidance for the area. A deviation is a finding even when the story text is silent.
+6. **ZAP baseline scan** against the running stack; record new alerts.
+7. **Evidence** to `docs/verification/<story>-qa.md`, keyed by commit SHA. Scrub `Authorization` headers, cookies, ID numbers and other personal data first (POPIA).
+8. **Passing walkthroughs become committed Playwright tests** in `e2e/`. A failing one blocks the merge.
 
 ## Report
 

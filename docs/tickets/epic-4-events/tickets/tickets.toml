@@ -14,5 +14,5 @@ owner = "backend"
 lane = "A"
 high_stakes = false
 migration = false
-touches = ["backend/src/DisputeDesk.Worker/", "backend/src/DisputeDesk.Infrastructure/Outbox/", "backend/src/DisputeDesk.Api/Program.cs (ShutdownTimeout)", "backend/Directory.Packages.props (Confluent.Kafka)", "backend/Dockerfile (worker-local target)", "docker-compose.yml (worker health check, depends_on api healthy, stop_grace_period)", "backend/tests/DisputeDesk.Worker.IntegrationTests/"]
+touches = ["backend/src/DisputeDesk.Worker/", "backend/src/DisputeDesk.Infrastructure/Outbox/", "backend/Directory.Packages.props (Confluent.Kafka)", "backend/Dockerfile (worker-local target)", "docker-compose.yml (worker health check, depends_on api healthy, stop_grace_period)", "backend/tests/DisputeDesk.Worker.IntegrationTests/"]
 supervisor_checks = ["Re-run the telemetry smoke check: one trace from the browser raise to the Worker producer span in the Aspire Dashboard.", "`docker compose stop redpanda`, raise twice, start it: both events arrive in order.", "`docker compose ps` shows the worker healthy and starting after the api."]

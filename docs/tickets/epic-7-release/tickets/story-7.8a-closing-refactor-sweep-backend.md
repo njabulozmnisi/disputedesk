@@ -4,7 +4,7 @@ type: story
 title: "Closing refactor sweep: backend"
 parent: epic-7-release
 covers: [R34, R33]
-after: [2, 4, 6, 7, 5.3, 5.4, 6.4, 3.7]
+after: [2, 4, 6, 7, 9, 5.3, 5.4, 6.4, 3.7]
 hitl: false
 risk: medium
 ---
@@ -55,3 +55,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 - Runs alone: no other builder lane is active.
 - Decision: 2026-10-26 — Gate 2: the closing sweep is split into 7.8a backend (owner backend) and 7.8b frontend (owner frontend), run sequentially after everything else.
+- Decision: 2026-10-27 — the standards items once listed here (deny by default, `AllowedHosts`, sign-out through the OIDC handler, `TotalRequestTimeout`, Production-environment tests, the testing convention) moved to story 7.9, and Data Protection keys at rest to 7.4; this sweep is again no behaviour change and waits on 7.9.

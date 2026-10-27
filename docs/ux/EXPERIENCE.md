@@ -104,9 +104,9 @@ Behavioural rules. Visual specs are in DESIGN.md, *Components*.
 | Component | Where | Behaviour |
 |---|---|---|
 | Transaction row | Transactions | Not a link as a whole. Its single action is the trailing control: "Dispute" (to 4a), the status badge (to 6), or nothing for not-disputable rows. The hint is plain text, read with the row. |
-| Load more | Transactions, Disputes | Button below the list, fetches the next keyset page (20). Disappears when there is no next cursor. After loading, focus stays on the button; new rows are announced ("20 more transactions loaded"). No infinite scroll. |
+| Load more | Transactions, Disputes | Button below the list, fetches the next keyset page (20). Disappears when there is no next cursor. After loading, focus moves to the first new row (`tabindex="-1"`), so focus is never lost when the button goes (WCAG 2.2 SC 2.4.3); new rows are announced ("20 more transactions loaded"). No infinite scroll. |
 | Reason card group | 4a | Radix `RadioGroup`: one tab stop, arrow keys move. Selecting Wrong amount reveals the Expected amount field directly below the group; selecting any other reason hides it and clears its value. |
-| Note field | 4a, withdraw dialog | Optional. Live count "312 / 1,000" (500 for withdraw), counted after trimming, announced politely only at 900 and at the limit. Input past the limit is blocked. |
+| Note field | 4a, withdraw dialog | Optional. Live count "312 / 1,000" (500 for withdraw), counted after trimming, announced politely only at 90% of the limit and at the limit. Input past the limit is allowed and shown as a field error on Continue (GOV.UK Design System character count), so a paste is never cut silently. |
 | Expected amount | 4a (wrong amount only) | Text input, `inputmode="decimal"`, "R" prefix. Validates on blur and Continue: required, at least R0.00, below the transaction amount, at most 2 decimals. Shows the disputed difference live underneath: "You're disputing R500.00". |
 | Review card | 4b | Reads back transaction, reason, note, disputed amount. "Change" returns to 4a with values kept. No re-entry of anything already given. |
 | Submit dispute | 4b | See *Idempotent submit* below. |
@@ -114,7 +114,7 @@ Behavioural rules. Visual specs are in DESIGN.md, *Components*.
 | Timeline | 6 | Oldest first, as the API returns it. Each entry: status line, actor label "You" or "The bank", time in SAST, customer-visible note if any. Ordered list semantics. |
 | Withdraw | 6 | Shown only for Submitted, Under review, Under review (prioritised). Secondary button opens an `AlertDialog`: optional note (500), "Withdraw dispute" (destructive) and "Keep dispute". On success: dialog closes, toast "Dispute withdrawn", timeline gains the entry. |
 | Problem notice | Any error | Plain sentence, next step, and "Reference: {traceId}" with Copy. Copy confirms with "Copied" for 2 seconds. |
-| OTP input | 2b | One input, six visual cells. Accepts paste and the platform's one-time-code autofill. Auto-submits when the sixth digit arrives; Verify button stays available. |
+| OTP input | 2b | One input, six visual cells. Accepts paste and the platform's one-time-code autofill. The Verify button submits; there is no auto-submit (WCAG 2.2 SC 3.2.2), so a mistyped digit never spends one of the 3 attempts. |
 
 ## State Patterns
 
@@ -133,7 +133,8 @@ Behavioural rules. Visual specs are in DESIGN.md, *Components*.
 | Unexpected error (5xx, network) | Any | Problem notice with "Try again" and the reference to quote to the bank. |
 | Rate limited (429) | 2a, 2b | "Too many attempts. Try again in {n} minutes." from `Retry-After`, rounded up. Form disabled until then. |
 | Linking lockout | 2b | See *Linking without disclosure*. |
-| Session ended (401) | Any | Full screen: "You've been signed out. For your security, we sign you out after 15 minutes without activity." Button "Sign in again" returns to the same route afterwards. A half-filled dispute is not kept; the screen says "Anything you hadn't submitted wasn't saved." [ASSUMPTION: no pre-expiry warning and no draft persistence in v1.] |
+| Session about to end | Any | 2 minutes before the 15-minute idle sign-out, a dialog: "You'll be signed out soon. For your security, we sign you out after 15 minutes without activity." Buttons "Stay signed in" (calls `GET /api/v1/bff/session`, which renews the idle limit, and closes the dialog) and "Sign out". Gives well over the 20 seconds WCAG 2.2 SC 2.2.1 requires (decided 2026-10-27). |
+| Session ended (401) | Any | Full screen: "You've been signed out. For your security, we sign you out after 15 minutes without activity." Button "Sign in again" returns to the same route afterwards. A half-filled dispute is not kept; the screen says "Anything you hadn't submitted wasn't saved." [ASSUMPTION: no draft persistence in v1.] |
 | Withdraw retried, 409 with status Withdrawn | 6 | Treated as success (FR-18). |
 | Just submitted | 6 | Success banner "Dispute submitted" above the timeline; the timeline shows one entry, Submitted, "You". |
 
@@ -180,12 +181,12 @@ Linking must never reveal whether a person banks here, whether their details mat
 
 ## Accessibility Floor
 
-Behavioural. Visual contrast is in DESIGN.md, *Contrast*. The PRD has no accessibility NFR; this spine sets the floor at **WCAG 2.2 AA** [ASSUMPTION: open, decision needed on adding this as an NFR].
+Behavioural. Visual contrast is in DESIGN.md, *Contrast*. The floor is **WCAG 2.2 AA** (PRD NFR-CODE-6).
 
 - Every screen has one `h1` (the title) and landmark regions (`header`, `nav`, `main`). Route changes move focus to the `h1` and update `document.title` ("Transactions · DisputeDesk").
 - Status is never conveyed by colour alone: badge text and icon always. Not-disputable rows say why in text.
 - Forms: visible labels (no placeholder-only fields), errors tied with `aria-describedby`, an error summary that takes focus, required fields marked in text.
-- Async results are announced through one polite live region: "Dispute submitted", "20 more transactions loaded", "Dispute withdrawn". Errors use `role="alert"`.
+- Async results are announced through one polite live region: "Dispute submitted" and "20 more transactions loaded". Toasts ("Dispute withdrawn", "Your login is linked.") are announced only by the toast component's own live region. Errors use `role="alert"`.
 - **2.2 specifics:** focus is never hidden under the phone bottom bar (`scroll-padding-bottom` equals its height); targets are at least 24px (DisputeDesk uses 44px); linking is an accessible authentication flow (paste and one-time-code autofill allowed, no puzzle); the review step never asks again for what was entered (redundant entry); "Contact the bank" guidance sits in the same place on every linking state (consistent help); no dragging anywhere.
 - Amounts are read as words where needed: a debit shows as "R849.00" and a credit as "+R1 200.00"; each carries an accessible label ("R849.00 out", "R1 200.00 in"); masked numbers are labelled "card ending 3456".
 - Times show "SAST" and carry a `<time datetime>` in ISO 8601 UTC.
@@ -221,7 +222,7 @@ Thandi, a teacher in Durban, on a phone at break, sees an R849.00 debit from "ZX
 
 1. On the start page Thandi taps **Create a login**. The hosted sign-up page carries DisputeDesk's wordmark and cobalt button. Thandi verifies the email address.
 2. Back in DisputeDesk Thandi lands on **Link your login**: ID number, account number, **Continue**.
-3. Thandi reads: "If these details match our records, we've sent a code to the cellphone number we hold for you." The phone offers the code from the SMS; one tap fills the six cells, and it submits.
+3. Thandi reads: "If these details match our records, we've sent a code to the cellphone number we hold for you." The phone offers the code from the SMS; one tap fills the six cells, and Thandi taps **Verify**.
 4. Toast "Your login is linked." Thandi is on **Transactions**, newest first. The R849.00 row has a **Dispute** link; the pending fuel row above it says "Pending. You can dispute it once it has settled."
 5. Thandi taps **Dispute**, picks **Unrecognised**, writes "I've never bought from this merchant", taps **Continue**, checks the review card (Disputed amount R849.00) and taps **Submit dispute**.
 6. **Climax:** the dispute detail opens with "Dispute submitted" and a timeline of one entry: Submitted, You, 26 Oct 2026, 09:14 SAST. Back on Transactions the R849.00 row now shows the **Submitted** badge instead of Dispute. Under two minutes, no phone call.

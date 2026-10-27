@@ -21,9 +21,10 @@ Story file: $story_file. Read it, then:
 2. Run the tests: unit, integration (Testcontainers) and architecture tests; Vitest, type check and lint for the frontend.
 3. Check OpenAPI drift: the committed backend openapi.json matches the build output.
 4. Compare the diff (git diff main...HEAD plus uncommitted changes) against each acceptance criterion. For each, name the test that proves it, or say it is unproved.
+5. Standards: list any mechanism in the diff that replaces the documented framework approach or an established industry standard (Microsoft Learn, RFCs, OWASP), with the standard it should use. Report these under "Standards"; they do not change the verdict.
 For .NET API questions, use: npx -y @microsoft/learn-cli search "<query>".
 Do not modify any file. Reply in Markdown with a first line exactly "VERDICT: PASS" or "VERDICT: FAIL",
-then a table of criterion | test | proved (yes/no), then failures with evidence.
+then a table of criterion | test | proved (yes/no), then failures with evidence, then a "Standards" section (or "Standards: none").
 PROMPT
 )
 

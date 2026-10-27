@@ -25,9 +25,9 @@ Verify: Integration tests with tokens signed by a test key cover credential pinn
    **Then** both get 401 `unauthorized`, never a redirect
 
 2. **Token validation** (R21; FR-25, NFR-SEC-2)
-   **Given** tokens with a wrong issuer, audience, signature or an expired lifetime
+   **Given** tokens with a wrong issuer, audience or signature, or expired by more than the JwtBearer `ClockSkew`
    **When** they call an operations route
-   **Then** each gets 401
+   **Then** each gets 401 `unauthorized` with a `WWW-Authenticate: Bearer` header (RFC 6750 §3)
 
 3. **Role and actor mapping** (R21; FR-25, FR-30, NFR-SEC-3)
    **Given** a valid token without the route's role, and one whose `sub` maps to no actor type
@@ -42,18 +42,23 @@ Verify: Integration tests with tokens signed by a test key cover credential pinn
 5. **Provisioned actor mapping** (R21; FR-25)
    **Given** `provision.sh`
    **When** it is read
-   **Then** the operations machine user holds all four camelCase roles and `Operations:Actors:<sub>` maps it to `operations`
+   **Then** the operations machine user issues JWT access tokens (`ACCESS_TOKEN_TYPE_JWT`), holds all four camelCase roles, and `Operations:Actors:<sub>` maps it to `operations`
 
 6. **Scalar behind a switch** (R39; NFR-DOC-4)
    **Given** `Scalar:Enabled` true and false
    **When** `/scalar/` is requested
    **Then** it is served only when true, with its own CSP allowing the client-credentials flow to the auth origin
 
+7. **Client-credentials scheme in the contract** (R39, R21; NFR-DOC-4, NFR-API-1)
+   **Given** `openapi.json`
+   **When** it is read
+   **Then** it declares an OAuth 2.0 security scheme with the `clientCredentials` flow and Zitadel's token URL (OpenAPI Security Scheme Object, RFC 6749 §4.4), applied to the operations routes only, so Scalar can obtain a token
+
 ## Supervisor checks
 
 Deliberate-break proofs and Docker checks, run by the supervisor, not the verifier.
 
-- From `/scalar/`, obtain a client-credentials token and read a seeded dispute.
+- From `/scalar/`, obtain a client-credentials token and read a dispute customer A raised through the customer API.
 
 ## Build facts
 
@@ -68,4 +73,6 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 ## Notes
 
+- Decision: 2026-10-27 — `openapi.json` declares the `clientCredentials` scheme so Scalar can obtain a token. Scalar holding a client secret is a local stand-in for an operations tool; the code that configures it carries a `// shortcut: Scalar holds an operations client secret, local stand-in for an operations tool; remove when a real tool holds its own credentials` comment.
+- Production path: real operations tools keep their own client credentials in a secret store, and Scalar holds none outside local runs (architecture Deferred, so story 7.6 records it in `docs/production-path.md`).
 - Risk high: a second credential type; beyond the criteria, the security agent checks no customer route accepts bearer.

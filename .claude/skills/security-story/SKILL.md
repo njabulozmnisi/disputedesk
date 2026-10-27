@@ -13,6 +13,7 @@ Run the scanners that apply and read the diff against this list.
 - **Data:** ownership filter, no other customer's data, ProblemDetails without stack traces, no personal data in logs or traces.
 - **Supply chain:** new packages verified and pinned; `dotnet list package --vulnerable`, `npm audit`, gitleaks, Semgrep, Trivy where relevant.
 - **Headers:** CSP and security headers unchanged or tightened.
+- **Standards:** each security mechanism (authentication, authorization, sessions, antiforgery, crypto, secrets, input validation) uses the framework's documented form and maps to an OWASP ASVS requirement; cite both. A home-grown security mechanism where a standard exists is at least a medium finding.
 
 ## Report
 

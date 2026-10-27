@@ -20,7 +20,7 @@ Conventions:
 
 - Vocabulary comes from `docs/glossary.md`, which §3 repeats and extends.
 - Features are grouped, with globally numbered FRs nested under each one. FR IDs are stable, so a gap in the numbering is never reused.
-- Non-functional requirements sit in §5 under the ten assessment areas, with IDs `NFR-<AREA>-<n>`.
+- Non-functional requirements sit in §5 under the ten quality areas, with IDs `NFR-<AREA>-<n>`.
 - Unconfirmed inferences are tagged `[ASSUMPTION]` inline and indexed in §10.
 - Consequences that cannot be automated are tagged `[manual check]`.
 
@@ -30,7 +30,7 @@ Two research reports calibrate the rules. `docs/research/dispute-lifecycle/dispu
 
 DisputeDesk lets a customer of a South African retail bank see their recent transactions, dispute one that is wrong, and follow that dispute to its outcome without phoning anyone. The bank's operations tools and automated processes move each dispute forward through one API under one set of rules, and each change reaches the rest of the bank as an event.
 
-It answers a take-home brief: "Create a system (front end and back end) for customers to view transactions and dispute them. There must be a historic view of disputed transactions." It is built solo to production standards and judged by interview reviewers on ten areas. Security is primary and testing is important. Over-engineering is the standing risk, so each area is shown once, done well. Anything bigger is a note for `docs/production-path.md`, not a requirement.
+It meets this business requirement: "The bank requires a customer-facing web application, with the back-end services that support it, through which customers can view their account transactions and raise a dispute against any transaction they believe is incorrect. Customers must also be able to view the history of their disputed transactions, including the current status of each dispute." It is built to production standards and must meet ten quality areas. Security is primary and testing is important. Over-engineering is the standing risk, so each area is met once, done well. Anything bigger is a note for `docs/production-path.md`, not a requirement.
 
 ## 2. Who it serves
 
@@ -38,7 +38,7 @@ It answers a take-home brief: "Create a system (front end and back end) for cust
 
 - **Customer:** When a card transaction is unrecognised or wrong, the customer wants to dispute it in a couple of minutes and then see where it stands, without phoning the bank. They also want to be confident that nobody else can see their transactions or disputes.
 - **Operations tool or automation (actor):** When a dispute arrives, the actor needs to read it, start review on it, escalate it or resolve it through a stable, authorised API, and have every change audited and published.
-- **Interview reviewer (audience):** The reviewer wants to see within minutes how each assessment area is handled, run it with one command, and trust the tests.
+- **Engineer new to the solution (maintainer):** They need to see within minutes how each quality area is met, run it with one command, and trust the tests.
 
 ### 2.2 Non-users (v1)
 
@@ -136,7 +136,7 @@ This PRD adds:
 - **Customer endpoint:** an endpoint called by the SPA with the BFF cookie. Withdraw is one.
 - **Operations endpoint:** an endpoint called with a bearer token: start review, escalate, resolve, and reading a dispute.
 - **Worker:** the background process that relays dispute events and runs the SLA sweep.
-- **Dispute event:** a message published to Kafka when a dispute is raised or its status changes.
+- **Dispute event:** a fact published to Kafka when a dispute is raised or its status changes.
 - **Transaction date:** the date the core-banking source gives as the date the transaction was made (the authorisation date), not the posting date. It stands in for the scheme's processing date (dispute-lifecycle research, section 1).
 
 The six technical terms above (actor type, authorisation state, role, customer endpoint, operations endpoint, Worker) stay in this PRD only and are not added to `docs/glossary.md`. Settled on 2026-10-26.
@@ -159,19 +159,20 @@ A person can create a login and verify their email on the identity provider's ho
 
 #### FR-2: Sign in through the BFF
 
-A person with a verified login can sign in. DisputeDesk then holds their session server-side and gives the browser only an HttpOnly, Secure, SameSite=Strict session cookie. Realises UJ-1.
+A person with a verified login can sign in. DisputeDesk then holds their session server-side and gives the browser only an HttpOnly, SameSite=Strict session cookie, Secure with the `__Host-` prefix in AWS (RFC 6265bis; local `http://localhost` is exempt). Realises UJ-1.
 
 **Consequences (testable):**
 
-- Sign-in uses the authorisation code flow with PKCE, with the API host as the confidential client.
+- Sign-in uses the authorisation code flow with PKCE, with the API host as the confidential client (RFC 9700; OAuth 2.0 for Browser-Based Applications, BFF pattern).
 - No access, ID or refresh token is ever readable by browser JavaScript or present in any browser-visible response.
 - SameSite=Strict applies to the session cookie only. The handler's short-lived correlation and nonce cookies use the handler defaults, so the cross-site callback works.
 - An E2E test signs in successfully through the real identity provider in Compose.
 - The session expires after 15 minutes of inactivity and after 12 hours in total. The SPA then sends the person to sign in again [ASSUMPTION].
+- At least 2 minutes before the idle sign-out, the SPA warns in a dialog, and "Stay signed in" renews the session (WCAG 2.2 SC 2.2.1 Timing Adjustable). Settled on 2026-10-27.
 
 #### FR-3: Sign out
 
-A signed-in person can sign out. Signing out ends both the DisputeDesk session and the identity provider session. Realises UJ-1.
+A signed-in person can sign out. Signing out ends both the DisputeDesk session and the identity provider session, through OpenID Connect RP-Initiated Logout 1.0. Realises UJ-1.
 
 **Consequences (testable):**
 
@@ -188,7 +189,7 @@ An authenticated, unlinked login can submit an ID number and an account number. 
 
 **Consequences (testable):**
 
-- The response is identical in status and body in all three cases: the details match a customer, they match nothing, or they match a customer who already has a linked login.
+- The response is identical in status and body in all three cases (OWASP Authentication Cheat Sheet, generic responses): the details match a customer, they match nothing, or they match a customer who already has a linked login.
 - Sending the OTP happens off the request path, so response time does not depend on whether the details matched. A test asserts that no SMS call is made inside the request.
 - Only when the details match a customer with no linked login is a challenge created and an OTP queued. The challenge records the customer ID resolved at this step.
 - Before any OTP is sent, the SIM-swap check (`ISimSwapCheck`) runs for the cellphone on the bank's record. If it fails, errors or times out, no OTP is sent and no challenge can succeed: this fails closed. The response is unchanged (same status and body), so nothing reveals the result, and the failure is audited. Seeded customer C fails this check.
@@ -235,7 +236,7 @@ Linking attempts, start and verify combined, are limited to 5 per login and 20 p
 
 **Consequences (testable):**
 
-- A login's 6th attempt within 15 minutes returns 429 with `Retry-After`.
+- A login's 6th attempt within 15 minutes returns 429 (RFC 6585) with `Retry-After` (RFC 9110).
 - An IP address's 21st attempt within 15 minutes returns 429, whichever logins are used.
 - Requests rejected with 429 do not count as attempts.
 - The client IP is read from forwarded headers only when they come from the known proxies (nginx, and CloudFront in AWS). Otherwise the connection address is used. A test shows that a spoofed `X-Forwarded-For` from an unknown source is ignored.
@@ -279,7 +280,7 @@ A linked customer can list their own transactions, newest first, with keyset pag
   - whether it is settled or pending;
   - the account, shown by its last 4 digits;
   - the masked card number, where there is one.
-- Page size defaults to 20, with a maximum of 50. An invalid or tampered cursor returns 400 [ASSUMPTION].
+- Page size is the integer query parameter `limit`, from 1 to 50, default 20. A `limit` that is not an integer or is outside 1–50, or an invalid or tampered cursor, returns 400 [ASSUMPTION].
 - Over a stable data set, paging returns each transaction exactly once, ordered by transaction date and then transaction ID.
 - If the core-banking source is still unavailable after the resilience policies, the endpoint returns 503 ProblemDetails and the SPA offers a retry. Dispute history (FR-16) stays available.
 
@@ -309,7 +310,7 @@ A linked customer can raise a dispute on their own disputable transaction, givin
 
 - The request body holds only the transaction ID, the reason, the note and, for wrong amount, the expected amount.
 - The server reads the transaction from `ICoreBankingClient`, checks it belongs to one of the customer's accounts, decides at that moment whether it is disputable, and stores a snapshot of it on the dispute. The snapshot holds date, description, amount, currency, masked card number and the account's last 4 digits. Any amount, date or description in the request is ignored.
-- On success the API returns 201 with the dispute. Its status is Submitted, and its timeline has one entry: Submitted, actor type `customer`, with the customer's note.
+- On success the API returns 201 with the dispute and a `Location` header naming it (RFC 9110). Its status is Submitted, and its timeline has one entry: Submitted, actor type `customer`, with the customer's note.
 - If the transaction has ever been disputed, the request returns 409, whatever the earlier dispute's status or outcome, including Rejected and Withdrawn. A unique index on (account reference, transaction ID) enforces this under concurrent requests.
 - Any other non-disputable transaction (FR-12) returns 422 [ASSUMPTION]. A row the list showed as disputable can return 422 if the window closes before the POST arrives. The SPA shows the reason and refreshes the row.
 - Another customer's transaction, or one that does not exist, returns 404.
@@ -330,11 +331,12 @@ When the reason is wrong amount, the customer must enter the amount they expecte
 
 #### FR-15: Idempotent submission
 
-The POST that raises a dispute requires an `Idempotency-Key` header. Realises UJ-1.
+The POST that raises a dispute requires an `Idempotency-Key` header, following the IETF Idempotency-Key header draft (draft-ietf-httpapi-idempotency-key-header), whose status codes the consequences below use. Realises UJ-1.
 
 **Consequences (testable):**
 
 - A missing key, or a key outside 1–255 printable characters, returns 400 [ASSUMPTION].
+- The key is an RFC 9651 Structured Field String, as the draft defines it, so the value is quoted (`Idempotency-Key: "<uuid>"`); any other form returns 400. Settled on 2026-10-27.
 - Replaying a key with the same validated request returns the original response, with no second dispute and no second event. "Same" means the same hash of the canonical validated request.
 - Reusing a key with a different request returns 422.
 - A request whose key is still being processed returns 409 with an "in progress" problem type. The key row is inserted first, under a unique constraint.
@@ -473,7 +475,7 @@ The Worker escalates every dispute that is still Submitted or Under review once 
 
 ### 4.9 Dispute events
 
-**Description:** every dispute change reaches the rest of the bank as an event, following `docs/research/event-versioning/event-versioning.md`. There is no consumer in this repo. The contract is written for consumers that dedupe on the event ID. Realises UJ-1 to UJ-4.
+**Description:** every dispute change reaches the rest of the bank as an event, following `docs/research/event-versioning/event-versioning.md`. There is no consumer in this repo. The contract is written for consumers that dedupe on the event's `source` and `id` (CloudEvents 1.0). Realises UJ-1 to UJ-4.
 
 #### FR-27: Dispute raised event
 
@@ -488,7 +490,7 @@ Every successful action, including withdrawal and SLA escalation, publishes `dis
 - Format and transport:
   - Events are CloudEvents 1.0 structured JSON (`content-type: application/cloudevents+json`).
   - They go on one topic, keyed by dispute ID.
-  - `traceparent` travels in the Kafka headers.
+  - `traceparent` travels in the Kafka headers (W3C Trace Context; OpenTelemetry messaging semantic conventions).
 - Each event is written to the outbox in the same database transaction as the change it describes. If that transaction rolls back, nothing is published.
 - Events carry no personal data: no names, ID numbers, account or card numbers, amounts, notes, customer ID or actor identity [ASSUMPTION: customer ID and amount are also left out; consumers read detail through FR-30].
 - Delivery is at least once. The event ID is set when the outbox row is written and stays the same across redelivery. Events for one dispute are published in the order they were committed.
@@ -550,13 +552,13 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - **NFR-DATA-3:** the allowed actions (FR-24), disputability (FR-12) and the amount rules (FR-14) live in the domain model, not in the handlers.
 - **NFR-DATA-4:** money is `numeric(19,2)` with an ISO 4217 code, and every timestamp is stored in UTC. South African time (UTC+2, no daylight saving) is applied only for display and for the 90-day calendar.
 - **NFR-DATA-5:** each dispute carries a version for optimistic concurrency. One dispute per transaction is enforced by a unique index on (account reference, transaction ID). Links have unique indexes on customer ID and on login.
-- **NFR-DATA-6:** schema changes are EF Core migrations. They are applied automatically on `docker compose up` and reviewed as high-stakes changes.
+- **NFR-DATA-6:** schema changes are EF Core migrations. They are applied at start-up through EF Core's `MigrateAsync`, under its migration lock, on `docker compose up`, and reviewed as high-stakes changes. A production deployment applies them with a migration bundle instead (EF Core documentation), recorded in `docs/production-path.md`.
 - **NFR-DATA-7:** dispute records and their audit entries are never deleted in v1. Retention follows transaction records: five years under the FIC Act, then de-identification under POPIA s14 (dispute-lifecycle research, recommendation 5). The jobs that enforce this are a production-path note.
 
 ### 5.4 API design
 
 - **NFR-API-1:** every route is under `/api/v1`. The built-in OpenAPI support generates the document, which is committed as `openapi.json` and checked for drift in CI. It is the frontend contract.
-- **NFR-API-2:** every error is an RFC 9457 ProblemDetails response with a stable `type`, and every one includes the `traceId`. Status codes are used as the FRs specify.
+- **NFR-API-2:** every error is an RFC 9457 ProblemDetails response with a stable `type`, and every one includes the `traceId`, except the gateway's own 429, which has no trace context (AD-3). Status codes are used as the FRs specify.
 - **NFR-API-3:** lists use keyset pagination with opaque cursors.
 - **NFR-API-4:** each action has its own endpoint, named after the action. There is no generic "update status" endpoint.
 - **NFR-API-5:** customer endpoint responses never contain an actor's identity or an SLA, and Escalated is mapped as FR-17 describes.
@@ -564,13 +566,13 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 
 ### 5.5 Security (primary)
 
-- **NFR-SEC-1:** the browser holds only the session cookie (FR-2). Every unsafe method on a customer or linking endpoint requires an antiforgery header, following the OAuth browser-based apps BCP (the BFF pattern).
+- **NFR-SEC-1:** the browser holds only the session cookie (FR-2). Every unsafe method on a customer or linking endpoint requires an antiforgery header, following OAuth 2.0 for Browser-Based Applications (the BFF pattern) and the OWASP CSRF Prevention Cheat Sheet.
 - **NFR-SEC-2:** customer and linking endpoints accept only the cookie. Operations endpoints accept only bearer JWTs (client credentials), validated for issuer, audience, lifetime and signature. The wrong kind of credential gets 401.
-- **NFR-SEC-3:** authorisation is enforced in the API on every endpoint, through the authorisation states (FR-9) and the roles (FR-21 to FR-23, FR-30). The SPA hiding a control is cosmetic only.
+- **NFR-SEC-3:** authorisation is enforced in the API on every endpoint and denies by default (OWASP Authorization Cheat Sheet), through the authorisation states (FR-9) and the roles (FR-21 to FR-23, FR-30). The SPA hiding a control is cosmetic only.
 - **NFR-SEC-4:** linking prevents enumeration (FR-4, FR-6). OTPs are HMAC-hashed with a key that is not in the repo. Tests cover the rate limits, the send cap and the lockout (FR-4, FR-7, FR-8).
-- **NFR-SEC-5:** ID numbers are never stored or logged. Card numbers are stored and shown masked only, as the first 6 and last 4 digits (dispute-lifecycle research, recommendation 5) [ASSUMPTION]. Account numbers are shown and stored as their last 4 digits only. Logs, traces, metrics and events carry no personal data (POPIA s10 and s19).
-- **NFR-SEC-6:** ownership of disputes is enforced by an EF Core global query filter on the customer resolved from the link table. Ownership of transactions is checked through `ICoreBankingClient` (FR-11, FR-13). Another customer's resource returns 404, never 403. Integration tests prove this for every customer endpoint. Only the operations endpoints and the Worker bypass the filter, each in one named place.
-- **NFR-SEC-7:** the nginx gateway sets a strict CSP with no inline script, `X-Content-Type-Options`, `Referrer-Policy` and `frame-ancestors 'none'`, plus HSTS in AWS. It applies a coarse limit of 10 requests per second per IP address, with a burst of 20 [ASSUMPTION]. Application limits use the built-in rate limiter.
+- **NFR-SEC-5:** ID numbers are never stored or logged. Card numbers are stored and shown masked only, as the first 6 and last 4 digits (dispute-lifecycle research, recommendation 5) [ASSUMPTION]. Account numbers are shown and stored as their last 4 digits only. The Api checks both masks where data enters from `ICoreBankingClient` and treats an unmasked number as core banking unavailable, so no unmasked number passes the core-banking boundary. Logs, traces, metrics and events carry no personal data (POPIA s10 and s19).
+- **NFR-SEC-6:** ownership of disputes is enforced by an EF Core global query filter on the customer resolved from the link table. Ownership of transactions is checked through `ICoreBankingClient` (FR-11, FR-13). Another customer's resource returns 404, never 403 (RFC 9110 §15.5.4). Integration tests prove this for every customer endpoint. Only the operations endpoints and the Worker bypass the filter, each in one named place.
+- **NFR-SEC-7:** the nginx gateway sets a strict CSP with no inline script, `X-Content-Type-Options`, `Referrer-Policy` and `frame-ancestors 'none'`, plus HSTS in AWS (OWASP HTTP Headers Cheat Sheet). Every `/api` response carries `Cache-Control: no-store` (RFC 9111), so no browser or shared cache keeps customer data. It applies a coarse limit of 10 requests per second per IP address, with a burst of 20 [ASSUMPTION]. Application limits use the built-in rate limiter.
 - **NFR-SEC-8:** CI runs these scans, and any high or critical finding fails the build unless it is triaged in the repo [ASSUMPTION: threshold]:
   - CodeQL or Semgrep;
   - a vulnerable-package check;
@@ -588,7 +590,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - **NFR-CODE-3:** glossary terms are used in code, in the API and in UI copy.
 - **NFR-CODE-4:** the frontend uses React and TypeScript, shadcn/ui on Tailwind, and TanStack Query hooks generated by Orval from `openapi.json`. Generated code is never edited by hand, and the design tokens live in one theme file.
 - **NFR-CODE-5:** every new package is verified (publisher, downloads, repository, latest stable version) and pinned exactly.
-- **NFR-CODE-6:** the customer portal meets WCAG 2.2 AA: text contrast, keyboard access, visible focus, labelled form errors and reflow at 320px, checked with an automated accessibility scan in the Playwright E2E tests.
+- **NFR-CODE-6:** the customer portal meets WCAG 2.2 AA: text contrast, keyboard access, visible focus, labelled form errors and reflow at 320px, checked by axe in the Playwright E2E tests, plus a recorded manual keyboard pass (settled on 2026-10-27).
 
 ### 5.7 Testing (important)
 
@@ -628,7 +630,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 
 ### 5.10 Documentation and communication
 
-- **NFR-DOC-1:** the README gives build, run and test steps, the demo logins and seed identities (FR-29), and how to drive the operations endpoints from Scalar. It ends with a map from each of the ten assessment areas to where it is addressed.
+- **NFR-DOC-1:** the README gives build, run and test steps, the demo logins and seed identities (FR-29), and how to drive the operations endpoints from Scalar. It ends with a map from each of the ten quality areas to where it is addressed.
 - **NFR-DOC-2:** `docs/production-path.md` records everything deferred in §6.2, with a one-line reason for each.
 - **NFR-DOC-3:** key decisions are short decision records in `docs/decisions/`, exactly these (settled on 2026-10-26):
   - ad-001 Zitadel as the external identity provider, standing in for the bank's identity platform;
@@ -638,7 +640,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
   - ad-005 QA data integrity;
   - ad-006 actor-agnostic dispute actions;
   - ad-007 the BFF session, with no tokens in the browser;
-  - ad-008 enrolment and account linking, including the SIM-swap check before the OTP is sent.
+  - ad-008 linking, including the SIM-swap check before the OTP is sent.
 
   The outbox and having no schema registry are recorded in the architecture spine (AD-14, AD-17, AD-19).
 - **NFR-DOC-4:** Scalar is the API viewer in dev and demo, and stands in for another team's operations tool.
@@ -738,7 +740,7 @@ None open. Settled on 2026-10-25:
 
 **Transactions and raising a dispute**
 - §4.3 FR-11: an account belongs to exactly one customer in v1.
-- §4.3 FR-11: page size defaults to 20, with a maximum of 50; a bad cursor returns 400.
+- §4.3 FR-11: `limit` is an integer from 1 to 50, default 20; a bad `limit` or cursor returns 400.
 - §4.3 FR-12: the 90 days are South African calendar days, up to and including D + 90.
 - §4.4 FR-13: a non-disputable transaction returns 422.
 - §4.4 FR-14: the expected amount is at least R0.00, below the transaction amount, with at most 2 decimal places.

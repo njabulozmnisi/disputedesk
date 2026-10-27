@@ -23,11 +23,13 @@ Verify: Integration tests for list, detail, ownership and the core-banking outag
    **Given** a customer with disputes
    **When** they list them
    **Then** rows come newest first by `CreatedAtUtc` then `Id` with keyset paging, each with the snapshot summary, reason, disputed amount, `customerStatus` and `outcome` when resolved
+   **And** paging matches transactions: `limit` is a typed `int` with `[Range(1, 50)]` defaulting to 20 through built-in validation, `nextCursor` is null on the last page, and an undecodable cursor or out-of-range `limit` gets 400 `validation` naming the field
 
 2. **Detail and timeline** (R16; FR-17)
    **Given** a dispute with several entries
    **When** its detail is read
    **Then** the timeline is oldest first, each entry with `customerStatus`, the UTC instant, actor `you` or `theBank` and any customer-visible note
+   **And** the `Location` returned by a raise serves this detail
 
 3. **Customer never sees internals** (R18; FR-17, NFR-API-5)
    **Given** disputes acted on by operations and automation, and an escalated one
@@ -38,7 +40,7 @@ Verify: Integration tests for list, detail, ownership and the core-banking outag
    **Given** customer A and a dispute of customer B
    **When** A calls the detail route with B's ID and with an unknown ID, and raises on B's transaction
    **Then** every response is 404 `not-found` with bodies identical apart from `traceId`
-   **And** an integration test enumerates every customer endpoint that exists (transactions, raise, list, detail) and fails when a new one is not listed
+   **And** an integration test reads the app's `EndpointDataSource`, finds every endpoint requiring the `Linked` policy (transactions, raise, list, detail) and fails when one is not covered
 
 5. **History works while core banking is down** (R11, R16; NFR-RES-2, FR-16)
    **Given** the stub is unreachable
