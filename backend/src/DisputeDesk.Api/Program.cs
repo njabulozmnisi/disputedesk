@@ -1,8 +1,9 @@
-using System.Diagnostics;
 using DisputeDesk.Api;
+using DisputeDesk.Api.Bff;
 using DisputeDesk.Api.Errors;
 using DisputeDesk.Api.Health;
 using DisputeDesk.Api.Security;
+using DisputeDesk.Contracts.Json;
 using DisputeDesk.Infrastructure;
 using DisputeDesk.Infrastructure.Observability;
 using OpenTelemetry.Metrics;
@@ -11,24 +12,34 @@ using Scalar.AspNetCore;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
+// Local Compose mounts the provisioner's Zitadel client settings here (infra/README.md). Elsewhere the file is
+// absent and the Zitadel:* keys come from the environment. The environment variables and the command line are added
+// again after it, so they still override it, as with appsettings.json.
+builder.Configuration.AddJsonFile("/run/zitadel/zitadel-clients.json", optional: true);
+builder.Configuration.AddEnvironmentVariables();
+builder.Configuration.AddCommandLine(args);
+
 builder.WebHost.ConfigureKestrel(kestrel => kestrel.AddServerHeader = false);
 builder.AddDisputeDeskTelemetry("disputedesk-api", typeof(Program).Assembly)
     .WithTracing(tracing => tracing.AddAspNetCoreInstrumentation())
     .WithMetrics(metrics => metrics.AddAspNetCoreInstrumentation());
 
 builder.Services.AddInfrastructure();
-// traceId is the W3C trace ID of the request (32 hex characters), the value to search for in the trace viewer.
-builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = context =>
-    context.ProblemDetails.Extensions["traceId"] = Activity.Current?.TraceId.ToHexString() ?? context.HttpContext.TraceIdentifier);
+builder.Services.ConfigureHttpJsonOptions(options => DisputeDeskJson.Apply(options.SerializerOptions));
+builder.Services.AddValidation();
+builder.Services.AddDisputeDeskProblemDetails();
 builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddDisputeDeskHealthChecks();
+builder.Services.AddBff();
 
 WebApplication app = builder.Build();
 
 app.UseSecurityHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
@@ -37,6 +48,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapDisputeDeskHealthChecks();
-app.MapApiV1();
+app.MapApiV1().MapBff();
 
 await app.RunAsync();

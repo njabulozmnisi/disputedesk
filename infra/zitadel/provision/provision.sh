@@ -15,6 +15,7 @@ OUT_FILE="${OUT_DIR:?}/zitadel-clients.json"
 OUT_UID="${OUT_UID:?}"                 # the .NET images' non-root app user, which reads the file later
 FIXTURES="${FIXTURES_FILE:?}"
 APP_ORIGINS="${APP_ORIGINS:?}"         # space-separated origins allowed to complete the BFF sign-in
+BFF_DEVELOPMENT_MODE="${BFF_DEVELOPMENT_MODE:?}"   # true only where the app origins are plain http (local)
 PROJECT_NAME=DisputeDesk
 BFF_APP_NAME=disputedesk-bff
 OPS_USERNAME=operations-tools
@@ -23,6 +24,12 @@ OPS_USERNAME=operations-tools
 # Zitadel while the Host header stays auth.localhost:8080 (Zitadel resolves the instance from it).
 CURL_OPTS=(${CURL_CONNECT_TO:+--connect-to "$CURL_CONNECT_TO"})
 log(){ printf '[provision] %s\n' "$*" >&2; }
+
+# It is written straight into the app's JSON, so anything but a JSON boolean is refused up front.
+case "$BFF_DEVELOPMENT_MODE" in
+  true|false) ;;
+  *) log "BFF_DEVELOPMENT_MODE must be true or false, not '$BFF_DEVELOPMENT_MODE'"; exit 1 ;;
+esac
 
 umask 077
 AUTH_HEADER=$(mktemp)
@@ -59,10 +66,12 @@ if [ -z "$PROJECT_ID" ]; then
   log "project created $PROJECT_ID"
 else log "project exists $PROJECT_ID"; fi
 
-# One role per action. Withdraw is the customer's own action and needs no role.
-ROLES='dispute.start_review|Start review
+# One role per action, plus reading one dispute (FR-30). Withdraw is the customer's own action and needs no role.
+# The part after the dot is camelCase, like the action names on the wire.
+ROLES='dispute.startReview|Start review
 dispute.escalate|Escalate
-dispute.resolve|Resolve'
+dispute.resolve|Resolve
+dispute.read|Read a dispute'
 while IFS='|' read -r key name; do
   ALLOW_CONFLICT=1 rpc zitadel.project.v2.ProjectService/AddProjectRole \
     "{\"projectId\":\"$PROJECT_ID\",\"roleKey\":\"$key\",\"displayName\":\"$name\",\"group\":\"action\"}" >/dev/null
@@ -73,7 +82,8 @@ log "roles ensured: $ROLE_KEYS"
 # ------------------------------------------------------------------------------- the Api's BFF web app
 redirects=() logouts=()
 for origin in $APP_ORIGINS; do
-  redirects+=("$origin/api/signin-oidc"); logouts+=("$origin/api/signout-callback-oidc")
+  # Sign-out returns to the app's root (AD-7); the handler's own signed-out callback stays registered as well.
+  redirects+=("$origin/api/signin-oidc"); logouts+=("$origin/" "$origin/api/signout-callback-oidc")
 done
 REDIRECTS=$(printf '%s\n' "${redirects[@]}" | jq -R . | jq -sc .)
 LOGOUTS=$(printf '%s\n' "${logouts[@]}" | jq -R . | jq -sc .)
@@ -85,26 +95,29 @@ find_bff(){ rpc zitadel.application.v2.ApplicationService/ListApplications \
 BFF_SECRET=""
 BFF=$(find_bff)
 if [ -z "$BFF" ]; then
-  # Confidential web app: authorization code (the Api adds PKCE), client_secret_basic, JWT access tokens,
-  # roles asserted in ID and access tokens. Dev mode allows the plain-http local redirect URIs.
+  # Confidential web app: authorization code only (the Api adds PKCE and keeps no refresh token),
+  # client_secret_post (the ASP.NET Core handler sends the secret in the form body), JWT access tokens, roles
+  # asserted in ID and access tokens. Development mode allows plain-http redirect URIs, so only the local stack
+  # turns it on (BFF_DEVELOPMENT_MODE).
   created=$(rpc zitadel.application.v2.ApplicationService/CreateApplication "{
     \"projectId\":\"$PROJECT_ID\",\"name\":\"$BFF_APP_NAME\",
     \"oidcConfiguration\":{
       \"redirectUris\":$REDIRECTS,
       \"postLogoutRedirectUris\":$LOGOUTS,
       \"responseTypes\":[\"OIDC_RESPONSE_TYPE_CODE\"],
-      \"grantTypes\":[\"OIDC_GRANT_TYPE_AUTHORIZATION_CODE\",\"OIDC_GRANT_TYPE_REFRESH_TOKEN\"],
+      \"grantTypes\":[\"OIDC_GRANT_TYPE_AUTHORIZATION_CODE\"],
       \"applicationType\":\"OIDC_APP_TYPE_WEB\",
-      \"authMethodType\":\"OIDC_AUTH_METHOD_TYPE_BASIC\",
+      \"authMethodType\":\"OIDC_AUTH_METHOD_TYPE_POST\",
       \"version\":\"OIDC_VERSION_1_0\",
-      \"developmentMode\":true,
+      \"developmentMode\":$BFF_DEVELOPMENT_MODE,
       \"accessTokenType\":\"OIDC_TOKEN_TYPE_JWT\",
       \"accessTokenRoleAssertion\":true,
       \"idTokenRoleAssertion\":true,
       \"idTokenUserinfoAssertion\":true
     }}")
   BFF_SECRET=$(jq -r '.oidcConfiguration.clientSecret' <<< "$created")
-  BFF=$(find_bff)
+  # Taken from the create response: listing again straight away can miss the new app (the list lags behind).
+  BFF=$(jq -c '{applicationId, oidcConfiguration: {clientId: .oidcConfiguration.clientId}}' <<< "$created")
   log "BFF web app created"
 else log "BFF web app exists (its settings are not updated)"; fi
 BFF_APP_ID=$(jq -r '.applicationId' <<< "$BFF")
@@ -145,8 +158,10 @@ jq -c '.logins[]' "$FIXTURES" | while read -r login; do
 done
 
 # --------------------------------------------------------------------- client settings for the Api
-# Kept when the file already describes this instance; otherwise both secrets are (re)generated.
+# The Zitadel:* keys of AD-26, plus the operations tools' client credentials (infra/smoke.sh uses them).
+# Kept when the file already describes this instance in this shape; otherwise both secrets are (re)generated.
 if [ -s "$OUT_FILE" ] \
+  && [ "$(jq -r '.Zitadel.Issuer' "$OUT_FILE")" = "$Z" ] \
   && [ "$(jq -r '.Zitadel.ProjectId' "$OUT_FILE")" = "$PROJECT_ID" ] \
   && [ "$(jq -r '.Zitadel.Bff.ClientId' "$OUT_FILE")" = "$BFF_CLIENT_ID" ]; then
   log "$OUT_FILE is current; secrets not rotated"
@@ -158,10 +173,10 @@ else
   OPS_SECRET=$(rpc zitadel.user.v2.UserService/AddSecret "{\"userId\":\"$OPS_ID\"}" | jq -r .clientSecret)
   # The secrets reach jq over stdin (printf is a shell builtin), never as arguments.
   { printf '%s' "$BFF_SECRET" | jq -Rs .; printf '%s' "$OPS_SECRET" | jq -Rs .; } \
-    | jq -s --arg authority "$Z" --arg org "$ORG_ID" --arg project "$PROJECT_ID" \
+    | jq -s --arg issuer "$Z" --arg project "$PROJECT_ID" \
         --arg bffId "$BFF_CLIENT_ID" --arg opsId "$OPS_USERNAME" '{
       Zitadel: {
-        Authority: $authority, OrganizationId: $org, ProjectId: $project,
+        Issuer: $issuer, MetadataAddress: "\($issuer)/.well-known/openid-configuration", ProjectId: $project,
         Bff: { ClientId: $bffId, ClientSecret: .[0] },
         OperationsTools: { ClientId: $opsId, ClientSecret: .[1] } } }' > "$OUT_FILE.tmp"
   chown "$OUT_UID:$OUT_UID" "$OUT_FILE.tmp"

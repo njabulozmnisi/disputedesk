@@ -82,8 +82,8 @@ token=$(jq -r '.Zitadel.OperationsTools | "user = \"\(.ClientId):\(.ClientSecret
 claims=$(jwt_payload <<< "$token")
 jq --arg p "$project" '{iss, client_id, aud, roles: (.["urn:zitadel:iam:org:project:\($p):roles"] | keys)}' <<< "$claims"
 [ "$(jq -c --arg p "$project" '.["urn:zitadel:iam:org:project:\($p):roles"] | keys' <<< "$claims")" \
-  = '["dispute.escalate","dispute.resolve","dispute.start_review"]' ] || fail "operations token roles"
-ok "JWT access token carries exactly the three action roles"
+  = '["dispute.escalate","dispute.read","dispute.resolve","dispute.startReview"]' ] || fail "operations token roles"
+ok "JWT access token carries exactly the three action roles and dispute.read"
 
 section "BFF app: authorize (code + PKCE S256), exact redirect URIs"
 authorize_lands_on_login(){ # redirect_uri -> 0 when Zitadel accepts it and hands over to Login v2
