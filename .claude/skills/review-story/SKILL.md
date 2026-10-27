@@ -19,7 +19,7 @@ Diff: `git diff main...HEAD` plus any uncommitted changes in the worktree.
 
 ## Pass 2: simplicity
 
-"Is there a smaller design that meets the criteria? Does every abstraction earn its place?" Flag single-implementation interfaces, speculative options, wrappers over framework features, and anything that belongs in `docs/production-path.md` instead.
+"Is there a smaller design that meets the criteria? Does every abstraction earn its place? Would a developer new to the repo understand each method on first read?" The bar is stupid simple and logical (AGENTS.md); clever or indirect code is a finding even when it works. Flag single-implementation interfaces, speculative options, wrappers over framework features, and anything that belongs in `docs/production-path.md` instead.
 
 ## Report
 

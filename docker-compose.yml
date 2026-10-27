@@ -70,7 +70,7 @@ services:
     environment:
       ZITADEL_EXTERNALDOMAIN: auth.localhost
       ZITADEL_EXTERNALPORT: "8080"
-      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_EXTERNALSECURE: ${ZITADEL_EXTERNALSECURE:-false}   # true behind HTTPS in AWS (AD-24)
       ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY:-DevOnlyMasterKeyNotForProduction}   # exactly 32 characters
       ZITADEL_PORT: "8080"
       ZITADEL_TLS_ENABLED: "false"
@@ -151,8 +151,13 @@ services:
       <<: *app-config
       ASPNETCORE_ENVIRONMENT: Development
       OTEL_SERVICE_NAME: disputedesk-api
+      # Local plain-http values (AD-24); appsettings.json holds the AWS ones (__Host- names, Secure always).
+      Authentication__SessionCookie__Name: disputedesk-session
+      Authentication__AntiforgeryCookie__Name: disputedesk-antiforgery
+      Authentication__Cookie__SecurePolicy: SameAsRequest
+      Zitadel__RequireHttpsMetadata: "false"       # the local issuer is http://auth.localhost:8080
     volumes:
-      - zitadel-clients:/run/zitadel:ro            # zitadel-clients.json (Authority, client IDs and secrets)
+      - zitadel-clients:/run/zitadel:ro            # zitadel-clients.json (the Zitadel:* keys, client IDs and secrets)
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
       interval: 5s

@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <!-- Build-time OpenAPI: writes backend/openapi.json on every build; CI fails if it drifts from the committed file. -->
+    <!-- Build-time OpenAPI: writes backend/openapi.json on every build; CI fails if it drifts from the committed file.
+         The tool starts the Api host without a database (see BuildTimeOpenApi.cs); its only output is its own
+         "Generating document" / "Writing document" lines. -->
+
     <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)/../..</OpenApiDocumentsDirectory>
     <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>
   </PropertyGroup>
@@ -12,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Extensions.ApiDescription.Server">
       <PrivateAssets>all</PrivateAssets>

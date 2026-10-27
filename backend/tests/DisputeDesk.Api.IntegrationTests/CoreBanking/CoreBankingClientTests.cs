@@ -127,6 +127,7 @@ public sealed class CoreBankingClientTests(CoreBankingStubFactory stub) : IClass
         Result<TransactionPage> result = await client.GetTransactionsAsync(CustomerA, cursor: "TXN-B-0001", limit: 20, CancellationToken);
 
         Assert.Equal(CoreBankingErrors.InvalidPaging, result.Error);
+        Assert.Equal(["Cursor"], CoreBankingErrors.InvalidPaging.FieldErrors.Keys);
     }
 
     [Theory]
