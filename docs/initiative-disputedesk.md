@@ -90,7 +90,7 @@ R39 (NFR-DOC-1, NFR-DOC-2, NFR-DOC-3, NFR-DOC-4, NFR-DOC-5): The README gives bu
 
 - Not a case-management system, not an identity platform, raises no chargebacks with card schemes (prd §7).
 - Out of scope, recorded in `docs/production-path.md`: everything in prd §6.2, including provisional credit, attachments, status-change notifications, self-unlink, scale-out, an event consumer and operations list or search.
-- Touch point: the merged P0 baseline (solution skeleton with health endpoints, Compose platform with zero-click Zitadel, OpenTelemetry baseline and security headers, CI and security scanning, Microsoft Learn conventions and AD-3 error kinds) — built on, not rebuilt; owner: epic-platform-baseline.
+- Touch point: the merged P0 baseline (solution skeleton with health endpoints, Compose platform with zero-click Zitadel, OpenTelemetry baseline and security headers, CI and security scanning, Microsoft Learn conventions and AD-3 error kinds) — built on, not rebuilt; owner: epic-1-platform-baseline.
 - Tracer path: a seeded linked customer signs in through the BFF and lists transactions from the core-banking stub in the SPA; then linking, raising a dispute, the raised event reaching Redpanda through the outbox, and the dispute showing on the customer's timeline.
 
 ## References
@@ -112,14 +112,14 @@ R39 (NFR-DOC-1, NFR-DOC-2, NFR-DOC-3, NFR-DOC-4, NFR-DOC-5): The README gives bu
 - Decision: 2026-10-26 — wire enum values are camelCase and actor types are `customer`, `operations` and `automation` (AD-5, AD-19).
 - Decision: 2026-10-26 — Zitadel role keys become camelCase `dispute.startReview`, `dispute.escalate`, `dispute.resolve` and `dispute.read`, renamed in the identity story (supervisor directive at slicing).
 - Decision: 2026-10-26 — Gate 2: the role-key source conflict is closed; prd §3, UJ-3, FR-21 to FR-23 and FR-30 and architecture AD-9 and its Casing row now name the camelCase keys `dispute.startReview`, `dispute.escalate`, `dispute.resolve` and `dispute.read`; story 2.2 renames them in `infra/zitadel/provision/provision.sh`.
-- Decision: 2026-10-26 — the merged Phase 0 stories P0-1 to P0-5 are recorded as done in epic-platform-baseline; not re-sliced.
+- Decision: 2026-10-26 — the merged Phase 0 stories P0-1 to P0-5 are recorded as done in epic-1-platform-baseline; not re-sliced.
 - Decision: 2026-10-26 — epic Requirements lines keep the initiative's R numbers (`R11 (parent R11)`) so story criteria carry one traceable id from PRD to test.
 - Decision: 2026-10-26 — Gate 2: the six technical prd §3 terms (actor type, authorisation state, role, customer endpoint, operations endpoint, Worker) stay in the PRD only and are not added to `docs/glossary.md`.
 - Open question: the new AWS free-plan account does not exist yet; R38's deploy waits on it (the Terraform deploy story is hitl).
 - Decision: 2026-10-26 — Gate 2: parallel stories may each touch the shared append-only files (`Program.cs`, `Directory.Packages.props`, `docker-compose.yml`, `appsettings*.json`) and the generated `openapi.json`; each merge rebases on main and regenerates `openapi.json`. Stated once here, not in every story.
 - Decision: 2026-10-26 — Gate 2: backend-builder may write `scripts/dev-login.sh`, `contracts/`, `.nvmrc`, `docker-compose.aws.yml` and `.zap/` (guard updated); docs stories 7.6 and 7.7 are owned by `docs`, a docs agent rather than a builder, with a short runbook and onboarding page.
 - Decision: 2026-10-26 — Gate 2: the closing refactor sweep 7.8 is split into 7.8a backend (owner backend) and 7.8b frontend (owner frontend), run sequentially after everything else.
-- Decision: 2026-10-26 — Gate 2: AD-13 governs seeding; the seeder changes dispute status only through the `Dispute` aggregate methods under a fixed seeding clock (AD-30 aligned), so the seeded-disputes story moves from epic-disputes (3.5) to epic-operations (5.4), after the operations actions (5.2); R24's seeded-dispute part moves with it.
+- Decision: 2026-10-26 — Gate 2: AD-13 governs seeding; the seeder changes dispute status only through the `Dispute` aggregate methods under a fixed seeding clock (AD-30 aligned), so the seeded-disputes story moves from epic-3-disputes (3.5) to epic-5-operations (5.4), after the operations actions (5.2); R24's seeded-dispute part moves with it.
 - Decision: 2026-10-26 — Gate 2: QA resets customer D by starting a fresh stack per QA run (`docker compose down -v`, then `up --wait`), not through a test-only database role (prd FR-29 and the spine's Deferred row aligned).
 - Decision: 2026-10-26 — Gate 2: decision records follow kickoff amendment 1: ad-001 Zitadel as the external identity provider, ad-002 `IAppDbContext`, ad-003 Result types, ad-004 model roles (exists), ad-005 QA data integrity, ad-006 actor-agnostic dispute actions, ad-007 BFF session (no tokens in the browser), ad-008 enrolment and account linking (prd NFR-DOC-3 aligned; story 7.6).
 - Decision: 2026-10-26 — Gate 2: code in every builder-owned story is stupid simple and logical, per AGENTS.md; recorded once in each epic's Notes.

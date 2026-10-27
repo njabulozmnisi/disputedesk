@@ -2,14 +2,14 @@
 
 [[epic]]
 id = 1
-slug = "epic-platform-baseline"
+slug = "epic-1-platform-baseline"
 title = "The platform baseline runs, is tested and is scanned"
 description = "The solution skeleton, the zero-click Compose platform, the OpenTelemetry baseline and security headers, CI with security scanning, and the Microsoft Learn conventions with the AD-3 error kinds are merged on main."
 covers = ["R25", "R27", "R30", "R33", "R34", "R36", "R37"]
 
 [[epic]]
 id = 2
-slug = "epic-transactions"
+slug = "epic-2-transactions"
 title = "Linked customers sign in and see their transactions"
 description = "A seeded linked customer signs in through the BFF on the themed hosted login and lists their own transactions from the core-banking stub in the SPA, served by the gateway, with disputability shown on each row and a retry when core banking is down."
 covers = ["R1", "R2", "R3", "R4", "R5", "R9", "R11", "R12", "R21", "R24", "R25", "R26", "R27", "R29", "R30", "R31", "R32", "R34", "R36", "R37", "R40"]
@@ -17,7 +17,7 @@ after = [{ epic = 1, needs = "the merged P0 baseline" }]
 
 [[epic]]
 id = 3
-slug = "epic-disputes"
+slug = "epic-3-disputes"
 title = "Customers raise, follow and withdraw disputes"
 description = "A linked customer raises a dispute on a disputable transaction, sees it on the transaction row, in the dispute history and on its timeline, and withdraws it while it is open; every change commits with its timeline entry, audit entry and outbox event."
 covers = ["R10", "R11", "R12", "R13", "R14", "R15", "R16", "R17", "R18", "R19", "R23", "R28", "R29", "R35", "R36", "R40"]
@@ -25,7 +25,7 @@ after = [{ epic = 2, needs = "CurrentCustomer, the Linked policy, the transactio
 
 [[epic]]
 id = 4
-slug = "epic-events"
+slug = "epic-4-events"
 title = "Dispute events reach Kafka in per-dispute order"
 description = "The Worker's outbox relay publishes every outbox row to `disputedesk.disputes` as a CloudEvent, keyed by dispute ID with trace headers, in per-dispute order, through Kafka outages, with failed rows parked after 5 attempts and a heartbeat health check."
 covers = ["R23", "R26", "R27", "R28", "R36"]
@@ -33,7 +33,7 @@ after = [{ epic = 3, needs = "outbox rows written by the one commit path (AD-14)
 
 [[epic]]
 id = 5
-slug = "epic-operations"
+slug = "epic-5-operations"
 title = "Operations tools and the SLA sweep act on disputes"
 description = "An operations tool holding a client-credentials token with the right role reads a dispute and starts review, escalates or resolves it under the allowed-actions table, and the Worker escalates disputes at submission plus 240 hours through the same domain operation, and seeded disputes in every status reach their statuses through the same aggregate methods."
 covers = ["R10", "R18", "R20", "R21", "R22", "R23", "R24", "R26", "R27", "R36", "R39"]
@@ -41,7 +41,7 @@ after = [{ epic = 2, needs = "the gateway templates and provisioning from storie
 
 [[epic]]
 id = 6
-slug = "epic-linking"
+slug = "epic-6-linking"
 title = "Logins link to customers without revealing a match"
 description = "An unlinked login links to its customer with an ID number, an account number and an OTP sent off the request path after the SIM-swap check, under the send cap, lockout and rate limits, with every step audited and nothing revealing whether the details matched."
 covers = ["R4", "R5", "R6", "R7", "R8", "R9", "R10", "R31", "R36", "R40"]
@@ -49,7 +49,7 @@ after = [{ epic = 2, needs = "the Unlinked policy, `CustomerLinks` and the core-
 
 [[epic]]
 id = 7
-slug = "epic-release"
+slug = "epic-7-release"
 title = "Journeys proven on the stack, deployed and documented"
 description = "The Playwright journeys with accessibility and ZAP scans pass on the real stack and in CI, images publish to GHCR, the dev environment deploys to AWS through Terraform and the OIDC role, the README and records are written, and one refactor sweep closes the project."
 covers = ["R28", "R32", "R33", "R34", "R35", "R36", "R38", "R39", "R40"]

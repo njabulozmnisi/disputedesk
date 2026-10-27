@@ -5,7 +5,7 @@ description: Procedure for building one DisputeDesk story test-first in a worktr
 
 # Build a story
 
-The input is a story file from `docs/tickets/` with Given/When/Then criteria tagged to requirement IDs.
+The input is a story file, `docs/tickets/epic-<epic>-<slug>/tickets/story-<epic>.<story>-<slug>.md`, with Given/When/Then criteria tagged to requirement IDs. `<story>` below is its story ID, `<epic>.<story>` (for example `2.3`).
 
 1. **Read first.** The story, the requirements it covers in `docs/initiative-disputedesk.md`, the relevant parts of `docs/architecture/architecture.md`, `docs/glossary.md`, and the code the story touches.
 2. **Test first.** For each criterion, write the failing test, then the smallest, plainest code that passes it (AGENTS.md: stupid simple and logical). Before reporting, reread the whole diff and remove anything a first-time reader would not need.

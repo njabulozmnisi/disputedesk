@@ -26,6 +26,14 @@ Correctness, then security, then data integrity, then maintainability, then perf
 | Feature | a story | The full story flow: builder, verifier, QA, reviewer |
 | High-stakes | auth, identity and account linking, customer data, money, migrations | Feature flow plus the security agent and a human review of the diff |
 
+## Ticket numbering
+
+Epics and stories are numbered in build order; [docs/tickets/README.md](docs/tickets/README.md) lists them all.
+
+- Epic folder: `docs/tickets/epic-<epic>-<slug>/`, for example `epic-2-transactions/`.
+- Story file: `story-<epic>.<story>-<slug>.md` in the epic's `tickets/`, for example `story-2.3-linked-customer-lists-their-own-transactions.md`.
+- The story ID is `<epic>.<story>` (`2.3`). Use it everywhere a story is named: lock tags, reports, `docs/verification/<story ID>-*.md`, commit messages.
+
 ## Dependency verification
 
 Before adding any package, confirm it exists, is the real one (publisher, download count, repository) and is the latest stable version. Pin it exactly. Hallucinated package names are a supply-chain risk.

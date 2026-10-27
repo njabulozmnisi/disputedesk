@@ -16,6 +16,8 @@ Nothing is committed, pushed or merged without explicit approval for that change
 builder → verifier → security (high-stakes only) → QA → reviewer → merge
 ```
 
+Stories run in the order of [docs/tickets/README.md](docs/tickets/README.md); `<story>` below is the story ID `<epic>.<story>` (AGENTS.md, Ticket numbering). Keep the index current when a story merges or the plan changes.
+
 Merge only when every stage passes and CI is green. Agents are in `.claude/agents/`; each file sets its model ([ad-004](docs/decisions/ad-004-model-roles.md)). If usage strains, drop to one Opus lane.
 
 ## Dispatch rules

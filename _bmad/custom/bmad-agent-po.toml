@@ -1,5 +1,7 @@
 [agent]
-persistent_facts = ["Planning docs live at: docs/product-brief/product-brief.md, docs/prd/prd.md, docs/ux/ (ux.md, DESIGN.md, EXPERIENCE.md), docs/architecture/architecture.md, docs/research/<topic>/<topic>.md, docs/initiative-disputedesk.md and docs/tickets/. Read inputs from these paths when no ticket lists them. Name these exact paths in sources: and companions:."]
+persistent_facts = ["Planning docs live at: docs/product-brief/product-brief.md, docs/prd/prd.md, docs/ux/ (ux.md, DESIGN.md, EXPERIENCE.md), docs/architecture/architecture.md, docs/research/<topic>/<topic>.md, docs/initiative-disputedesk.md and docs/tickets/. Read inputs from these paths when no ticket lists them. Name these exact paths in sources: and companions:.",
+  "Ticket names carry the build-order number (AGENTS.md, Ticket numbering). An epic folder is `epic-<epic id>-<slug>`, and its `slug` in docs/tickets/tickets.toml is that folder name. A story, spike or bug file is `<type>-<epic id>.<id>-<slug>.md` and its plan `<type>-<epic id>.<id>-<slug>-plan.md`. `tickets.py pull` writes the file without the number, so `git mv` it to the numbered name in the same change (the file joins its entry by `id`, so the rename is safe); a title change keeps the number. Give new epics and entries ids in table order so the numbers read in build order; never renumber an id.",
+  "docs/tickets/README.md is the build-order index a human reads: every epic and story in table order with its number, title, link, owner and status. Update it in the same change whenever an epic or entry is added, moved, renamed or dropped."]
 
 [workflow]
 tickets_refactor_sweep = """
