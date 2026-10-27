@@ -193,6 +193,22 @@ services:
       retries: 20
     mem_limit: 128m
 
+  core-banking:   # stand-in for the bank's core banking and the SIM-swap check (AD-21); internal only, no host port
+    image: disputedesk-core-banking:local
+    build: { context: ./backend, target: core-banking }
+    restart: unless-stopped                        # runs as the image's non-root `app` user
+    environment:
+      FixturesPath: /fixtures/local.json
+    volumes:
+      - ./fixtures/local.json:/fixtures/local.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    mem_limit: 256m
+
   api:
     image: disputedesk-api-local:local
     build: { context: ./backend, target: api-local }   # the api image plus a wget probe for the healthcheck

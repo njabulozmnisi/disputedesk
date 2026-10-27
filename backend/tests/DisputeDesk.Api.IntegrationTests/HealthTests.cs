@@ -31,6 +31,7 @@ public class HealthTests(PostgresFixture postgres)
     {
         await using var factory = new ApiFactory(postgres.ConnectionString);
         using HttpClient client = factory.CreateClient();
+        await WaitUntilReadyAsync(client);
 
         HttpResponseMessage response = await client.GetAsync(new Uri("/health/ready", UriKind.Relative), TestContext.Current.CancellationToken);
 
