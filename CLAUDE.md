@@ -13,8 +13,17 @@ Nothing is committed, pushed or merged without explicit approval for that change
 ## Story flow
 
 ```
-builder → verifier → security (high-stakes only) → QA → reviewer → merge
+builder → verifier → security (high-stakes only) ∥ reviewer → QA → merge
 ```
+
+Security and the reviewer are read-only and run in parallel; QA, the most expensive stage, runs last, once their findings are fixed.
+
+- **One supervisor session per story.** Start from `docs/tickets/README.md`, the story file and its `docs/verification/<story>-*.md`; hand over in files, not in the conversation; clear the session after the merge and the capture below.
+- **Fix rounds.** Collect every stage's findings for one commit into `docs/verification/<story>-fixes.md` and give them to one fresh builder, not a resumed one. At most one fix round per stage pass.
+- **Re-runs after a fix.** The verifier always re-runs; the reviewer reviews only the delta; security re-runs when the delta touches auth, identity, customer data or security headers; QA re-runs when the HTTP surface, data or events change. CI stays the full authoritative run.
+- **One test run per commit.** The builder's full run is the authoritative result for its diff; later stages reuse it and re-run only after a change.
+- **Research.** One agent per question, with a scope and an output file; parallel audits split by file set with one merge owner; no fan-out to more models than the verifier and its backup.
+- **A rule change mid-story** applies from the next story unless the human decides to rework the current one.
 
 Stories run in the order of [docs/tickets/README.md](docs/tickets/README.md); `<story>` below is the story ID `<epic>.<story>` (AGENTS.md, Ticket numbering). Keep the index current when a story merges or the plan changes.
 
@@ -28,6 +37,16 @@ Merge only when every stage passes and CI is green. Agents are in `.claude/agent
 - Frontend work starts once the API contract (`openapi.json`) is merged.
 - The supervisor reads reviewer and security findings directly and writes them to `docs/verification/<story>-review.md` and `<story>-security.md`.
 - Story files given to the verifier hold only criteria it can check read-only. The supervisor reproduces the builder's deliberate breaks and any Docker checks in a throwaway copy, and records the result in `<story>-review.md`.
+
+## Continuous improvement
+
+Claude learns only from what is written down where the right agent loads it.
+
+- **After every merge (capture).** Add an Escapes table to `<story>-review.md`: each finding a later stage caught that an earlier stage should have, with the stage that caught it, the stage that should have, a category (spec gap, input boundary, non-standard mechanism, missing test, environment or tooling, flaky, script error, auth) and the countermeasure. Add one metrics row: fix rounds per stage, full-suite runs, wall time per stage, tokens and peak context per agent, disk change.
+- **After every epic (retrospective).** Aggregate the epic's escapes and metrics, propose countermeasures to the human as one batch, and prune stale skill lines.
+- **Immediately (trigger).** A recurring escape category, a second fix round, a stage failing for tooling (account, lock, disk), a full pipeline re-run, a supervisor context over 200k tokens, or free disk under 15 GB: write a short postmortem and a fix proposal at once.
+- **A repeated mistake becomes a check, not a sentence.** Countermeasures in this order: a deterministic check (guard, analyzer, architecture test, floor-guard, script exit code); one line in the responsible agent's skill, under "Known pitfalls", at most about 10 lines, deleted once a check covers it; a field in the story template. Never in this file or AGENTS.md.
+- **Machine hygiene.** After every merge, remove merged clean worktrees and their branches and the session's throwaway copies; weekly, or under 15 GB free, prune only DisputeDesk-scoped Docker leftovers (the Docker daemon is shared with other projects).
 
 ## Human gates
 

@@ -27,6 +27,15 @@ Correctness, then security, then data integrity, then maintainability, then perf
 | Feature | a story | The full story flow: builder, verifier, QA, reviewer |
 | High-stakes | auth, identity and account linking, customer data, money, migrations | Feature flow plus the security agent and a human review of the diff |
 
+## Definition of ready
+
+A story is ready to build only when:
+
+- every criterion is testable and tagged to a requirement;
+- each criterion names the mechanism that implements it and the documented source for it (Microsoft Learn, the RFC, OWASP);
+- every request input is listed with its bounds;
+- it has no open questions.
+
 ## Ticket numbering
 
 Epics and stories are numbered in build order; [docs/tickets/README.md](docs/tickets/README.md) lists them all.

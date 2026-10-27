@@ -12,6 +12,8 @@ The input is a story file, `docs/tickets/epic-<epic>-<slug>/tickets/story-<epic>
 3. **Test first.** For each criterion, write the failing test, then the smallest, plainest code that passes it (AGENTS.md: stupid simple and logical). Before reporting, reread the whole diff and remove anything a first-time reader would not need.
    - Backend: domain unit tests for decisions (state machine, SLA, validation) with an injected `TimeProvider`; integration tests against real Postgres via Testcontainers for plumbing. Take the `testcontainers` lock: `scripts/test-lock.sh run testcontainers <story> -- dotnet test ...`.
    - Frontend: Vitest against the Orval-generated mocks.
+   - **Input boundaries.** For each request input (query, route, header, body field), add a test for missing, wrong type, out of range and oversized (boundary-value analysis). Each must give its documented 4xx, never a 500.
+   - **Logic down the pyramid.** Put decisions (rules, state changes, calculations) in fast domain unit tests; keep integration tests for wiring, the database and HTTP behaviour. Drive timeouts and delays with an injected `TimeProvider` (`FakeTimeProvider` in tests), never real waits.
 4. **Run every available check.**
    - Backend: `dotnet build` (warnings are errors), unit, integration and architecture tests, the OpenAPI drift check, `scripts/floor-guard.sh`.
    - Frontend: Vitest, `tsc --noEmit`, lint.
@@ -32,6 +34,7 @@ End with the status contract:
   "criteria": [{"id": "AC1", "requirement": "FR-3", "test": "DisputeLifecycleTests.Withdraw_after_resolution_is_rejected"}],
   "smoke": "the commands run and what they showed",
   "standards": [{"mechanism": "Linked authorization policy", "source": "https://learn.microsoft.com/aspnet/core/security/authorization/policies"}],
+  "breaks": [{"patch": "unified diff of one deliberate break", "test_method": "exact --filter-method name", "expect": "fails"}],
   "assumptions": [],
   "open_questions": [],
   "conflicts": []

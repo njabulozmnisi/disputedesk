@@ -13,6 +13,7 @@ Status: done (merged on main), in progress, or planned. The supervisor updates i
 | 1.3 | [P0-3 OpenTelemetry baseline and security headers](epic-1-platform-baseline/tickets/story-1.3-opentelemetry-baseline-and-security-headers-plan.md) | backend | done |
 | 1.4 | [P0-4 CI, security scanning and floor guard](epic-1-platform-baseline/tickets/story-1.4-ci-security-scanning-and-floor-guard-plan.md) | backend | done |
 | 1.5 | [P0-5 Microsoft Learn conventions, AD-3 error kinds and EF drift check](epic-1-platform-baseline/tickets/story-1.5-microsoft-learn-conventions-ad-3-error-kinds-and-ef-dri-plan.md) | backend | done |
+| 1.6 | [Workflow and test tooling](epic-1-platform-baseline/tickets/story-1.6-workflow-and-test-tooling.md) | backend | planned |
 
 ## Epic 2: [Linked customers sign in and see their transactions](epic-2-transactions/epic-2-transactions.md)
 
