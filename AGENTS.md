@@ -34,7 +34,8 @@ A story is ready to build only when:
 - every criterion is testable and tagged to a requirement;
 - each criterion names the mechanism that implements it and the documented source for it (Microsoft Learn, the RFC, OWASP);
 - every request input is listed with its bounds;
-- it has no open questions.
+- it has no open questions;
+- the challenger's verdict is "proceed", or a human has decided on its "simplify" or "rethink" points (`docs/verification/<story>-challenge.md`).
 
 ## Ticket numbering
 
