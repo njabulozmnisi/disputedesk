@@ -133,7 +133,7 @@ public class ProblemDetailsTests(PostgresFixture postgres)
         JsonElement root = problem.RootElement;
         Assert.Equal(expectedStatus, root.GetProperty("status").GetInt32());
         Assert.Equal(error.Message, root.GetProperty("detail").GetString());
-        Assert.Equal($"tag:disputedesk,2026:problem:{error.Code}", root.GetProperty("type").GetString());
+        Assert.Equal($"https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/{error.Code}.md", root.GetProperty("type").GetString());
         Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("traceId").GetString()));
     }
 
@@ -177,7 +177,7 @@ public class ProblemDetailsTests(PostgresFixture postgres)
 
         JsonElement root = problem.RootElement;
         Assert.Equal(400, root.GetProperty("status").GetInt32());
-        Assert.Equal("tag:disputedesk,2026:problem:validation", root.GetProperty("type").GetString());
+        Assert.Equal("https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/validation.md", root.GetProperty("type").GetString());
         Assert.Equal("The note is longer than 1000 characters.", root.GetProperty("errors").GetProperty("note")[0].GetString());
         Assert.False(root.GetProperty("errors").TryGetProperty("Note", out _));
     }
@@ -191,7 +191,7 @@ public class ProblemDetailsTests(PostgresFixture postgres)
 
         JsonElement root = problem.RootElement;
         Assert.Equal(409, root.GetProperty("status").GetInt32());
-        Assert.Equal("tag:disputedesk,2026:problem:action-not-allowed", root.GetProperty("type").GetString());
+        Assert.Equal("https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/action-not-allowed.md", root.GetProperty("type").GetString());
         Assert.Equal("underReviewPrioritised", root.GetProperty("customerStatus").GetString());
     }
 
@@ -208,7 +208,7 @@ public class ProblemDetailsTests(PostgresFixture postgres)
         string body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.DoesNotContain("echo-marker", body, StringComparison.Ordinal);
         using var problem = JsonDocument.Parse(body);
-        Assert.Equal("tag:disputedesk,2026:problem:validation", problem.RootElement.GetProperty("type").GetString());
+        Assert.Equal("https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/validation.md", problem.RootElement.GetProperty("type").GetString());
         Assert.True(problem.RootElement.GetProperty("errors").TryGetProperty("returnUrl", out _));
         Assert.False(string.IsNullOrWhiteSpace(problem.RootElement.GetProperty("traceId").GetString()));
     }
@@ -227,7 +227,7 @@ public class ProblemDetailsTests(PostgresFixture postgres)
         Assert.Equal(expectedStatus, (int)response.StatusCode);
         Assert.Equal(ProblemJson, response.Content.Headers.ContentType?.MediaType);
         using JsonDocument problem = await ReadJsonAsync(response);
-        Assert.Equal($"tag:disputedesk,2026:problem:{expectedSlug}", problem.RootElement.GetProperty("type").GetString());
+        Assert.Equal($"https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/{expectedSlug}.md", problem.RootElement.GetProperty("type").GetString());
         Assert.False(string.IsNullOrWhiteSpace(problem.RootElement.GetProperty("traceId").GetString()));
     }
 
@@ -240,7 +240,7 @@ public class ProblemDetailsTests(PostgresFixture postgres)
         HttpResponseMessage response = await client.GetAsync(new Uri("/health/live", UriKind.Relative), TestContext.Current.CancellationToken);
 
         using JsonDocument problem = await ReadJsonAsync(response);
-        Assert.Equal("tag:disputedesk,2026:problem:internal", problem.RootElement.GetProperty("type").GetString());
+        Assert.Equal("https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/internal.md", problem.RootElement.GetProperty("type").GetString());
     }
 
     private enum SampleCustomerStatus
