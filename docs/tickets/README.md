@@ -22,7 +22,7 @@ Needs: epic 1 (the merged P0 baseline).
 |---|---|---|---|
 | 2.1 | [Core-banking stub and the three ports with the resilience handler](epic-2-transactions/tickets/story-2.1-core-banking-stub-and-the-three-ports-with-the-resilience-ha.md) | backend | done |
 | 2.2 | [Sign in and sign out through the BFF, with one ProblemDetails contract](epic-2-transactions/tickets/story-2.2-sign-in-and-sign-out-through-the-bff-with-one-problemdetails.md) | backend | done |
-| 2.3 | [Linked customer lists their own transactions](epic-2-transactions/tickets/story-2.3-linked-customer-lists-their-own-transactions.md) | backend | in progress |
+| 2.3 | [Linked customer lists their own transactions](epic-2-transactions/tickets/story-2.3-linked-customer-lists-their-own-transactions.md) | backend | done |
 | 2.7 | [Problem types resolve to documentation pages](epic-2-transactions/tickets/story-2.7-problem-types-resolve-to-documentation-pages.md) | backend | planned |
 | 2.4 | [SPA shell, session routing and the transactions screen](epic-2-transactions/tickets/story-2.4-spa-shell-session-routing-and-the-transactions-screen.md) | frontend | planned |
 | 2.5 | [Gateway serves the SPA with the edge rules, and CI checks the frontend](epic-2-transactions/tickets/story-2.5-gateway-serves-the-spa-with-the-edge-rules-and-ci-checks-the.md) | backend | planned |
