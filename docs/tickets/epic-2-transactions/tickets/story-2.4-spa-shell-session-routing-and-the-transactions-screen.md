@@ -104,3 +104,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Decision: 2026-10-27 — inactivity warning (WCAG 2.2 SC 2.2.1 Timing Adjustable): the dialog warns at least 2 minutes before the idle sign-out, and "Stay signed in" renews the session through `GET /api/v1/bff/session` (AD-7, EXPERIENCE.md, prd FR-2).
 - Decision: 2026-10-27 — routes are defined with TanStack Router (AD-31); links to screens not built yet render the not-found screen until their stories land.
 - Decision: 2026-10-27 — waits on 2.7 as well, so the SPA routes on the resolvable problem `type` form from the start.
+- Decision: 2026-10-27 — 2.7 security review: the SPA routes on the problem slug and never renders `type` as a link or fetches it (RFC 9457 §3.1.1: clients do not dereference `type`).
