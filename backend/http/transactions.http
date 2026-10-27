@@ -1,0 +1,20 @@
+# Transactions on the local stack (docker compose up --wait), through the gateway.
+# Sign in first, headless: scripts/dev-login.sh customer-a (linked by the seed)
+# then copy the disputedesk-session value from the cookie jar it prints into @session below.
+# With curl, pass the jar instead: curl -b <cookie-jar> http://localhost:8080/api/v1/transactions
+
+@app = http://localhost:8080
+@session = paste-the-disputedesk-session-cookie-value
+
+### First page: 20 rows, newest first (401 without the cookie, 403 linking-required for an unlinked login)
+# @name firstPage
+GET {{app}}/api/v1/transactions
+Cookie: disputedesk-session={{session}}
+
+### Next page: pass nextCursor back as cursor; nextCursor is null on the last page
+GET {{app}}/api/v1/transactions?limit=50&cursor={{firstPage.response.body.nextCursor}}
+Cookie: disputedesk-session={{session}}
+
+### A limit above 50: 400 validation naming limit
+GET {{app}}/api/v1/transactions?limit=51
+Cookie: disputedesk-session={{session}}

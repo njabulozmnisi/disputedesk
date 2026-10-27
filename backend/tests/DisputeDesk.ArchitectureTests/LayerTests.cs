@@ -32,6 +32,14 @@ public class LayerTests
     }
 
     [Fact]
+    public void ContractsAssembly_References_NoOtherSolutionAssembly()
+    {
+        IEnumerable<string> forbidden = SolutionAssemblies.Where(assembly => assembly != ContractsAssembly).Select(NameOf);
+
+        AssertReferencesNone(ContractsAssembly, forbidden);
+    }
+
+    [Fact]
     public void ApplicationAssembly_References_NoInfrastructureHostsOrNpgsql()
     {
         AssertReferencesNone(ApplicationAssembly, [NameOf(InfrastructureAssembly), NameOf(ApiAssembly), NameOf(WorkerAssembly)]);

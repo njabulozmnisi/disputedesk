@@ -7,7 +7,8 @@ namespace DisputeDesk.Api.Errors;
 
 /// <summary>
 /// Turns an expected failure into a ProblemDetails response with the status its kind implies. The only place an
-/// <see cref="Error"/> becomes HTTP (AD-3). Malformed input never gets here: built-in minimal API validation answers 400.
+/// <see cref="Error"/> becomes HTTP (AD-3). Input that fails to bind, or fails a built-in validation attribute, is
+/// answered 400 by the framework before any handler runs; field rules a handler checks itself come through here.
 /// </summary>
 public static class ErrorResults
 {

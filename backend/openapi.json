@@ -146,6 +146,99 @@
           }
         }
       }
+    },
+    "/api/v1/transactions": {
+      "get": {
+        "tags": [
+          "Transactions"
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 50,
+              "minimum": 1,
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionPageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -209,6 +302,29 @@
           }
         }
       },
+      "Money": {
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "description": "An amount on the wire (AD-4): a decimal string with exactly two decimals, such as `849.00`, and its ISO 4217 code."
+      },
+      "NotDisputableReason": {
+        "enum": [
+          "notEligible",
+          "outsideWindow",
+          null
+        ]
+      },
       "ProblemDetails": {
         "type": "object",
         "properties": {
@@ -266,12 +382,127 @@
           "linked"
         ],
         "description": "Where the caller stands (AD-10): not signed in, signed in but not yet a linked customer, or linked."
+      },
+      "TransactionDirection": {
+        "enum": [
+          "debit",
+          "credit"
+        ],
+        "description": "Whether money left the account or arrived in it."
+      },
+      "TransactionKind": {
+        "enum": [
+          "card",
+          "ownAccountTransfer",
+          "transfer",
+          "other"
+        ],
+        "description": "What kind of movement a transaction is."
+      },
+      "TransactionPageResponse": {
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransactionResponse"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The body of `GET /api/v1/transactions` (AD-5): one page, newest first. Pass `nextCursor` back as\n`cursor` for the next page; it is null on the last page."
+      },
+      "TransactionResponse": {
+        "required": [
+          "transactionId",
+          "accountRef",
+          "accountLast4",
+          "transactionDate",
+          "description",
+          "amount",
+          "direction",
+          "kind",
+          "state",
+          "maskedCard",
+          "disputable",
+          "notDisputableReason"
+        ],
+        "type": "object",
+        "properties": {
+          "transactionId": {
+            "type": "string"
+          },
+          "accountRef": {
+            "type": "string"
+          },
+          "accountLast4": {
+            "type": "string"
+          },
+          "transactionDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": {
+            "type": "string"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/TransactionDirection"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TransactionKind"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TransactionState"
+          },
+          "maskedCard": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "disputable": {
+            "type": "boolean"
+          },
+          "notDisputableReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NotDisputableReason"
+              }
+            ]
+          }
+        },
+        "description": "One row of `GET /api/v1/transactions`. The account shows only its last 4 digits and the card only its first 6\nand last 4 (`maskedCard` is null when there is no card). `notDisputableReason` is null\nexactly when `disputable` is true."
+      },
+      "TransactionState": {
+        "enum": [
+          "settled",
+          "pending"
+        ],
+        "description": "Whether a transaction has settled or is still pending."
       }
     }
   },
   "tags": [
     {
       "name": "Bff"
+    },
+    {
+      "name": "Transactions"
     }
   ]
 }

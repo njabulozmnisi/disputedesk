@@ -40,4 +40,13 @@ public sealed class PostgresFixture : IAsyncLifetime
         await command.ExecuteNonQueryAsync();
         return new NpgsqlConnectionStringBuilder(ConnectionString) { Database = name }.ConnectionString;
     }
+
+    /// <summary>Creates a new database with every migration applied, for a test that needs its own rows, and returns its connection string.</summary>
+    public async Task<string> CreateMigratedDatabaseAsync()
+    {
+        string connectionString = await CreateEmptyDatabaseAsync();
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connectionString).Options);
+        await db.Database.MigrateAsync();
+        return connectionString;
+    }
 }

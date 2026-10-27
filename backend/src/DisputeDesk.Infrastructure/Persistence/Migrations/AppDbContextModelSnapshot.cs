@@ -22,6 +22,35 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("DisputeDesk.Infrastructure.Persistence.CustomerLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CustomerId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("LinkedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LoginSub")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId")
+                        .IsUnique()
+                        .HasDatabaseName("UQ_CustomerLinks_CustomerId");
+
+                    b.HasIndex("LoginSub")
+                        .IsUnique()
+                        .HasDatabaseName("UQ_CustomerLinks_LoginSub");
+
+                    b.ToTable("CustomerLinks", (string)null);
+                });
+
             modelBuilder.Entity("DisputeDesk.Infrastructure.Sessions.Session", b =>
                 {
                     b.Property<Guid>("Id")
