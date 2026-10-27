@@ -1,0 +1,73 @@
+---
+id: 7
+type: story
+title: "Disputes history, dispute detail and withdraw screens"
+parent: epic-3-disputes
+covers: [R16, R18, R19, R40]
+after: [4, 6]
+hitl: false
+risk: medium
+---
+
+# Disputes history, dispute detail and withdraw screens
+
+## Description
+
+Adds the Disputes screen grouped open and closed, the dispute detail with timeline, Withdraw where allowed, and the guidance after a Rejected outcome.
+
+## Requirements
+
+Verify: Vitest component tests pass, with API responses mocked from `openapi.json` shapes.
+
+1. **History grouped open and closed** (R16; FR-16)
+   **Given** loaded pages of disputes
+   **When** the Disputes screen renders
+   **Then** open and closed groups show newest first with reason, amount, status badge and outcome, with Load more
+
+2. **Timeline as the customer sees it** (R16, R18; FR-17, NFR-API-5)
+   **Given** a dispute detail
+   **When** it renders
+   **Then** entries show oldest first with the status label, South African time, "You" or "The bank" and any note, and `underReviewPrioritised` reads "Under review (prioritised)"
+
+3. **Withdraw offered only while open** (R19; FR-18, FR-20)
+   **Given** disputes in each customer status
+   **When** the detail renders
+   **Then** Withdraw appears for Submitted, Under review and Under review (prioritised) only, and confirming sends an optional note of up to 500 characters
+
+4. **Rejected guidance** (R16; FR-17)
+   **Given** a dispute resolved Rejected
+   **When** the detail renders
+   **Then** it shows how to complain to the bank and then the National Financial Ombud Scheme, as EXPERIENCE.md words it
+
+5. **Not found is one screen** (R17; FR-17)
+   **Given** a 404 on a dispute or an unknown route
+   **When** it renders
+   **Then** the same not-found screen shows for both
+
+6. **Accessible dialog** (R40; NFR-CODE-6)
+   **Given** the withdraw dialog
+   **When** it opens and closes by keyboard
+   **Then** focus is trapped inside and returns to Withdraw on close
+
+## Supervisor checks
+
+Deliberate-break proofs and Docker checks, run by the supervisor, not the verifier.
+
+- None beyond the story flow.
+
+## Build facts
+
+- Owner: frontend (frontend-builder).
+- Flags: none.
+- Lane: B.
+- Touches: `frontend/src/features/disputes/history/, detail/, withdraw/`; frontend/src/app/ (routes).
+
+## References
+
+- parent — docs/tickets/epic-3-disputes/epic-3-disputes.md
+- design — docs/ux/mockups/disputes.html
+- design — docs/ux/mockups/dispute-under-review.html
+- design — docs/ux/mockups/dispute-withdrawn.html
+- design — docs/ux/mockups/dispute-loading.html
+- design — docs/ux/mockups/not-found.html
+- experience — docs/ux/EXPERIENCE.md, Copy deck
