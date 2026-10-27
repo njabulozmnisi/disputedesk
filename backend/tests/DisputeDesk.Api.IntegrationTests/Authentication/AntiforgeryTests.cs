@@ -21,7 +21,7 @@ public class AntiforgeryTests(PostgresFixture postgres)
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using JsonDocument problem = await response.ReadJsonAsync();
-        Assert.Equal("tag:disputedesk,2026:problem:validation", problem.RootElement.GetProperty("type").GetString());
+        Assert.Equal("https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/validation.md", problem.RootElement.GetProperty("type").GetString());
         Assert.Equal("unlinked", await browser.SessionStateAsync());
     }
 
@@ -77,6 +77,6 @@ public class AntiforgeryTests(PostgresFixture postgres)
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Null(response.Headers.Location);
         using JsonDocument problem = await response.ReadJsonAsync();
-        Assert.Equal("tag:disputedesk,2026:problem:unauthorized", problem.RootElement.GetProperty("type").GetString());
+        Assert.Equal("https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/unauthorized.md", problem.RootElement.GetProperty("type").GetString());
     }
 }

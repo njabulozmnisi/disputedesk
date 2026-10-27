@@ -1,7 +1,7 @@
 # Code incorrect
 
 - Type: `https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/otp-incorrect.md`
-- Status: decided by story 6.2 (an AD-3 error kind)
+- Status: 422 (AD-3 `BusinessRule`: the request is well formed but the code is wrong; RFC 9110 §15.5.21)
 
 ## When it happens
 
