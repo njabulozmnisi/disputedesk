@@ -36,13 +36,15 @@ bff=$(jq -c --arg id "$BFF_CLIENT_ID" '.applications[].oidcConfiguration | selec
 check "BFF app: confidential web, code, JWT" '{applicationType: (.applicationType // "OIDC_APP_TYPE_WEB"),
     authMethodType: (.authMethodType // "OIDC_AUTH_METHOD_TYPE_BASIC"), responseTypes, grantTypes, developmentMode,
     accessTokenType, accessTokenRoleAssertion, idTokenRoleAssertion}
-  | select(.applicationType == "OIDC_APP_TYPE_WEB" and .authMethodType == "OIDC_AUTH_METHOD_TYPE_BASIC"
-      and .responseTypes == ["OIDC_RESPONSE_TYPE_CODE"] and (.grantTypes | index("OIDC_GRANT_TYPE_AUTHORIZATION_CODE"))
+  | select(.applicationType == "OIDC_APP_TYPE_WEB" and .authMethodType == "OIDC_AUTH_METHOD_TYPE_POST"
+      and .responseTypes == ["OIDC_RESPONSE_TYPE_CODE"] and .grantTypes == ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE"]
       and .accessTokenType == "OIDC_TOKEN_TYPE_JWT" and .accessTokenRoleAssertion and .idTokenRoleAssertion)' "$bff"
 check "BFF app: post-logout URIs (exact)" '.postLogoutRedirectUris | select(sort == ([
-    "http://localhost:8080/api/signout-callback-oidc",
-    "http://localhost:5101/api/signout-callback-oidc",
-    "http://localhost:5102/api/signout-callback-oidc"] | sort))' "$bff"
+    "http://localhost:8080/", "http://localhost:8080/api/signout-callback-oidc",
+    "http://localhost:5101/", "http://localhost:5101/api/signout-callback-oidc",
+    "http://localhost:5102/", "http://localhost:5102/api/signout-callback-oidc"] | sort))' "$bff"
+check "BFF app: development mode as configured" \
+  "(.developmentMode // false) | select(tostring == \"${BFF_DEVELOPMENT_MODE:?}\")" "$bff"
 
 while read -r login; do
   id=$(jq -r .userId <<< "$login"); username=$(jq -r .username <<< "$login")

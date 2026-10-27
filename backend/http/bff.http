@@ -1,0 +1,25 @@
+# BFF endpoints on the local stack (docker compose up --wait), through the gateway.
+# Sign in first, headless: scripts/dev-login.sh customer-a
+# then copy the disputedesk-session value from the cookie jar it prints into @session below.
+# With curl, pass the jar instead: curl -b <cookie-jar> -c <cookie-jar> ...
+
+@app = http://localhost:8080
+@session = paste-the-disputedesk-session-cookie-value
+
+### Session state: anonymous without the cookie, unlinked or linked with it
+GET {{app}}/api/v1/bff/session
+Cookie: disputedesk-session={{session}}
+
+### Antiforgery token for the X-XSRF-TOKEN header (401 without a session). It also sets the antiforgery cookie.
+# @name antiforgery
+GET {{app}}/api/v1/bff/antiforgery
+Cookie: disputedesk-session={{session}}
+
+### Sign out: 302 to Zitadel's end-session endpoint. Send the antiforgery cookie from the previous response too.
+POST {{app}}/api/v1/bff/logout
+Cookie: disputedesk-session={{session}}
+X-XSRF-TOKEN: {{antiforgery.response.body.requestToken}}
+Content-Type: application/x-www-form-urlencoded
+
+### Sign in in a browser instead: open this URL
+GET {{app}}/api/v1/bff/login?returnUrl=/
