@@ -4,7 +4,7 @@ type: story
 title: "QA journey UJ-1 on the real stack with axe and ZAP"
 parent: epic-7-release
 covers: [R35, R40, R33]
-after: [6.4, 3.6, 3.7, 2.5, 2.6, 4.1]
+after: [6.4, 3.6, 3.7, 2.5, 2.6, 4.1, 10]
 hitl: false
 risk: high
 ---

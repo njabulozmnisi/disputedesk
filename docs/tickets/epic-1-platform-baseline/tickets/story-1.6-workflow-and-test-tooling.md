@@ -44,6 +44,27 @@ Verify: Each script runs as described with its documented exit codes; the four t
    **When** the api container is recreated
    **Then** the gateway restarts with it through `depends_on` `restart: true` (Compose specification), so no manual gateway restart is needed
 
+6. **Redundant tests merged or removed** (R35; NFR-TEST-3)
+   **Given** the six cases from the 2026-10-27 redundancy review
+   **When** each is changed
+   **Then** `UnknownRoute_Get_Returns404ProblemDetailsWithTraceId` and `TryHandleAsync_UnhandledException_CarriesTheInternalSlug` have their one unique assertion merged into `FrameworkResponse_EachStatus_CarriesItsSlug` and `TryHandleAsync_UnhandledException_ReturnsClean500` and are removed; `Antiforgery_Anonymous_Returns401Unauthorized` and `Logout_SignedInWithTokenFromAntiforgeryEndpoint_Passes` are removed; the security-headers 200 row and the `limit=-1` row are dropped
+   **And** before each removal, `scripts/break-check.sh` shows the covering test fails for the same break, and the result is recorded in `docs/verification/1.6-review.md`
+
+7. **Over-specified assertions loosened** (R35)
+   **Given** assertions that compare exact raw JSON or message wording (money object order and text, session state bodies, the unmasked warning text, the unhandled-exception log template)
+   **When** they are rewritten
+   **Then** each asserts the specific value (`GetProperty(...).GetString()`, a stable message fragment), and each still fails for the break it proves
+
+8. **Shared fixtures for read-only test classes** (R35; NFR-TEST-3)
+   **Given** `TransactionsListTests` (21 cases, all read-only GETs as customer A) and the `ToProblem_*` cases in `ProblemDetailsTests`
+   **When** they run
+   **Then** each class shares one host, database and sign-in through `IClassFixture` (xUnit shared context), and no test depends on another's state
+
+9. **Two more real waits removed** (R35; NFR-TEST-2)
+   **Given** the caller-cancel tests in `CoreBankingResilienceTests` and `SimSwapCheckTests`
+   **When** they run
+   **Then** they use `FakeTimeProvider` like criterion 4 and finish without the 500 ms waits
+
 ## Supervisor checks
 
 - Run `scripts/break-check.sh` with a known break from story 2.7 and see exit 0; with a no-op patch see exit 1.
@@ -54,7 +75,7 @@ Verify: Each script runs as described with its documented exit codes; the four t
 - Owner: backend (backend-builder).
 - Flags: none.
 - Lane: A or B (no product code).
-- Touches: scripts/check.sh (new); scripts/break-check.sh (new); scripts/verify-with-copilot.sh; .claude/skills/verify-story/SKILL.md (reuse the check summary); backend/Directory.Packages.props; backend/tests/DisputeDesk.Api.IntegrationTests/CoreBanking/; docker-compose.yml (gateway depends_on).
+- Touches: scripts/check.sh (new); scripts/break-check.sh (new); scripts/verify-with-copilot.sh; .claude/skills/verify-story/SKILL.md (reuse the check summary); backend/Directory.Packages.props; backend/tests/DisputeDesk.Api.IntegrationTests/ (CoreBanking/, Transactions/TransactionsListTests.cs, ProblemDetailsTests.cs, Bff/AntiforgeryTests.cs, Bff/SessionStateTests.cs, SecurityHeadersTests.cs, TelemetryTests.cs); docker-compose.yml (gateway depends_on).
 
 ## References
 
@@ -64,3 +85,4 @@ Verify: Each script runs as described with its documented exit codes; the four t
 
 - Decision: 2026-10-27 — from the workflow efficiency review: the review stages are cheap; the waste is repeated full runs, long-lived contexts and hand-made break scripts. Tests are not deleted by count.
 - `.claude/skills/verify-story/SKILL.md` and `scripts/verify-with-copilot.sh` are outside `backend/`; the supervisor makes those two edits, the builder the rest.
+- Decision: 2026-10-27 — 2.2 criterion 5's "the token makes the request pass" is proved by `SignOutTests.Logout_SignedIn_DeletesTheRowClearsBothCookiesAndRedirectsToEndSession` once `Logout_SignedInWithTokenFromAntiforgeryEndpoint_Passes` is removed; `docs/verification/1.6-review.md` records the remap.

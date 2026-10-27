@@ -13,10 +13,10 @@ Nothing is committed, pushed or merged without explicit approval for that change
 ## Story flow
 
 ```
-builder → verifier → security (high-stakes only) ∥ reviewer → QA → merge
+challenger → builder → verifier → security (high-stakes only) ∥ reviewer → QA → merge
 ```
 
-Security and the reviewer are read-only and run in parallel; QA, the most expensive stage, runs last, once their findings are fixed.
+The challenger (`scripts/challenge-with-copilot.sh`, a different model family from the builders) reads only the story, the architecture and the code it would touch, never the supervisor's view, and answers proceed, simplify or rethink. Simplify or rethink is a model disagreement, so a human decides before the builder starts. Security and the reviewer are read-only and run in parallel; QA, the most expensive stage, runs last, once their findings are fixed. For high-stakes stories the human review of the diff (AGENTS.md stakes tiers) happens in the review blocks, before the commit is approved.
 
 - **One supervisor session per story.** Start from `docs/tickets/README.md`, the story file and its `docs/verification/<story>-*.md`; hand over in files, not in the conversation; clear the session after the merge and the capture below.
 - **Fix rounds.** Collect every stage's findings for one commit into `docs/verification/<story>-fixes.md` and give them to one fresh builder, not a resumed one. At most one fix round per stage pass.

@@ -1,13 +1,28 @@
 # Journeys proven on the stack, deployed and documented: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
 
 [[entry]]
+id = 10
+type = "story"
+title = "Production readiness review"
+description = "An independent, evidence-based review of the whole system before the QA journeys and the deploy, modelled on the Production Readiness Review in Google's SRE practice."
+verify = "docs/verification/7.10-prr.md exists with a verdict per checklist item, the evidence for each, and a ranked list of findings with a human decision recorded for each."
+covers = ["R9", "R11", "R28", "R30", "R31", "R32", "R35", "R36"]
+after = [9]
+hitl = true
+risk = "high"
+owner = "supervisor"
+lane = "none"
+high_stakes = true
+migration = false
+
+[[entry]]
 id = 1
 type = "story"
 title = "QA journey UJ-1 on the real stack with axe and ZAP"
 description = "Playwright runs UJ-1 end to end on a fresh stack per QA run and traces it through browser, network, database and events, with accessibility and ZAP baseline scans."
 verify = "`npx playwright test` in `e2e/` passes UJ-1 against a fresh stack (`docker compose down -v`, then `docker compose up --wait`); axe and ZAP report no untriaged high finding."
 covers = ["R35", "R40", "R33"]
-after = ["6.4", "3.6", "3.7", "2.5", "2.6", "4.1"]
+after = ["6.4", "3.6", "3.7", "2.5", "2.6", "4.1", 10]
 hitl = false
 risk = "high"
 owner = "qa"
