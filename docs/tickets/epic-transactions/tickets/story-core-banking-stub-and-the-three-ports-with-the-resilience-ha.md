@@ -35,13 +35,13 @@ Verify: Stub and client integration tests pass; with the stub stopped, the clien
    **Given** any fixture transaction
    **When** the stub returns it
    **Then** the row carries `transactionId`, `accountRef`, `accountLast4`, `transactionDate`, `description`, `amount`, `currency`, `direction`, `kind`, `state` and `maskedCard` (first 6 and last 4 or null)
-   **And** no full account or card number exists in the fixtures or the response
+   **And** no full account number exists in the transaction fixtures or any stub response, and no full card number exists anywhere (the bank records in `customers[].accounts[]` keep the full account number for matching only)
 
 4. **Resilience handler exhausts to Unavailable** (R11; NFR-RES-2)
    **Given** the stub is unreachable or slow
    **When** the client is called
    **Then** it retries twice with jitter, gives up within 5 seconds and returns an `Unavailable` error
-   **And** after 5 failures in 30 seconds the circuit opens for 15 seconds
+   **And** when every call in a 30-second window fails, with at least 5 calls, the circuit opens for 15 seconds; a success inside the window keeps it closed
 
 5. **SIM-swap check fails closed** (R5; FR-4, FR-6)
    **Given** customer C is flagged with a recent SIM swap in the fixtures

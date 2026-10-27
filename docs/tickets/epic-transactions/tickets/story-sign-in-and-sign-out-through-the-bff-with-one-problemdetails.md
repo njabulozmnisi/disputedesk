@@ -50,7 +50,7 @@ Verify: BFF and ProblemDetails integration tests pass.
 6. **Sign-out ends both sessions** (R3; FR-3)
    **Given** a signed-in login
    **When** it posts the logout form
-   **Then** its session row is deleted, the cookie is cleared, the redirect goes to Zitadel end-session with `client_id` and `post_logout_redirect_uri`
+   **Then** its session row is deleted, the cookie is cleared, the redirect goes to Zitadel end-session with `client_id`, `post_logout_redirect_uri` and the session's `id_token_hint`, so Zitadel ends its session without a prompt
    **And** replaying the old cookie gets 401
 
 7. **One ProblemDetails contract** (R30; NFR-API-2, NFR-API-1)
