@@ -41,8 +41,9 @@ Verify: `npx playwright test` passes all five journeys with axe clean on a fresh
 
 5. **Accessibility** (R40; NFR-CODE-6)
    **Given** every screen visited
-   **When** axe runs
+   **When** `@axe-core/playwright` runs with the tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` and `wcag22aa`
    **Then** no WCAG 2.2 AA violation is reported
+   **And** a manual keyboard pass over the same screens (Tab order, visible focus, no keyboard trap; WCAG 2.2 SC 2.1.1, 2.1.2, 2.4.7) is recorded in `docs/verification/7.2-qa.md`
 
 ## Supervisor checks
 
@@ -64,3 +65,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Decision: 2026-10-26 — Gate 2: each QA run starts on a fresh stack (`docker compose down -v`, then `up --wait`); UJ-2's withdrawal of A's Under review dispute is reset the same way. The seeded disputes now come from story 5.4 (was 3.5).
+- Decision: 2026-10-27 — WCAG 2.2 AA is checked by axe plus a recorded manual keyboard pass, not proved by axe alone (R40).

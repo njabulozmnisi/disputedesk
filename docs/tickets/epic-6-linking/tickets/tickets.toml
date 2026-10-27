@@ -4,7 +4,7 @@
 id = 1
 type = "story"
 title = "Unlinked login starts linking with a uniform response and an OTP sent after the SIM-swap check"
-description = "Adds `LinkingChallenges`, `POST /api/v1/linking/start` and the background job that matches, caps, runs the SIM-swap check and sends the OTP (AD-12)."
+description = "Adds `LinkingChallenges`, `POST /api/v1/linking/start` and the background job (a `BackgroundService` reading a bounded `Channel`, the documented queue-service pattern) that matches, caps, runs the SIM-swap check and sends the OTP (AD-12)."
 verify = "Integration tests prove identical responses, the check order, the cap, fail-closed SIM swap and audit; no ID number appears in any table or log."
 covers = ["R4", "R5", "R6", "R7", "R9", "R10", "R31", "R36"]
 after = ["2.1", "2.3", "3.2"]
@@ -37,7 +37,7 @@ touches = ["backend/src/DisputeDesk.Application/Linking/VerifyOtp/", "backend/sr
 id = 3
 type = "story"
 title = "Linking rate limits and trusted forwarded headers"
-description = "Adds the chained built-in rate limiter on linking routes and restricts forwarded headers to the gateway (AD-12, AD-23)."
+description = "Adds the built-in sliding-window limiters, chained as Microsoft Learn documents for limiters partitioned on different keys (confirm the chaining form against the installed .NET), on linking routes and restricts forwarded headers to the gateway (AD-12, AD-23)."
 verify = "Integration tests prove the limits, `Retry-After`, uncounted rejections, audit of the first rejection and spoofed headers being ignored."
 covers = ["R8", "R10"]
 after = [2]

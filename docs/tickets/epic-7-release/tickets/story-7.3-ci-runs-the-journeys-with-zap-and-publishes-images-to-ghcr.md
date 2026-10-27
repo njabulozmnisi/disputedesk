@@ -17,12 +17,12 @@ Adds the `e2e` job (Compose up, Playwright with axe, ZAP baseline) and the main-
 
 ## Requirements
 
-Verify: Workflow lint passes; reading `ci.yml` shows the `e2e` job on pull requests and the `publish` job gated to main with `packages: write` only there.
+Verify: `actionlint` passes; reading `ci.yml` shows the `e2e` job on pull requests and the `publish` job gated to main with `packages: write` only there.
 
 1. **E2E job** (R33, R35; NFR-TEST-5, NFR-TEST-6, NFR-SEC-8)
    **Given** a pull request
    **When** CI runs
-   **Then** the `e2e` job starts the stack with Compose, runs the Playwright journeys with axe and the ZAP baseline, and fails on any failure or untriaged high or critical finding
+   **Then** the `e2e` job starts the stack with Compose, runs the Playwright journeys with axe and the ZAP baseline with `.zap/rules.tsv` as its config, and fails on any failure or untriaged high finding
 
 2. **Publish on main** (R33; NFR-INFRA-2)
    **Given** a push to main
@@ -40,7 +40,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Owner: backend (backend-builder).
 - Flags: none.
 - Lane: A.
-- Touches: .github/workflows/ci.yml (e2e, publish); `.zap/` (triage file).
+- Touches: .github/workflows/ci.yml (e2e, publish); `.zap/rules.tsv` (ZAP baseline config).
 
 ## References
 

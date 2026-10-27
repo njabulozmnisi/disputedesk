@@ -21,6 +21,8 @@ Diff: `git diff main...HEAD` plus any uncommitted changes in the worktree.
 
 "Is there a smaller design that meets the criteria? Does every abstraction earn its place? Would a developer new to the repo understand each method on first read?" The bar is stupid simple and logical (AGENTS.md); clever or indirect code is a finding even when it works. Flag single-implementation interfaces, speculative options, wrappers over framework features, and anything that belongs in `docs/production-path.md` instead.
 
+Then the standards check (AGENTS.md, "Use established standards; do not invent mechanisms"): for each mechanism the diff adds, name the documented framework mechanism or industry standard it should use (Microsoft Learn, the RFC, OWASP) and flag any home-grown replacement, with the link. Flag any part that can't be explained in a sentence or two.
+
 ## Report
 
 Rank findings by severity with file and line.

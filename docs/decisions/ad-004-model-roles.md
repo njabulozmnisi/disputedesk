@@ -10,7 +10,7 @@
 | `frontend-builder` | Claude Sonnet 5.5 | Generated client and design tokens keep the frontend well-constrained; faster and cheaper |
 | `verifier` | GPT-6 Astra via GitHub Copilot CLI (GPT-6 Sol as backup), driven by a Sonnet agent | A non-author from another model family catches what the author's family is blind to |
 | `qa` | Claude Sonnet 5.5 with Playwright MCP | Procedural, evidence-heavy work |
-| `reviewer`, `security` | Claude Opus 5.5, read-only | Judgement-heavy; security is the primary assessment area |
+| `reviewer`, `security` | Claude Opus 5.5, read-only | Judgement-heavy; security is the primary quality requirement |
 
 **Options rejected.**
 - *One model everywhere:* simplest, but an author verifying its own family's output shares its blind spots, and Opus everywhere strains usage.

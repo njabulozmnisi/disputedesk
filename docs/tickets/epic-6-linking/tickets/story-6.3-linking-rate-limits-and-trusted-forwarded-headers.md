@@ -13,7 +13,7 @@ risk: high
 
 ## Description
 
-Adds the chained built-in rate limiter on linking routes and restricts forwarded headers to the gateway (AD-12, AD-23).
+Adds the built-in sliding-window limiters, chained as Microsoft Learn documents for limiters partitioned on different keys (confirm the chaining form against the installed .NET), on linking routes and restricts forwarded headers to the gateway (AD-12, AD-23).
 
 ## Requirements
 
@@ -22,7 +22,7 @@ Verify: Integration tests prove the limits, `Retry-After`, uncounted rejections,
 1. **Per-login and per-IP limits** (R8; FR-8, NFR-SEC-4)
    **Given** start and verify requests combined
    **When** a login exceeds 5, or a client IP exceeds 20, within 15 minutes
-   **Then** the excess gets 429 `rate-limited` with `Retry-After`, and rejected requests are not counted
+   **Then** the excess gets 429 `rate-limited` (RFC 6585 §4) with `Retry-After` from the lease's `MetadataName.RetryAfter`, and rejected requests are not counted, except that a request the second limiter rejects has already used a permit from the first
 
 2. **Rejections audited once** (R10, R8; FR-10)
    **Given** repeated rejections in one window
@@ -32,7 +32,7 @@ Verify: Integration tests prove the limits, `Retry-After`, uncounted rejections,
 3. **Forwarded headers only from the gateway** (R8; FR-8)
    **Given** a spoofed `X-Forwarded-For` from an address other than the gateway
    **When** it reaches the Api
-   **Then** the client IP stays the connection address; `KnownProxies` holds only the gateway, `ForwardLimit` is 1 and IPv6 partitions use the /64 prefix
+   **Then** the client IP stays the connection address; the loopback defaults are cleared, `KnownProxies` holds only the gateway, `KnownIPNetworks` is empty, `ForwardLimit` is 1, `AllowedHosts` holds the public app host, and IPv6 partitions use the /64 prefix
 
 ## Supervisor checks
 
@@ -54,3 +54,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Risk high: brute force; beyond the criteria, the security agent sends spoofed headers through the gateway.
+- Decision: 2026-10-27 — standards audit: the Api reads the gateway's `X-Forwarded-*` through the Forwarded Headers middleware with the gateway as the known proxy, so the OIDC redirect and sign-out URIs are `https` behind TLS.

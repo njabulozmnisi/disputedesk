@@ -13,7 +13,7 @@ risk: high
 
 ## Description
 
-Adds `LinkingChallenges`, `POST /api/v1/linking/start` and the background job that matches, caps, runs the SIM-swap check and sends the OTP (AD-12).
+Adds `LinkingChallenges`, `POST /api/v1/linking/start` and the background job (a `BackgroundService` reading a bounded `Channel`, the documented queue-service pattern) that matches, caps, runs the SIM-swap check and sends the OTP (AD-12).
 
 ## Requirements
 
@@ -22,7 +22,7 @@ Verify: Integration tests prove identical responses, the check order, the cap, f
 1. **One response for every outcome** (R4; FR-4, NFR-SEC-4)
    **Given** details that match, match nothing, or match a customer with a linked login
    **When** each starts linking
-   **Then** every response is 202 with the same fixed body, and timing does not depend on the match because the lookup runs off the request path
+   **Then** every response is 202 with the same fixed body, and timing does not depend on the match because the lookup runs off the request path (OWASP Forgot Password Cheat Sheet)
 
 2. **Format errors without echo** (R4; FR-4)
    **Given** a malformed ID number or account number
@@ -32,7 +32,7 @@ Verify: Integration tests prove identical responses, the check order, the cap, f
 3. **SIM-swap before any OTP, failing closed** (R5; FR-4, FR-6)
    **Given** customer C, and a check that errors or times out
    **When** linking starts
-   **Then** no OTP is sent, the response is unchanged, and an audit entry `LinkingSimSwapFailed` is written
+   **Then** no OTP is sent, the response is unchanged, and an audit entry `LinkingSimSwapFailed` is written (NIST SP 800-63B §3.1.3.3 SIM-change check)
 
 4. **Send cap** (R6; FR-4, NFR-SEC-4)
    **Given** 3 OTPs sent to one customer within an hour across logins and IPs
@@ -42,7 +42,7 @@ Verify: Integration tests prove identical responses, the check order, the cap, f
 5. **OTP issued safely** (R7; FR-5)
    **Given** a match with no linked login that passes the check
    **When** the job sends
-   **Then** a 6-digit OTP goes to the cellphone on record, only its HMAC is stored, and it expires at the send instant plus 5 minutes
+   **Then** a 6-digit OTP from `RandomNumberGenerator` (NIST SP 800-63B §3.1.3.2) goes to the cellphone on record, only its HMAC-SHA256 is stored, and it expires at the send instant plus 5 minutes
 
 6. **Restart supersedes** (R4; FR-4)
    **Given** an earlier challenge

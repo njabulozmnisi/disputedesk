@@ -78,7 +78,6 @@ sequenceDiagram
     S->>N: Staged diff + all verdicts
     N-->>S: Explicit approval
     S->>S: Commit, merge to main (CI must be green)
-    S->>S: Study note to ~/disputedesk-study, review-debt counter +1
 ```
 
 A failed stage sends the story back to its builder with the findings. After two failed attempts the builder returns `blocked` and the supervisor escalates for a decision.

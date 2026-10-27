@@ -22,12 +22,13 @@ Verify: Integration tests cover correct, wrong, expired, locked, parallel and ra
 1. **Correct code links** (R7; FR-6)
    **Given** an active challenge
    **When** the correct OTP is entered
-   **Then** the login becomes a linked customer with no new sign-in, the challenge is consumed, the session is re-issued under a new key and `Linked` is audited
+   **Then** the login becomes a linked customer with no new sign-in, the challenge is consumed, the session is re-issued under a new key (OWASP Session Management Cheat Sheet) and `Linked` is audited
 
 2. **Wrong, expired and absent** (R7; FR-5, FR-6)
-   **Given** a wrong code, a code after 5 minutes, and no active challenge
+   **Given** a wrong code, a code after 5 minutes, and a login with no challenge row
    **When** each is verified
-   **Then** the first two get `otp-incorrect` with `attemptsRemaining` until the last try, and no challenge answers `linking-locked`
+   **Then** all three get `otp-incorrect`, exactly like a wrong code (FR-6; OWASP Authentication Cheat Sheet, generic responses), with `attemptsRemaining` until the last try, and 2 for the login with no challenge row, as after a first wrong code (AD-12)
+   **And** only a locked challenge answers `linking-locked`
 
 3. **Lockout after three** (R7; FR-7)
    **Given** 3 wrong codes
@@ -73,4 +74,6 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 ## Notes
 
+- Decision: 2026-10-27 — a verify with no challenge row answers `otp-incorrect` like a wrong code; `linking-locked` is only for a locked challenge (AD-12, prd FR-6).
 - Risk high: account takeover; beyond the criteria, the security agent times correct and wrong comparisons.
+- Decision: 2026-10-27 — this story sets the HTTP status of `otp-incorrect` and `linking-locked` from the AD-3 error kinds and fills it into `docs/problems/otp-incorrect.md` and `linking-locked.md` (the supervisor updates the pages).

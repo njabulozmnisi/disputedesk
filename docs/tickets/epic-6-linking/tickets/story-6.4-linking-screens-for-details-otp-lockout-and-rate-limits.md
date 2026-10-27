@@ -42,7 +42,7 @@ Verify: Vitest component tests pass, with API responses mocked from `openapi.jso
 5. **Accessible inputs** (R40; NFR-CODE-6)
    **Given** the details and OTP forms
    **When** used by keyboard
-   **Then** fields are labelled, errors are announced, and the OTP input accepts paste
+   **Then** fields are labelled, errors are announced, and the OTP input uses `autocomplete="one-time-code"` and `inputmode="numeric"` and accepts paste (WCAG 2.2 SC 3.3.8)
 
 ## Supervisor checks
 

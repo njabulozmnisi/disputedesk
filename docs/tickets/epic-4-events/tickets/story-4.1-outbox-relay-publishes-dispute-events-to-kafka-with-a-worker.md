@@ -48,12 +48,12 @@ Verify: Worker integration tests on Testcontainers Postgres and Redpanda pass fo
 6. **Trace continues** (R36; NFR-OBS-1)
    **Given** an outbox row with a stored `TraceParent`
    **When** it is produced
-   **Then** the producer span's parent is the stored context, or a root span when none, and the headers are injected through the default propagator
+   **Then** the producer span (kind Producer, named `send disputedesk.disputes`, with `messaging.system` `kafka`, `messaging.operation.name` and `messaging.operation.type` `send`, `messaging.destination.name`, `messaging.kafka.message.key` and `messaging.message.id`, per the OpenTelemetry Kafka semantic conventions) has the stored context as parent, or is a root span when none, and the headers are injected through `Propagators.DefaultTextMapPropagator`
 
 7. **Heartbeat and shutdown** (R27; NFR-RES-1, NFR-RES-5)
    **Given** the Worker
    **When** the relay loops and then SIGTERM arrives
-   **Then** `/tmp/heartbeat-relay` is touched every loop including non-leader lock attempts, and both hosts finish in-flight work within the 30-second `ShutdownTimeout`
+   **Then** `/tmp/heartbeat-relay` is touched every loop including non-leader lock attempts, and both hosts finish in-flight work within the default 30-second `HostOptions.ShutdownTimeout` (no code needed)
 
 ## Supervisor checks
 
@@ -68,7 +68,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Owner: backend (backend-builder).
 - Flags: none.
 - Lane: A.
-- Touches: `backend/src/DisputeDesk.Worker/`; `backend/src/DisputeDesk.Infrastructure/Outbox/`; backend/src/DisputeDesk.Api/Program.cs (ShutdownTimeout); backend/Directory.Packages.props (Confluent.Kafka); backend/Dockerfile (worker-local target); docker-compose.yml (worker health check, depends_on api healthy, stop_grace_period); `backend/tests/DisputeDesk.Worker.IntegrationTests/`.
+- Touches: `backend/src/DisputeDesk.Worker/`; `backend/src/DisputeDesk.Infrastructure/Outbox/`; backend/Directory.Packages.props (Confluent.Kafka); backend/Dockerfile (worker-local target); docker-compose.yml (worker health check, depends_on api healthy, stop_grace_period); `backend/tests/DisputeDesk.Worker.IntegrationTests/`.
 
 ## References
 

@@ -108,3 +108,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 - Risk high: authentication and sessions; beyond the criteria, the security agent checks cookie flags and that no token is logged.
 - Assumption: the AD-3 completion lands here because this is the first endpoint story; split it out first if the builder blocks on size.
+- Decision: 2026-10-27 — the tag URI `type` this story shipped moves to the resolvable URL `https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/<slug>.md` in story 2.7 (AD-3, RFC 9457 §3.1.1); the criterion above records what was merged.

@@ -41,8 +41,8 @@ Verify: Worker integration tests with a fake `TimeProvider` cover the 240-hour b
 
 5. **Sweep heartbeat and metric** (R27, R36; NFR-RES-1, NFR-OBS-3)
    **Given** the sweep loop
-   **When** it runs every 30 seconds
-   **Then** `/tmp/heartbeat-sweep` is touched each loop, the health check fails when it is older than 30 seconds, and `disputedesk.sla.escalations` counts
+   **When** it runs every 30 seconds on a `PeriodicTimer` built with the injected `TimeProvider`
+   **Then** `/tmp/heartbeat-sweep` is touched each loop, the health check fails when it is older than 90 seconds (three missed 30-second loops; AD-25), and `disputedesk.sla.escalations` counts
 
 ## Supervisor checks
 
@@ -63,4 +63,6 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 ## Notes
 
+- Decision: 2026-10-27 — the sweep heartbeat threshold is 90 seconds, three missed 30-second loops, so one slow batch does not mark the Worker unhealthy; the relay threshold stays 30 seconds (AD-25).
 - Risk high: double escalation; beyond the criteria, QA watches the seeded demo dispute get exactly one escalation entry.
+- Decision: 2026-10-27 — scope: if time runs short, this story goes to `docs/production-path.md` (initiative scope decision) and 7.8a is replanned.

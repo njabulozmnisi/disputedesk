@@ -23,6 +23,7 @@ Verify: The README sections below exist and every command in them runs on a fres
    **Given** the README
    **When** it is read
    **Then** it opens with `docker compose up`, then build, run and test steps, the demo logins for A and B and the synthetic details for C and D, driving the operations endpoints from Scalar, the research simplifications, and ends with the ten-area map
+   **And** it states that rate limits live in memory, per Api instance, and reset on restart (FR-8)
 
 2. **Runbook** (R28, R39; NFR-RES-4)
    **Given** `docs/runbook.md`
@@ -53,5 +54,6 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 ## Notes
 
+- Decision: 2026-10-27 — the README states where rate-limit state lives (FR-8).
 - Gold-plating watch: the PRD asks for a README runbook; the separate runbook and onboarding page stay short.
 - Decision: 2026-10-26 — Gate 2: owner changes to `docs`, a docs agent rather than a builder; runbook and onboarding stay short.

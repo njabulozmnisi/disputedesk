@@ -81,7 +81,7 @@ owner = "frontend"
 lane = "B"
 high_stakes = false
 migration = false
-touches = ["frontend/src/features/disputes/raise/", "frontend/src/telemetry/", "frontend/src/app/ (routes)", "frontend/package.json", "frontend/src/api/generated/"]
+touches = ["frontend/src/features/disputes/raise/", "frontend/src/telemetry/", "frontend/src/app/ (routes)", "frontend/src/components/ui/ (shadcn/ui Form)", "frontend/package.json (React Hook Form, zod and the resolver, each verified and pinned per AGENTS.md)", "frontend/src/api/generated/"]
 supervisor_checks = ["The Aspire Dashboard shows one trace from `dispute.raise.submit` to the Api raise span."]
 references = ["design — docs/ux/mockups/dispute-new.html", "design — docs/ux/mockups/dispute-new-wrong-amount.html", "design — docs/ux/mockups/dispute-review.html", "design — docs/ux/mockups/dispute-review-retry.html", "design — docs/ux/mockups/transactions-after.html", "experience — docs/ux/EXPERIENCE.md, Copy deck"]
 

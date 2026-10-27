@@ -52,5 +52,5 @@ id = 7
 slug = "epic-7-release"
 title = "Journeys proven on the stack, deployed and documented"
 description = "The Playwright journeys with accessibility and ZAP scans pass on the real stack and in CI, images publish to GHCR, the dev environment deploys to AWS through Terraform and the OIDC role, the README and records are written, and one refactor sweep closes the project."
-covers = ["R28", "R32", "R33", "R34", "R35", "R36", "R38", "R39", "R40"]
+covers = ["R3", "R9", "R11", "R28", "R30", "R32", "R33", "R34", "R35", "R36", "R38", "R39", "R40"]
 after = [{ epic = 2, needs = "the themed hosted login for UJ-1" }, { epic = 3, needs = "dispute screens for UJ-1, UJ-2 and UJ-5" }, { epic = 4, needs = "events on the topic for the four-hop trace" }, { epic = 5, needs = "Scalar and the sweep for the README and the sweep story" }, { epic = 6, needs = "linking screens for UJ-1" }]

@@ -38,7 +38,7 @@ Verify: A seeder integration test on a fresh database finds every status and out
 4. **Seeding publishes nothing and is idempotent** (R24; FR-29)
    **Given** the seeder
    **When** it runs twice
-   **Then** the second run writes nothing and `OutboxMessages` stays empty for seeded disputes, written with no query-filter bypass
+   **Then** the seeder runs from EF Core's `UseSeeding` and `UseAsyncSeeding` hooks, the second run writes nothing, and `OutboxMessages` stays empty for seeded disputes, written with no query-filter bypass
 
 5. **Status changes go through the aggregate** (R24; FR-29, FR-24)
    **Given** the seeder and a fixed seeding clock
@@ -65,3 +65,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Decision: 2026-10-26 — Gate 2: AD-13 governs seeding. The seeder changes dispute status only through the `Dispute` aggregate methods under a fixed seeding clock, so this story moved from epic-3-disputes (was 3.5) to epic-5-operations (now 5.4) and waits on story 2.
+- Decision: 2026-10-27 — scope: if time runs short, this story goes to `docs/production-path.md` (initiative scope decision) and 7.2 and 7.8a are replanned.
