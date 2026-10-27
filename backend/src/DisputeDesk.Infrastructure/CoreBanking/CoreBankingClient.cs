@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Domain;
+using Microsoft.Extensions.Logging;
 using Polly;
 
 namespace DisputeDesk.Infrastructure.CoreBanking;
@@ -14,11 +15,15 @@ namespace DisputeDesk.Infrastructure.CoreBanking;
 /// travel in headers and the ID number in the body, never in the URL, so none of them reaches an access log, a
 /// trace or a metric.
 /// </summary>
-public sealed partial class CoreBankingClient(HttpClient http) : ICoreBankingClient
+public sealed partial class CoreBankingClient(HttpClient http, ILogger<CoreBankingClient> logger) : ICoreBankingClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+        // A missing field, or null where the record does not allow it, is a JsonException (so Unavailable), never a
+        // null that fails later outside the error handling.
+        RespectNullableAnnotations = true,
+        RespectRequiredConstructorParameters = true,
     };
 
     public Task<Result<CustomerMatch>> MatchCustomerAsync(string idNumber, string accountNumber, CancellationToken cancellationToken)
@@ -30,32 +35,70 @@ public sealed partial class CoreBankingClient(HttpClient http) : ICoreBankingCli
         return SendAsync<CustomerMatch>(request, cancellationToken);
     }
 
-    public Task<Result<IReadOnlyList<Account>>> GetAccountsAsync(string customerId, CancellationToken cancellationToken) =>
-        SendAsync<IReadOnlyList<Account>>(GetRequest("accounts", customerId), cancellationToken);
+    public async Task<Result<IReadOnlyList<Account>>> GetAccountsAsync(string customerId, CancellationToken cancellationToken)
+    {
+        Result<IReadOnlyList<Account>> accounts = await SendAsync<IReadOnlyList<Account>>(GetRequest("accounts", customerId), cancellationToken);
+        if (accounts.IsSuccess && !accounts.Value.All(account => Last4Shape().IsMatch(account.AccountLast4)))
+        {
+            return Unmasked();
+        }
 
-    public Task<Result<TransactionPage>> GetTransactionsAsync(string customerId, string? cursor, int limit, CancellationToken cancellationToken)
+        return accounts;
+    }
+
+    public async Task<Result<TransactionPage>> GetTransactionsAsync(string customerId, string? cursor, int limit, CancellationToken cancellationToken)
     {
         string path = cursor is null
             ? $"transactions?limit={limit}"
             : $"transactions?limit={limit}&cursor={Uri.EscapeDataString(cursor)}";
-        return SendAsync<TransactionPage>(GetRequest(path, customerId), cancellationToken);
+        Result<TransactionPage> page = await SendAsync<TransactionPage>(GetRequest(path, customerId), cancellationToken);
+        if (page.IsSuccess && !page.Value.Items.All(IsMasked))
+        {
+            return Unmasked();
+        }
+
+        return page;
     }
 
-    public Task<Result<Transaction>> GetTransactionAsync(string customerId, string accountRef, string transactionId, CancellationToken cancellationToken)
+    public async Task<Result<Transaction>> GetTransactionAsync(string customerId, string accountRef, string transactionId, CancellationToken cancellationToken)
     {
         // A value that is not shaped like an ID cannot exist, so it is not found. Stopping it here matters: a non-ASCII
         // value makes HttpClient fail before sending, which the resilience handler would count towards opening the
         // shared circuit, and a line break would be refused as a header value.
         if (!IdShape().IsMatch(accountRef) || !IdShape().IsMatch(transactionId))
         {
-            return Task.FromResult<Result<Transaction>>(CoreBankingErrors.NotFound);
+            return CoreBankingErrors.NotFound;
         }
 
         HttpRequestMessage request = GetRequest("transaction", customerId);
         request.Headers.Add("X-Account-Ref", accountRef);
         request.Headers.Add("X-Transaction-Id", transactionId);
-        return SendAsync<Transaction>(request, cancellationToken);
+        Result<Transaction> transaction = await SendAsync<Transaction>(request, cancellationToken);
+        if (transaction.IsSuccess && !IsMasked(transaction.Value))
+        {
+            return Unmasked();
+        }
+
+        return transaction;
     }
+
+    /// <summary>
+    /// Full account and card numbers never enter DisputeDesk (AD-21, NFR-SEC-5). An answer that breaks the masking is
+    /// treated like any other broken answer, as Unavailable, so it is never passed on.
+    /// </summary>
+    private static bool IsMasked(Transaction transaction) =>
+        Last4Shape().IsMatch(transaction.AccountLast4)
+        && (transaction.MaskedCard is null || MaskedCardShape().IsMatch(transaction.MaskedCard));
+
+    /// <summary>Logs that an answer broke the masking, without any of its values, and returns Unavailable.</summary>
+    private Error Unmasked()
+    {
+        LogUnmasked(logger);
+        return CoreBankingErrors.Unavailable;
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Core banking answered with an unmasked account or card number; treated as unavailable")]
+    private static partial void LogUnmasked(ILogger logger);
 
     private static HttpRequestMessage GetRequest(string path, string customerId)
     {
@@ -125,4 +168,12 @@ public sealed partial class CoreBankingClient(HttpClient http) : ICoreBankingCli
     // \z, not $, so a trailing line break does not match.
     [GeneratedRegex(@"^[A-Z0-9-]{1,32}\z")]
     private static partial Regex IdShape();
+
+    // The last 4 digits of an account number. [0-9], not \d, which also matches other scripts' digits.
+    [GeneratedRegex(@"^[0-9]{4}\z")]
+    private static partial Regex Last4Shape();
+
+    // A card's first 6 and last 4 digits with the 6 in between masked, such as 492181******4417.
+    [GeneratedRegex(@"^[0-9]{6}\*{6}[0-9]{4}\z")]
+    private static partial Regex MaskedCardShape();
 }

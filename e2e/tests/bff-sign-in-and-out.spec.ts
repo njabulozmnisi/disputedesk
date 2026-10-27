@@ -40,12 +40,12 @@ test('anonymous caller: session is anonymous and antiforgery is a 401 problem', 
   expect(expectProblemShape(await antiforgery.json(), 'unauthorized', 401)).toEqual([]);
 });
 
-test('sign-in lands on / with an unlinked session and one hashed row', async () => {
+test('sign-in lands on / with a linked session (customer A is seeded linked) and one hashed row', async () => {
   await signInThroughHostedLogin(page, '/api/v1/bff/login');
   expect(new URL(page.url()).pathname).toBe('/');
 
   const session = await page.request.get('/api/v1/bff/session');
-  expect(await session.json()).toEqual({ state: 'unlinked' });
+  expect(await session.json()).toEqual({ state: 'linked' });
 
   expect(sessionRows()).toBe(rowsBefore + 1);
   expect(queryDatabase('select min(length("KeyHash")) from "Sessions"')).toBe('32');

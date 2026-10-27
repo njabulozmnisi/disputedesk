@@ -1,11 +1,13 @@
 using System.ComponentModel.DataAnnotations;
 using DisputeDesk.Contracts.Bff;
+using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -20,7 +22,7 @@ public static class BffEndpoints
         RouteGroupBuilder bff = apiV1.MapGroup("/bff").WithTags("Bff");
 
         bff.MapGet("/login", LoginAsync).Produces(StatusCodes.Status302Found).ProducesValidationProblem();
-        bff.MapGet("/session", Session);
+        bff.MapGet("/session", SessionAsync);
         bff.MapGet("/antiforgery", Antiforgery).RequireAuthorization().ProducesProblem(StatusCodes.Status401Unauthorized);
         bff.MapPost("/logout", LogoutAsync).AddEndpointFilter<AntiforgeryFilter>()
             .Produces(StatusCodes.Status302Found).ProducesProblem(StatusCodes.Status400BadRequest);
@@ -42,11 +44,17 @@ public static class BffEndpoints
         return TypedResults.Challenge(new AuthenticationProperties { RedirectUri = redirectUri }, [OpenIdConnectDefaults.AuthenticationScheme]);
     }
 
-    private static Ok<SessionResponse> Session(HttpContext http)
+    /// <summary>Anonymous without a session; otherwise linked when <c>CustomerLinks</c> holds the session's login, else unlinked (AD-10).</summary>
+    private static async Task<Ok<SessionResponse>> SessionAsync(HttpContext http, AppDbContext db)
     {
-        bool isSignedIn = http.User.Identity?.IsAuthenticated == true;
-        // shortcut: a signed-in login is always unlinked until the linking story adds the CustomerLinks lookup.
-        return TypedResults.Ok(new SessionResponse(isSignedIn ? SessionState.Unlinked : SessionState.Anonymous));
+        string? loginSub = http.User.Identity?.IsAuthenticated == true ? http.User.FindFirst("sub")?.Value : null;
+        if (loginSub is null)
+        {
+            return TypedResults.Ok(new SessionResponse(SessionState.Anonymous));
+        }
+
+        bool isLinked = await db.Set<CustomerLink>().AnyAsync(link => link.LoginSub == loginSub, http.RequestAborted);
+        return TypedResults.Ok(new SessionResponse(isLinked ? SessionState.Linked : SessionState.Unlinked));
     }
 
     /// <summary>The request token for the <c>X-XSRF-TOKEN</c> header. It is bound to the login, so the SPA fetches it after sign-in.</summary>

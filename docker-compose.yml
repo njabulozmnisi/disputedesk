@@ -222,8 +222,15 @@ services:
       Bff__AntiforgeryCookie__Name: disputedesk-antiforgery
       Bff__Cookie__SecurePolicy: SameAsRequest
       Zitadel__RequireHttpsMetadata: "false"       # the local issuer is http://auth.localhost:8080
+      CoreBanking__BaseUrl: http://core-banking:8080
+      Sms__Host: mailpit                           # every SMS lands in the Mailpit inbox
+      Sms__Port: "1025"
+      Sms__UseTls: "false"                         # Mailpit accepts plain SMTP only
+      Seed__Enabled: "true"                        # links customers A and B to their fixture logins (AD-30)
+      Seed__FixturesPath: /fixtures/local.json
     volumes:
       - zitadel-clients:/run/zitadel:ro            # zitadel-clients.json (the Zitadel:* keys, client IDs and secrets)
+      - ./fixtures/local.json:/fixtures/local.json:ro   # the seed source, the same file the stub reads
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
       interval: 5s
@@ -234,6 +241,7 @@ services:
       postgres: { condition: service_healthy }
       redpanda-topics: { condition: service_completed_successfully }
       provision: { condition: service_completed_successfully }
+      core-banking: { condition: service_healthy }
     mem_limit: 512m
 
   worker:
