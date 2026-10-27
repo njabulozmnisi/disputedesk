@@ -101,3 +101,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Risk high: money and the commit path; beyond the criteria, the reviewer checks the migration names against AD-22.
+- Decision: 2026-10-27 — 2.7 security review: `already-disputed` (409) is returned only after the ownership check, so another customer's disputed transaction gives 404 `not-found`; the security review confirms the order.

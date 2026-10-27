@@ -53,3 +53,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Decision: 2026-10-26 — Gate 2: owner changes to `docs`, a docs agent rather than a builder.
 - Decision: 2026-10-27 — standards audit: the production path records migrations as a migration bundle run as a one-off job instead of every replica migrating at startup, and the deferred operations stories (see the initiative's scope decision).
 - Decision: 2026-10-27 — ad-008 records the NIST SP 800-63B deviation on restarted challenges and the bound that replaces it (criterion 1).
+- Decision: 2026-10-27 — 2.7 security review: the production path records that problem `type` URLs live under the GitHub namespace, an accepted risk (rename, deletion or repo-jacking would break or hijack them); production moves them to an owned domain.

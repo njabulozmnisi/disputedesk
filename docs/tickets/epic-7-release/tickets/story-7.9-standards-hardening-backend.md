@@ -64,3 +64,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Decision: 2026-10-27 — the behaviour-changing items of the standards audit and the 2.3 security re-review move here from 7.8a, so the sweep stays "no behaviour change". Data Protection key encryption at rest moved to story 7.4.
 - Runs in lane A after the stories whose code it hardens. `AllowedHosts` is owned by story 6.3 (forwarded headers), and the testing convention was corrected on 2026-10-27, so neither is repeated here.
 - Risk high: authorisation, sign-out and host handling; beyond the criteria, the security agent re-checks every endpoint's authorisation state.
+- Decision: 2026-10-27 — 2.7 review: each problem's `title` is the same for every occurrence of its type and matches its page (RFC 9457 §3.1.3); fold this into this story with a criterion before it starts.

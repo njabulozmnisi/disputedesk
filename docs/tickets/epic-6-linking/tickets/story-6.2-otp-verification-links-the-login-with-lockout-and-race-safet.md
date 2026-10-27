@@ -76,4 +76,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 - Decision: 2026-10-27 — a verify with no challenge row answers `otp-incorrect` like a wrong code; `linking-locked` is only for a locked challenge (AD-12, prd FR-6).
 - Risk high: account takeover; beyond the criteria, the security agent times correct and wrong comparisons.
-- Decision: 2026-10-27 — this story sets the HTTP status of `otp-incorrect` and `linking-locked` from the AD-3 error kinds and fills it into `docs/problems/otp-incorrect.md` and `linking-locked.md` (the supervisor updates the pages).
+- Decision: 2026-10-27 — `otp-incorrect` is 422 (`BusinessRule`, RFC 9110 §15.5.21) and `linking-locked` is 409 (`Conflict`, RFC 9110 §15.5.10); the problem pages state both.
