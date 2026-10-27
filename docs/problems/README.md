@@ -17,6 +17,6 @@ Every DisputeDesk error is an RFC 9457 problem details response whose `type` is 
 | [`idempotency-mismatch`](idempotency-mismatch.md) | 422 | Idempotency key reused |
 | [`linking-required`](linking-required.md) | 403 | Linking required |
 | [`already-linked`](already-linked.md) | 403 | Already linked |
-| [`otp-incorrect`](otp-incorrect.md) | story 6.2 | Code incorrect |
-| [`linking-locked`](linking-locked.md) | story 6.2 | Linking locked |
+| [`otp-incorrect`](otp-incorrect.md) | 422 | Code incorrect |
+| [`linking-locked`](linking-locked.md) | 409 | Linking locked |
 | [`core-banking-unavailable`](core-banking-unavailable.md) | 503 | Core banking unavailable |

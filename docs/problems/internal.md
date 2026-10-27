@@ -1,7 +1,7 @@
 # Internal error
 
 - Type: `https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/internal.md`
-- Status: 500
+- Status: 500, or another 5xx that has no slug of its own
 
 ## When it happens
 

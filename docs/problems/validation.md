@@ -1,7 +1,7 @@
 # Validation failed
 
 - Type: `https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/validation.md`
-- Status: 400
+- Status: 400, or another 4xx the request itself causes (for example 405 or 415), which keeps its own status
 
 ## When it happens
 
