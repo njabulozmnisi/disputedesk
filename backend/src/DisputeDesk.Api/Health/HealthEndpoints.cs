@@ -10,9 +10,18 @@ public static class HealthEndpoints
 
     public static IServiceCollection AddDisputeDeskHealthChecks(this IServiceCollection services)
     {
-        // Kafka (Redpanda) and Zitadel readiness checks arrive with the stories that introduce them.
+        services.AddSingleton<DatabaseMigrator>();
+        // The build writing openapi.json must never migrate a database (BuildTimeOpenApi).
+        if (!BuildTimeOpenApi.IsRunning)
+        {
+            services.AddHostedService(provider => provider.GetRequiredService<DatabaseMigrator>());
+        }
+
+        // Core banking is left out on purpose (AD-25): its outage is a 503 on the calls that need it, not "not ready".
         services.AddHealthChecks()
-            .AddDbContextCheck<AppDbContext>("postgres", tags: [ReadyTag]);
+            .AddDbContextCheck<AppDbContext>("postgres", tags: [ReadyTag])
+            .AddCheck<DatabaseMigrator>("migrations", tags: [ReadyTag])
+            .AddCheck<ZitadelDiscoveryCheck>("zitadel-discovery", tags: [ReadyTag]);
         return services;
     }
 

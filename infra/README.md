@@ -34,15 +34,20 @@ stack, whichever worktree started it. Run it only under the `stack` lock.
 - Logins for customers A, B and C come from [`fixtures/local.json`](../fixtures/local.json). Sign in with the username.
   The Zitadel console admin is `admin` / `Dev-Only-Admin-1`.
 - Zitadel's bootstrap PATs sit in two volumes: `zitadel-bootstrap` (the IAM_OWNER PAT, seen only by zitadel and
-  the provisioner) and `login-pat` (the login client's PAT, seen only by zitadel and zitadel).
-- Generated values (web app client ID and secret, operations-tools client secret, org and project IDs, the
-  Authority) are written by the provisioner to `zitadel-clients.json` in the `zitadel-clients` volume, shaped
-  as .NET configuration (`Zitadel:WebApp:ClientId` and so on). The api container mounts it at
+  the provisioner) and `login-pat` (the login client's PAT, seen only by zitadel and zitadel;
+  `scripts/dev-login.sh` reads it inside the zitadel container for one headless sign-in, never storing it).
+- Generated values are written by the provisioner to `zitadel-clients.json` in the `zitadel-clients` volume, shaped
+  as .NET configuration: the AD-26 keys `Zitadel:Issuer`, `Zitadel:MetadataAddress`, `Zitadel:ProjectId`,
+  `Zitadel:WebApp:ClientId` and `Zitadel:WebApp:ClientSecret`, plus the operations tools' client credentials
+  (`Zitadel:OperationsTools:*`, used by `smoke.sh`). The api container mounts it at
   `/run/zitadel/zitadel-clients.json` (owner 1654, the .NET images' app user, mode 0400). To read it from the host:
 
   ```sh
   docker compose run --rm --no-deps -T --entrypoint cat provision /out/zitadel-clients.json
   ```
+
+  The provisioner never changes an app or authorization that already exists, so after a change to what it creates
+  (for example the web app's roles, URIs or auth method), run `docker compose down -v` once to re-provision.
 
   The secrets are regenerated whenever the file is missing or describes another Zitadel instance, so
   `docker compose down -v` gives fresh ones.

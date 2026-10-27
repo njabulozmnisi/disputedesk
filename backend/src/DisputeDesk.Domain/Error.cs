@@ -1,15 +1,35 @@
 namespace DisputeDesk.Domain;
 
-/// <summary>An expected failure. Unexpected failures are exceptions. <see cref="Code"/> is a slug from the AD-3 catalogue.</summary>
+/// <summary>
+/// An expected failure. Unexpected failures are exceptions. <see cref="Code"/> is a slug from the AD-3 catalogue.
+/// The message never repeats an input value. Record equality compares the dictionaries by reference, so two errors
+/// are equal only when they have no field errors or extensions and the same kind, code and message.
+/// </summary>
 public sealed record Error(ErrorKind Kind, string Code, string Message)
 {
+    private static readonly Dictionary<string, string[]> NoFieldErrors = [];
+    private static readonly Dictionary<string, object?> NoExtensions = [];
+
+    /// <summary>For <see cref="ErrorKind.Validation"/>: the message for each field that failed, keyed by field name.</summary>
+    public IReadOnlyDictionary<string, string[]> FieldErrors { get; private init; } = NoFieldErrors;
+
+    /// <summary>Extra members of the problem body, such as the caller's view of the current status.</summary>
+    public IReadOnlyDictionary<string, object?> Extensions { get; private init; } = NoExtensions;
+
     public static Error NotFound(string code, string message) => new(ErrorKind.NotFound, code, message);
 
-    public static Error Validation(string code, string message) => new(ErrorKind.Validation, code, message);
+    /// <summary>A field rule failed, such as the trimmed note length. <paramref name="field"/> names the field.</summary>
+    public static Error Validation(string code, string message, string field) =>
+        new(ErrorKind.Validation, code, message) { FieldErrors = new Dictionary<string, string[]> { [field] = [message] } };
 
     public static Error Forbidden(string code, string message) => new(ErrorKind.Forbidden, code, message);
 
-    public static Error ActionNotAllowed(string code, string message) => new(ErrorKind.ActionNotAllowed, code, message);
+    /// <summary>
+    /// The action is not allowed in the current status. <paramref name="statusField"/> names the extension that
+    /// carries <paramref name="currentStatus"/>: <c>customerStatus</c> for customers, <c>status</c> for operations.
+    /// </summary>
+    public static Error ActionNotAllowed(string code, string message, string statusField, Enum currentStatus) =>
+        new(ErrorKind.ActionNotAllowed, code, message) { Extensions = new Dictionary<string, object?> { [statusField] = currentStatus } };
 
     public static Error Conflict(string code, string message) => new(ErrorKind.Conflict, code, message);
 
