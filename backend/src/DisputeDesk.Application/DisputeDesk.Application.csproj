@@ -3,4 +3,8 @@
     <ProjectReference Include="..\DisputeDesk.Contracts\DisputeDesk.Contracts.csproj" />
     <ProjectReference Include="..\DisputeDesk.Domain\DisputeDesk.Domain.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- For DbSet<T> and its async queries behind IAppDbContext (AD-2); never a database provider. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+  </ItemGroup>
 </Project>

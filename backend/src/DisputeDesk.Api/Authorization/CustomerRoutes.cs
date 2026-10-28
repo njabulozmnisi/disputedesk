@@ -1,3 +1,4 @@
+using DisputeDesk.Api.Bff;
 using DisputeDesk.Application.Abstractions;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -26,10 +27,14 @@ public static class CustomerRoutes
         return services;
     }
 
-    /// <summary>The group customer features map their endpoints onto.</summary>
+    /// <summary>
+    /// The group customer features map their endpoints onto. Every unsafe request on it needs the antiforgery token
+    /// (AD-7); the filter lets safe methods through.
+    /// </summary>
     public static RouteGroupBuilder MapCustomerRoutes(this RouteGroupBuilder apiV1) =>
         apiV1.MapGroup("")
             .RequireAuthorization(LinkedPolicy)
+            .AddEndpointFilter<AntiforgeryFilter>()
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden);
 }
