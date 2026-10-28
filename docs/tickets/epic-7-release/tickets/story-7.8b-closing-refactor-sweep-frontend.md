@@ -55,3 +55,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 - Runs alone, after 7.8a is merged: no other builder lane is active.
 - Decision: 2026-10-26 — Gate 2: split from the closing refactor sweep (7.8) as 7.8b, owner frontend.
+- Input (from 2.4 QA, 2026-10-28): each route change focuses the `<h1>`, so the first Tab skips the header and there is no skip link; consider a skip link (WCAG 2.2 SC 2.4.1). Also from 2.4's review: the bare `reason satisfies never;` statement passes ESLint only because `no-unused-expressions` does not unwrap `satisfies`.
