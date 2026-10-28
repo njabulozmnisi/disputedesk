@@ -1,0 +1,17 @@
+{
+  "specversion": "1.0",
+  "id": "019a2a3c-7e40-7c3a-9a61-2f4c1d8e0b51",
+  "source": "/disputedesk/api",
+  "type": "disputedesk.dispute.raised.v1",
+  "subject": "019a2a3c-7e40-7b11-8d2e-6a0f3c9e4d27",
+  "time": "2026-10-26T08:15:30.123456Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://github.com/njabulozmnisi/disputedesk/blob/main/contracts/events/disputedesk.dispute.raised.v1.schema.json",
+  "data": {
+    "disputeId": "019a2a3c-7e40-7b11-8d2e-6a0f3c9e4d27",
+    "reason": "wrongAmount",
+    "status": "submitted",
+    "occurredAt": "2026-10-26T08:15:30.123456Z",
+    "disputeVersion": 1
+  }
+}
