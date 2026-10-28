@@ -55,13 +55,39 @@ section "api readiness through the gateway"
 [ "$(curl -fsS "$GW/api/health/ready")" = Healthy ] || fail "api readiness"
 ok "GET $GW/api/health/ready -> Healthy"
 
-section "gateway: placeholder page and security headers"
+section "gateway: the SPA and security headers, each exactly once"
 curl -fsS -o /dev/null "$GW/" && ok "GET $GW/ -> 200"
-headers=$(curl -fsSI "$GW/")
-for h in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
-  line=$(grep -i "^$h:" <<< "$headers") || fail "missing header $h"
-  ok "$(tr -d '\r' <<< "$line")"
+for path in / /api/health/live; do
+  headers=$(curl -fsSI "$GW$path")
+  for h in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
+    [ "$(grep -ic "^$h:" <<< "$headers")" = 1 ] || fail "$path: header $h is not sent exactly once"
+    ok "$path $(grep -i "^$h:" <<< "$headers" | tr -d '\r')"
+  done
+  # Locally GATEWAY_HSTS is empty, and nginx must then send no Strict-Transport-Security at all.
+  ! grep -qi '^strict-transport-security:' <<< "$headers" || fail "$path: HSTS sent over plain HTTP"
+  ok "$path no strict-transport-security"
 done
+# The Api owns Cache-Control on its responses; the gateway adds none of its own.
+cache_control=$(curl -fsSI "$GW/api/health/live" | grep -i '^cache-control:' | tr -d '\r')
+[ "$(grep -c . <<< "$cache_control")" = 1 ] || fail "/api/health/live: not exactly one cache-control: $cache_control"
+grep -qi 'no-store' <<< "$cache_control" || fail "/api/health/live: cache-control without no-store: $cache_control"
+ok "/api/health/live $cache_control"
+
+section "gateway: the coarse limit's 429"
+# Rapid requests exceed 10 r/s with burst 20. The path ends in .json, so the 429 proves its Content-Type does not
+# come from the extension.
+limited=""
+for _ in $(seq 40); do
+  response=$(curl -sS -D - -o /dev/null "$GW/api/limit-probe.json" | tr -d '\r')
+  if head -1 <<< "$response" | grep -q ' 429'; then limited=$response; break; fi
+done
+[ -n "$limited" ] || fail "40 rapid requests to /api/ got no 429"
+grep -qi '^content-type: application/problem+json$' <<< "$limited" || fail "429 content type: $limited"
+grep -qi '^retry-after: 1$' <<< "$limited" || fail "429 has no Retry-After: 1: $limited"
+for h in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
+  [ "$(grep -ic "^$h:" <<< "$limited")" = 1 ] || fail "429: header $h is not sent exactly once"
+done
+ok "429 with application/problem+json, Retry-After: 1 and each security header once"
 
 section "Zitadel discovery and Login v2 at auth.localhost"
 discovery=$(curl -fsS "$AUTH/.well-known/openid-configuration")

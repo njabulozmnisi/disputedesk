@@ -1,0 +1,8 @@
+# Builds with the repository root as their context (the gateway image, infra/nginx/Dockerfile) get only what they
+# read: the frontend sources and the nginx templates. Everything else, .env files and .git included, stays out.
+*
+!frontend/
+!infra/nginx/
+frontend/.env*
+frontend/node_modules/
+frontend/dist/

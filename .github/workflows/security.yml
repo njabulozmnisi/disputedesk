@@ -50,29 +50,38 @@ jobs:
       - name: Scan full history
         run: gitleaks git --config .gitleaks.toml --redact --no-banner .
 
+  # One job per language: build-mode applies to a single language per job, so CodeQL's documented form is a matrix.
   codeql:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
       security-events: write # upload results to code scanning
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [csharp, javascript-typescript]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # Build mode none still restores NuGet packages, which needs the SDK that global.json pins.
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: backend/global.json
 
-      # Build mode none is GitHub's default for C#: it analyses the source without compiling it.
+      # Build mode none analyses the source without compiling it: GitHub's default for C#, and the only mode for
+      # JavaScript and TypeScript (frontend/ and e2e/).
       - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
-          languages: csharp
+          languages: ${{ matrix.language }}
           build-mode: none
 
       - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:${{ matrix.language }}
 
   vulnerable-packages:
     runs-on: ubuntu-24.04
@@ -116,12 +125,15 @@ jobs:
       - name: Filesystem and config scan
         run: trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 1 --ignorefile .github/trivyignore.yaml .
 
-      - name: Build the api and worker images
+      # The gateway builds from the repository root, so its one build reads frontend/ and infra/nginx/.
+      - name: Build the api, worker and gateway images
         run: |
           docker build -t disputedesk-api:ci backend
           docker build -t disputedesk-worker:ci --target worker backend
+          docker build -t disputedesk-gateway:ci -f infra/nginx/Dockerfile .
 
       - name: Image scan
         run: |
           trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-api:ci
           trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-worker:ci
+          trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-gateway:ci
