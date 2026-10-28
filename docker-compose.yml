@@ -1,5 +1,5 @@
 # DisputeDesk local platform. `docker compose up --wait` brings everything up configured, zero clicks.
-#   http://localhost:8080                 gateway: app origin (placeholder page, /api/ -> api)
+#   http://localhost:8080                 gateway: app origin (the SPA, /api/ -> api, /otlp/v1/* -> Aspire)
 #   http://auth.localhost:8080            gateway: Zitadel API, console and Login v2
 #   http://localhost:8025                 Mailpit (verification and reset emails)
 #   http://localhost:18888                Aspire dashboard (traces, metrics, logs)
@@ -274,13 +274,20 @@ services:
       retries: 20
     mem_limit: 512m
 
-  gateway:
-    image: nginx:1.31.8-alpine@sha256:1ef7ca94d7879df82421428ce13bd1eaa412404953859cf7a5b6512c25e67a60
+  gateway:   # the SPA and the edge rules; runs as the image's non-root nginx user (infra/nginx/Dockerfile)
+    image: disputedesk-gateway:local
+    build: { context: ., dockerfile: infra/nginx/Dockerfile }   # the repo root, so it reads frontend/ too
     restart: unless-stopped
     ports: ["127.0.0.1:8080:8080"]
-    volumes:
-      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./infra/nginx/html:/usr/share/nginx/html:ro
+    environment:
+      # Rendered into the nginx templates at start (infra/nginx/templates). Hosts are Host header values (with the
+      # port); the server name is the identity host as nginx matches it (without the port).
+      GATEWAY_APP_HOST: localhost:8080
+      GATEWAY_AUTH_HOST: auth.localhost:8080
+      GATEWAY_AUTH_SERVER_NAME: auth.localhost
+      GATEWAY_AUTH_ORIGIN: http://auth.localhost:8080              # the CSP form-action origin
+      GATEWAY_HSTS: ""                                             # plain HTTP locally; set behind HTTPS in AWS
+      GATEWAY_OTLP_ENDPOINT: http://aspire-dashboard:18890         # the dashboard's OTLP/HTTP receiver
     networks:
       default:
         aliases: ["auth.localhost"]                # containers reach the issuer at the same URL as browsers
@@ -295,6 +302,7 @@ services:
       api: { condition: service_started }
       zitadel: { condition: service_healthy }
       zitadel-login: { condition: service_healthy }
+      aspire-dashboard: { condition: service_started }
     mem_limit: 64m
 
 volumes:

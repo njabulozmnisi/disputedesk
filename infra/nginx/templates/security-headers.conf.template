@@ -1,0 +1,13 @@
+# The app origin's browser security headers, each set exactly once per response (OWASP HTTP Headers Cheat Sheet;
+# AD-23); the Api sets none of them. nginx inherits add_header from the level above only when a level defines none,
+# so nginx.conf includes this file in the server block and again in every block that adds a header of its own.
+# form-action allows the identity origin because the sign-in redirect chain ends there.
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' ${GATEWAY_AUTH_ORIGIN}" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "DENY" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+add_header Cross-Origin-Opener-Policy "same-origin" always;
+# HSTS only where the public origin is HTTPS (AWS). Locally GATEWAY_HSTS is empty, and nginx sends no header
+# whose value is empty.
+add_header Strict-Transport-Security "${GATEWAY_HSTS}" always;

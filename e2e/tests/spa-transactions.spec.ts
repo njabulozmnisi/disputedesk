@@ -4,11 +4,11 @@ import { execFileSync } from 'node:child_process';
 import { fixtureLogin, gatewayContentSecurityPolicy, queryDatabase, sessionCookieName } from './support';
 
 // Story 2.4: the SPA shell, session routing and the transactions screen, through the real BFF and Zitadel.
-// Until story 2.5 the gateway does not serve the SPA, so run `npm run build` and `npx vite preview --port 4173` in
-// frontend/ first (it proxies /api to the gateway on :8080). Set SPA_ORIGIN to point somewhere else.
+// Since story 2.5 the gateway serves the SPA, so SPA_ORIGIN defaults to the gateway and the browser sees the real
+// security headers. Set SPA_ORIGIN to point somewhere else (for example `vite preview` on :4173, which sends no CSP).
 // The browser clock for the inactivity warning is Playwright's, so no test waits 13 minutes.
 
-const spa = process.env.SPA_ORIGIN ?? 'http://localhost:4173';
+const spa = process.env.SPA_ORIGIN ?? 'http://localhost:8080';
 const gateway = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const coreBankingContainer = 'disputedesk-core-banking-1';
 const axeTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
@@ -22,6 +22,9 @@ type ApiRow = {
   notDisputableReason: string | null;
 };
 type ApiPage = { items: ApiRow[]; nextCursor: string | null };
+
+/** The one console error accepted by decision (story 2.5 criterion 7): Radix's scroll-lock <style> under style-src 'self'. */
+const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
 
 const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -57,6 +60,7 @@ async function signIn(browser: Browser, loginKey: string, timezoneId?: string): 
  * SPA is on another port, so that origin is added to form-action to stand in for it.
  */
 async function withGatewayCsp(page: Page) {
+  if (spa === gateway) return; // the gateway sends its own CSP; do not replace it with a copy
   await page.route(`${spa}/**`, async (route) => {
     const request = route.request();
     if (request.resourceType() !== 'document' || request.method() !== 'GET' || new URL(request.url()).pathname.startsWith('/api/')) return route.fallback();
@@ -389,7 +393,7 @@ test.describe('inactivity warning (Playwright clock)', () => {
     const { context, page } = await signIn(browser, 'customer-a');
     const consoleErrors: string[] = [];
     page.on('console', (message) => {
-      if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 160));
+      if (message.type() === 'error') consoleErrors.push(message.text());
     });
     await withGatewayCsp(page);
     await page.clock.install();
@@ -404,8 +408,9 @@ test.describe('inactivity warning (Playwright clock)', () => {
     await expect(dialog).toContainText("You'll be signed out soon.");
     await expect(dialog).toContainText('For your security, we sign you out after 15 minutes without activity.');
     await expectNoAxeViolations(page);
-    // Radix scroll lock injects a <style>; the gateway CSP (style-src 'self') blocks it. Recorded, accepted by decision.
-    test.info().annotations.push({ type: 'csp-console', description: consoleErrors.join(' || ') || 'none' });
+    // Radix scroll lock injects a <style>; the gateway CSP (style-src 'self') blocks it (story 2.5 criterion 7, accepted
+    // by decision). Any other console error, CSP or not, fails the test.
+    expect(consoleErrors.filter((text) => !knownRadixStyleViolation.test(text))).toEqual([]);
 
     // Escape acts as "Stay signed in": one GET /session, then the dialog closes.
     let sessionCalls = 0;

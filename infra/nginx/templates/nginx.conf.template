@@ -1,0 +1,146 @@
+# DisputeDesk gateway: the single entry point of the platform.
+#   app origin       the SPA; /api/ -> api; /otlp/v1/* -> the OTLP/HTTP receiver
+#   identity origin  Zitadel API, console and Login v2 (/ui/v2/login)
+#
+# A template: at start, the image's entrypoint renders /etc/nginx/templates/*.template with envsubst into /etc/nginx,
+# filling in the GATEWAY_* variables that docker-compose.yml sets. A variable left unset stays as ${NAME}. Where nginx
+# reads that as a variable (proxy_set_header, proxy_pass, add_header), it rejects it as unknown and the gateway refuses
+# to start; server_name takes no variables, so there it would stay a literal name that no request matches.
+#
+# This is the edge: upstreams get a fixed Host for their origin (never the client's raw Host, which only has to match
+# server_name, port aside) and X-Forwarded-For is the peer address, not a client-supplied chain. This is the local
+# edge; trusting CloudFront's client address and scheme in AWS is story 7.4.
+worker_processes 1;
+pid /tmp/nginx.pid;
+
+events { worker_connections 1024; }
+
+http {
+  include       /etc/nginx/mime.types;
+  default_type  application/octet-stream;
+  sendfile      on;
+  server_tokens off;
+  access_log    /var/log/nginx/access.log;
+
+  # The image runs as a non-root user, which can write only under /tmp (the image's own defaults).
+  client_body_temp_path /tmp/client_temp;
+  proxy_temp_path       /tmp/proxy_temp;
+  fastcgi_temp_path     /tmp/fastcgi_temp;
+  uwsgi_temp_path       /tmp/uwsgi_temp;
+  scgi_temp_path        /tmp/scgi_temp;
+
+  upstream api           { server api:8080;           keepalive 16; }
+  upstream zitadel_api   { server zitadel:8080;       keepalive 16; }
+  upstream zitadel_login { server zitadel-login:3000; keepalive 16; }
+
+  # The coarse per-client limit on /api/ and /otlp/ (AD-23): 10 requests per second, with bursts of up to 20 served
+  # at once (nodelay) instead of queued. A rejected request gets 429 (RFC 6585).
+  limit_req_zone $binary_remote_addr zone=coarse:10m rate=10r/s;
+  limit_req_status 429;
+
+  # ---------------------------------------------------------------------------------------------
+  # App origin: every host that is not the identity origin.
+  # ---------------------------------------------------------------------------------------------
+  server {
+    listen 8080 default_server;
+
+    include /etc/nginx/security-headers.conf;
+
+    # The gateway's own 429 as RFC 9457 problem details. No traceId: nginx has no trace context (AD-3).
+    # Retry-After in seconds (RFC 9110 10.2.3), matching the 10r/s limit. This block adds a header, so it repeats the
+    # rest. The empty types block stops nginx picking a Content-Type from the request's extension (a limited .json).
+    error_page 429 @rate_limited;
+    location @rate_limited {
+      include /etc/nginx/security-headers.conf;
+      add_header Retry-After "1" always;
+      types { }
+      default_type application/problem+json;
+      return 429 '{"type":"https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/rate-limited.md","title":"Too many requests","status":429}';
+    }
+
+    # The SPA: client-side routes fall back to index.html, but a missing build file is a plain 404.
+    root /usr/share/nginx/html;
+    location / { try_files $uri /index.html; }
+    location /assets/ { try_files $uri =404; }
+
+    # The api keeps its health endpoints at the root (/health/*); expose them under /api/health/*.
+    location /api/health/ {
+      limit_req zone=coarse burst=20 nodelay;
+      proxy_pass http://api/health/;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-For $remote_addr;
+    }
+
+    # Everything else under /api/ keeps its path: the api serves /api/v1/... itself.
+    location /api/ {
+      limit_req zone=coarse burst=20 nodelay;
+      proxy_pass http://api;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-For $remote_addr;
+    }
+
+    # The SPA's telemetry, same origin so the CSP keeps connect-src 'self' (AD-29). OTLP/HTTP exporters only POST
+    # to the three signal paths, so anything else is refused. /otlp/v1/traces goes to <endpoint>/v1/traces.
+    location ~ ^/otlp/v1/(traces|metrics|logs)$ {
+      if ($request_method != POST) {
+        # A 405 must list the allowed methods (RFC 9110 15.5.6). This block adds a header, so it repeats the rest.
+        include /etc/nginx/security-headers.conf;
+        add_header Allow "POST" always;
+        return 405;
+      }
+      limit_req zone=coarse burst=20 nodelay;
+      client_max_body_size 1m;
+      rewrite ^/otlp(/.*)$ $1 break;
+      proxy_pass ${GATEWAY_OTLP_ENDPOINT};
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      # The receiver needs no credentials, so the session and antiforgery cookies and any Authorization stay at the
+      # edge (an empty value is not passed upstream).
+      proxy_set_header Cookie "";
+      proxy_set_header Authorization "";
+      proxy_set_header X-Forwarded-For $remote_addr;
+    }
+  }
+
+  # ---------------------------------------------------------------------------------------------
+  # Identity origin: Zitadel API and Login v2 on one host (a separate login origin fights the
+  # login's own CSP, see the Zitadel lab notes). Zitadel resolves its instance from the Host,
+  # which must be exactly ExternalDomain:ExternalPort. No app CSP here: the login sets its own.
+  # ---------------------------------------------------------------------------------------------
+  server {
+    listen 8080;
+    server_name ${GATEWAY_AUTH_SERVER_NAME};
+
+    location /ui/v2/login {
+      proxy_pass http://zitadel_login;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_AUTH_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_AUTH_HOST};
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-For $remote_addr;
+    }
+
+    location = / { return 302 /ui/v2/login/; }
+
+    # OIDC, REST, Connect (HTTP/1.1), console and assets.
+    location / {
+      proxy_pass http://zitadel_api;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_AUTH_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_AUTH_HOST};
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_buffering off;
+    }
+  }
+}
