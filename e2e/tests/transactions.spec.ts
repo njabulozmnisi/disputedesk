@@ -120,8 +120,9 @@ test('a non-numeric limit is 400 validation, not a server error', async () => {
 
 test('row fields: money as string, masked card and account, camelCase enums, disputability', async () => {
   const rows = await listAll(contexts.a.request, 50);
-  const json = JSON.stringify(rows);
-  expect(json).not.toMatch(/\d{10}/); // no full account, card or ID number anywhere
+  // No full account, card or ID number anywhere. A dispute ID is a UUID whose random tail can hold ten digits, so UUIDs are removed first.
+  const json = JSON.stringify(rows).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '');
+  expect(json).not.toMatch(/\d{10}/);
   for (const row of rows) {
     expect(row.accountLast4).toMatch(/^\d{4}$/);
     if (row.maskedCard) expect(row.maskedCard).toMatch(/^\d{6}\*{6}\d{4}$/);
@@ -134,7 +135,9 @@ test('row fields: money as string, masked card and account, camelCase enums, dis
   const pending = rows.find((row: any) => row.state === 'pending');
   expect(pending).toMatchObject({ disputable: false, notDisputableReason: 'notEligible' });
   const reasons = new Set(rows.filter((row) => !row.disputable).map((row) => row.notDisputableReason));
-  expect(reasons).toEqual(new Set(['notEligible', 'outsideWindow']));
+  // Story 3.1 added alreadyDisputed, which appears once the customer has raised a dispute (the data is not reset between runs).
+  expect(reasons.has('notEligible') && reasons.has('outsideWindow')).toBe(true);
+  expect([...reasons].filter((reason) => !['notEligible', 'outsideWindow', 'alreadyDisputed'].includes(reason as string))).toEqual([]);
 });
 
 test('CustomerLinks holds exactly customers A and B', async () => {
