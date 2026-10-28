@@ -403,7 +403,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
 | PostgreSQL (container) | 18.6 |
 | Redpanda | v26.2.2 |
 | Zitadel / Zitadel Login | v4.20.0 |
-| nginx | 1.31.8 |
+| nginx (`nginxinc/nginx-unprivileged`) | 1.31.7 (1.31.8 has no unprivileged build yet and no security fixes) |
 | Mailpit | v1.32.0 |
 | Node | 24.22.1 (`.nvmrc`) |
 | React / Vite | 19.3.1 / 8.3.5 |
