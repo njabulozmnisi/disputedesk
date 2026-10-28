@@ -32,6 +32,9 @@ Merge only when every stage passes and CI is green. Agents are in `.claude/agent
 ## Dispatch rules
 
 - Two builder lanes at most, one Testcontainers slot, one verifier story at a time, one QA run at a time behind `scripts/test-lock.sh`.
+- Sized for the build machine: 16 GB RAM, 12 cores, Docker VM capped at 8 GB. A backend lane peaks near 2 GB on the host (build plus the full suite); the Compose stack can take up to 5.8 GB of the VM, so only one stack runs at a time.
+- Memory gate: dispatch a new lane only while `sysctl -n kern.memorystatus_vm_pressure_level` prints `1` (normal); on `2` or `4`, wait for a lane to finish. Read-only stages (reviewer, security, challenger, verifier) cost little locally and may run beside a builder.
+- Stop the Compose stack (`docker compose stop`) whenever no one holds the `stack` lock.
 - The story (a vertical slice) is the parallel unit. Start sequentially (platform baseline, then the tracer bullet), run the middle in parallel, finish with a sequential refactor sweep.
 - Collision check before dispatching two stories together: no shared files, never two migrations at once.
 - Frontend work starts once the API contract (`openapi.json`) is merged.
