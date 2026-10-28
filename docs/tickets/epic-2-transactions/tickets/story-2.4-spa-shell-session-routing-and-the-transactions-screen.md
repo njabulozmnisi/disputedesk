@@ -70,7 +70,7 @@ Verify: `npm run build`, `tsc --noEmit`, ESLint, Prettier and Vitest pass.
 9. **Inactivity warning before the idle sign-out** (R2, R40; FR-2, NFR-CODE-6)
    **Given** a signed-in person with no API request for 13 minutes
    **When** the SPA's idle timer fires, 2 minutes before the 15-minute idle sign-out (well over the 20 seconds WCAG 2.2 SC 2.2.1 requires)
-   **Then** a shadcn/ui `AlertDialog` shows the EXPERIENCE.md warning; "Stay signed in" calls `GET /api/v1/bff/session`, which renews the idle limit (AD-7), and closes the dialog only after that succeeds; a 401 from it goes to `/signed-out?reason=expired`; "Sign out" submits the sign-out form
+   **Then** a shadcn/ui `AlertDialog` shows the EXPERIENCE.md warning; "Stay signed in" calls `GET /api/v1/bff/session`, which renews the idle limit (AD-7), and closes the dialog only after that succeeds; an answer of `anonymous` (the endpoint allows anonymous callers and answers 200 `{ "state": "anonymous" }` once the session has ended) or a 401 goes to `/signed-out?reason=expired`; Escape acts as "Stay signed in" (WAI-ARIA APG alertdialog pattern); "Sign out" submits the sign-out form
    **And** while signed in, every API response other than a 401 restarts the timer (the server renews on every authenticated request), and component tests drive it with fake timers, including a 401 during Load more
    **And** the timer is per tab and only presents the warning; the server enforces the idle limit (OWASP Session Management, idle timeout). Mark it `// shortcut: per-tab idle timer, another tab's activity can only make the warning early, never late; share it with BroadcastChannel if early warnings confuse people`
 

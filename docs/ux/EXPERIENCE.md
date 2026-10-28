@@ -94,6 +94,7 @@ Plain, calm, short. Second person. Say what happened and what to do next. Use th
 | Already disputed | The dispute's status badge, linking to the dispute |
 | Credit | "Money in. Not disputable." |
 | Transfer between own accounts | "Transfer between your accounts. Not disputable." |
+| Settled debit that is not a card payment (fee, payment to someone else) | "Not a card payment. Contact the bank about this transaction." |
 
 **After a Rejected outcome** (static, FR-17): "If you disagree with this outcome, you can complain to the bank first. If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers." [ASSUMPTION: no bank complaint contact details or ombud contact details are shown; static text only.]
 

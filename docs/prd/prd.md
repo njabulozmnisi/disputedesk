@@ -294,6 +294,7 @@ Each transaction row shows either that it is disputable or the status badge of i
   - pending transactions;
   - credits;
   - transfers between the customer's own accounts;
+  - debits that are not card payments, such as fees and payments to someone else, because a dispute becomes a card-scheme chargeback (glossary, "Disputable transaction"; decided 2026-10-28);
   - transactions whose transaction date is more than 90 days ago.
 - A transaction with a dispute in any status, including Withdrawn and Resolved, shows that dispute's customer-facing status (FR-17) and is not disputable.
 - The 90 days are counted in South African calendar days. A transaction dated D is disputable until the end of day D + 90, inclusive [ASSUMPTION]. Boundary tests cover D + 90 and D + 91.
