@@ -61,6 +61,49 @@ jobs:
       # Integration tests start Postgres with Testcontainers on the runner's Docker.
       - run: dotnet test --solution DisputeDesk.slnx --no-build
 
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The same Node version as local development and the gateway image's build stage.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - run: npm ci
+
+      # Production dependencies only (what ships in the gateway image); fails on a High or Critical advisory.
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - name: Formatting
+        run: npm run format
+
+      - run: npm test
+
+      # Orval regenerates the client from backend/openapi.json. Any difference from the committed files, new files
+      # included, is drift.
+      - name: Orval drift
+        run: |
+          npm run generate
+          changes=$(git status --porcelain -- src/api/generated)
+          if [[ -n "$changes" ]]; then
+            echo "::error::src/api/generated does not match backend/openapi.json; run npm run generate and commit."
+            printf '%s\n' "$changes"
+            exit 1
+          fi
+
   platform:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
