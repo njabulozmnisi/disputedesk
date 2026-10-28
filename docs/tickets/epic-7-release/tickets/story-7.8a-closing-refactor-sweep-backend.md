@@ -56,3 +56,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Runs alone: no other builder lane is active.
 - Decision: 2026-10-26 — Gate 2: the closing sweep is split into 7.8a backend (owner backend) and 7.8b frontend (owner frontend), run sequentially after everything else.
 - Decision: 2026-10-27 — the standards items once listed here (deny by default, `AllowedHosts`, sign-out through the OIDC handler, `TotalRequestTimeout`, Production-environment tests, the testing convention) moved to story 7.9, and Data Protection keys at rest to 7.4; this sweep is again no behaviour change and waits on 7.9.
+- Input (from 2.5 review, 2026-10-28): `infra/smoke.sh` 429 loop sends 40 requests and can miss the limit on a slow host; raise it (it stops at the first 429). Under `pipefail` a missing `cache-control` line exits without `SMOKE FAIL` (wrap the `grep` with `|| true`). In `SecurityHeadersTests`, rename `isApiResponse` to `isUnderApiPath`.
