@@ -1,0 +1,57 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import './theme/tokens.css';
+
+@layer base {
+  html {
+    /* Focus is never hidden under the phone tab bar (EXPERIENCE.md, Accessibility Floor). */
+    scroll-padding-bottom: calc(var(--spacing) * 24);
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #root {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+  }
+
+  a {
+    color: var(--primary);
+    font-weight: var(--weight-label);
+    text-underline-offset: 3px;
+  }
+
+  a:hover {
+    color: var(--primary-hover);
+  }
+
+  a:active {
+    color: var(--primary-pressed);
+  }
+
+  /* A heading takes focus when the route changes; it is not a control, so it shows no ring. */
+  h1[tabindex='-1']:focus {
+    outline: none;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  h1,
+  h2,
+  h3,
+  p,
+  ul,
+  ol {
+    margin: 0;
+  }
+}
