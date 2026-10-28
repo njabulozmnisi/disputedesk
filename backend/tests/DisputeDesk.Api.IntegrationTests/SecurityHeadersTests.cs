@@ -3,30 +3,37 @@ using DisputeDesk.Api.IntegrationTests.Infrastructure;
 
 namespace DisputeDesk.Api.IntegrationTests;
 
-/// <summary>The Api's own response headers. CSP is set by the nginx gateway, not here.</summary>
+/// <summary>
+/// The Api's own response headers. The nginx gateway owns the browser security headers (CSP,
+/// X-Content-Type-Options, Referrer-Policy and the rest), so the Api must not send them too: each header appears
+/// once per response (AD-23).
+/// </summary>
 public class SecurityHeadersTests(PostgresFixture postgres)
 {
-    public static TheoryData<string, bool, HttpStatusCode> Responses => new()
+    public static TheoryData<string, HttpStatusCode, bool> Responses => new()
     {
-        { "/health/live", false, HttpStatusCode.OK },
-        { "/api/v1/no-such-route", false, HttpStatusCode.NotFound },
+        { "/health/live", HttpStatusCode.OK, false },
+        { "/api/v1/no-such-route", HttpStatusCode.NotFound, true },
         // The exception handler clears the response headers before writing the 500, so this case matters.
-        { "/health/live", true, HttpStatusCode.InternalServerError },
+        { ThrowProbe.Path, HttpStatusCode.InternalServerError, true },
     };
 
     [Theory]
     [MemberData(nameof(Responses))]
-    public async Task UseSecurityHeaders_AnyResponse_SetsNosniffAndNoReferrer(string path, bool throwing, HttpStatusCode expectedStatus)
+    public async Task UseSecurityHeaders_AnyResponse_LeavesGatewayHeadersToTheGatewayAndKeepsApiNoStore(
+        string path, HttpStatusCode expectedStatus, bool isApiResponse)
     {
-        await using var factory = new ApiFactory(
-            postgres.ConnectionString,
-            configureServices: throwing ? ThrowingHealthCheckService.Register : null);
+        await using var factory = new ApiFactory(postgres.ConnectionString, configureServices: ThrowProbe.Register);
         using HttpClient client = factory.CreateClient();
 
         HttpResponseMessage response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
 
         Assert.Equal(expectedStatus, response.StatusCode);
-        AssertSecurityHeaders(response);
+        AssertNoGatewayHeaders(response);
+        if (isApiResponse)
+        {
+            Assert.Equal(["no-store"], response.Headers.GetValues("Cache-Control"));
+        }
     }
 
     [Fact]
@@ -43,12 +50,12 @@ public class SecurityHeadersTests(PostgresFixture postgres)
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Empty(response.Headers.Server);
         Assert.False(response.Headers.Contains("Server"));
-        AssertSecurityHeaders(response);
+        AssertNoGatewayHeaders(response);
     }
 
-    private static void AssertSecurityHeaders(HttpResponseMessage response)
+    private static void AssertNoGatewayHeaders(HttpResponseMessage response)
     {
-        Assert.Equal(["nosniff"], response.Headers.GetValues("X-Content-Type-Options"));
-        Assert.Equal(["no-referrer"], response.Headers.GetValues("Referrer-Policy"));
+        Assert.False(response.Headers.Contains("X-Content-Type-Options"));
+        Assert.False(response.Headers.Contains("Referrer-Policy"));
     }
 }

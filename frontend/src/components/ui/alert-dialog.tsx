@@ -4,6 +4,7 @@ import { AlertDialog as AlertDialogPrimitive } from 'radix-ui';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
+// shortcut: Radix scroll lock injects a <style> that the gateway CSP (style-src 'self') blocks, so the page behind the dialog can still scroll; upgrade if the dialog must lock scrolling
 function AlertDialog({ ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
 }
