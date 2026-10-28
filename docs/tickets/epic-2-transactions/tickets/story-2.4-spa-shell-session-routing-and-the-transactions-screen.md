@@ -13,7 +13,7 @@ risk: medium
 
 ## Description
 
-Scaffolds the SPA (AD-31) with the start page, session-driven routing, navigation, sign-out and the transactions screen in every state from the mockups; the SPA half of the tracer bullet.
+Scaffolds the SPA (AD-31) with the start page, session-driven routing, navigation, sign-out and the transactions screen in its loading, empty, error, disputable and not-disputable states; the SPA half of the tracer bullet. The rows' dispute badges and `alreadyDisputed` need the row fields story 3.1 adds, so story 3.6 builds them.
 
 ## Requirements
 
@@ -28,18 +28,23 @@ Verify: `npm run build`, `tsc --noEmit`, ESLint, Prettier and Vitest pass.
    **Given** `/api/v1/bff/session` returns anonymous, unlinked or linked
    **When** the SPA loads any route
    **Then** anonymous sees the start page, unlinked is sent to `/link`, linked to `/transactions`
+   **And** `/`, `/signed-out` and the not-found route are public and render for any state, except that a signed-in visit to `/` redirects to its state's home; an unknown path renders not-found for any state
+   **And** if the session request itself fails (503 or a network error, after the one read retry), the SPA shows an error notice with "Try again" calling `refetch`, never the anonymous start page
+   **And** problems are identified by the full `type` URI (RFC 9457 §3.1.1): one function builds `<problem base>/<slug>.md` from a single base constant and the SPA compares with `===`, never parsing the URI, rendering it as a link or fetching it
    **And** a 403 `linking-required` sends the person to `/link` and a 401 while signed in to `/signed-out?reason=expired`, handled once in the `QueryClient`'s `QueryCache` and `MutationCache` `onError`
    **And** the `QueryClient` retries no 4xx, retries a read once on 503 or a network error, and never retries a write, as EXPERIENCE.md sets (TanStack Query otherwise retries every failed query 3 times)
 
 3. **No token in the browser** (R2; NFR-SEC-1)
    **Given** the built SPA
    **When** its code and storage are inspected
-   **Then** it reads no token, writes nothing auth-related to `localStorage` or `sessionStorage`, and sign-in is a navigation to `/api/v1/bff/login`
+   **Then** its code reads and stores no token, writes nothing auth-related to `localStorage` or `sessionStorage`, and sign-in is a navigation to `/api/v1/bff/login`
+   **And** the one place a token crosses the browser is the BFF's end-session redirect carrying `id_token_hint` (AD-7), which SPA code never touches
 
 4. **Sign-out is a form POST** (R3; FR-3)
    **Given** a signed-in person
    **When** they choose Sign out
-   **Then** the SPA submits a top-level form POST to `/api/v1/bff/logout` carrying `__RequestVerificationToken`
+   **Then** the SPA fetches a fresh request token from `GET /api/v1/bff/antiforgery`, then submits a top-level form POST to `/api/v1/bff/logout` carrying it as `__RequestVerificationToken`
+   **And** if that fetch fails, it shows the EXPERIENCE.md unexpected-error message with `role="alert"` and does not submit
 
 5. **Transactions list** (R11; FR-11)
    **Given** a linked customer
@@ -65,8 +70,9 @@ Verify: `npm run build`, `tsc --noEmit`, ESLint, Prettier and Vitest pass.
 9. **Inactivity warning before the idle sign-out** (R2, R40; FR-2, NFR-CODE-6)
    **Given** a signed-in person with no API request for 13 minutes
    **When** the SPA's idle timer fires, 2 minutes before the 15-minute idle sign-out (well over the 20 seconds WCAG 2.2 SC 2.2.1 requires)
-   **Then** a shadcn/ui `AlertDialog` shows the EXPERIENCE.md warning; "Stay signed in" closes it and calls `GET /api/v1/bff/session`, which renews the idle limit (AD-7); "Sign out" submits the sign-out form
-   **And** every API response restarts the timer, and component tests drive it with fake timers
+   **Then** a shadcn/ui `AlertDialog` shows the EXPERIENCE.md warning; "Stay signed in" calls `GET /api/v1/bff/session`, which renews the idle limit (AD-7), and closes the dialog only after that succeeds; a 401 from it goes to `/signed-out?reason=expired`; "Sign out" submits the sign-out form
+   **And** while signed in, every API response other than a 401 restarts the timer (the server renews on every authenticated request), and component tests drive it with fake timers, including a 401 during Load more
+   **And** the timer is per tab and only presents the warning; the server enforces the idle limit (OWASP Session Management, idle timeout). Mark it `// shortcut: per-tab idle timer, another tab's activity can only make the warning early, never late; share it with BroadcastChannel if early warnings confuse people`
 
 10. **Routes, not-found and screens not built yet** (R9; FR-9)
    **Given** the route tree defined with TanStack Router
@@ -77,7 +83,7 @@ Verify: `npm run build`, `tsc --noEmit`, ESLint, Prettier and Vitest pass.
 
 Deliberate-break proofs and Docker checks, run by the supervisor, not the verifier.
 
-- Through the gateway after story 5, customer A signs in and sees the screen matching `docs/ux/mockups/transactions.html`.
+- Through the gateway after story 5, customer A signs in and sees the screen matching `docs/ux/mockups/transactions.html`, apart from the dispute badges that story 3.6 adds.
 - In Playwright at 320 CSS px wide, the shell and transactions screen have no horizontal scroll, and every focused control shows a visible focus indicator not hidden by the tab bar (WCAG 2.2 SC 1.4.10, 2.4.7, 2.4.11).
 
 ## Build facts
@@ -104,4 +110,5 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Decision: 2026-10-27 — inactivity warning (WCAG 2.2 SC 2.2.1 Timing Adjustable): the dialog warns at least 2 minutes before the idle sign-out, and "Stay signed in" renews the session through `GET /api/v1/bff/session` (AD-7, EXPERIENCE.md, prd FR-2).
 - Decision: 2026-10-27 — routes are defined with TanStack Router (AD-31); links to screens not built yet render the not-found screen until their stories land.
 - Decision: 2026-10-27 — waits on 2.7 as well, so the SPA routes on the resolvable problem `type` form from the start.
+- Decision: 2026-10-28 — challenge (`docs/verification/2.4-challenge.md`, RETHINK), decided by the human: dispute badges and `alreadyDisputed` on rows move to story 3.6, after 3.1 adds the row fields; problems are compared by full `type` URI (AD-3 and AD-31 amended, superseding "routes on the slug" below); public routes, the session-failure state, the AD-7 token exception, the timer rules and the fresh logout token are added above. Supervisor session: run in the same session as 3.1 at the human's request, a deviation from "one supervisor session per story".
 - Decision: 2026-10-27 — 2.7 security review: the SPA routes on the problem slug and never renders `type` as a link or fetches it (RFC 9457 §3.1.1: clients do not dereference `type`).

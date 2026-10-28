@@ -56,6 +56,12 @@ Verify: Vitest component tests pass, with API responses mocked from `openapi.jso
    **When** a 201 goes to the dispute detail, or "View dispute" is chosen after a 409
    **Then** the not-found screen renders until 3.7 adds the route
 
+8. **Dispute badges on transaction rows** (R12; FR-12)
+   **Given** rows whose `disputeId` and `customerStatus` are set (story 3.1), in every customer status
+   **When** the transactions screen renders
+   **Then** each shows its status badge as `docs/ux/mockups/transactions.html` and `transactions-after.html` show, with the EXPERIENCE.md label (Escalated shows as "Under review (prioritised)"), has no Dispute control, and shows the `alreadyDisputed` reason text; a row with null fields shows no badge
+   **And** moved here from story 2.4 (decided 2026-10-28), because the row fields arrive with 3.1
+
 ## Supervisor checks
 
 Deliberate-break proofs and Docker checks, run by the supervisor, not the verifier.
@@ -67,7 +73,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Owner: frontend (frontend-builder).
 - Flags: none.
 - Lane: B.
-- Touches: `frontend/src/features/disputes/raise/`; `frontend/src/telemetry/`; frontend/src/app/ (routes); frontend/src/components/ui/ (shadcn/ui Form); frontend/package.json (React Hook Form, zod and the resolver, each verified and pinned per AGENTS.md); `frontend/src/api/generated/`.
+- Touches: `frontend/src/features/disputes/raise/`; `frontend/src/features/transactions/` (dispute badges); `frontend/src/telemetry/`; frontend/src/app/ (routes); frontend/src/components/ui/ (shadcn/ui Form); frontend/package.json (React Hook Form, zod and the resolver, each verified and pinned per AGENTS.md); `frontend/src/api/generated/`.
 
 ## References
 
@@ -77,6 +83,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - design — docs/ux/mockups/dispute-review.html
 - design — docs/ux/mockups/dispute-review-retry.html
 - design — docs/ux/mockups/transactions-after.html
+- design — docs/ux/mockups/transactions.html
 - experience — docs/ux/EXPERIENCE.md, Copy deck
 
 ## Notes
