@@ -91,3 +91,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Decision: 2026-10-27 — forms use shadcn/ui's documented Form component (React Hook Form with zod); the packages are verified (publisher, downloads, repository, latest stable) and pinned exactly when added (AGENTS.md, AD-31).
 - Decision: 2026-10-27 — the `Idempotency-Key` value is an RFC 9651 Structured Field String, so the SPA sends it quoted (AD-16).
 - Decision: 2026-10-27 — links to screens not built yet render the not-found screen until their stories land.
+- Input (from 3.1 QA, 2026-10-28): body binding failures (unknown `reason`, a JSON-number `expectedAmount`, malformed JSON) return 400 `validation` with no `errors` member naming the field; validation-attribute failures do name it. Map the binding case to a form-level error, or raise it for a backend fix before building.

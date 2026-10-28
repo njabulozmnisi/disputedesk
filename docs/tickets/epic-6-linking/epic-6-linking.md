@@ -61,3 +61,4 @@ R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard acce
 - Waits on 2.4, 3.7 because: 4 needs what those stories build (see its References and Description).
 - Waits on: epic 2 (the Unlinked policy, `CustomerLinks` and the core-banking port), epic 3 (`AuditLogEntries` and `Audit.Record`).
 - Decision: 2026-10-26 — Gate 2: code in every builder-owned story of this epic is stupid simple and logical, per AGENTS.md (smallest change that meets the criteria; every abstraction earns its place).
+- Open (from 3.1 review, 2026-10-28): this epic needs `Audit.Record` and the `LoginSub`, `ClientIp` and `Details` audit columns, but no epic 3 story names them; 3.1's `AuditLogEntries` has only the columns it writes. Decide which story adds them (likely 6.1) before epic 6 starts.

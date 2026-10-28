@@ -67,3 +67,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Risk high: cross-customer leakage; beyond the criteria, the security agent diffs the 404 bodies byte for byte.
+- Open (from 3.1, 2026-10-28): 3.1's customer timeline entry carries the wire `action`, so a later escalate entry would show `escalate` to the customer. Before building, decide whether R18 ("Escalated always shows as Under review (prioritised)") means the action is hidden or mapped in customer responses; 3.1's `DisputeResponse` is the shape the GET reuses.

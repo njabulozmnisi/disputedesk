@@ -73,3 +73,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Decision: 2026-10-27 — the gateway owns the security headers: nginx sets each one once with `add_header ... always`; the Api keeps only `Cache-Control: no-store` on `/api` (AD-23).
 - Decision: 2026-10-27 — the gateway's own 429 carries no `traceId` (AD-3 exception) and uses the resolvable problem `type` (2.7).
 - Decision: 2026-10-27 — the gateway image builds from the repository root with a root `.dockerignore`, so one build reads both `frontend/` and `infra/nginx/`.
+- Input (from 3.1 QA, 2026-10-28): the gateway and the Api both set `X-Content-Type-Options` and `Referrer-Policy`, with two different `Referrer-Policy` values on one response. Decide which layer owns each header and set it once.
