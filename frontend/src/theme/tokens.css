@@ -1,0 +1,236 @@
+/* DisputeDesk theme tokens. The single source of the brand (see docs/ux/DESIGN.md).
+   Mirrors docs/ux/mockups/tokens.css; names follow shadcn/ui variables. Components use only these tokens, through
+   the Tailwind utilities that the @theme inline block at the foot of this file maps to them.
+   Style: friendly, high-contrast retail-banking style. One cobalt accent, navy display type, pill controls.
+   To rebrand: change values here and in the generated identity-provider label policy. */
+
+/* Nunito Sans (SIL Open Font License 1.1, see fonts/OFL.txt), self-hosted: CSP font-src 'self'. Latin subset. */
+@font-face {
+  font-family: 'Nunito Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/nunito-sans-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nunito Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/nunito-sans-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nunito Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('fonts/nunito-sans-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nunito Sans';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('fonts/nunito-sans-latin-800-normal.woff2') format('woff2');
+}
+
+:root {
+  /* Colour: neutrals */
+  --background: #f4f5f7; /* canvas */
+  --foreground: #1e2430; /* body text */
+  --card: #ffffff; /* surfaces */
+  --card-foreground: #1e2430;
+  --muted: #eef0f3; /* section bands, quiet fills */
+  --muted-foreground: #586070; /* secondary text */
+  --border: #e1e4ea; /* dividers */
+  --input: #848d9d; /* field and control borders */
+  --heading: #14287a; /* deep navy: display and page titles */
+
+  /* Colour: the one accent (cobalt) */
+  --primary: #2b57c9;
+  --primary-foreground: #ffffff;
+  --primary-hover: #2247ad;
+  --primary-pressed: #1b3a8f;
+  --primary-subtle: #e8eefb; /* selected fill, current nav item */
+  --ring: #2b57c9;
+
+  --destructive: #b42318; /* errors and destructive actions only */
+  --destructive-foreground: #ffffff;
+
+  /* Colour: status tones (semantic, never the accent) */
+  --status-info-bg: #e2f2f5;
+  --status-info-fg: #0b4f5e;
+  --status-priority-bg: #fff1d6;
+  --status-priority-fg: #7a4300;
+  --status-success-bg: #e3f4ea;
+  --status-success-fg: #156038;
+  --status-danger-bg: #fdecea;
+  --status-danger-fg: #9a1c13;
+  --status-neutral-bg: #eef0f3;
+  --status-neutral-fg: #454d5c;
+
+  /* Type */
+  --font-sans: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --text-display: 2.25rem; /* 36px phone; 56px from 768px */
+  --text-display-lg: 3.5rem; /* 56px */
+  --text-title: 2rem; /* h1 32px */
+  --text-heading: 1.5rem; /* h2 24px */
+  --text-subheading: 1.25rem; /* h3 20px */
+  --text-body: 1rem; /* 16px */
+  --text-label: 0.875rem; /* small 14px */
+  --text-caption: 0.8125rem; /* 13px */
+  --text-amount: 1rem; /* 16px, weight 700, tabular figures: a transaction amount */
+  --text-amount-hero: 2rem; /* 32px */
+  /* Line heights from DESIGN.md, Typography; each size above has one (the theme test checks). */
+  --leading-display: 1.1; /* phone; DESIGN.md gives 60px for the 56px size */
+  --leading-display-lg: 1.07;
+  --leading-title: 1.2;
+  --leading-heading: 1.3;
+  --leading-subheading: 1.3;
+  --leading-body: 1.5;
+  --leading-label: 1.4; /* also the monospace 14px size (trace IDs) */
+  --leading-caption: 1.4;
+  --leading-amount: 1.3;
+  --leading-amount-hero: 1.1;
+  --weight-regular: 400;
+  --weight-label: 600;
+  --weight-strong: 700;
+  --weight-title: 800;
+
+  /* Spacing (4-based) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px; /* desktop section spacing */
+  --tap-target: 44px;
+  --content-max: 880px;
+  --form-max: 560px;
+  --page-max: 1120px; /* start page only: two-column hero */
+  --row-min: 64px; /* list rows */
+
+  /* Radius */
+  /* Radius follows hierarchy: rows none, list panels and fields md, cards and form surfaces lg, controls full. */
+  --radius-sm: 8px; /* focus outline, mock notes */
+  --radius-md: 12px; /* list panels, text fields, reason group, OTP cells, notices, quote blocks */
+  --radius-lg: 24px; /* elevated cards, form surfaces, empty states, dialogs */
+  --radius-full: 9999px; /* buttons, badges, segmented nav, step numbers, timeline dots */
+  --radius: var(--radius-md); /* shadcn default */
+
+  /* Elevation */
+  --shadow-card: 0 4px 16px rgb(20 40 122 / 0.08);
+  --shadow-overlay: 0 12px 32px rgb(20 40 122 / 0.18);
+  --overlay: rgb(20 40 122 / 0.35); /* dialog backdrop, navy scrim */
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #12171e;
+    --foreground: #eef1f5;
+    --card: #1f2933; /* slate */
+    --card-foreground: #eef1f5;
+    --muted: #2a3441;
+    --muted-foreground: #a9b2c0;
+    --border: #323d4b;
+    --input: #7a8697;
+    --heading: #c9d6ff;
+    --primary: #8caaf7;
+    --primary-foreground: #0b1838;
+    --primary-hover: #a9c0fa;
+    --primary-pressed: #c4d4fc;
+    --primary-subtle: #22355f;
+    --ring: #8caaf7;
+    --destructive: #ff8a7e;
+    --destructive-foreground: #2a0b08;
+    --status-info-bg: #103a43;
+    --status-info-fg: #a6e0ea;
+    --status-priority-bg: #3f2d0c;
+    --status-priority-fg: #f5cf8a;
+    --status-success-bg: #123a26;
+    --status-success-fg: #9bddb8;
+    --status-danger-bg: #4a1a16;
+    --status-danger-fg: #ffb4ab;
+    --status-neutral-bg: #2a3441;
+    --status-neutral-fg: #c8ced8;
+    --shadow-card: none;
+    --shadow-overlay: 0 12px 32px rgb(0 0 0 / 0.5);
+    --overlay: rgb(0 0 0 / 0.6);
+  }
+}
+
+/* Letter spacing from DESIGN.md, Typography: display -0.02em, title -0.01em. */
+@theme {
+  --tracking-display: -0.02em;
+  --tracking-title: -0.01em;
+}
+
+/* Tailwind v4 (https://tailwindcss.com/docs/theme): `inline` makes each utility use the token itself, so the dark set
+   above switches every utility at once. The default palette is cleared, so no colour outside this file exists.
+   A line that maps a token to its own name (--text-title, --radius-md) only registers the utility; the :root value
+   above is unlayered, so it is the one that applies. */
+@theme inline {
+  --color-*: initial;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-heading: var(--heading);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-pressed: var(--primary-pressed);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-overlay: var(--overlay);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-info-fg: var(--status-info-fg);
+  --color-status-priority-bg: var(--status-priority-bg);
+  --color-status-priority-fg: var(--status-priority-fg);
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-success-fg: var(--status-success-fg);
+  --color-status-danger-bg: var(--status-danger-bg);
+  --color-status-danger-fg: var(--status-danger-fg);
+  --color-status-neutral-bg: var(--status-neutral-bg);
+  --color-status-neutral-fg: var(--status-neutral-fg);
+  --shadow-card: var(--shadow-card);
+  --shadow-overlay: var(--shadow-overlay);
+  --text-display: var(--text-display);
+  --text-display-lg: var(--text-display-lg);
+  --text-title: var(--text-title);
+  --text-heading: var(--text-heading);
+  --text-subheading: var(--text-subheading);
+  --text-body: var(--text-body);
+  --text-label: var(--text-label);
+  --text-caption: var(--text-caption);
+  --text-amount: var(--text-amount);
+  --text-amount-hero: var(--text-amount-hero);
+  --text-display--line-height: var(--leading-display);
+  --text-display-lg--line-height: var(--leading-display-lg);
+  --text-title--line-height: var(--leading-title);
+  --text-heading--line-height: var(--leading-heading);
+  --text-subheading--line-height: var(--leading-subheading);
+  --text-body--line-height: var(--leading-body);
+  --text-label--line-height: var(--leading-label);
+  --text-caption--line-height: var(--leading-caption);
+  --text-amount--line-height: var(--leading-amount);
+  --text-amount-hero--line-height: var(--leading-amount-hero);
+  --font-weight-label: var(--weight-label);
+  --font-weight-strong: var(--weight-strong);
+  --font-weight-title: var(--weight-title);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-full: var(--radius-full);
+}
