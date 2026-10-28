@@ -1,6 +1,7 @@
 using DisputeDesk.Api;
 using DisputeDesk.Api.Authorization;
 using DisputeDesk.Api.Bff;
+using DisputeDesk.Api.Disputes;
 using DisputeDesk.Api.Errors;
 using DisputeDesk.Api.Health;
 using DisputeDesk.Api.Security;
@@ -44,11 +45,12 @@ builder.Services.AddValidation();
 builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = false);
 builder.Services.AddDisputeDeskProblemDetails();
 builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options => options.AddSchemaTransformer<EnumSchemaTransformer>());
 builder.Services.AddDisputeDeskHealthChecks();
 builder.Services.AddBff();
 builder.Services.AddCustomerRoutes();
 builder.Services.AddTransactions();
+builder.Services.AddDisputes();
 
 WebApplication app = builder.Build();
 
@@ -67,6 +69,6 @@ if (app.Environment.IsDevelopment())
 app.MapDisputeDeskHealthChecks();
 RouteGroupBuilder apiV1 = app.MapApiV1();
 apiV1.MapBff();
-apiV1.MapCustomerRoutes().MapTransactions();
+apiV1.MapCustomerRoutes().MapTransactions().MapDisputes();
 
 await app.RunAsync();

@@ -30,7 +30,11 @@ public sealed class PostgresFixture : IAsyncLifetime
     public AppDbContext CreateDbContext() =>
         new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(ConnectionString).Options);
 
-    /// <summary>Creates a new, empty database on the same server and returns its connection string.</summary>
+    /// <summary>
+    /// Creates a new, empty database on the same server and returns its connection string. Its connections are not
+    /// pooled: a pool per test database would keep idle connections open for minutes after the test, and enough of
+    /// them exhaust the server's <c>max_connections</c>.
+    /// </summary>
     public async Task<string> CreateEmptyDatabaseAsync()
     {
         string name = $"empty_{Guid.NewGuid():N}";
@@ -38,7 +42,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand($"CREATE DATABASE \"{name}\"", connection);
         await command.ExecuteNonQueryAsync();
-        return new NpgsqlConnectionStringBuilder(ConnectionString) { Database = name }.ConnectionString;
+        return new NpgsqlConnectionStringBuilder(ConnectionString) { Database = name, Pooling = false }.ConnectionString;
     }
 
     /// <summary>Creates a new database with every migration applied, for a test that needs its own rows, and returns its connection string.</summary>

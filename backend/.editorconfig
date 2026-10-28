@@ -127,3 +127,8 @@ dotnet_diagnostic.CA1707.severity = suggestion
 # CA1716 skips type names in Domain only: the conventions name the domain type `Error`, and the solution is
 # C# only (no VB consumers). Every other project still checks type names against language keywords.
 dotnet_code_quality.CA1716.analyzed_symbol_kinds = Namespace, Method, Property, Event, Parameter
+
+[**/Migrations/*.cs]
+# EF Core writes the migrations; they are deleted and regenerated, never edited by hand (AD-2). As generated code,
+# analyzers skip them (Microsoft Learn, "Configuration options for code analysis": generated code).
+generated_code = true

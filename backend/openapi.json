@@ -239,6 +239,115 @@
           }
         }
       }
+    },
+    "/api/v1/disputes": {
+      "post": {
+        "tags": [
+          "Disputes"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RaiseDisputeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisputeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -254,6 +363,84 @@
           }
         },
         "description": "The body of `GET /api/v1/bff/antiforgery`: the value the SPA sends in the `X-XSRF-TOKEN` header."
+      },
+      "CustomerStatus": {
+        "enum": [
+          "submitted",
+          "underReview",
+          "underReviewPrioritised",
+          "resolved",
+          "withdrawn"
+        ]
+      },
+      "DisputeAction": {
+        "enum": [
+          "raise",
+          "startReview",
+          "escalate",
+          "resolve",
+          "withdraw"
+        ],
+        "description": "A named change to a dispute. On the wire: `raise`, `startReview`, and so on."
+      },
+      "DisputeResponse": {
+        "required": [
+          "disputeId",
+          "customerStatus",
+          "reason",
+          "note",
+          "transaction",
+          "expectedAmount",
+          "disputedAmount",
+          "createdAt",
+          "timeline"
+        ],
+        "type": "object",
+        "properties": {
+          "disputeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "customerStatus": {
+            "$ref": "#/components/schemas/CustomerStatus"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/Reason"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "transaction": {
+            "$ref": "#/components/schemas/TransactionSnapshotResponse"
+          },
+          "expectedAmount": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Money"
+              }
+            ]
+          },
+          "disputedAmount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntryResponse"
+            }
+          }
+        },
+        "description": "A dispute as its customer sees it (AD-13): no actor identity, SLA or due date. `expectedAmount` is set only\nfor the reason `wrongAmount`; `disputedAmount` is then the transaction amount minus it."
       },
       "HttpValidationProblemDetails": {
         "type": "object",
@@ -320,9 +507,9 @@
       },
       "NotDisputableReason": {
         "enum": [
+          "alreadyDisputed",
           "notEligible",
-          "outsideWindow",
-          null
+          "outsideWindow"
         ]
       },
       "ProblemDetails": {
@@ -363,6 +550,67 @@
           }
         }
       },
+      "RaiseDisputeRequest": {
+        "required": [
+          "accountRef",
+          "transactionId",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "accountRef": {
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string",
+            "description": "The transaction's `accountRef` from the transactions list, 1 to 32 characters."
+          },
+          "transactionId": {
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string",
+            "description": "The transaction's `transactionId`, 1 to 32 characters."
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Why the customer disputes the transaction.",
+                "$ref": "#/components/schemas/Reason"
+              }
+            ]
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional, at most 1,000 characters (UTF-16 code units) after trimming."
+          },
+          "expectedAmount": {
+            "minLength": 1,
+            "pattern": "^[0-9]{1,17}(\\.[0-9]{1,2})?$",
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The amount the customer expected to pay, in ZAR, as a decimal string such as `80.00`: required for the reason\n`wrongAmount` and rejected for every other reason; at least 0.00, at most 2 decimals, and below the\ntransaction amount."
+          }
+        },
+        "description": "The body of `POST /api/v1/disputes` (FR-13). Built-in minimal API validation checks its shape before the\ntransaction is looked up (AD-8), so each rule here is one a body breaks on its own; rules that need the transaction\n(disputability, an expected amount below the transaction amount) come after the lookup. Any other property, such as\nan amount, date or description, is ignored."
+      },
+      "Reason": {
+        "enum": [
+          "unrecognised",
+          "duplicateCharge",
+          "wrongAmount",
+          "notReceived",
+          "cancelledSubscription",
+          "refundNotProcessed"
+        ],
+        "description": "Why the customer disputes a transaction. On the wire: `unrecognised`, `duplicateCharge`, and so on."
+      },
       "SessionResponse": {
         "required": [
           "state"
@@ -382,6 +630,45 @@
           "linked"
         ],
         "description": "Where the caller stands (AD-10): not signed in, signed in but not yet a linked customer, or linked."
+      },
+      "TimelineActor": {
+        "enum": [
+          "you",
+          "theBank"
+        ],
+        "description": "Who acted, as the customer sees it (AD-13): the customer, or the bank for operations and automation."
+      },
+      "TimelineEntryResponse": {
+        "required": [
+          "action",
+          "customerStatus",
+          "actor",
+          "occurredAt",
+          "note"
+        ],
+        "type": "object",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/DisputeAction"
+          },
+          "customerStatus": {
+            "$ref": "#/components/schemas/CustomerStatus"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/TimelineActor"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "One timeline entry as the customer sees it: the action, the status it led to, who acted, when, and any note meant for the customer."
       },
       "TransactionDirection": {
         "enum": [
@@ -434,7 +721,9 @@
           "state",
           "maskedCard",
           "disputable",
-          "notDisputableReason"
+          "notDisputableReason",
+          "disputeId",
+          "customerStatus"
         ],
         "type": "object",
         "properties": {
@@ -484,9 +773,66 @@
                 "$ref": "#/components/schemas/NotDisputableReason"
               }
             ]
+          },
+          "disputeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "customerStatus": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CustomerStatus"
+              }
+            ]
           }
         },
-        "description": "One row of `GET /api/v1/transactions`. The account shows only its last 4 digits and the card only its first 6\nand last 4 (`maskedCard` is null when there is no card). `notDisputableReason` is null\nexactly when `disputable` is true."
+        "description": "One row of `GET /api/v1/transactions`. The account shows only its last 4 digits and the card only its first 6\nand last 4 (`maskedCard` is null when there is no card). `notDisputableReason` is null\nexactly when `disputable` is true. `disputeId` and `customerStatus` name the transaction's dispute,\nin any status, and are both null when it has none."
+      },
+      "TransactionSnapshotResponse": {
+        "required": [
+          "transactionId",
+          "accountRef",
+          "accountLast4",
+          "transactionDate",
+          "description",
+          "amount",
+          "maskedCard"
+        ],
+        "type": "object",
+        "properties": {
+          "transactionId": {
+            "type": "string"
+          },
+          "accountRef": {
+            "type": "string"
+          },
+          "accountLast4": {
+            "type": "string"
+          },
+          "transactionDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": {
+            "type": "string"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "maskedCard": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The disputed transaction as core banking reported it when the dispute was raised."
       },
       "TransactionState": {
         "enum": [
@@ -503,6 +849,9 @@
     },
     {
       "name": "Transactions"
+    },
+    {
+      "name": "Disputes"
     }
   ]
 }

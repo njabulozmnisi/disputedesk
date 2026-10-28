@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/njabulozmnisi/disputedesk/blob/main/contracts/events/disputedesk.dispute.raised.v1.schema.json",
+  "title": "disputedesk.dispute.raised.v1",
+  "description": "A dispute was raised. A CloudEvents 1.0 event in structured JSON mode (architecture AD-19, AD-19a). It carries no personal data: no customer ID, account or card number, amount, note or actor identity. Consumers dedupe on source + id and read the dispute's detail through GET /api/v1/operations/disputes/{disputeId}. Changes within v1 are additive.",
+  "type": "object",
+  "required": ["specversion", "id", "source", "type", "subject", "time", "datacontenttype", "dataschema", "data"],
+  "properties": {
+    "specversion": { "const": "1.0" },
+    "id": { "description": "The event ID, stable across redelivery (the outbox row ID, a UUIDv7).", "type": "string", "format": "uuid" },
+    "source": { "const": "/disputedesk/api" },
+    "type": { "const": "disputedesk.dispute.raised.v1" },
+    "subject": { "description": "The dispute ID.", "type": "string", "format": "uuid" },
+    "time": { "description": "When the dispute was raised (RFC 3339, UTC with Z).", "type": "string", "format": "date-time", "pattern": "Z$" },
+    "datacontenttype": { "const": "application/json" },
+    "dataschema": { "const": "https://github.com/njabulozmnisi/disputedesk/blob/main/contracts/events/disputedesk.dispute.raised.v1.schema.json" },
+    "data": {
+      "type": "object",
+      "required": ["disputeId", "reason", "status", "occurredAt", "disputeVersion"],
+      "properties": {
+        "disputeId": { "type": "string", "format": "uuid" },
+        "reason": {
+          "enum": ["unrecognised", "duplicateCharge", "wrongAmount", "notReceived", "cancelledSubscription", "refundNotProcessed"]
+        },
+        "status": { "const": "submitted" },
+        "occurredAt": { "description": "The same instant as time (RFC 3339, UTC with Z).", "type": "string", "format": "date-time", "pattern": "Z$" },
+        "disputeVersion": { "const": 1 }
+      }
+    }
+  }
+}

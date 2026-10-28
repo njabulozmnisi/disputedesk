@@ -8,9 +8,23 @@ namespace DisputeDesk.Application.Abstractions;
 public sealed class CurrentCustomer
 {
     private string? _customerId;
+    private string? _loginSub;
 
     /// <summary>The customer's ID in core banking. Reading it before the handler set it is a programming error.</summary>
     public string CustomerId => _customerId ?? throw new InvalidOperationException("No linked customer was resolved for this request.");
 
-    public void Set(string customerId) => _customerId = customerId;
+    /// <summary>The login's <c>sub</c>, the actor identity of the customer's actions (AD-14a).</summary>
+    public string LoginSub => _loginSub ?? throw new InvalidOperationException("No linked customer was resolved for this request.");
+
+    /// <summary>
+    /// The customer's ID, or null before one is resolved. Only for the ownership filter (AD-11), which must match
+    /// nothing when no customer was resolved, rather than throw.
+    /// </summary>
+    public string? CustomerIdOrNull => _customerId;
+
+    public void Set(string customerId, string loginSub)
+    {
+        _customerId = customerId;
+        _loginSub = loginSub;
+    }
 }

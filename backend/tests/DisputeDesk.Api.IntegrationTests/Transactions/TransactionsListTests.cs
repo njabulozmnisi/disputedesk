@@ -20,8 +20,8 @@ public sealed partial class TransactionsListTests(PostgresFixture postgres, Tran
 
     private static readonly string[] RowFields =
     [
-        "accountLast4", "accountRef", "amount", "description", "direction", "disputable", "kind", "maskedCard",
-        "notDisputableReason", "state", "transactionDate", "transactionId",
+        "accountLast4", "accountRef", "amount", "customerStatus", "description", "direction", "disputable", "disputeId", "kind",
+        "maskedCard", "notDisputableReason", "state", "transactionDate", "transactionId",
     ];
 
     private ApiFactory? _factory;
