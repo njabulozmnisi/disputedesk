@@ -65,7 +65,7 @@ public class DisputabilityTests
     public void ReasonNotDisputable_AnythingButASettledCardDebit_IsNotEligible(
         TransactionDirection direction, TransactionKind kind, TransactionState state)
     {
-        NotDisputableReason? reason = Disputability.ReasonNotDisputable(direction, kind, state, LateOnD, LastInstantOfDPlus90);
+        NotDisputableReason? reason = Disputability.ReasonNotDisputable(everDisputed: false, direction, kind, state, LateOnD, LastInstantOfDPlus90);
 
         Assert.Equal(NotDisputableReason.NotEligible, reason);
     }
@@ -75,11 +75,30 @@ public class DisputabilityTests
     {
         // Eligibility never changes; the window does. So a credit stays "not eligible" after the window closes.
         NotDisputableReason? reason = Disputability.ReasonNotDisputable(
-            TransactionDirection.Credit, TransactionKind.Transfer, TransactionState.Settled, LateOnD, FirstInstantAfterDPlus90);
+            everDisputed: false, TransactionDirection.Credit, TransactionKind.Transfer, TransactionState.Settled, LateOnD, FirstInstantAfterDPlus90);
 
         Assert.Equal(NotDisputableReason.NotEligible, reason);
     }
 
+    [Fact]
+    public void ReasonNotDisputable_EverDisputedSettledCardDebitInsideTheWindow_IsAlreadyDisputed()
+    {
+        NotDisputableReason? reason = Disputability.ReasonNotDisputable(
+            everDisputed: true, TransactionDirection.Debit, TransactionKind.Card, TransactionState.Settled, LateOnD, LateOnD.AddMinutes(5));
+
+        Assert.Equal(NotDisputableReason.AlreadyDisputed, reason);
+    }
+
+    [Fact]
+    public void ReasonNotDisputable_EverDisputedAndOutsideWindowAndNotEligible_IsAlreadyDisputed()
+    {
+        // AD-13's raise order: an earlier dispute (409) is reported before eligibility and the window (422).
+        NotDisputableReason? reason = Disputability.ReasonNotDisputable(
+            everDisputed: true, TransactionDirection.Debit, TransactionKind.Card, TransactionState.Pending, LateOnD, FirstInstantAfterDPlus90);
+
+        Assert.Equal(NotDisputableReason.AlreadyDisputed, reason);
+    }
+
     private static NotDisputableReason? SettledCardDebit(DateTimeOffset transactionDate, DateTimeOffset now) =>
-        Disputability.ReasonNotDisputable(TransactionDirection.Debit, TransactionKind.Card, TransactionState.Settled, transactionDate, now);
+        Disputability.ReasonNotDisputable(everDisputed: false, TransactionDirection.Debit, TransactionKind.Card, TransactionState.Settled, transactionDate, now);
 }

@@ -32,7 +32,7 @@ public sealed class LinkedCustomerHandler(AppDbContext db, CurrentCustomer curre
             return;
         }
 
-        currentCustomer.Set(customerId);
+        currentCustomer.Set(customerId, loginSub);
         context.Succeed(requirement);
     }
 }

@@ -33,7 +33,15 @@ public sealed record Error(ErrorKind Kind, string Code, string Message)
 
     public static Error Conflict(string code, string message) => new(ErrorKind.Conflict, code, message);
 
+    /// <summary>A conflict whose problem carries <paramref name="extensions"/>, such as the existing dispute and its customer status.</summary>
+    public static Error Conflict(string code, string message, IReadOnlyDictionary<string, object?> extensions) =>
+        new(ErrorKind.Conflict, code, message) { Extensions = extensions };
+
     public static Error BusinessRule(string code, string message) => new(ErrorKind.BusinessRule, code, message);
+
+    /// <summary>A broken rule whose problem carries <paramref name="value"/> under <paramref name="extension"/>, such as the <c>reason</c> a transaction is not disputable.</summary>
+    public static Error BusinessRule(string code, string message, string extension, Enum value) =>
+        new(ErrorKind.BusinessRule, code, message) { Extensions = new Dictionary<string, object?> { [extension] = value } };
 
     public static Error Unavailable(string code, string message) => new(ErrorKind.Unavailable, code, message);
 }
