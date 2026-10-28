@@ -33,3 +33,7 @@ export function expectProblemShape(body: Record<string, unknown>, slug: string, 
   if (JSON.stringify(body).match(/Exception|StackTrace|\bat [A-Z]\w+\.\w+\(/)) problems.push('exception text leaked');
   return problems;
 }
+
+/** The CSP the gateway sends with the SPA (infra/nginx). `vite preview` sends none, so SPA tests add it to the document. */
+export const gatewayContentSecurityPolicy =
+  "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' http://auth.localhost:8080";
