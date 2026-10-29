@@ -72,7 +72,7 @@ public class RaiseDisputeTests(PostgresFixture postgres, TransactionsStub stub) 
         Assert.Equal("Steers Braamfontein", transaction.GetProperty("description").GetString());
         Assert.Equal("0011", transaction.GetProperty("accountLast4").GetString());
         Assert.Equal("492181******4417", transaction.GetProperty("maskedCard").GetString());
-        Assert.Equal(stub.Now.AddDays(-2).UtcDateTime.Date, transaction.GetProperty("transactionDate").GetDateTimeOffset().UtcDateTime.Date);
+        Assert.Equal(stub.FixtureTransactionDate(daysAgo: 2, new TimeOnly(13, 24)), transaction.GetProperty("transactionDate").GetDateTimeOffset());
         Assert.Equal("""{"amount":"87.23","currency":"ZAR"}""", body.RootElement.GetProperty("disputedAmount").GetRawText());
         Assert.Equal("submitted", body.RootElement.GetProperty("customerStatus").GetString());
 

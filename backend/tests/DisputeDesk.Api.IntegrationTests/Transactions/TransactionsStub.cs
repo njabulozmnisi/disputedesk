@@ -9,15 +9,23 @@ namespace DisputeDesk.Api.IntegrationTests.Transactions;
 /// </summary>
 public sealed class TransactionsStub : IAsyncDisposable
 {
+    // South Africa has no daylight saving time, so its offset is always UTC+02:00 (glossary: transaction date).
+    private static readonly TimeSpan SouthAfricanOffset = TimeSpan.FromHours(2);
+
     private readonly CoreBankingStubFactory _stub;
 
+    // .1234567 s past the second is a tick finer than the microseconds Postgres keeps, so a test sees any instant
+    // that storing would change; the raise stamps it as .123456 s.
     public TransactionsStub()
+        : this(DateTimeOffset.FromUnixTimeSeconds(TimeProvider.System.GetUtcNow().ToUnixTimeSeconds()).AddTicks(1_234_567))
     {
-        // .1234567 s past the second is a tick finer than the microseconds Postgres keeps, so a test sees any instant
-        // that storing would change; the raise stamps it as .123456 s.
-        var second = DateTimeOffset.FromUnixTimeSeconds(TimeProvider.System.GetUtcNow().ToUnixTimeSeconds());
-        Now = second.AddTicks(1_234_567);
-        NowAsStored = second.AddTicks(1_234_560);
+    }
+
+    /// <summary>The stub with its clock fixed at <paramref name="now"/>, for a test that needs a chosen instant.</summary>
+    internal TransactionsStub(DateTimeOffset now)
+    {
+        Now = now;
+        NowAsStored = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
         _stub = new CoreBankingStubFactory { ClockNow = Now };
     }
 
@@ -28,6 +36,17 @@ public sealed class TransactionsStub : IAsyncDisposable
     public DateTimeOffset NowAsStored { get; }
 
     public Uri BaseUrl => _stub.BaseUrl;
+
+    /// <summary>
+    /// The date the stub gives a fixture transaction: <paramref name="daysAgo"/> days before the start of the South
+    /// African day <see cref="Now"/> falls in, at <paramref name="time"/> South African time. Between 22:00 and 24:00
+    /// UTC that day is already tomorrow's UTC date.
+    /// </summary>
+    public DateTimeOffset FixtureTransactionDate(int daysAgo, TimeOnly time)
+    {
+        var startOfSouthAfricanToday = new DateTimeOffset(Now.ToOffset(SouthAfricanOffset).Date, SouthAfricanOffset);
+        return startOfSouthAfricanToday.AddDays(-daysAgo).Add(time.ToTimeSpan());
+    }
 
     public ValueTask DisposeAsync() => _stub.DisposeAsync();
 }
