@@ -29,7 +29,7 @@ public class SessionExpiryTests(PostgresFixture postgres)
         HttpResponseMessage response = await browser.GetPathAsync(AuthenticatedPath);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.False(await SessionExistsAsync(sub));
+        Assert.False(await SessionExistsAsync(factory, sub));
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class SessionExpiryTests(PostgresFixture postgres)
         HttpResponseMessage[] responses = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => browser.GetPathAsync(AuthenticatedPath)));
 
         Assert.All(responses, response => Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode));
-        Assert.False(await SessionExistsAsync(sub));
+        Assert.False(await SessionExistsAsync(factory, sub));
     }
 
     [Fact]
@@ -93,14 +93,16 @@ public class SessionExpiryTests(PostgresFixture postgres)
         HttpResponseMessage response = await browser.GetPathAsync(AuthenticatedPath);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.False(await SessionExistsAsync(sub));
+        Assert.False(await SessionExistsAsync(factory, sub));
     }
 
     [Fact]
     public async Task DeleteExpiredAsync_AbandonedSession_DeletesOnlyExpiredRows()
     {
+        // Its own database: the sweep, on a clock 16 minutes ahead, would delete every session other tests running in
+        // parallel just started on the shared one.
         var clock = new TestClock();
-        await using var factory = new ApiFactory(postgres.ConnectionString, clock: clock);
+        await using var factory = new ApiFactory(await postgres.CreateMigratedDatabaseAsync(), clock: clock);
         using HttpClient abandoned = factory.CreateBrowser(new CookieContainer());
         string abandonedSub = $"abandoned-{Guid.NewGuid():N}";
         await abandoned.SignInAsync(factory.Zitadel, abandonedSub);
@@ -111,14 +113,30 @@ public class SessionExpiryTests(PostgresFixture postgres)
 
         await factory.Services.GetRequiredService<ExpiredSessionCleanup>().DeleteExpiredAsync(TestContext.Current.CancellationToken);
 
-        Assert.False(await SessionExistsAsync(abandonedSub));
-        Assert.True(await SessionExistsAsync(freshSub));
+        Assert.False(await SessionExistsAsync(factory, abandonedSub));
+        Assert.True(await SessionExistsAsync(factory, freshSub));
     }
 
-    private async Task<bool> SessionExistsAsync(string sub)
+    [Fact]
+    public async Task DeleteExpiredAsyncTest_RunningBetweenAnotherTestsSignInAndRequest_LeavesThatSessionLive()
     {
-        await using AppDbContext db = postgres.CreateDbContext();
-        return await db.Set<Session>().AnyAsync(row => row.LoginSub == sub, TestContext.Current.CancellationToken);
+        // The interleaving that once failed the fallback probe in a full run: a test signs in on the shared database,
+        // then the sweep test above (its clock 16 minutes ahead) runs before that test's next request.
+        await using var factory = new ApiFactory(postgres.ConnectionString);
+        using HttpClient browser = factory.CreateBrowser(new CookieContainer());
+        await browser.SignInAsync(factory.Zitadel, $"bystander-{Guid.NewGuid():N}");
+
+        await DeleteExpiredAsync_AbandonedSession_DeletesOnlyExpiredRows();
+
+        Assert.Equal(HttpStatusCode.OK, (await browser.GetPathAsync(AuthenticatedPath)).StatusCode);
+    }
+
+    /// <summary>Looks in the factory's own database.</summary>
+    private static async Task<bool> SessionExistsAsync(ApiFactory factory, string sub)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<Session>()
+            .AnyAsync(row => row.LoginSub == sub, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Once enabled, holds each read of the Sessions table for a moment, so concurrent requests all read before any of them writes.</summary>
