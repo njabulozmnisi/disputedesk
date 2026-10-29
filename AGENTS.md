@@ -35,7 +35,7 @@ A story is ready to build only when:
 - each criterion names the mechanism that implements it and the documented source for it (Microsoft Learn, the RFC, OWASP);
 - every request input is listed with its bounds;
 - it has no open questions;
-- the challenger's verdict is "proceed", or a human has decided on its "simplify" or "rethink" points (`docs/verification/<story>-challenge.md`).
+- the challenger's verdict is "proceed", or its `[story]` points are fixed in the story and a human has decided on its `[decision]` points (`docs/verification/<story>-challenge.md`).
 
 ## Ticket numbering
 
