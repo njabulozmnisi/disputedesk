@@ -6,13 +6,15 @@ namespace DisputeDesk.Application.Disputes;
 
 /// <summary>
 /// A dispute as its customer sees it (AD-13), mapped once here: the customer status, "you" or "the bank" for the
-/// actor, and no actor identity, SLA or due date. The timeline is built from the dispute's stored events.
+/// actor, and no actor identity, SLA or due date. The timeline is built from the dispute's stored events. The raise 201
+/// and the detail both use it.
 /// </summary>
 public static class CustomerView
 {
     public static Contracts.Disputes.DisputeResponse ToResponse(Dispute dispute, IEnumerable<StoredEvent> storedEvents) => new(
         dispute.Id,
         DisputeWire.ToCustomerStatus(dispute.Status),
+        dispute.Outcome is Outcome outcome ? DisputeWire.ToWire(outcome) : null,
         DisputeWire.ToWire(dispute.Reason),
         dispute.Note,
         new Contracts.Disputes.TransactionSnapshotResponse(
@@ -26,10 +28,10 @@ public static class CustomerView
         dispute.ExpectedAmount is decimal expected ? ToMoney(expected, dispute.Currency) : null,
         ToMoney(dispute.DisputedAmount, dispute.Currency),
         dispute.CreatedAtUtc,
-        Timeline(storedEvents));
+        ToTimeline(storedEvents));
 
     /// <summary>The customer's timeline: one entry for each stored event the allowlist admits, in stream order.</summary>
-    public static IReadOnlyList<Contracts.Disputes.TimelineEntryResponse> Timeline(IEnumerable<StoredEvent> storedEvents) =>
+    public static IReadOnlyList<Contracts.Disputes.TimelineEntryResponse> ToTimeline(IEnumerable<StoredEvent> storedEvents) =>
         [.. storedEvents.Select(ToTimelineEntry).OfType<Contracts.Disputes.TimelineEntryResponse>()];
 
     /// <summary>

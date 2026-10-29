@@ -15,6 +15,7 @@ export * from './httpValidationProblemDetails';
 export * from './httpValidationProblemDetailsErrors';
 export * from './money';
 export * from './notDisputableReason';
+export * from './outcome';
 export * from './problemDetails';
 export * from './raiseDisputeRequest';
 export * from './reason';

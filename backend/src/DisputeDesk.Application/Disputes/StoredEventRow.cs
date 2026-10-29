@@ -61,10 +61,17 @@ public sealed class StoredEventRow
         Data = JsonSerializer.Serialize(storedEvent, storedEvent.GetType(), DisputeDeskJson.Options),
     };
 
+    /// <summary>
+    /// Whether <see cref="EventType"/> names a stored event type this code knows. The customer view skips a row that
+    /// does not, before reading its data, while replay refuses it (AD-13).
+    /// </summary>
+    public bool HasKnownEventType => TypeNamed(EventType) is not null;
+
     /// <summary>The stored event this row holds. A row whose <see cref="EventType"/> names no stored event type throws.</summary>
     public StoredEvent ToStoredEvent()
     {
-        StoredEvent storedEvent = (StoredEvent?)JsonSerializer.Deserialize(Data, TypeNamed(EventType), DisputeDeskJson.Options)
+        Type type = TypeNamed(EventType) ?? throw new InvalidOperationException($"No stored event type is named {EventType}.");
+        StoredEvent storedEvent = (StoredEvent?)JsonSerializer.Deserialize(Data, type, DisputeDeskJson.Options)
             ?? throw new InvalidOperationException($"Stored event {Id} has no data.");
         return storedEvent with
         {
@@ -77,7 +84,7 @@ public sealed class StoredEventRow
         };
     }
 
-    private static Type TypeNamed(string eventType) => eventType switch
+    private static Type? TypeNamed(string eventType) => eventType switch
     {
         nameof(DisputeRaised) => typeof(DisputeRaised),
         nameof(ReviewStarted) => typeof(ReviewStarted),
@@ -85,6 +92,6 @@ public sealed class StoredEventRow
         nameof(DisputeResolved) => typeof(DisputeResolved),
         nameof(DisputeWithdrawn) => typeof(DisputeWithdrawn),
         nameof(SlaWarningRaised) => typeof(SlaWarningRaised),
-        _ => throw new InvalidOperationException($"No stored event type is named {eventType}."),
+        _ => null,
     };
 }
