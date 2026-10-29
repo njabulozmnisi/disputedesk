@@ -52,7 +52,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
         }
         catch (DbUpdateException exception) when (UniqueViolations.ErrorFor(exception) is Error error)
         {
-            DetachRowsOfTheLostSave();
+            // The lost save committed nothing, but EF Core still tracks its rows (the dispute with its timeline, audit
+            // and outbox rows as Added, a completed idempotency key as Modified), so a later save on this context would
+            // write them. Clearing the tracker forgets them all (EF Core docs, ChangeTracker.Clear: preferred over
+            // detaching each entity).
+            ChangeTracker.Clear();
             throw new UniqueViolationException(error, exception);
         }
     }
@@ -66,25 +70,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
         }
         catch (DbUpdateException exception) when (UniqueViolations.ErrorFor(exception) is Error error)
         {
-            DetachRowsOfTheLostSave();
+            // As in SaveChanges above.
+            ChangeTracker.Clear();
             throw new UniqueViolationException(error, exception);
-        }
-    }
-
-    /// <summary>
-    /// The lost save inserted nothing, but EF Core still tracks its new rows (the dispute, its timeline entry, audit
-    /// entry and outbox row) as Added, so a later save on this context, such as storing the 409, would insert them
-    /// again. Detaching stops tracking them (EF Core change tracking, <see cref="EntityState.Detached"/>).
-    /// </summary>
-    private void DetachRowsOfTheLostSave()
-    {
-        // Disputes last: detaching a dispute while its timeline entry or outbox row is still tracked makes EF Core null
-        // their required foreign key, which it refuses.
-        List<EntityEntry> added =
-            [.. ChangeTracker.Entries().Where(entry => entry.State == EntityState.Added).OrderBy(entry => entry.Entity is Dispute)];
-        foreach (EntityEntry entry in added)
-        {
-            entry.State = EntityState.Detached;
         }
     }
 

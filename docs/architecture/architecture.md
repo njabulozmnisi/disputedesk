@@ -196,8 +196,9 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
   - **Scope.** An endpoint filter on `POST /api/v1/disputes` only. The key's string value must be 1 to 255 printable characters, or the request gets 400 `validation` before any insert.
   - **Insert.** In its own short transaction the filter inserts an `IdempotencyKeys` row (`CustomerId`, `Key`, unique as `UQ_IdempotencyKeys_CustomerId_Key`) with `InProgress`, a fresh `LeaseId`, and the SHA-256 of the canonical validated request. An expired row is replaced in the same statement.
   - **Duplicates.** A different hash gets 422 `idempotency-mismatch`. An in-progress row older than 60 seconds with the same hash is taken over with a new `LeaseId`; a younger one gets 409 `idempotency-in-progress`. The raise endpoint's request timeout is 30 seconds, so a live request is never taken over. A completed key replays the stored status, body and `Location`.
-  - **Writes conditional on the lease.** The filter attaches the tracked key row to the scoped context, and the handler's one `SaveChangesAsync` marks it completed with the 201 response. That update is conditional on `LeaseId`, and zero rows rolls back the dispute. Deterministic 4xx (404, 409 `already-disputed`, 422 `not-disputable`) are stored afterwards under the same lease. Any 5xx deletes the key under the lease, with `CancellationToken.None`.
+  - **Writes conditional on the lease.** The filter attaches the tracked key row to the scoped context, and the handler's one `SaveChangesAsync` marks it completed with the 201 response. `LeaseId` is an EF Core concurrency token, so zero rows rolls back the dispute. Every 4xx the handler returns is stored afterwards with a lease-conditional `ExecuteUpdateAsync`. Any 5xx, including a request-timeout 504, deletes the key with a lease-conditional `ExecuteDeleteAsync` that matches only `InProgress`, with `CancellationToken.None`. After a lost unique-index save the context is cleared with `ChangeTracker.Clear()` (decided 2026-10-28).
   - **Expiry.** 24 hours.
+  - **Stored body.** `ResponseBody` is `text`, not `jsonb`, so a replay is byte for byte the original (jsonb reorders keys, as AD-14 notes for the outbox payload).
 - **Rejected:** an in-memory cache; keys on operations actions.
 
 ### AD-17 - Transactional outbox with a single relay [ADOPTED]
@@ -571,7 +572,7 @@ erDiagram
     text Status "InProgress, Completed"
     int ResponseStatus
     text ResponseLocation
-    jsonb ResponseBody
+    text ResponseBody
     timestamptz CreatedAtUtc
     timestamptz ExpiresAtUtc
   }

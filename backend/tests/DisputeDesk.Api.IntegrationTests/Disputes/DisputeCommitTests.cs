@@ -105,8 +105,8 @@ public class DisputeCommitTests(PostgresFixture postgres, TransactionsStub stub)
     [Fact]
     public async Task SaveChanges_AgainAfterLosingToTheUniqueIndex_WritesNothingMore()
     {
-        // A handler that answers the lost race with 409 may save again on the same context (story 3.2 stores the 409
-        // that way); the losing dispute and its rows must not be inserted a second time.
+        // After a lost race the context tracks nothing (ChangeTracker.Clear), so a later save on it cannot insert the
+        // losing dispute and its rows a second time.
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         string database = await postgres.CreateMigratedDatabaseAsync();
         DbContextOptions<AppDbContext> options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(database).Options;

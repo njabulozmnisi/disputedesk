@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using DisputeDesk.Api.IntegrationTests.CoreBanking;
+using DisputeDesk.Api.IntegrationTests.Disputes.Idempotency;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Contracts.Problems;
@@ -107,6 +108,8 @@ public sealed class RaiseDisputeInputTests(RaiseDisputeInputTests.LinkedCustomer
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(ProblemType.For(CommonProblems.Validation), await response.ProblemTypeAsync());
         Assert.Equal(coreBankingRequests, CoreBanking.RequestCount);
+        // An empty or null body still runs the endpoint filters (with status 400), and must not claim the key.
+        Assert.Empty(await Factory.KeyRowsAsync());
     }
 
     [Fact]
@@ -117,6 +120,7 @@ public sealed class RaiseDisputeInputTests(RaiseDisputeInputTests.LinkedCustomer
             Content = new StringContent(Body(), Encoding.UTF8, "text/plain"),
         };
         request.Headers.Add("X-XSRF-TOKEN", await Browser.AntiforgeryTokenAsync());
+        request.Headers.Add("Idempotency-Key", DisputesApi.NewKey());
         int coreBankingRequests = CoreBanking.RequestCount;
 
         HttpResponseMessage response = await Browser.SendAsync(request, TestContext.Current.CancellationToken);
