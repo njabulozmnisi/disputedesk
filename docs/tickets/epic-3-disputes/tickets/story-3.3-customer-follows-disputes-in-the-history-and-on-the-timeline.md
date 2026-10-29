@@ -68,3 +68,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 - Risk high: cross-customer leakage; beyond the criteria, the security agent diffs the 404 bodies byte for byte.
 - Open (from 3.1, 2026-10-28): 3.1's customer timeline entry carries the wire `action`, so a later escalate entry would show `escalate` to the customer. Before building, decide whether R18 ("Escalated always shows as Under review (prioritised)") means the action is hidden or mapped in customer responses; 3.1's `DisputeResponse` is the shape the GET reuses.
+- Input (from 3.2 review R5, 2026-10-28): the raise handler now builds the `Location` string `/api/v1/disputes/{id}` in Application, because the stored 201 exists before the save. When this story adds the GET, put the route in one Contracts constant used by both the handler and `MapGet`.

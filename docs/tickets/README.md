@@ -36,7 +36,7 @@ Needs: epic 2 (CurrentCustomer, the Linked policy, the transactions handler and 
 | Story | Title | Owner | Status |
 |---|---|---|---|
 | 3.1 | [Linked customer raises a dispute that commits with its timeline, audit and outbox rows](epic-3-disputes/tickets/story-3.1-linked-customer-raises-a-dispute-that-commits-with-its-timel.md) | backend | done |
-| 3.2 | [Raising is idempotent under an Idempotency-Key](epic-3-disputes/tickets/story-3.2-raising-is-idempotent-under-an-idempotency-key.md) | backend | planned |
+| 3.2 | [Raising is idempotent under an Idempotency-Key](epic-3-disputes/tickets/story-3.2-raising-is-idempotent-under-an-idempotency-key.md) | backend | done |
 | 3.3 | [Customer follows disputes in the history and on the timeline](epic-3-disputes/tickets/story-3.3-customer-follows-disputes-in-the-history-and-on-the-timeline.md) | backend | planned |
 | 3.4 | [Customer withdraws an open dispute](epic-3-disputes/tickets/story-3.4-customer-withdraws-an-open-dispute.md) | backend | planned |
 | 3.6 | [Raise-a-dispute screens with idempotent submit and browser spans](epic-3-disputes/tickets/story-3.6-raise-a-dispute-screens-with-idempotent-submit-and-browser-s.md) | frontend | planned |
