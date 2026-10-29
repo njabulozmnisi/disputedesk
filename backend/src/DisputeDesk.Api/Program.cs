@@ -65,8 +65,9 @@ app.UseRequestTimeouts();
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
-    app.MapScalarApiReference();
+    // The API reference is public in Development, the only place it is mapped (AD-10's fallback policy covers the rest).
+    app.MapOpenApi().AllowAnonymous();
+    app.MapScalarApiReference().AllowAnonymous();
 }
 
 app.MapDisputeDeskHealthChecks();

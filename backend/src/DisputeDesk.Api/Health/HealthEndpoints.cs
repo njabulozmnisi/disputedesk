@@ -27,8 +27,9 @@ public static class HealthEndpoints
 
     public static IEndpointRouteBuilder MapDisputeDeskHealthChecks(this IEndpointRouteBuilder app)
     {
-        app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-        app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) });
+        // Probes carry no session, so both opt out of the fallback policy (AD-10).
+        app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
+        app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) }).AllowAnonymous();
         return app;
     }
 }

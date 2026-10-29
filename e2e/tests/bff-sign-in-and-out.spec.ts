@@ -89,7 +89,7 @@ test('a missing or forged antiforgery token gets a 400 validation problem and ke
   expect(sessionRows()).toBe(rowsBefore + 1);
 });
 
-test('logout with the token deletes the row, clears both cookies and redirects to end_session with an id_token_hint', async ({ browser }) => {
+test('logout with the token deletes the row, clears both cookies and redirects to end_session (id_token_hint, state) and back through the signed-out callback', async ({ browser }) => {
   const { requestToken } = await (await page.request.get('/api/v1/bff/antiforgery')).json();
   await page.goto('/');
   const navigations: string[] = [];
@@ -103,8 +103,8 @@ test('logout with the token deletes the row, clears both cookies and redirects t
     form.submit();
   }, requestToken);
 
-  // No Zitadel logout or account-selection page in between: the browser goes straight back to /.
-  // The page is already at /, so wait for the navigation chain itself: end_session, then / again.
+  // Story 2.8 (AD-7): the OIDC handler's flow. No Zitadel logout or account-selection page in between: the browser goes
+  // to end_session, back to /api/signout-callback-oidc (the handler's SignedOutCallbackPath), then on to /.
   await expect.poll(() => {
     const endSessionIndex = navigations.findIndex((url) => url.includes('/oidc/v1/end_session'));
     return endSessionIndex >= 0 && navigations.slice(endSessionIndex + 1).includes('http://localhost:8080/');
@@ -115,8 +115,10 @@ test('logout with the token deletes the row, clears both cookies and redirects t
 
   const endSession = new URL(navigations.find((url) => url.includes('/oidc/v1/end_session'))!);
   expect(endSession.searchParams.get('client_id')).toBeTruthy();
-  expect(endSession.searchParams.get('post_logout_redirect_uri')).toBe('http://localhost:8080/');
+  expect(endSession.searchParams.get('post_logout_redirect_uri')).toBe('http://localhost:8080/api/signout-callback-oidc');
   expect(endSession.searchParams.get('id_token_hint')).toBeTruthy();
+  expect(endSession.searchParams.get('state')).toBeTruthy();
+  expect(navigations.some((url) => url.startsWith('http://localhost:8080/api/signout-callback-oidc'))).toBe(true);
 
   expect(await (await page.request.get('/api/v1/bff/session')).json()).toEqual({ state: 'anonymous' });
 
@@ -177,7 +179,12 @@ test('with the password the sign-in completes, and a non-local returnUrl lands o
 });
 
 test('error bodies share one shape', async ({ request }) => {
-  const notFound = await request.get('/api/v1/does-not-exist');
+  // Story 2.8 (criterion 9): the fallback policy answers an unmatched route 401 to an anonymous caller and 404 to a signed-in one.
+  const anonymousUnknown = await request.get('/api/v1/does-not-exist');
+  expect(anonymousUnknown.status()).toBe(401);
+  expect(expectProblemShape(await anonymousUnknown.json(), 'unauthorized', 401)).toEqual([]);
+
+  const notFound = await page.request.get('/api/v1/does-not-exist');
   expect(notFound.status()).toBe(404);
   expect(expectProblemShape(await notFound.json(), 'not-found', 404)).toEqual([]);
 

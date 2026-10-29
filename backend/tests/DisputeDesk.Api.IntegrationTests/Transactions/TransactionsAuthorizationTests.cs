@@ -5,15 +5,20 @@ using DisputeDesk.Contracts.Problems;
 
 namespace DisputeDesk.Api.IntegrationTests.Transactions;
 
-/// <summary>AC1 and AC2: the three authorisation states, and the customer taken only from the link table.</summary>
+/// <summary>
+/// AC1 and AC2: the three authorisation states, and the customer taken only from the link table. Every test runs in
+/// Development and in Production (2.8 AC10).
+/// </summary>
 public class TransactionsAuthorizationTests(PostgresFixture postgres, TransactionsStub stub) : IClassFixture<TransactionsStub>
 {
     private const string Path = "/api/v1/transactions?limit=50";
 
-    [Fact]
-    public async Task ListTransactions_Anonymous_Returns401UnauthorizedWithoutRedirect()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task ListTransactions_Anonymous_Returns401UnauthorizedWithoutRedirect(string environment)
     {
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         using HttpClient browser = factory.CreateBrowser(new CookieContainer());
 
         HttpResponseMessage response = await browser.GetPathAsync(Path);
@@ -23,10 +28,12 @@ public class TransactionsAuthorizationTests(PostgresFixture postgres, Transactio
         await AssertProblemTypeAsync(response, CommonProblems.Unauthorized);
     }
 
-    [Fact]
-    public async Task ListTransactions_UnlinkedLogin_Returns403LinkingRequiredWithoutRedirect()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task ListTransactions_UnlinkedLogin_Returns403LinkingRequiredWithoutRedirect(string environment)
     {
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         using HttpClient browser = factory.CreateBrowser(new CookieContainer());
         await browser.SignInAsync(factory.Zitadel, "unlinked-login");
 
@@ -37,11 +44,13 @@ public class TransactionsAuthorizationTests(PostgresFixture postgres, Transactio
         await AssertProblemTypeAsync(response, LinkingProblems.LinkingRequired);
     }
 
-    [Fact]
-    public async Task ListTransactions_UnlinkedLoginWithLimit51_Returns403LinkingRequired()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task ListTransactions_UnlinkedLoginWithLimit51_Returns403LinkingRequired(string environment)
     {
         // The authorisation state is checked before the query (FR-24's order: 401, 403, then 400).
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         using HttpClient browser = factory.CreateBrowser(new CookieContainer());
         await browser.SignInAsync(factory.Zitadel, "unlinked-login");
 
@@ -51,10 +60,12 @@ public class TransactionsAuthorizationTests(PostgresFixture postgres, Transactio
         await AssertProblemTypeAsync(response, LinkingProblems.LinkingRequired);
     }
 
-    [Fact]
-    public async Task ListTransactions_LinkedCustomer_Returns200WithTheirOwnTransactionsOnly()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task ListTransactions_LinkedCustomer_Returns200WithTheirOwnTransactionsOnly(string environment)
     {
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         await factory.LinkAsync("login-a", TransactionsApi.CustomerA);
         using HttpClient browser = factory.CreateBrowser(new CookieContainer());
         await browser.SignInAsync(factory.Zitadel, "login-a");
@@ -65,10 +76,12 @@ public class TransactionsAuthorizationTests(PostgresFixture postgres, Transactio
         Assert.Equal(["ACC-A-1", "ACC-A-2"], await AccountRefsAsync(response));
     }
 
-    [Fact]
-    public async Task ListTransactions_CustomerIdInQueryAndHeader_StillReturnsTheLinkedCustomer()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task ListTransactions_CustomerIdInQueryAndHeader_StillReturnsTheLinkedCustomer(string environment)
     {
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         await factory.LinkAsync("login-b", TransactionsApi.CustomerB);
         using HttpClient browser = factory.CreateBrowser(new CookieContainer());
         await browser.SignInAsync(factory.Zitadel, "login-b");
@@ -81,11 +94,13 @@ public class TransactionsAuthorizationTests(PostgresFixture postgres, Transactio
         Assert.Equal(["ACC-B-1"], await AccountRefsAsync(response));
     }
 
-    [Fact]
-    public async Task ListTransactions_TokenSubjectEqualsAnotherCustomersId_ReturnsTheCustomerLinkedToThatLogin()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task ListTransactions_TokenSubjectEqualsAnotherCustomersId_ReturnsTheCustomerLinkedToThatLogin(string environment)
     {
         // The login's sub happens to read like customer A's ID, but the link table says this login is customer B.
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         await factory.LinkAsync(TransactionsApi.CustomerA, TransactionsApi.CustomerB);
         using HttpClient browser = factory.CreateBrowser(new CookieContainer());
         await browser.SignInAsync(factory.Zitadel, TransactionsApi.CustomerA);
@@ -96,10 +111,12 @@ public class TransactionsAuthorizationTests(PostgresFixture postgres, Transactio
         Assert.Equal(["ACC-B-1"], await AccountRefsAsync(response));
     }
 
-    [Fact]
-    public async Task ListTransactions_UnlinkedTokenSubjectEqualsACustomerId_Returns403LinkingRequired()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task ListTransactions_UnlinkedTokenSubjectEqualsACustomerId_Returns403LinkingRequired(string environment)
     {
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         using HttpClient browser = factory.CreateBrowser(new CookieContainer());
         await browser.SignInAsync(factory.Zitadel, TransactionsApi.CustomerA);
 

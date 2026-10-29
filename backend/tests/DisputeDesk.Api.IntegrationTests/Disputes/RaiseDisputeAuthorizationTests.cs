@@ -17,11 +17,13 @@ public class RaiseDisputeAuthorizationTests(PostgresFixture postgres, Transactio
     private const string BrokenBody = """{"accountRef":"","reason":"fraud"}""";
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Raise_Anonymous_Returns401UnauthorizedWithoutRedirectBeforeValidation(bool validBody)
+    [InlineData(true, "Development")]
+    [InlineData(false, "Development")]
+    [InlineData(true, "Production")]
+    [InlineData(false, "Production")]
+    public async Task Raise_Anonymous_Returns401UnauthorizedWithoutRedirectBeforeValidation(bool validBody, string environment)
     {
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         using HttpClient browser = factory.CreateBrowser(new CookieContainer());
 
         HttpResponseMessage response = await browser.RaiseAsync(validBody ? DisputesApi.Body() : BrokenBody, withAntiforgeryToken: false);
@@ -31,11 +33,13 @@ public class RaiseDisputeAuthorizationTests(PostgresFixture postgres, Transactio
         Assert.Equal(ProblemType.For(CommonProblems.Unauthorized), await response.ProblemTypeAsync());
     }
 
-    [Fact]
-    public async Task Raise_BearerTokenOnly_Returns401Unauthorized()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task Raise_BearerTokenOnly_Returns401Unauthorized(string environment)
     {
         // The customer routes take only the session cookie (AD-8); a bearer token is not a credential here.
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         using HttpClient client = factory.CreateBrowser(new CookieContainer());
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(DisputesApi.RaisePath, UriKind.Relative))
         {
@@ -53,11 +57,13 @@ public class RaiseDisputeAuthorizationTests(PostgresFixture postgres, Transactio
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Raise_UnlinkedLogin_Returns403LinkingRequiredBeforeValidation(bool validBody)
+    [InlineData(true, "Development")]
+    [InlineData(false, "Development")]
+    [InlineData(true, "Production")]
+    [InlineData(false, "Production")]
+    public async Task Raise_UnlinkedLogin_Returns403LinkingRequiredBeforeValidation(bool validBody, string environment)
     {
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         using HttpClient browser = factory.CreateBrowser(new CookieContainer());
         await browser.SignInAsync(factory.Zitadel, "unlinked-login");
 
@@ -69,10 +75,12 @@ public class RaiseDisputeAuthorizationTests(PostgresFixture postgres, Transactio
         Assert.Equal(RowCounts.None, await factory.CountRowsAsync());
     }
 
-    [Fact]
-    public async Task Raise_LinkedWithoutAntiforgeryToken_Returns400ValidationAndWritesNothing()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task Raise_LinkedWithoutAntiforgeryToken_Returns400ValidationAndWritesNothing(string environment)
     {
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
 
         HttpResponseMessage response = await browser.RaiseAsync(DisputesApi.Body(), withAntiforgeryToken: false);
@@ -83,10 +91,12 @@ public class RaiseDisputeAuthorizationTests(PostgresFixture postgres, Transactio
         Assert.Empty(await factory.KeyRowsAsync());
     }
 
-    [Fact]
-    public async Task Raise_LinkedWithAnotherLoginsAntiforgeryToken_Returns400AndWritesNothing()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task Raise_LinkedWithAnotherLoginsAntiforgeryToken_Returns400AndWritesNothing(string environment)
     {
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         using HttpClient attacker = await factory.SignInLinkedAsync("login-b", TransactionsApi.CustomerB);
         string attackersToken = await attacker.AntiforgeryTokenAsync();
         using HttpClient victim = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
@@ -104,11 +114,13 @@ public class RaiseDisputeAuthorizationTests(PostgresFixture postgres, Transactio
         Assert.Empty(await factory.KeyRowsAsync());
     }
 
-    [Fact]
-    public async Task Raise_CustomerIdInTheBodyAndHeader_RaisesForTheLinkedCustomerOnly()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task Raise_CustomerIdInTheBodyAndHeader_RaisesForTheLinkedCustomerOnly(string environment)
     {
         // The customer comes from the link table, never the request: B's ID in the body or a header changes nothing.
-        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, environment: environment);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(DisputesApi.RaisePath, UriKind.Relative))
         {

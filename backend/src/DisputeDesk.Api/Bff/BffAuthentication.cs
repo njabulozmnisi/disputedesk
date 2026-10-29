@@ -1,9 +1,14 @@
+using DisputeDesk.Application.Audit;
+using DisputeDesk.Contracts.Audit;
+using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace DisputeDesk.Api.Bff;
@@ -44,7 +49,10 @@ public static partial class BffAuthentication
             .Configure<IOptions<BffOptions>, SessionTicketStore>(ConfigureCookie);
         services.AddOptions<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme)
             .Configure<IOptions<ZitadelOptions>>(ConfigureOpenIdConnect);
-        services.AddAuthorization();
+        // Deny by default (AD-10): an endpoint that names no policy, and a request that matches no endpoint, need a
+        // signed-in user. Public endpoints opt out with AllowAnonymous().
+        services.AddAuthorizationBuilder()
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
         services.AddAntiforgery();
         services.AddOptions<AntiforgeryOptions>().Configure<IOptions<BffOptions>>((antiforgery, bff) =>
@@ -128,6 +136,22 @@ public static partial class BffAuthentication
 
             return Task.CompletedTask;
         };
+        // After the handler accepts the ticket and before the cookie handler writes the session. A failed save throws,
+        // so the callback is a 500 and no session exists without its SignIn entry (AD-7).
+        oidc.Events.OnTicketReceived = async context =>
+        {
+            string loginSub = context.Principal?.FindFirst("sub")?.Value ?? throw new InvalidOperationException("The signed-in principal has no sub claim.");
+            IServiceProvider services = context.HttpContext.RequestServices;
+            await RecordSignInOrOutAsync(services.GetRequiredService<AppDbContext>(), services.GetRequiredService<TimeProvider>(), AuditAction.SignIn, loginSub, context.HttpContext.RequestAborted);
+        };
+        // The end-session request (OpenID Connect RP-Initiated Logout 1.0, section 2). The handler adds the state and the
+        // post_logout_redirect_uri and the id_token_hint (the session's stored ID token, read through the request's cookie
+        // authentication); client_id lets Zitadel check that URI when there is no hint (an anonymous logout).
+        oidc.Events.OnRedirectToIdentityProviderForSignOut = context =>
+        {
+            context.ProtocolMessage.ClientId = context.Options.ClientId;
+            return Task.CompletedTask;
+        };
         oidc.Events.OnRemoteFailure = context =>
         {
             // Any failed callback (unverified email, bad state, a refused client, the login cancelled) ends with no
@@ -138,6 +162,21 @@ public static partial class BffAuthentication
             context.HandleResponse();
             return Task.CompletedTask;
         };
+    }
+
+    /// <summary>
+    /// Writes and saves one <c>SignIn</c> or <c>SignOut</c> entry for the login (AD-14a). The customer ID is the one
+    /// <c>CustomerLinks</c> holds for the login, null when it is unlinked.
+    /// </summary>
+    internal static async Task RecordSignInOrOutAsync(AppDbContext db, TimeProvider time, AuditAction action, string loginSub, CancellationToken cancellationToken)
+    {
+        DateTimeOffset now = time.GetUtcNow();
+        string? customerId = await db.Set<CustomerLink>()
+            .Where(link => link.LoginSub == loginSub)
+            .Select(link => link.CustomerId)
+            .SingleOrDefaultAsync(cancellationToken);
+        AuditLog.Record(db, action, AuditResult.Succeeded, new Actor(ActorType.Customer, loginSub), now, customerId);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Sign-in failed: {Reason}")]

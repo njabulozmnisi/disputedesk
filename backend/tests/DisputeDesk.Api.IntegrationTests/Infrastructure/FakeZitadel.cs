@@ -14,14 +14,18 @@ namespace DisputeDesk.Api.IntegrationTests.Infrastructure;
 
 /// <summary>
 /// Plays Zitadel's part in the code flow for the Api's real OpenID Connect handler: a fixed discovery document, a
-/// signing key and a token endpoint. The test acts as the browser and the hosted login: it reads the authorize
-/// redirect, asks for a code here, and sends the code to the Api's callback.
+/// signing key, a token endpoint and an end-session endpoint. The test acts as the browser and the hosted login: it
+/// reads the authorize redirect, asks for a code here, and sends the code to the Api's callback; at sign-out it brings
+/// the end-session redirect here and follows the redirect back.
 /// </summary>
 public sealed class FakeZitadel
 {
     public const string Issuer = "https://zitadel.test";
     public const string ClientId = "bff-client";
     public const string ClientSecret = "bff-secret";
+
+    /// <summary>The post-logout redirect URI registered for the app: the Api origin's signed-out callback path.</summary>
+    public const string PostLogoutRedirectUri = "https://localhost/api/signout-callback-oidc";
 
     private readonly RsaSecurityKey _signingKey = new(RSA.Create(2048)) { KeyId = "test-key" };
     private readonly ConcurrentDictionary<string, PendingCode> _codes = new();
@@ -65,6 +69,27 @@ public sealed class FakeZitadel
         string code = Guid.NewGuid().ToString("N");
         _codes[code] = new PendingCode(sub, emailVerified, query["nonce"].ToString(), query["code_challenge"].ToString());
         return code;
+    }
+
+    /// <summary>
+    /// What Zitadel's end-session endpoint does with the browser's request (OpenID Connect RP-Initiated Logout 1.0,
+    /// sections 2 and 3): checks the ID token hint is the one it issued at sign-in, the client ID, a state and the
+    /// registered post-logout redirect URI, then returns where it redirects the browser: that URI with the same state.
+    /// </summary>
+    public Uri EndSession(Uri endSessionRequest)
+    {
+        Dictionary<string, Microsoft.Extensions.Primitives.StringValues> query = QueryHelpers.ParseQuery(endSessionRequest.Query);
+        string state = query.GetValueOrDefault("state").ToString();
+        if (endSessionRequest.GetLeftPart(UriPartial.Path) != Configuration.EndSessionEndpoint
+            || query.GetValueOrDefault("id_token_hint").ToString() != LastIdToken
+            || query.GetValueOrDefault("client_id").ToString() != ClientId
+            || string.IsNullOrEmpty(state)
+            || query.GetValueOrDefault("post_logout_redirect_uri").ToString() != PostLogoutRedirectUri)
+        {
+            throw new InvalidOperationException($"Zitadel rejects the end-session request {endSessionRequest}.");
+        }
+
+        return new Uri($"{PostLogoutRedirectUri}?state={Uri.EscapeDataString(state)}");
     }
 
     private string CreateIdToken(PendingCode pending)

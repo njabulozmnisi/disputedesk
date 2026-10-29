@@ -9,6 +9,14 @@ type Page = { items: Row[]; nextCursor: string | null };
 
 const contexts: Record<string, BrowserContext> = {};
 
+// The gateway limits each client to 10 requests a second (burst 20, infra/nginx). Every API call here waits
+// 125 ms first, so the spec stays near 8 requests a second and never draws a 429. The gateway limit is unchanged.
+const pauseBetweenRequestsMs = 125;
+async function get(api: APIRequestContext, url: string, options?: { maxRedirects?: number; headers?: Record<string, string> }) {
+  await new Promise((resolve) => setTimeout(resolve, pauseBetweenRequestsMs));
+  return api.get(url, options);
+}
+
 async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
   const login = fixtureLogin(loginKey);
   const context = await browser.newContext();
@@ -28,7 +36,7 @@ async function listAll(api: APIRequestContext, limit: number): Promise<Row[]> {
   let cursor: string | null = null;
   do {
     const query: string = `limit=${limit}` + (cursor ? `&cursor=${cursor}` : '');
-    const response = await api.get(`/api/v1/transactions?${query}`);
+    const response = await get(api, `/api/v1/transactions?${query}`);
     expect(response.status()).toBe(200);
     const page: Page = await response.json();
     rows.push(...page.items);
@@ -48,27 +56,27 @@ test.afterAll(async () => {
 });
 
 test('three authorisation states: 401, 403 linking-required, 200, never a redirect', async ({ request }) => {
-  const anonymous = await request.get('/api/v1/transactions', { maxRedirects: 0 });
+  const anonymous = await get(request, '/api/v1/transactions', { maxRedirects: 0 });
   expect(anonymous.status()).toBe(401);
   expect(expectProblemShape(await anonymous.json(), 'unauthorized', 401)).toEqual([]);
 
-  const unlinked = await contexts.c.request.get('/api/v1/transactions', { maxRedirects: 0 });
+  const unlinked = await get(contexts.c.request, '/api/v1/transactions', { maxRedirects: 0 });
   expect(unlinked.status()).toBe(403);
   expect(expectProblemShape(await unlinked.json(), 'linking-required', 403)).toEqual([]);
 
-  const linked = await contexts.a.request.get('/api/v1/transactions', { maxRedirects: 0 });
+  const linked = await get(contexts.a.request, '/api/v1/transactions', { maxRedirects: 0 });
   expect(linked.status()).toBe(200);
   expect(linked.headers()['cache-control']).toBe('no-store');
 });
 
 test('session state reads the link: anonymous, unlinked, linked', async ({ request }) => {
-  expect(await (await request.get('/api/v1/bff/session')).json()).toEqual({ state: 'anonymous' });
-  expect(await (await contexts.c.request.get('/api/v1/bff/session')).json()).toEqual({ state: 'unlinked' });
-  expect(await (await contexts.a.request.get('/api/v1/bff/session')).json()).toEqual({ state: 'linked' });
+  expect(await (await get(request, '/api/v1/bff/session')).json()).toEqual({ state: 'anonymous' });
+  expect(await (await get(contexts.c.request, '/api/v1/bff/session')).json()).toEqual({ state: 'unlinked' });
+  expect(await (await get(contexts.a.request, '/api/v1/bff/session')).json()).toEqual({ state: 'linked' });
 });
 
 test('default page is 20, paging reaches the end, every page size gives the same newest-first list', async () => {
-  const first = await (await contexts.a.request.get('/api/v1/transactions')).json();
+  const first = await (await get(contexts.a.request, '/api/v1/transactions')).json();
   expect(first.items).toHaveLength(20);
   expect(first.nextCursor).not.toBeNull();
 
@@ -88,13 +96,13 @@ test('customer A never sees B rows, and a cursor from one customer is refused fo
   expect(bRows).toHaveLength(28);
   expect(bRows.every((row) => row.transactionId.startsWith('TXN-B-'))).toBe(true);
 
-  const bPage = await (await contexts.b.request.get('/api/v1/transactions?limit=5')).json();
-  const crossed = await contexts.a.request.get(`/api/v1/transactions?cursor=${bPage.nextCursor}`);
+  const bPage = await (await get(contexts.b.request, '/api/v1/transactions?limit=5')).json();
+  const crossed = await get(contexts.a.request, `/api/v1/transactions?cursor=${bPage.nextCursor}`);
   expect(crossed.status()).toBe(400);
   expect(expectProblemShape(await crossed.json(), 'validation', 400)).toEqual([]);
 
   // Neither a query field nor a header chooses the customer.
-  const forged = await contexts.a.request.get('/api/v1/transactions?customerId=CUS-000002', {
+  const forged = await get(contexts.a.request, '/api/v1/transactions?customerId=CUS-000002', {
     headers: { 'X-Customer-Id': 'CUS-000002' },
   });
   const forgedRows: Row[] = (await forged.json()).items;
@@ -102,18 +110,18 @@ test('customer A never sees B rows, and a cursor from one customer is refused fo
 });
 
 test('limit above 50 and an undecodable cursor are 400 validation naming the field', async () => {
-  const tooMany = await contexts.a.request.get('/api/v1/transactions?limit=51');
+  const tooMany = await get(contexts.a.request, '/api/v1/transactions?limit=51');
   expect(tooMany.status()).toBe(400);
   expect((await tooMany.json()).errors).toHaveProperty('limit');
 
-  const badCursor = await contexts.a.request.get('/api/v1/transactions?cursor=garbage');
+  const badCursor = await get(contexts.a.request, '/api/v1/transactions?cursor=garbage');
   expect(badCursor.status()).toBe(400);
   expect((await badCursor.json()).errors).toHaveProperty('cursor');
 });
 
 // Found by QA: a non-numeric limit is 500 `internal` today (BadHttpRequestException from parameter binding).
 test('a non-numeric limit is 400 validation, not a server error', async () => {
-  const response = await contexts.a.request.get('/api/v1/transactions?limit=abc');
+  const response = await get(contexts.a.request, '/api/v1/transactions?limit=abc');
   expect(response.status()).toBe(400);
   expect(expectProblemShape(await response.json(), 'validation', 400)).toEqual([]);
 });
