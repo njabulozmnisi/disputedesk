@@ -273,7 +273,7 @@ public class SignInTests(PostgresFixture postgres)
             Assert.Equal(AuditAction.SignIn, entry.Action);
             Assert.Equal(AuditResult.Succeeded, entry.Result);
             Assert.Equal(ActorType.Customer, entry.ActorType);
-            Assert.Equal(clock.GetUtcNow(), entry.OccurredAtUtc);
+            Assert.Equal(clock.NowAsStored, entry.OccurredAtUtc);
             Assert.Null(entry.DisputeId);
             Assert.False(string.IsNullOrEmpty(entry.TraceId));
         }
