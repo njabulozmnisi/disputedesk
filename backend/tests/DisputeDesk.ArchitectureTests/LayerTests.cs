@@ -96,6 +96,26 @@ public class LayerTests
         Assert.Equal(["DisputeDesk.Api", "DisputeDesk.Worker"], hosts);
     }
 
+    /// <summary>
+    /// No type shares its name with a solution namespace (.NET Framework Design Guidelines, "Names of Namespaces"):
+    /// inside any <c>DisputeDesk.*</c> namespace the name would resolve to the namespace first (CS0234).
+    /// </summary>
+    [Fact]
+    public void SolutionTypes_Name_IsNoSolutionNamespaceSegment()
+    {
+        Type[] types = [.. SolutionAssemblies.SelectMany(assembly => assembly.GetTypes()).Where(type => !type.IsNested)];
+        var segments = types
+            .SelectMany(type => (type.Namespace ?? "").Split('.'))
+            .ToHashSet(StringComparer.Ordinal);
+
+        var violations = types
+            .Where(type => segments.Contains(type.Name))
+            .Select(type => type.FullName)
+            .ToList();
+
+        Assert.True(violations.Count == 0, "Types named like a namespace:\n" + string.Join('\n', violations));
+    }
+
     private static string NameOf(Assembly assembly) => assembly.GetName().Name ?? assembly.FullName ?? string.Empty;
 
     private static IEnumerable<string> ReferencedNames(Assembly assembly) =>

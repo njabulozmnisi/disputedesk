@@ -1,5 +1,6 @@
 extern alias CoreBankingStub;
 
+using System.Net;
 using CoreBankingStub::DisputeDesk.CoreBankingStub;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -16,7 +17,7 @@ namespace DisputeDesk.Api.IntegrationTests.CoreBanking;
 /// The real core-banking stub on a loopback port, reading the real <c>fixtures/local.json</c>, with its clock fixed at
 /// <see cref="ClockNow"/>. Everything it logs is captured in <see cref="Logs"/>.
 /// </summary>
-public sealed class CoreBankingStubFactory : WebApplicationFactory<Bank>
+public class CoreBankingStubFactory : WebApplicationFactory<Bank>
 {
     /// <summary>01:00 on 26 October 2026 in South Africa, while it is still 25 October in UTC.</summary>
     public static readonly DateTimeOffset Now = new(2026, 10, 25, 23, 0, 0, TimeSpan.Zero);
@@ -24,7 +25,9 @@ public sealed class CoreBankingStubFactory : WebApplicationFactory<Bank>
     /// <summary>The start of the South African day that <see cref="Now"/> falls in.</summary>
     public static readonly DateTimeOffset StartOfToday = new(2026, 10, 26, 0, 0, 0, TimeSpan.FromHours(2));
 
-    public CoreBankingStubFactory() => UseKestrel(0);
+    // The port goes in Kestrel's own options, read when Kestrel starts. UseKestrel(0) instead rewrites the server
+    // addresses after the build, which throws when the stub's entry point has already started Kestrel on its own thread.
+    public CoreBankingStubFactory() => UseKestrel(kestrel => kestrel.Listen(IPAddress.Loopback, 0));
 
     public LogCapture Logs { get; } = new();
 

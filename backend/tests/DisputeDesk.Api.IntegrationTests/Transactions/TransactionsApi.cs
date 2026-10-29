@@ -11,18 +11,27 @@ public static class TransactionsApi
     public const string CustomerA = "CUS-000001";
     public const string CustomerB = "CUS-000002";
 
-    /// <summary>The Api with its clock fixed at <paramref name="now"/>, calling core banking at <paramref name="coreBankingUrl"/>.</summary>
+    /// <summary>
+    /// The Api in <paramref name="environment"/> with its clock fixed at <paramref name="now"/>, calling core banking at
+    /// <paramref name="coreBankingUrl"/>.
+    /// </summary>
     public static async Task<ApiFactory> StartAsync(
-        PostgresFixture postgres, Uri coreBankingUrl, DateTimeOffset now, Action<IServiceCollection>? configureServices = null) =>
+        PostgresFixture postgres,
+        Uri coreBankingUrl,
+        DateTimeOffset now,
+        Action<IServiceCollection>? configureServices = null,
+        string environment = "Development") =>
         new(
             await postgres.CreateMigratedDatabaseAsync(),
-            configureServices: configureServices,
+            environment,
+            configureServices,
             settings: new Dictionary<string, string?> { ["CoreBanking:BaseUrl"] = coreBankingUrl.ToString() },
             clock: new FixedTimeProvider(now));
 
     /// <summary>The Api against the stub, both reading the stub's instant.</summary>
-    public static Task<ApiFactory> StartAsync(PostgresFixture postgres, TransactionsStub stub, Action<IServiceCollection>? configureServices = null) =>
-        StartAsync(postgres, stub.BaseUrl, stub.Now, configureServices);
+    public static Task<ApiFactory> StartAsync(
+        PostgresFixture postgres, TransactionsStub stub, Action<IServiceCollection>? configureServices = null, string environment = "Development") =>
+        StartAsync(postgres, stub.BaseUrl, stub.Now, configureServices, environment);
 
     /// <summary>Links the login <paramref name="loginSub"/> to the customer, as linking or the seeder would.</summary>
     public static async Task LinkAsync(this ApiFactory factory, string loginSub, string customerId)
