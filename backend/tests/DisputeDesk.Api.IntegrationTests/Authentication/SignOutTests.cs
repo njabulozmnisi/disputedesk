@@ -51,7 +51,7 @@ public class SignOutTests(PostgresFixture postgres)
         Assert.Equal(ActorType.Customer, signOut.ActorType);
         Assert.Equal("login-signout", signOut.ActorId);
         Assert.Equal("CUS-000001", signOut.CustomerId);
-        Assert.Equal(clock.GetUtcNow(), signOut.OccurredAtUtc);
+        Assert.Equal(clock.NowAsStored, signOut.OccurredAtUtc);
 
         // The browser follows the redirect to Zitadel, which checks the request and sends it back to the signed-out
         // callback with the same state; the handler lands it on /.
@@ -151,7 +151,7 @@ public class SignOutTests(PostgresFixture postgres)
         Assert.Equal(ActorType.Customer, signOut.ActorType);
         Assert.Equal("login-first", signOut.ActorId);
         Assert.Equal("CUS-000001", signOut.CustomerId);
-        Assert.Equal(clock.GetUtcNow(), signOut.OccurredAtUtc);
+        Assert.Equal(clock.NowAsStored, signOut.OccurredAtUtc);
         Assert.Equal(["login-first", "login-second"], entries.Where(entry => entry.Action == AuditAction.SignIn).Select(entry => entry.ActorId).Order());
     }
 
