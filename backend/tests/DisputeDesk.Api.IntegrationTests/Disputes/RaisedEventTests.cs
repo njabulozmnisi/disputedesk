@@ -99,6 +99,7 @@ public class RaisedEventTests(PostgresFixture postgres, TransactionsStub stub) :
             Content = new StringContent(DisputesApi.Body(), System.Text.Encoding.UTF8, "application/json"),
         };
         request.Headers.Add("X-XSRF-TOKEN", await browser.AntiforgeryTokenAsync());
+        request.Headers.Add("Idempotency-Key", DisputesApi.NewKey());
         request.Headers.Add("traceparent", $"00-{traceId.ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01");
         request.Headers.Add("tracestate", "disputedesk=test");
 

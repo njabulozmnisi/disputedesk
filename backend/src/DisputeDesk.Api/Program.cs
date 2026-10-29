@@ -48,6 +48,7 @@ builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
 builder.Services.AddOpenApi(options => options.AddSchemaTransformer<EnumSchemaTransformer>());
 builder.Services.AddDisputeDeskHealthChecks();
 builder.Services.AddBff();
+builder.Services.AddRequestTimeouts();
 builder.Services.AddCustomerRoutes();
 builder.Services.AddTransactions();
 builder.Services.AddDisputes();
@@ -59,6 +60,8 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseAuthentication();
 app.UseAuthorization();
+// After routing (implicit here), so it reads each endpoint's timeout; a timeout the endpoint does not answer is a 504.
+app.UseRequestTimeouts();
 
 if (app.Environment.IsDevelopment())
 {

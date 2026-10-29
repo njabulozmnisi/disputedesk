@@ -57,15 +57,28 @@ public static class DisputesApi
         return JsonSerializer.Serialize(body);
     }
 
-    /// <summary>POSTs <paramref name="json"/> as the raise body, with a fresh antiforgery token unless told not to.</summary>
+    /// <summary>A new <c>Idempotency-Key</c> header value: a UUID as an RFC 9651 String, so quoted.</summary>
+    public static string NewKey() => $"\"{Guid.NewGuid()}\"";
+
+    /// <summary>
+    /// POSTs <paramref name="json"/> as the raise body under a new idempotency key, with a fresh antiforgery token unless
+    /// told not to.
+    /// </summary>
     public static async Task<HttpResponseMessage> RaiseAsync(this HttpClient browser, string json, bool withAntiforgeryToken = true) =>
         await browser.RaiseAsync(json, withAntiforgeryToken ? await browser.AntiforgeryTokenAsync() : null);
 
     /// <summary>
-    /// POSTs <paramref name="json"/> with the given antiforgery token. Parallel raises share one token: fetching a token
-    /// also renews the antiforgery cookie, so tokens fetched in parallel would not all match it.
+    /// POSTs <paramref name="json"/> under a new idempotency key with the given antiforgery token. Parallel raises share
+    /// one token: fetching a token also renews the antiforgery cookie, so tokens fetched in parallel would not all match it.
     /// </summary>
-    public static async Task<HttpResponseMessage> RaiseAsync(this HttpClient browser, string json, string? antiforgeryToken)
+    public static Task<HttpResponseMessage> RaiseAsync(this HttpClient browser, string json, string? antiforgeryToken) =>
+        browser.RaiseAsync(json, antiforgeryToken, NewKey());
+
+    /// <summary>
+    /// POSTs <paramref name="json"/> with the given antiforgery token and <c>Idempotency-Key</c> values, each sent as it
+    /// is (no header validation), so malformed values reach the Api; several values send the header once per value.
+    /// </summary>
+    public static async Task<HttpResponseMessage> RaiseAsync(this HttpClient browser, string json, string? antiforgeryToken, params string?[] idempotencyKeys)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(RaisePath, UriKind.Relative))
         {
@@ -76,8 +89,18 @@ public static class DisputesApi
             request.Headers.Add("X-XSRF-TOKEN", antiforgeryToken);
         }
 
+        string[] keys = [.. idempotencyKeys.OfType<string>()];
+        if (keys.Length > 0)
+        {
+            request.Headers.TryAddWithoutValidation("Idempotency-Key", keys);
+        }
+
         return await browser.SendAsync(request, TestContext.Current.CancellationToken);
     }
+
+    /// <summary>POSTs <paramref name="json"/> with a fresh antiforgery token and the given <c>Idempotency-Key</c> value, or none when null.</summary>
+    public static async Task<HttpResponseMessage> RaiseWithKeyAsync(this HttpClient browser, string json, string? idempotencyKey) =>
+        await browser.RaiseAsync(json, await browser.AntiforgeryTokenAsync(), idempotencyKey);
 
     /// <summary>The rows in the four tables a raise writes, read past the ownership filter.</summary>
     public static async Task<RowCounts> CountRowsAsync(this ApiFactory factory)
