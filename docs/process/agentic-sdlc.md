@@ -118,8 +118,8 @@ flowchart LR
 
 | Piece | Where |
 |---|---|
-| Rules for every assistant | `AGENTS.md` |
-| Supervisor instructions | `CLAUDE.md` (plus the gitignored `CLAUDE.local.md`) |
+| Rules for every assistant, delivery process included | `AGENTS.md` |
+| Claude Code mechanics (guard hook, agents, skills, dispatch) | `CLAUDE.md` (plus the gitignored `CLAUDE.local.md`) |
 | Agents | `.claude/agents/` — `backend-builder`, `frontend-builder`, `verifier`, `qa`, `reviewer`, `security` |
 | Story procedures | `.claude/skills/` — `build-story`, `verify-story`, `qa-story`, `review-story`, `security-story`, `grill` |
 | Planning skills | BMAD v7, pinned in `skills-lock.json`, restored by `scripts/bmad-install.sh` (not committed), configured in `_bmad/config.toml` and `_bmad/custom/` |

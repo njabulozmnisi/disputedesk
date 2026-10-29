@@ -1,8 +1,9 @@
 # AGENTS.md
 
-Rules for any AI assistant or person working in this repo. Area detail lives in
+Rules for any AI assistant or person working in this repo, whichever tool runs it. Area detail lives in
 [docs/conventions/backend.md](docs/conventions/backend.md) and
-[docs/conventions/frontend.md](docs/conventions/frontend.md).
+[docs/conventions/frontend.md](docs/conventions/frontend.md). A tool's own instruction file (for example `CLAUDE.md`) adds only
+that tool's mechanics and never overrides these rules.
 
 ## Priority order
 
@@ -71,3 +72,64 @@ Builders add `"criteria": [{"id": "...", "test": "..."}]` mapping each acceptanc
 - Every new mechanism follows a cited standard; any custom mechanism says why no standard fits.
 - No forbidden terms.
 - The report lists assumptions and open questions.
+
+# Delivery process
+
+## Roles
+
+A supervisor session plans, dispatches, tracks and merges. It never writes production or test code; where the tool supports hooks a guard enforces this. Builders, the verifier, security, the reviewer and QA each work one story through the story flow below. Gates require human approval.
+
+## Commits
+
+Nothing is committed, pushed or merged without explicit approval for that change. Stage the change, show what goes in, wait.
+
+## Story flow
+
+```
+challenger → builder → verifier → security (high-stakes only) ∥ reviewer → QA → merge
+```
+
+The challenger (`scripts/challenge-with-copilot.sh`, a different model family from the builders) reads only the story, the architecture and the code it would touch, never the supervisor's view, and answers proceed, simplify or rethink, tagging each point `[story]` or `[decision]`. `[story]` points (a bound, a missing criterion, a gap against the code) go to the product owner (Sofia), who fixes the story with no human gate; `[decision]` points contradict a PRD requirement or an architecture decision, so they are a model disagreement and a human decides before the builder starts.
+
+**Decision-time challenge.** Before stories are written from a new or changed architecture decision, a PRD change or a brief, the supervisor runs the challenger in decision mode on that document (`scripts/challenge-with-copilot.sh <id> <file> decision`), without the supervisor's evaluation, and brings its findings to the human beside the supervisor's own. Security and the reviewer are read-only and run in parallel; QA, the most expensive stage, runs last, once their findings are fixed. For high-stakes stories the human review of the diff (Stakes tiers) happens in the review blocks, before the commit is approved.
+
+- **One supervisor session per story.** Start from `docs/tickets/README.md`, the story file and its `docs/verification/<story>-*.md`; hand over in files, not in the conversation; clear the session after the merge and the capture below.
+- **Fix rounds.** Collect every stage's findings for one commit into `docs/verification/<story>-fixes.md` and give them to one fresh builder, not a resumed one; `scripts/story-patch.sh` carries the story's uncommitted change to that builder (`docs/process/agentic-sdlc.md`). At most one fix round per stage pass.
+- **Re-runs after a fix.** The verifier always re-runs; the reviewer reviews only the delta; security re-runs when the delta touches auth, identity, customer data or security headers; QA re-runs when the HTTP surface, data or events change. CI stays the full authoritative run.
+- **One test run per commit.** The builder's full run is the authoritative result for its diff; later stages reuse it and re-run only after a change.
+- **Research.** One agent per question, with a scope and an output file; parallel audits split by file set with one merge owner; no fan-out to more models than the verifier and its backup.
+- **A rule change mid-story** applies from the next story unless the human decides to rework the current one.
+
+Stories run in the order of [docs/tickets/README.md](docs/tickets/README.md); `<story>` is the story ID `<epic>.<story>` (Ticket numbering). Keep the index current when a story merges or the plan changes.
+
+Merge only when every stage passes and CI is green.
+
+## Dispatch rules
+
+- Two builder lanes at most per machine, one Testcontainers slot, one verifier story at a time, one QA run at a time behind `scripts/test-lock.sh`.
+- Sized for a build machine with 16 GB RAM, 12 cores and the Docker VM capped at 8 GB. A backend lane peaks near 2 GB on the host (build plus the full suite); the Compose stack can take up to 5.8 GB of the VM, so only one stack runs at a time.
+- Memory gate: dispatch a new lane only while `sysctl -n kern.memorystatus_vm_pressure_level` prints `1` (normal); on `2` or `4`, wait for a lane to finish. Read-only stages (reviewer, security, challenger, verifier) cost little locally and may run beside a builder.
+- Stop the Compose stack (`docker compose stop`) whenever no one holds the `stack` lock.
+- The story (a vertical slice) is the parallel unit. Start sequentially (platform baseline, then the tracer bullet), run the middle in parallel, finish with a sequential refactor sweep.
+- Collision check before dispatching two stories together: no shared files, never two migrations at once.
+- Frontend work starts once the API contract (`openapi.json`) is merged.
+- The supervisor reads reviewer and security findings directly and writes them to `docs/verification/<story>-review.md` and `<story>-security.md`.
+- Story files given to the verifier hold only criteria it can check read-only. The supervisor reproduces the builder's deliberate breaks and any Docker checks in a throwaway copy, and records the result in `<story>-review.md`.
+
+## Continuous improvement
+
+Agents learn only from what is written down where the right agent loads it.
+
+- **After every merge (capture).** Add an Escapes table to `<story>-review.md`: each finding a later stage caught that an earlier stage should have, with the stage that caught it, the stage that should have, a category (spec gap, input boundary, non-standard mechanism, missing test, environment or tooling, flaky, script error, auth) and the countermeasure. Add one metrics row: fix rounds per stage, full-suite runs, wall time per stage, tokens and peak context per agent, disk change.
+- **After every epic (retrospective).** Aggregate the epic's escapes and metrics, propose countermeasures to the human as one batch, and prune stale skill lines.
+- **Immediately (trigger).** A recurring escape category, a second fix round, a stage failing for tooling (account, lock, disk), a full pipeline re-run, a supervisor context over 200k tokens, or free disk under 15 GB: write a short postmortem and a fix proposal at once.
+- **A repeated mistake becomes a check, not a sentence.** Countermeasures in this order: a deterministic check (guard, analyzer, architecture test, floor-guard, script exit code); one line in the responsible agent's skill, under "Known pitfalls", at most about 10 lines, deleted once a check covers it; a field in the story template. Never in AGENTS.md or a tool's instruction file.
+- **Machine hygiene.** After every merge, remove merged clean worktrees and their branches and the session's throwaway copies; weekly, or under 15 GB free, prune only DisputeDesk-scoped Docker leftovers (the Docker daemon is shared with other projects).
+
+## Human gates
+
+Escalate for a human decision only for: spec ambiguity or a re-plan, two failed fix attempts, irreversible actions, rule changes, high-severity security findings, model disagreement (a challenger `[decision]` point or any decision-mode finding), and the token-usage threshold.
+
+## Planning
+
+Planning runs through the BMAD method (brief, PRD, UX, architecture, the product owner Sofia), configured in `_bmad/`; decisions are grilled with the `grill` procedure before a brief or PRD. See [docs/process/agentic-sdlc.md](docs/process/agentic-sdlc.md).
