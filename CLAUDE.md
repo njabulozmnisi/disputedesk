@@ -16,7 +16,9 @@ Nothing is committed, pushed or merged without explicit approval for that change
 challenger → builder → verifier → security (high-stakes only) ∥ reviewer → QA → merge
 ```
 
-The challenger (`scripts/challenge-with-copilot.sh`, a different model family from the builders) reads only the story, the architecture and the code it would touch, never the supervisor's view, and answers proceed, simplify or rethink. Simplify or rethink is a model disagreement, so a human decides before the builder starts. Security and the reviewer are read-only and run in parallel; QA, the most expensive stage, runs last, once their findings are fixed. For high-stakes stories the human review of the diff (AGENTS.md stakes tiers) happens in the review blocks, before the commit is approved.
+The challenger (`scripts/challenge-with-copilot.sh`, a different model family from the builders) reads only the story, the architecture and the code it would touch, never the supervisor's view, and answers proceed, simplify or rethink, tagging each point `[story]` or `[decision]`. `[story]` points (a bound, a missing criterion, a gap against the code) go to Sofia, who fixes the story with no human gate; `[decision]` points contradict a PRD requirement or an architecture decision, so they are a model disagreement and a human decides before the builder starts.
+
+**Decision-time challenge.** Before stories are written from a new or changed architecture decision, a PRD change or a brief, the supervisor runs the challenger in decision mode on that document (`scripts/challenge-with-copilot.sh <id> <file> decision`), without the supervisor's evaluation, and brings its findings to the human beside the supervisor's own. Security and the reviewer are read-only and run in parallel; QA, the most expensive stage, runs last, once their findings are fixed. For high-stakes stories the human review of the diff (AGENTS.md stakes tiers) happens in the review blocks, before the commit is approved.
 
 - **One supervisor session per story.** Start from `docs/tickets/README.md`, the story file and its `docs/verification/<story>-*.md`; hand over in files, not in the conversation; clear the session after the merge and the capture below.
 - **Fix rounds.** Collect every stage's findings for one commit into `docs/verification/<story>-fixes.md` and give them to one fresh builder, not a resumed one. At most one fix round per stage pass.
@@ -53,7 +55,7 @@ Claude learns only from what is written down where the right agent loads it.
 
 ## Human gates
 
-Escalate for a human decision only for: spec ambiguity or a re-plan, two failed fix attempts, irreversible actions, rule changes, high-severity security findings, model disagreement, and the token-usage threshold.
+Escalate for a human decision only for: spec ambiguity or a re-plan, two failed fix attempts, irreversible actions, rule changes, high-severity security findings, model disagreement (a challenger `[decision]` point or any decision-mode finding), and the token-usage threshold.
 
 ## Planning
 
