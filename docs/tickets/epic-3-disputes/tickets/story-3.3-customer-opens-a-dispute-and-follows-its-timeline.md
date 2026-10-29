@@ -36,7 +36,7 @@ Verify: Integration tests for the detail, its timeline and `outcome`, privacy of
 3. **Identical 404 for another customer's resource** (R17; FR-17, NFR-SEC-6, NFR-TEST-3)
    **Given** customer A; customer B's dispute, whose stream holds every stored event type, and B's transaction; an unknown dispute ID and transaction ID
    **When** A reads the detail with B's dispute ID and with the unknown ID, and raises on B's transaction and on the unknown transaction
-   **Then** every response is 404 `not-found`, and on each endpoint the response for B's ID equals the one for the unknown ID in status, `Content-Type`, header names and values (except `Date` and trace headers), and body byte for byte once only `traceId` is removed (RFC 9457; AD-11, Not found; PRD 2.4 Key journeys (a))
+   **Then** every response is 404 `not-found`, and on each endpoint the response for B's ID equals the one for the unknown ID in status, `Content-Type`, header names and values (except `Date`, the trace headers, and the session cookie's value and expiry, which the cookie handler renews on every response; each `Set-Cookie`'s name and its `Path`, `HttpOnly`, `SameSite` and `Secure` attributes must match), and body byte for byte once only `traceId` is removed (RFC 9457; AD-11, Not found; PRD 2.4 Key journeys (a))
    **And** neither `detail` nor `instance` carries the requested ID (AD-3: errors never echo a value)
 
 4. **Authorization states and check order on the detail** (R17; NFR-SEC-6, FR-24)

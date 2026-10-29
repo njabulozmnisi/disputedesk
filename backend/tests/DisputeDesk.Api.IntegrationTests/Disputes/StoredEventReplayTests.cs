@@ -120,7 +120,7 @@ public class StoredEventReplayTests(PostgresFixture postgres, TransactionsStub s
 
             Assert.All(disputeType.GetProperties(), column =>
                 Assert.Equal(column.PropertyInfo?.GetValue(row), column.PropertyInfo?.GetValue(replayed)));
-            AssertSameTimeline(body.GetProperty("timeline"), CustomerView.Timeline(stream));
+            AssertSameTimeline(body.GetProperty("timeline"), CustomerView.ToTimeline(stream));
         }
     }
 

@@ -13,7 +13,7 @@ public class CustomerTimelineAllowlistTests
     private static readonly DateTimeOffset Now = new(2026, 10, 26, 10, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Timeline_EveryTypeAndAnUnknownOne_AdmitsOnlyTheFiveLifecycleTypesInStreamOrder()
+    public void ToTimeline_EveryTypeAndAnUnknownOne_AdmitsOnlyTheFiveLifecycleTypesInStreamOrder()
     {
         StoredEvent[] stream =
         [
@@ -25,7 +25,7 @@ public class CustomerTimelineAllowlistTests
             At(new DisputeResolved(DisputeStatus.Escalated, DisputeStatus.Resolved, Outcome.Upheld, "Refunded"), 6, ActorType.Operations),
         ];
 
-        IReadOnlyList<Contracts.Disputes.TimelineEntryResponse> timeline = CustomerView.Timeline(stream);
+        IReadOnlyList<Contracts.Disputes.TimelineEntryResponse> timeline = CustomerView.ToTimeline(stream);
 
         Assert.Equal(
             [
@@ -38,25 +38,25 @@ public class CustomerTimelineAllowlistTests
     }
 
     [Fact]
-    public void Timeline_Withdrawn_IsTheCustomersWithTheirNote()
+    public void ToTimeline_Withdrawn_IsTheCustomersWithTheirNote()
     {
         StoredEvent withdrawn = At(new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, "Found it"), 2, ActorType.Customer);
 
-        Contracts.Disputes.TimelineEntryResponse entry = Assert.Single(CustomerView.Timeline([withdrawn]));
+        Contracts.Disputes.TimelineEntryResponse entry = Assert.Single(CustomerView.ToTimeline([withdrawn]));
 
         Assert.Equal(new Contracts.Disputes.TimelineEntryResponse(Contracts.Disputes.DisputeAction.Withdraw, Contracts.Disputes.CustomerStatus.Withdrawn, Contracts.Disputes.TimelineActor.You, Now.AddHours(2), "Found it"), entry);
     }
 
     [Fact]
-    public void Timeline_SlaWarning_GivesNoEntry()
+    public void ToTimeline_SlaWarning_GivesNoEntry()
     {
-        Assert.Empty(CustomerView.Timeline([At(new SlaWarningRaised(), 2, ActorType.Automation)]));
+        Assert.Empty(CustomerView.ToTimeline([At(new SlaWarningRaised(), 2, ActorType.Automation)]));
     }
 
     [Fact]
-    public void Timeline_TypeNotOnTheAllowlist_GivesNoEntry()
+    public void ToTimeline_TypeNotOnTheAllowlist_GivesNoEntry()
     {
-        Assert.Empty(CustomerView.Timeline([At(new UnknownStoredEvent(), 2, ActorType.Operations)]));
+        Assert.Empty(CustomerView.ToTimeline([At(new UnknownStoredEvent(), 2, ActorType.Operations)]));
     }
 
     private static TransactionSnapshot Transaction() => new(

@@ -6,17 +6,20 @@
  */
 import type { CustomerStatus } from './customerStatus';
 import type { Money } from './money';
+import type { Outcome } from './outcome';
 import type { Reason } from './reason';
 import type { TimelineEntryResponse } from './timelineEntryResponse';
 import type { TransactionSnapshotResponse } from './transactionSnapshotResponse';
 
 /**
- * A dispute as its customer sees it (AD-13): no actor identity, SLA or due date. `expectedAmount` is set only
- * for the reason `wrongAmount`; `disputedAmount` is then the transaction amount minus it.
+ * A dispute as its customer sees it (AD-13): no actor identity, SLA or due date. `outcome` is `upheld` or
+ * `rejected` once the dispute is resolved, and null until then. `expectedAmount` is set only for the reason
+ * `wrongAmount`; `disputedAmount` is then the transaction amount minus it.
  */
 export interface DisputeResponse {
   disputeId: string;
   customerStatus: CustomerStatus;
+  outcome: null | Outcome;
   reason: Reason;
   /** @nullable */
   note: string | null;

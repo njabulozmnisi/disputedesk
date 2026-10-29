@@ -6,6 +6,7 @@ using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Application.Audit;
 using DisputeDesk.Application.Disputes;
 using DisputeDesk.Contracts.Audit;
+using DisputeDesk.Contracts.Json;
 using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
@@ -106,6 +107,73 @@ public static class DisputesApi
     /// <summary>POSTs <paramref name="json"/> with a fresh antiforgery token and the given <c>Idempotency-Key</c> value, or none when null.</summary>
     public static async Task<HttpResponseMessage> RaiseWithKeyAsync(this HttpClient browser, string json, string? idempotencyKey) =>
         await browser.RaiseAsync(json, await browser.AntiforgeryTokenAsync(), idempotencyKey);
+
+    /// <summary>The 201 body of a raise of <paramref name="json"/>, which must succeed.</summary>
+    public static async Task<JsonElement> RaiseCreatedAsync(this HttpClient browser, string json)
+    {
+        HttpResponseMessage response = await browser.RaiseAsync(json);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        using JsonDocument created = await response.ReadJsonAsync();
+        return created.RootElement.Clone();
+    }
+
+    /// <summary>GETs the detail of the dispute <paramref name="disputeId"/>, written as the client sends it.</summary>
+    public static Task<HttpResponseMessage> GetDisputeAsync(this HttpClient browser, string disputeId) =>
+        browser.GetPathAsync($"{RaisePath}/{disputeId}");
+
+    /// <summary>
+    /// Appends <paramref name="storedEvents"/> to the stream of the dispute <paramref name="disputeId"/>, each with its
+    /// own version, instant, actor and trace ID, and moves that dispute's <c>Disputes</c> row to <paramref name="status"/>
+    /// and <paramref name="outcome"/> at the stream's highest stored version, as the later stories' actions will. Only the
+    /// raise exists yet, so tests write the later stored events by hand; the insert-only guard allows adds.
+    /// </summary>
+    public static async Task AppendAsync(this ApiFactory factory, Guid disputeId, DisputeStatus status, Outcome? outcome, params StoredEvent[] storedEvents)
+    {
+        await factory.AddRowsAsync([.. storedEvents.Select(storedEvent => new StoredEventRow
+        {
+            Id = Guid.CreateVersion7(storedEvent.OccurredAtUtc),
+            DisputeId = disputeId,
+            Version = storedEvent.Version,
+            EventType = storedEvent.GetType().Name,
+            OccurredAtUtc = storedEvent.OccurredAtUtc,
+            ActorType = storedEvent.ActorType,
+            ActorId = storedEvent.ActorId,
+            TraceId = storedEvent.TraceId,
+            Data = JsonSerializer.Serialize(storedEvent, storedEvent.GetType(), DisputeDeskJson.Options),
+        })]);
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        int version = await db.Set<StoredEventRow>().IgnoreQueryFilters()
+            .Where(row => row.DisputeId == disputeId)
+            .MaxAsync(row => row.Version, TestContext.Current.CancellationToken);
+        await db.Set<Dispute>().IgnoreQueryFilters()
+            .Where(dispute => dispute.Id == disputeId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(dispute => dispute.Status, status)
+                    .SetProperty(dispute => dispute.Outcome, outcome)
+                    .SetProperty(dispute => dispute.Version, version),
+                TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>The <c>Disputes</c> row's <c>Version</c> of the dispute <paramref name="disputeId"/>, read past the ownership filter.</summary>
+    public static async Task<int> DisputeVersionAsync(this ApiFactory factory, Guid disputeId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<Dispute>().IgnoreQueryFilters()
+            .Where(dispute => dispute.Id == disputeId)
+            .Select(dispute => dispute.Version)
+            .SingleAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Inserts <paramref name="rows"/> into <c>StoredEvents</c> exactly as given, as a damaged or a newer writer might have.</summary>
+    public static async Task AddRowsAsync(this ApiFactory factory, params StoredEventRow[] rows)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Set<StoredEventRow>().AddRange(rows);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
 
     /// <summary>
     /// The rows a raise writes, and the dispute audit rows it must not write (ad-009), read past the ownership filter.

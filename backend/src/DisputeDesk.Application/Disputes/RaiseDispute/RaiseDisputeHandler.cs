@@ -26,8 +26,7 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
     {
         // The one clock reading (AD-4), cut to the whole microseconds a Postgres timestamptz keeps, so the row, the
         // stored event, the outbox row, the 201 and the CloudEvent time all hold the same instant.
-        DateTimeOffset now = time.GetUtcNow();
-        now = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
+        DateTimeOffset now = ToWholeMicroseconds(time.GetUtcNow());
         Reason reason = DisputeWire.ToDomain(request.Reason ?? throw new ArgumentException("Built-in validation requires a reason.", nameof(request)));
 
         Result<Transaction> found = await coreBanking.GetTransactionAsync(
@@ -56,8 +55,7 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
 
         // A new dispute's stream is the one stored event the raise appended.
         Contracts.Disputes.DisputeResponse response = CustomerView.ToResponse(raised.Value, raised.Value.PendingChanges);
-        // shortcut: the GET this names is built in story 3.3 (a known gap against AD-5); 3.3 proves it serves the dispute
-        key.CompleteCreated(JsonSerializer.Serialize(response, DisputeDeskJson.Options), $"/api/v1/disputes/{response.DisputeId}");
+        key.CompleteCreated(JsonSerializer.Serialize(response, DisputeDeskJson.Options), Contracts.Disputes.DisputeRoutes.DetailPath(response.DisputeId));
         db.Entities<Dispute>().Add(raised.Value);
         try
         {
@@ -86,11 +84,13 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
     private static Error AlreadyDisputed(Dispute dispute) =>
         DisputeErrors.AlreadyDisputedAs(dispute.Id, DisputeWire.ToCustomerStatus(dispute.Status));
 
+    // The transaction date in UTC (AD-4) and at the whole microseconds Postgres keeps, cut once here, so the 201 shows
+    // the instant the detail reads back.
     private static TransactionSnapshot ToSnapshot(Transaction transaction) => new(
         transaction.AccountRef,
         transaction.TransactionId,
         transaction.AccountLast4,
-        transaction.TransactionDate,
+        ToWholeMicroseconds(transaction.TransactionDate.ToUniversalTime()),
         transaction.Description,
         transaction.Amount,
         transaction.Currency,
@@ -98,6 +98,10 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
         transaction.Direction,
         transaction.Kind,
         transaction.State);
+
+    // A Postgres timestamptz keeps whole microseconds (PostgreSQL, Date/Time Types); a DateTimeOffset has 100 ns ticks.
+    private static DateTimeOffset ToWholeMicroseconds(DateTimeOffset instant) =>
+        instant.AddTicks(-(instant.Ticks % TimeSpan.TicksPerMicrosecond));
 
     // Built-in validation has matched RaiseDisputeRequest.AmountPattern, so the string is a plain non-negative decimal.
     private static decimal? ParseAmount(string? amount) =>

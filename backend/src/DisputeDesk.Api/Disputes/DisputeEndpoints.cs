@@ -1,15 +1,17 @@
 using DisputeDesk.Api.Disputes.Idempotency;
 using DisputeDesk.Api.Errors;
+using DisputeDesk.Application.Disputes.GetDispute;
 using DisputeDesk.Application.Disputes.RaiseDispute;
 using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Domain;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 
 namespace DisputeDesk.Api.Disputes;
 
-/// <summary><c>POST /api/v1/disputes</c>, on the customer routes.</summary>
+/// <summary><c>POST /api/v1/disputes</c> and <c>GET /api/v1/disputes/{disputeId}</c>, on the customer routes.</summary>
 public static class DisputeEndpoints
 {
     /// <summary>
@@ -20,6 +22,7 @@ public static class DisputeEndpoints
 
     public static IServiceCollection AddDisputes(this IServiceCollection services) =>
         services.AddScoped<RaiseDisputeHandler>()
+            .AddScoped<GetDisputeHandler>()
             .AddScoped<ClaimedIdempotencyKey>()
             .AddSingleton<RaiseMetrics>()
             .Configure<RequestTimeoutOptions>(options => options.AddPolicy(RaiseTimeoutPolicy, TimeSpan.FromSeconds(30)));
@@ -38,7 +41,30 @@ public static class DisputeEndpoints
             .AddEndpointFilter<IdempotencyFilter>()
             .WithRequestTimeout(RaiseTimeoutPolicy)
             .AddOpenApiOperationTransformer(DocumentIdempotencyKeyAsync);
+        customerRoutes.MapGet(DisputeRoutes.Detail, GetAsync)
+            .WithTags("Disputes")
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound);
         return customerRoutes;
+    }
+
+    /// <summary>
+    /// One of the linked customer's disputes, with its timeline oldest first. 404 <c>not-found</c> for an unknown
+    /// dispute and for another customer's alike; 400 <c>validation</c> for a <paramref name="disputeId"/> that is not a
+    /// GUID. It reads only what the raise stored, so it answers while core banking is down.
+    /// </summary>
+    /// <remarks>
+    /// The <c>Linked</c> policy runs in the authorization middleware, before binding, so the checks run 401, 403, then
+    /// 400 (AD-8). <paramref name="disputeId"/> has no route constraint on purpose: a value that is not a GUID then
+    /// fails to bind and gets 400, where a <c>:guid</c> constraint would make it 404.
+    /// </remarks>
+    private static async Task<Results<Ok<DisputeResponse>, ProblemHttpResult>> GetAsync(
+        Guid disputeId,
+        GetDisputeHandler handler,
+        CancellationToken cancellationToken)
+    {
+        Result<DisputeResponse> result = await handler.HandleAsync(disputeId, cancellationToken);
+        return result.IsSuccess ? TypedResults.Ok(result.Value) : result.Error.ToProblem();
     }
 
     /// <summary>

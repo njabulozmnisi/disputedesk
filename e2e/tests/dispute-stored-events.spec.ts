@@ -91,7 +91,8 @@ test.describe.serial('raise as customer A', () => {
     expect(response.headers()['location']).toBe(`/api/v1/disputes/${body.disputeId}`);
     expect(response.headers()['cache-control']).toBe('no-store');
     expect(Object.keys(body).sort()).toEqual(
-      ['createdAt', 'customerStatus', 'disputeId', 'disputedAmount', 'expectedAmount', 'note', 'reason', 'timeline', 'transaction'].sort());
+      ['createdAt', 'customerStatus', 'disputeId', 'disputedAmount', 'expectedAmount', 'note', 'outcome', 'reason', 'timeline', 'transaction'].sort());
+    expect(body.outcome).toBeNull(); // story 3.3: outcome is null until the dispute is resolved
     expect(body.customerStatus).toBe('submitted');
     expect(body.timeline).toHaveLength(1);
     expect(Object.keys(body.timeline[0]).sort()).toEqual(['action', 'actor', 'customerStatus', 'note', 'occurredAt']);
