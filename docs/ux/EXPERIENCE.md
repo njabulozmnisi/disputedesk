@@ -76,6 +76,8 @@ Plain, calm, short. Second person. Say what happened and what to do next. Use th
 
 **Customer-facing status** (badge text; timeline heading):
 
+On a transaction row the badge for a resolved dispute reads plain **Resolved**; the outcome (Upheld or Rejected) shows on the dispute detail, because the transactions list carries the dispute status but not its outcome (decided 2026-10-30, story 3.10).
+
 | Status (domain) | Shown as | Timeline line |
 |---|---|---|
 | Submitted | Submitted | "You submitted this dispute." |
@@ -251,4 +253,4 @@ The detail shows **Resolved · Upheld**, "The bank agreed with you", and the ban
 - **(b)** A resolved dispute never shows Withdraw.
 - **(c)** Three wrong codes end on "We can't link you online" with **Start again**.
 - **(d)** An unlinked login opening `/transactions` is taken to **Link your login**.
-- **(e)** The row of a transaction whose dispute was Rejected shows "Resolved · Rejected" and no Dispute control; a stale tab that submits anyway gets the already-disputed notice.
+- **(e)** The row of a transaction whose dispute was Rejected shows "Resolved" and no Dispute control; a stale tab that submits anyway gets the already-disputed notice.

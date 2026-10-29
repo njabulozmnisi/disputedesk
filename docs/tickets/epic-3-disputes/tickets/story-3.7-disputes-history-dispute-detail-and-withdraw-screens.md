@@ -4,7 +4,7 @@ type: story
 title: "Disputes history, dispute detail and withdraw screens"
 parent: epic-3-disputes
 covers: [R16, R18, R19, R40]
-after: [4, 6, 9]
+after: [4, 6, 9, 11]
 hitl: false
 risk: medium
 ---
@@ -81,3 +81,5 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Input (from 2.4 QA, 2026-10-28): each route change focuses the `<h1>`, so the first Tab skips the header and there is no skip link; criterion 7 adds one. Also from 2.4's review: the bare `reason satisfies never;` statement passes ESLint only because `no-unused-expressions` does not unwrap `satisfies`; write the exhaustiveness check as an assignment (`const unreachable: never = reason;`) where this story touches it.
+- Waits on 3.11 because: both edit `frontend/src/app/router.tsx` (3.11 adds the raise flow's `onEnter`); collision check 2026-10-30.
+- Carried from 3.6 (2026-10-30, AD-31): after a 401 on the dispute detail, `returnUrl` carries no dispute ID from the route.

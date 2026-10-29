@@ -192,7 +192,8 @@ An authenticated, unlinked login can submit an ID number and an account number. 
 
 - The response is identical in status and body in all three cases (OWASP Authentication Cheat Sheet, generic responses): the details match a customer, they match nothing, or they match a customer who already has a linked login.
 - Sending the OTP happens off the request path, so response time does not depend on whether the details matched. A test asserts that no SMS call is made inside the request.
-- Only when the details match a customer with no linked login is a challenge created and an OTP queued. The challenge records the customer ID resolved at this step.
+- Every well-formed start writes a challenge, so the writes, timing and response are the same whether or not the details match (OWASP Forgot Password Cheat Sheet). Only when the details match a customer with no linked login does the challenge record the customer ID resolved at this step and an OTP get queued.
+- The OTP send is claimed, then sent, then released on failure: one conditional update stamps the send only if the challenge is still current and unsent; if SMTP then fails, a second update clears the stamp, so a failed send counts nothing toward the hourly cap and starts no lifetime. An OTP sent for a challenge a newer start has replaced can never verify.
 - Before any OTP is sent, the SIM-swap check (`ISimSwapCheck`) runs for the cellphone on the bank's record. If it fails, errors or times out, no OTP is sent and no challenge can succeed: this fails closed. The response is unchanged (same status and body), so nothing reveals the result, and the failure is audited. Seeded customer C fails this check.
 - The OTP goes to the cellphone number on the bank's record, through `ISmsSender` (which writes to Mailpit). A number the person types is never used.
 - At most 3 OTPs are sent to one customer in any hour, across all logins and IP addresses. Requests beyond that get the same response, send nothing, and are audited [ASSUMPTION].
@@ -541,7 +542,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - **NFR-RES-2:** calls to `ICoreBankingClient` go through the standard resilience handler: a timeout, retries with jitter on idempotent reads, and a circuit breaker. Once the policies are exhausted, the caller gets 503 ProblemDetails.
 - **NFR-RES-3:** raising a dispute and taking actions keep working while Kafka is down. Events wait in the outbox and are published, in order per dispute, when Kafka returns. The relay retries with backoff and stops at the first failure in each dispute's sequence.
 - **NFR-RES-4:** an outbox row the broker rejects permanently (not a transient failure) is marked failed after 5 attempts. It is counted in a metric and logged with its event ID. Later events for that dispute wait until an operator acts, as described in the README runbook [ASSUMPTION: a failed state in the outbox, not a dead-letter topic; see §9 Q4].
-- **NFR-RES-5:** the Api host and the Worker shut down gracefully on SIGTERM, finishing in-flight requests and the current outbox batch within 30 seconds [ASSUMPTION].
+- **NFR-RES-5:** the Api host and the Worker shut down gracefully on SIGTERM, finishing in-flight requests and the outbox record in flight within 30 seconds (rows not yet sent stay Pending for the next start) [ASSUMPTION].
 
 ### 5.3 Data and domain modelling
 

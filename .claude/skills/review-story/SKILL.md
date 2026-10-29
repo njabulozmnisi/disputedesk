@@ -32,6 +32,8 @@ On a re-review, review only the delta since the approved version and say for eac
 
 ## Known pitfalls
 
+- A test that deletes or bulk-updates rows it did not create (a sweep, a cleanup, `ExecuteDelete`) runs on its own database (`PostgresFixture.CreateMigratedDatabaseAsync`), never the shared one: on the shared database it removes parallel tests' rows (2.8, the session sweep).
+- A test that compares an instant with a stored column runs on a fixed clock that is not microsecond-aligned and expects the stored, microsecond value (Npgsql truncates on write); the code truncates where it reads the clock only when the same instant is also returned or published (AD-4, the raise). macOS clocks read whole microseconds and hide the mismatch that Linux CI (100 ns) shows (2.8).
 - An invariant a design decision relies on (for example "every `Disputes` write commits with a stored event") must be enforced in code and proved by a test, not assumed (3.8).
 
 Rank findings by severity with file and line.

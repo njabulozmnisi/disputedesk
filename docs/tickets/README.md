@@ -1,6 +1,6 @@
 # Build order
 
-Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, 3.9 right after 3.3, and 7.10 before 7.1).
+Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, 3.9 right after 3.3, 3.10 and 3.11 right after 3.6, and 7.10 before 7.1).
 
 Status: done (merged on main), in progress, or planned. The supervisor updates it when a story merges.
 
@@ -26,7 +26,7 @@ Needs: epic 1 (the merged P0 baseline).
 | 2.7 | [Problem types resolve to documentation pages](epic-2-transactions/tickets/story-2.7-problem-types-resolve-to-documentation-pages.md) | backend | done |
 | 2.4 | [SPA shell, session routing and the transactions screen](epic-2-transactions/tickets/story-2.4-spa-shell-session-routing-and-the-transactions-screen.md) | frontend | done |
 | 2.5 | [Gateway serves the SPA with the edge rules, and CI checks the frontend](epic-2-transactions/tickets/story-2.5-gateway-serves-the-spa-with-the-edge-rules-and-ci-checks-the.md) | backend | done |
-| 2.8 | [Sign-in and sign-out are audited, and every endpoint is denied by default](epic-2-transactions/tickets/story-2.8-sign-in-and-sign-out-are-audited-and-every-endpoint-is-denied.md) | backend | planned |
+| 2.8 | [Sign-in and sign-out are audited, and every endpoint is denied by default](epic-2-transactions/tickets/story-2.8-sign-in-and-sign-out-are-audited-and-every-endpoint-is-denied.md) | backend | done |
 | 2.6 | [Hosted login pages themed from the design tokens](epic-2-transactions/tickets/story-2.6-hosted-login-pages-themed-from-the-design-tokens.md) | backend | planned |
 
 ## Epic 3: [Customers raise, follow and withdraw disputes](epic-3-disputes/epic-3-disputes.md)
@@ -38,10 +38,12 @@ Needs: epic 2 (CurrentCustomer, the Linked policy, the transactions handler and 
 | 3.1 | [Linked customer raises a dispute that commits with its stored event and outbox row](epic-3-disputes/tickets/story-3.1-linked-customer-raises-a-dispute-that-commits-with-its-store.md) | backend | done |
 | 3.2 | [Raising is idempotent under an Idempotency-Key](epic-3-disputes/tickets/story-3.2-raising-is-idempotent-under-an-idempotency-key.md) | backend | done |
 | 3.8 | [Dispute changes are recorded as stored events, and disputes load by replay](epic-3-disputes/tickets/story-3.8-dispute-changes-are-recorded-as-stored-events-and-disputes-lo.md) | backend | done |
-| 3.3 | [Customer opens a dispute and follows its timeline](epic-3-disputes/tickets/story-3.3-customer-opens-a-dispute-and-follows-its-timeline.md) | backend | planned |
+| 3.3 | [Customer opens a dispute and follows its timeline](epic-3-disputes/tickets/story-3.3-customer-opens-a-dispute-and-follows-its-timeline.md) | backend | done |
 | 3.9 | [Customer lists their disputes newest first, a page at a time](epic-3-disputes/tickets/story-3.9-customer-lists-their-disputes-newest-first-a-page-at-a-time.md) | backend | planned |
 | 3.4 | [Customer withdraws an open dispute](epic-3-disputes/tickets/story-3.4-customer-withdraws-an-open-dispute.md) | backend | planned |
-| 3.6 | [Raise-a-dispute screens with idempotent submit and browser spans](epic-3-disputes/tickets/story-3.6-raise-a-dispute-screens-with-idempotent-submit-and-browser-s.md) | frontend | planned |
+| 3.6 | [Raise-a-dispute screens with idempotent submit](epic-3-disputes/tickets/story-3.6-raise-a-dispute-screens-with-idempotent-submit.md) | frontend | planned |
+| 3.10 | [Dispute status badges on transaction rows](epic-3-disputes/tickets/story-3.10-dispute-status-badges-on-transaction-rows.md) | frontend | planned |
+| 3.11 | [Raise screens emit browser spans that join the API trace](epic-3-disputes/tickets/story-3.11-raise-screens-emit-browser-spans-that-join-the-api-trace.md) | frontend | planned |
 | 3.7 | [Disputes history, dispute detail and withdraw screens](epic-3-disputes/tickets/story-3.7-disputes-history-dispute-detail-and-withdraw-screens.md) | frontend | planned |
 
 ## Epic 4: [Dispute events reach Kafka in per-dispute order](epic-4-events/epic-4-events.md)
@@ -66,11 +68,12 @@ Needs: epic 2 (the gateway templates and provisioning from stories 2.5 and 2.6);
 
 ## Epic 6: [Logins link to customers without revealing a match](epic-6-linking/epic-6-linking.md)
 
-Needs: epic 2 (the Unlinked policy, `CustomerLinks`, the core-banking port and `AuditLog.Record`); epic 3 (`AuditLogEntries`).
+Needs: epic 2 (`CustomerLinks`, the core-banking port and `AuditLog.Record`); epic 3 (`AuditLogEntries`); epic 4 (story 4.1's `Telemetry.ActivitySourceName`, for the linking job's span).
 
 | Story | Title | Owner | Status |
 |---|---|---|---|
 | 6.1 | [Unlinked login starts linking with a uniform response and an OTP sent after the SIM-swap check](epic-6-linking/tickets/story-6.1-unlinked-login-starts-linking-with-a-uniform-response-and-an.md) | backend | planned |
+| 6.5 | [Linking start holds the send cap and a full queue](epic-6-linking/tickets/story-6.5-linking-start-holds-the-send-cap-and-a-full-queue.md) | backend | planned |
 | 6.2 | [OTP verification links the login, with lockout and race safety](epic-6-linking/tickets/story-6.2-otp-verification-links-the-login-with-lockout-and-race-safet.md) | backend | planned |
 | 6.3 | [Linking rate limits and trusted forwarded headers](epic-6-linking/tickets/story-6.3-linking-rate-limits-and-trusted-forwarded-headers.md) | backend | planned |
 | 6.4 | [Linking screens for details, OTP, lockout and rate limits](epic-6-linking/tickets/story-6.4-linking-screens-for-details-otp-lockout-and-rate-limits.md) | frontend | planned |

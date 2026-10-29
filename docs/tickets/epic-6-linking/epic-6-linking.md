@@ -36,7 +36,7 @@ R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard acce
 ## Done when
 
 - A new login links to customer D with the OTP from Mailpit and lands on Transactions.
-- Customer C's codes fail and end in the locked message; the cap, lockout and rate limits hold under tests.
+- Customer C's codes fail and end in the locked message; the send cap and full-queue 429 (story 6.5), the lockout (6.2) and the rate limits (6.3) hold under tests. Without 6.5 one customer's phone can receive unlimited OTPs, so the epic is not done before 6.5 and 6.3 merge.
 - Responses are identical for match, no match and already-linked; integrated verification passed.
 
 ## Boundaries
@@ -57,8 +57,12 @@ R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard acce
 
 - Decision: 2026-10-26 — epic Requirements are the parent's lines only, ids kept (`R<n> (parent R<n>)`); each line names the part this epic delivers where the parent line is shared.
 - Decision: 2026-10-26 — tracer bullet: story 1, Unlinked login starts linking with a uniform response and an OTP sent after the SIM-swap check; it is the thinnest path through every layer this epic touches.
-- Waits on 2.1, 2.3, 2.8, 3.2 because: 1 needs what those stories build (see its References and Description).
+- Waits on 2.1, 2.3, 2.8, 3.2, 4.1 because: 1 needs what those stories build (see its References and Description); from 4.1 it needs `Telemetry.ActivitySourceName` and its `AddSource`.
 - Waits on 2.4, 3.7 because: 4 needs what those stories build (see its References and Description).
-- Waits on: epic 2 (the Unlinked policy, `CustomerLinks`, the core-banking port and `AuditLog.Record` from story 2.8), epic 3 (`AuditLogEntries`).
+- Waits on: epic 2 (`CustomerLinks`, the core-banking port and `AuditLog.Record` from story 2.8), epic 3 (`AuditLogEntries`), epic 4 (story 4.1's `Telemetry.ActivitySourceName`).
 - Decision: 2026-10-26 — Gate 2: code in every builder-owned story of this epic is stupid simple and logical, per AGENTS.md (smallest change that meets the criteria; every abstraction earns its place).
-- Open question (from 3.1 review, 2026-10-28): this epic needs the `LoginSub`, `ClientIp` and `Details` audit columns; `AuditLogEntries` has only the columns `AuditLog.Record` (story 2.8) writes. Decide which story adds them and their migration (likely 6.1) before epic 6 starts.
+- Decision: 2026-10-30 (Sofia, 6.1 refine) — answers the 3.1-review question of 2026-10-28: story 6.1 adds `AuditLogEntries.ClientIp` and its migration; `ActorId` already carries the login (AD-14a), and `LoginSub` and `Details` are added by the first story that needs them.
+- Decision: 2026-10-30 (human, 6.1 challenge) — the OTP send is claim, send, release on failure; every well-formed start writes a challenge and only a match with no linked login gets an OTP (story 6.1, Notes).
+- Decision: 2026-10-30 (Sofia, 6.1 refine) — 6.1 split into 6.1 (start to a sent OTP) and 6.5 (the send cap and the full-queue 429); build order 6.1, 6.5, 6.2, 6.3, 6.4, and 6.2 waits on 6.5 because both change the linking job and endpoint files.
+- Decision: 2026-10-30 (Sofia, 6.1 pre-build reviews) — story 6.1 waits on 4.1 for the shared ActivitySource; `UQ_LinkingChallenges_LoginSub` is filtered on `"SupersededAtUtc" IS NULL AND "ConsumedAtUtc" IS NULL` as AD-15 states, and 6.2 relies on that filter once it sets `ConsumedAtUtc`.
+- Assumption: 2026-10-30 (Sofia, 6.1 pre-build security) — the OTP HMAC is HMAC-SHA256 under `Linking:OtpHmacKey` over the challenge ID followed by the six-digit code (story 6.1, criterion 5); story 6.2 computes the same input to compare in constant time.

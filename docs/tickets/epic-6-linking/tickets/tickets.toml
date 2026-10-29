@@ -4,18 +4,37 @@
 id = 1
 type = "story"
 title = "Unlinked login starts linking with a uniform response and an OTP sent after the SIM-swap check"
-description = "Adds `LinkingChallenges`, `POST /api/v1/linking/start` and the background job (a `BackgroundService` reading a bounded `Channel`, the documented queue-service pattern) that matches, caps, runs the SIM-swap check and sends the OTP (AD-12)."
-verify = "Integration tests prove identical responses, the check order, the cap, fail-closed SIM swap and audit; no ID number appears in any table or log."
-covers = ["R4", "R5", "R6", "R7", "R9", "R10", "R31", "R36"]
-after = ["2.1", "2.3", "2.8", "3.2"]
+description = "Adds `LinkingChallenges`, the `Unlinked` policy, `POST /api/v1/linking/start` and the background job (a `BackgroundService` reading a bounded `Channel`, the documented queued-background-task pattern) that matches, checks the link, runs the SIM-swap check, then claims, sends and releases the OTP on failure; adds `AuditLogEntries.ClientIp` (AD-12)."
+verify = "Integration tests prove identical responses and writes, format errors, the linking-route states, the check order, fail-closed SIM swap, claim-send-release, supersession before and during a send, and every audited stop with its client IP; no ID number, full account number, cellphone or plaintext OTP appears in any table, log or span."
+covers = ["R4", "R5", "R7", "R9", "R10", "R31", "R36"]
+after = ["2.1", "2.3", "2.8", "3.2", "4.1"]
 hitl = false
 risk = "high"
+refine = true
 owner = "backend"
 lane = "M2"
 high_stakes = true
 migration = true
-touches = ["backend/src/DisputeDesk.Application/Linking/StartLinking/", "backend/src/DisputeDesk.Infrastructure/Linking/ (job, conditional fill)", "backend/src/DisputeDesk.Infrastructure/Persistence/ (LinkingChallenge configuration, Migrations/)", "backend/src/DisputeDesk.Api/Linking/", "backend/src/DisputeDesk.Api/Program.cs", "backend/src/DisputeDesk.Api/appsettings.json", "docker-compose.yml (Linking__OtpHmacKey dev value)", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/"]
-supervisor_checks = ["Start linking as customer D's details through the gateway; the OTP email lands in Mailpit."]
+touches = ["backend/src/DisputeDesk.Contracts/Linking/", "backend/src/DisputeDesk.Application/Linking/ (LinkingChallenge, job record, LinkingErrors)", "backend/src/DisputeDesk.Application/Linking/StartLinking/", "backend/src/DisputeDesk.Application/Audit/ (ClientIp)", "backend/src/DisputeDesk.Application/Abstractions/CustomerMatch.cs (sealed ToString)", "backend/src/DisputeDesk.Infrastructure/Linking/ (job, claim and release, channel, options, metrics, AddLinking)", "backend/src/DisputeDesk.Infrastructure/Persistence/ (LinkingChallenge configuration, UniqueViolations.cs, AuditLogEntryConfiguration.cs, Migrations/)", "backend/src/DisputeDesk.Api/Linking/", "backend/src/DisputeDesk.Api/Authorization/ (Unlinked policy, result handler)", "backend/src/DisputeDesk.Api/Program.cs", "docker-compose.yml (api service: Linking__OtpHmacKey dev value)", "backend/openapi.json", "frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/ (with the port fakes)", "backend/tests/DisputeDesk.Api.IntegrationTests/Infrastructure/ApiFactory.cs", "backend/tests/DisputeDesk.Api.IntegrationTests/Authorization/EndpointAuthorizationTests.cs"]
+supervisor_checks = ["Start linking with customer D's details through the gateway; the OTP lands in Mailpit and LinkingChallenges holds only its HMAC.", "Throwaway copy: move the SIM-swap call after the claim; criterion 4 fails.", "Throwaway copy: remove the release after an SMTP failure; criterion 5 fails.", "Throwaway copy: drop SupersededAtUtc IS NULL from the claim; criterion 6 fails.", "Throwaway copy: remove UQ_LinkingChallenges_LoginSub from UniqueViolations; criterion 1's parallel test gets a 500."]
+
+[[entry]]
+id = 5
+type = "story"
+title = "Linking start holds the send cap and a full queue"
+description = "Adds the three-per-hour send cap to 6.1's job, counted and claimed in one transaction under `pg_advisory_xact_lock` on the customer, and the audited 429 when the bounded channel is full (AD-12)."
+verify = "Integration tests prove the cap at its edges, across logins and IPs and under parallel starts, that a released send does not count, and the audited 429 on a full queue."
+covers = ["R4", "R6", "R10", "R36"]
+after = [1]
+hitl = false
+risk = "high"
+refine = true
+owner = "backend"
+lane = "M2"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Infrastructure/Linking/ (cap)", "backend/src/DisputeDesk.Application/Linking/StartLinking/ (full-queue result)", "backend/src/DisputeDesk.Api/Linking/ (full-channel 429)", "backend/openapi.json", "frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/"]
+supervisor_checks = ["Throwaway copy: take the cap count outside the advisory-lock transaction; criterion 2 fails."]
 
 [[entry]]
 id = 2
@@ -24,7 +43,7 @@ title = "OTP verification links the login, with lockout and race safety"
 description = "Adds `POST /api/v1/linking/verify` with the atomic attempt counter, constant-time comparison, link insert and session re-issue (AD-12, AD-7)."
 verify = "Integration tests cover correct, wrong, expired, locked, parallel and racing verifications."
 covers = ["R5", "R7", "R10", "R36"]
-after = [1]
+after = [5]
 hitl = false
 risk = "high"
 owner = "backend"

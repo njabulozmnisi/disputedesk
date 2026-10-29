@@ -55,7 +55,7 @@ R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard acce
 
 - Decision: 2026-10-26 — epic Requirements are the parent's lines only, ids kept (`R<n> (parent R<n>)`); each line names the part this epic delivers where the parent line is shared.
 - Decision: 2026-10-26 — tracer bullet: story 1, QA journey UJ-1 on the real stack with axe and ZAP; it is the thinnest path through every layer this epic touches.
-- Waits on 6.4, 3.6, 3.7, 2.5, 2.6, 4.1 because: 1 needs what those stories build (see its References and Description).
+- Waits on 6.4, 3.6, 3.10, 3.11, 3.7, 2.5, 2.6, 4.1 because: 1 needs what those stories build (3.10 the Submitted badge in UJ-1 step 6, 3.11 the browser hop of the trace) (see its References and Description).
 - Waits on 5.4 because: 2 needs what those stories build (see its References and Description).
 - Waits on 5.1 because: 4 needs what those stories build (see its References and Description).
 - Waits on 5.1 because: 7 needs what those stories build (see its References and Description).
