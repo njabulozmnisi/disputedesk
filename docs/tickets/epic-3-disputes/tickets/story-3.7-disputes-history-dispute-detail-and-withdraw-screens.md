@@ -50,6 +50,11 @@ Verify: Vitest component tests pass, with API responses mocked from `openapi.jso
    **When** it opens, and closes by Escape or "Keep dispute"
    **Then** focus moves into it, stays inside, and returns to Withdraw on close
 
+7. **Skip link** (R40; NFR-CODE-6)
+   **Given** any screen of the shell, these screens included
+   **When** the keyboard user presses Tab first after a route change
+   **Then** the first focusable element is a visible-on-focus "Skip to main content" link that moves focus to the main region, so the header can be bypassed (WCAG 2.2 SC 2.4.1 Bypass Blocks)
+
 ## Supervisor checks
 
 Deliberate-break proofs and Docker checks, run by the supervisor, not the verifier.
@@ -61,7 +66,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Owner: frontend (frontend-builder).
 - Flags: none.
 - Lane: B.
-- Touches: `frontend/src/features/disputes/history/, detail/, withdraw/`; frontend/src/app/ (routes).
+- Touches: `frontend/src/features/disputes/history/, detail/, withdraw/`; frontend/src/app/ (routes, the shell's skip link).
 
 ## References
 
@@ -72,3 +77,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - design — docs/ux/mockups/dispute-loading.html
 - design — docs/ux/mockups/not-found.html
 - experience — docs/ux/EXPERIENCE.md, Copy deck
+
+## Notes
+
+- Input (from 2.4 QA, 2026-10-28): each route change focuses the `<h1>`, so the first Tab skips the header and there is no skip link; criterion 7 adds one. Also from 2.4's review: the bare `reason satisfies never;` statement passes ESLint only because `no-unused-expressions` does not unwrap `satisfies`; write the exhaustiveness check as an assignment (`const unreachable: never = reason;`) where this story touches it.

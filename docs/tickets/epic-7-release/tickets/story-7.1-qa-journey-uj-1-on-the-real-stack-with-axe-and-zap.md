@@ -27,7 +27,7 @@ Verify: `npx playwright test` in `e2e/` passes UJ-1 against a fresh stack (`dock
 2. **Four hops traced** (R35, R23; NFR-TEST-5, FR-27)
    **Given** the raise in UJ-1
    **When** the test inspects the network, the database through `qa_readonly` and the topic
-   **Then** the request carried the `Idempotency-Key`, one row exists in each of `Disputes`, `TimelineEntries`, `AuditLogEntries` and `OutboxMessages` (Sent), and one `raised.v1` is on `disputedesk.disputes`
+   **Then** the request carried the `Idempotency-Key`, one row exists in each of `Disputes`, `StoredEvents` and `OutboxMessages` (Sent) with the stored event ID equal to the outbox ID and the CloudEvent `id`, no `AuditLogEntries` row records the raise, the login's `SignIn` and `SignOut` audit entries exist, and one `raised.v1` is on `disputedesk.disputes`
 
 3. **Accessibility** (R40; NFR-CODE-6)
    **Given** every screen visited

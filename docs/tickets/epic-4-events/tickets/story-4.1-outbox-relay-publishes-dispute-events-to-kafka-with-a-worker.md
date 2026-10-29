@@ -23,6 +23,7 @@ Verify: Worker integration tests on Testcontainers Postgres and Redpanda pass fo
    **Given** a pending outbox row
    **When** the relay runs
    **Then** the record goes to `disputedesk.disputes` keyed by dispute ID, its value equal to `Payload`, with headers `traceparent`, `tracestate` and `content-type: application/cloudevents+json`, and the row is marked Sent
+   **And** the published CloudEvent `id` equals the outbox row's ID; the relay never mints an ID (CloudEvents 1.0 `id`; AD-17, AD-19, ad-009)
 
 2. **Per-dispute order** (R23, R28; FR-28, NFR-RES-3)
    **Given** versions 1 to 3 of one dispute pending
@@ -55,6 +56,11 @@ Verify: Worker integration tests on Testcontainers Postgres and Redpanda pass fo
    **When** the relay loops and then SIGTERM arrives
    **Then** `/tmp/heartbeat-relay` is touched every loop including non-leader lock attempts, and both hosts finish in-flight work within the default 30-second `HostOptions.ShutdownTimeout` (no code needed)
 
+8. **Tests own their rows** (R28; NFR-TEST-3)
+   **Given** a database that may already hold outbox rows, seeded ones included (AD-30)
+   **When** the relay tests run
+   **Then** each test inserts its own rows and asserts only on them, and none depends on an empty outbox (AD-17)
+
 ## Supervisor checks
 
 Deliberate-break proofs and Docker checks, run by the supervisor, not the verifier.
@@ -67,7 +73,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 - Owner: backend (backend-builder).
 - Flags: none.
-- Lane: A.
+- Lane: M1, after 2.8, in parallel with 3.8 and 3.3 on M2 after a collision check.
 - Touches: `backend/src/DisputeDesk.Worker/`; `backend/src/DisputeDesk.Infrastructure/Outbox/`; backend/Directory.Packages.props (Confluent.Kafka); backend/Dockerfile (worker-local target); docker-compose.yml (worker health check, depends_on api healthy, stop_grace_period); `backend/tests/DisputeDesk.Worker.IntegrationTests/`.
 
 ## References
@@ -77,3 +83,5 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Risk high: lost or reordered events; beyond the criteria, QA reads the topic for one raise.
+- Decision: 2026-10-29 — 3.8 proves stored event ID = outbox ID; this story proves the published CloudEvent `id` = outbox ID (ad-009). It runs on M1 after 2.8 (lane plan).
+- Collision check with 3.8 and 3.3: this story touches the Worker, `Infrastructure/Outbox/` and the Worker tests; 3.8 owns `Infrastructure/Persistence/` and the outbox payload, so the relay reads `OutboxMessages` as AD-22 defines it and changes no persistence file.
