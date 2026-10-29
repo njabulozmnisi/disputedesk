@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Net;
 using System.Text;
+using DisputeDesk.Api.IntegrationTests.Disputes.Idempotency;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Contracts.Problems;
@@ -79,6 +80,7 @@ public class RaiseDisputeAuthorizationTests(PostgresFixture postgres, Transactio
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(ProblemType.For(CommonProblems.Validation), await response.ProblemTypeAsync());
         Assert.Equal(RowCounts.None, await factory.CountRowsAsync());
+        Assert.Empty(await factory.KeyRowsAsync());
     }
 
     [Fact]
@@ -93,11 +95,13 @@ public class RaiseDisputeAuthorizationTests(PostgresFixture postgres, Transactio
             Content = new StringContent(DisputesApi.Body(), Encoding.UTF8, "application/json"),
         };
         request.Headers.Add("X-XSRF-TOKEN", attackersToken);
+        request.Headers.Add("Idempotency-Key", DisputesApi.NewKey());
 
         HttpResponseMessage response = await victim.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(RowCounts.None, await factory.CountRowsAsync());
+        Assert.Empty(await factory.KeyRowsAsync());
     }
 
     [Fact]
@@ -115,6 +119,7 @@ public class RaiseDisputeAuthorizationTests(PostgresFixture postgres, Transactio
         };
         request.Headers.Add("X-XSRF-TOKEN", await browser.AntiforgeryTokenAsync());
         request.Headers.Add("X-Customer-Id", TransactionsApi.CustomerB);
+        request.Headers.Add("Idempotency-Key", DisputesApi.NewKey());
 
         HttpResponseMessage response = await browser.SendAsync(request, TestContext.Current.CancellationToken);
 

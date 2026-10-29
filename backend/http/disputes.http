@@ -2,14 +2,17 @@
 # Sign in first, headless: scripts/dev-login.sh customer-a (linked by the seed)
 # then copy the disputedesk-session value from the cookie jar it prints into @session below.
 # Run "Antiforgery token" first: it sets the disputedesk-antiforgery cookie, so copy that value into @antiforgery.
+# Every raise needs an Idempotency-Key: an RFC 9651 String, so quoted, 1 to 255 printable characters (AD-16).
+# The same request with the same key gets the stored response again; {{$guid}} gives each request a new key.
 # With curl, keep both cookies in the jar:
 #   token=$(curl -s -b <jar> -c <jar> http://localhost:8080/api/v1/bff/antiforgery | jq -r .requestToken)
-#   curl -b <jar> -H "X-XSRF-TOKEN: $token" -H 'Content-Type: application/json' \
+#   curl -b <jar> -H "X-XSRF-TOKEN: $token" -H 'Content-Type: application/json' -H "Idempotency-Key: \"$(uuidgen)\"" \
 #     -d '{"accountRef":"ACC-A-1","transactionId":"TXN-A-0029","reason":"unrecognised"}' http://localhost:8080/api/v1/disputes
 
 @app = http://localhost:8080
 @session = paste-the-disputedesk-session-cookie-value
 @antiforgery = paste-the-disputedesk-antiforgery-cookie-value
+@raiseKey = "replay-demo-1"
 
 ### Antiforgery token: the X-XSRF-TOKEN value for unsafe requests
 # @name token
@@ -20,14 +23,34 @@ Cookie: disputedesk-session={{session}}
 POST {{app}}/api/v1/disputes
 Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
 X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Idempotency-Key: {{raiseKey}}
 Content-Type: application/json
 
 {"accountRef": "ACC-A-1", "transactionId": "TXN-A-0029", "reason": "unrecognised", "note": "I did not make this purchase."}
 
-### The same transaction again: 409 already-disputed
+### The same raise with the same key: the stored 201 again, byte for byte, and no second dispute
 POST {{app}}/api/v1/disputes
 Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
 X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Idempotency-Key: {{raiseKey}}
+Content-Type: application/json
+
+{"accountRef": "ACC-A-1", "transactionId": "TXN-A-0029", "reason": "unrecognised", "note": "I did not make this purchase."}
+
+### A different request under the same key: 422 idempotency-mismatch
+POST {{app}}/api/v1/disputes
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Idempotency-Key: {{raiseKey}}
+Content-Type: application/json
+
+{"accountRef": "ACC-A-1", "transactionId": "TXN-A-0029", "reason": "duplicateCharge"}
+
+### The same transaction under a new key: 409 already-disputed, carrying the existing dispute's disputeId and customerStatus
+POST {{app}}/api/v1/disputes
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Idempotency-Key: "{{$guid}}"
 Content-Type: application/json
 
 {"accountRef": "ACC-A-1", "transactionId": "TXN-A-0029", "reason": "duplicateCharge"}
@@ -36,6 +59,7 @@ Content-Type: application/json
 POST {{app}}/api/v1/disputes
 Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
 X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Idempotency-Key: "{{$guid}}"
 Content-Type: application/json
 
 {"accountRef": "ACC-A-1", "transactionId": "TXN-A-0028", "reason": "wrongAmount", "expectedAmount": "200.00"}
@@ -44,6 +68,7 @@ Content-Type: application/json
 POST {{app}}/api/v1/disputes
 Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
 X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Idempotency-Key: "{{$guid}}"
 Content-Type: application/json
 
 {"accountRef": "ACC-A-1", "transactionId": "TXN-A-0030", "reason": "unrecognised"}
@@ -52,9 +77,19 @@ Content-Type: application/json
 POST {{app}}/api/v1/disputes
 Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
 X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Idempotency-Key: "{{$guid}}"
 Content-Type: application/json
 
 {"accountRef": "ACC-A-1", "transactionId": "TXN-A-0027", "reason": "unrecognised", "expectedAmount": "10.00"}
+
+### An unquoted key: 400 validation (the key must be an RFC 9651 String)
+POST {{app}}/api/v1/disputes
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+
+{"accountRef": "ACC-A-1", "transactionId": "TXN-A-0027", "reason": "unrecognised"}
 
 ### The transactions list now shows the dispute on TXN-A-0029: disputeId, customerStatus submitted, notDisputableReason alreadyDisputed
 GET {{app}}/api/v1/transactions?limit=50
