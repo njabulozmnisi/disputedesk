@@ -90,7 +90,7 @@ Request inputs: none new. `POST /api/v1/disputes` keeps the inputs and bounds in
     **Then** only A's are returned, because `StoredEvent` carries the `Ownership` named filter through its dispute (EF Core *Global query filters*: filter a required dependent through its navigation), and with no current customer none are returned; the bypass rule of AD-11 is unchanged
 
 12. **Replay reproduces the read model and the timeline** (R29, R16; NFR-DATA-2, NFR-TEST-3)
-    **Given** every dispute the integration tests commit through the raise endpoint
+    **Given** raises through the raise endpoint covering a note, the wrong-amount reason, no note, and a second customer
     **When** a test replays each dispute's stream
     **Then** the state `Replay` returns equals its `Disputes` row column by column
     **And** the customer view built from that same ordered stored-event stream, passed separately through the criterion 13 allowlist, gives a `timeline` equal to the one the API returned for it, item for item and in order (ad-009, AD-13)
@@ -150,24 +150,6 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
   - `backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/` (`DisputeCommitTests.cs`, `OwnershipFilterTests.cs`, `RaiseDisputeTests.cs`, `RaiseDisputeConcurrencyTests.cs`, `RaisedEventTests.cs`, `DisputeSchemaTests.cs`, `DisputesApi.cs`, new stored-event replay, publish mapping, privacy and concurrency test files); `Infrastructure/FailOutboxInsertInterceptor.cs` only if its insert target changes
   - `backend/tests/DisputeDesk.ArchitectureTests/AuditLogRulesTests.cs`
 - Not touched: `backend/openapi.json` (no diff).
-
-## Code to change
-
-<!-- builder-only: the supervisor removes this section at merge -->
-
-The merged code from stories 3.1 and 3.2 holds these, which this story deletes or rewrites:
-
-- `backend/src/DisputeDesk.Domain/Disputes/TimelineEntry.cs`: delete. The aggregate's `_timeline` list and `Timeline` property in `Dispute.cs` go with it.
-- `backend/src/DisputeDesk.Domain/Disputes/DisputeChange.cs`: delete; `Dispute.TakePendingChanges()` returns the pending stored events instead.
-- `backend/src/DisputeDesk.Infrastructure/Persistence/TimelineEntryConfiguration.cs`: delete, with the `HasMany(dispute => dispute.Timeline)` relationship in `DisputeConfiguration.cs` and the `TimelineEntry` query filter in `AppDbContext.OnModelCreating`.
-- `CommitRows.AuditEntry` and `CommitRows.ToAuditAction`: delete; `AppDbContext.AddRowsForDisputeChanges` stops adding an `AuditLogEntry` per change and adds the stored event row instead. `CommitRows.OutboxMessage`'s `NotSupportedException` for non-raise actions becomes the exhaustive publish `switch`.
-- `DisputeConfiguration`'s `builder.Property<uint>("RowVersion").IsRowVersion()` (`xmin`): delete.
-- `AppDbContext.SaveChanges` and `SaveChangesAsync` clear the tracker only for a unique violation today; criterion 7 clears it for any exception.
-- `Migrations/20261028084134_AddDisputes.cs` creates `TimelineEntries`: rewrite it to create `StoredEvents` instead, keeping its migration ID, then regenerate its designer file, the designer of `20261028150231_AddIdempotencyKeys` and `AppDbContextModelSnapshot.cs` from the model (they embed the model, so they name `TimelineEntries` and the `RowVersion` property today).
-- `CustomerView.ToResponse(TimelineEntry)`: rewrite to build each `TimelineEntryResponse` from an admitted stored event.
-- `CommitRows.CreateEventJson` and `RaiseDisputeHandler.CreateResponseJson`: replace with the shared instance.
-- The test `TimelineEntries_QueriedDirectly_AreFilteredThroughTheirDispute` in `OwnershipFilterTests.cs` and the row-count assertions on `TimelineEntries` and `AuditLogEntries` in the dispute tests: rewrite for `StoredEvents` (criteria 5, 6, 11).
-- Developers' local databases hold the earlier `AddDisputes` schema under the same migration ID, so EF Core will not re-apply it: recreate the local volume with `docker compose down -v`, then `docker compose up --wait` (`infra/README.md`; it also resets Zitadel and Redpanda). Testcontainers databases are created fresh per run and need nothing; CI likewise starts from a fresh database, because `ci.yml` runs the integration tests on a new Testcontainers Postgres and holds no database between runs (it only validates the Compose file, never starts it).
 
 ## References
 

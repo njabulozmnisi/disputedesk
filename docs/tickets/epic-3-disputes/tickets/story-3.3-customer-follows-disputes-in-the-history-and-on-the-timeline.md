@@ -13,7 +13,7 @@ risk: high
 
 ## Description
 
-Adds `GET /api/v1/disputes` and `GET /api/v1/disputes/<disputeId>` on story 3.8's customer view mapping: list rows and the dispute fields of the detail read the `Disputes` read model, and the timeline is built from the dispute's stored events through the deny-by-default allowlist (AD-13). Proves the allowlist against every stored event type and a test-only unknown type, and proves ownership on every customer endpoint.
+Adds `GET /api/v1/disputes` and `GET /api/v1/disputes/<disputeId>` on story 3.8's customer view mapping: list rows and the dispute fields of the detail read the `Disputes` read model, and the timeline is built from the dispute's stored events through the deny-by-default allowlist (AD-13). The customer read skips a stored event row whose `EventType` it does not know before mapping it, so an unknown row is hidden, never a 500 (AD-13); replay keeps refusing unknown rows (3.8). Proves the allowlist against every stored event type and a test-only unknown type, and proves ownership on every customer endpoint.
 
 ## Requirements
 
@@ -74,7 +74,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Owner: backend (backend-builder).
 - Flags: high-stakes.
 - Lane: M2.
-- Touches: `backend/src/DisputeDesk.Application/Disputes/ListDisputes/, GetDispute/, CustomerView/`; `backend/src/DisputeDesk.Contracts/Disputes/`; `backend/src/DisputeDesk.Contracts/Json/` (timestamps, exact enum reading); `backend/src/DisputeDesk.Api/Disputes/`; `backend/openapi.json`; `backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/, Ownership/`.
+- Touches: `backend/src/DisputeDesk.Application/Disputes/ListDisputes/, GetDispute/, CustomerView.cs`; `backend/src/DisputeDesk.Contracts/Disputes/`; `backend/src/DisputeDesk.Contracts/Json/` (timestamps, exact enum reading); `backend/src/DisputeDesk.Api/Disputes/`; `backend/openapi.json`; `backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/, Ownership/`.
 
 ## References
 
@@ -86,3 +86,6 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Open question (from 3.1, 2026-10-28): each customer `timeline` item (`TimelineEntryResponse`) carries the wire `action`, so an escalation would show `escalate` to the customer. Before building, decide whether R18 ("Escalated always shows as Under review (prioritised)") means the action is hidden or mapped in customer responses; `DisputeResponse` is the shape the GET reuses.
 - Input (from 3.2 review R5, 2026-10-28): the raise handler builds the `Location` string `/api/v1/disputes/{id}` in Application, because the stored 201 exists before the save. When this story adds the GET, put the route in one Contracts constant used by both the handler and `MapGet`.
 - Input (from 3.1, decided 2026-10-28): responses write `DateTimeOffset` values as `+00:00` with 7 fractional digits, while Postgres stores 6 and events write `Z`; criterion 7 settles the `Z` form in the shared JSON options of story 3.8. Open question: whether a response timestamp should round to the 6 digits Postgres stores, so a value read back equals the value returned; the convention says System.Text.Json's precision, so the answer may need an architecture change. From 3.1 QA: the shared enum converter reads names case-insensitively; criterion 7 makes reading exact in `SingleNameEnumConverter`.
+- Carried from 3.8's review: the alias rule (`UsingAliasRulesTests`, `docs/conventions/backend.md`) also scans `backend/stubs` and fails on an MSBuild `<Using ... Alias="..." />` item in any `*.csproj` or `*.props` under `backend/`; its regex comment states that it matches one line at a time.
+- Carried from 3.8 (naming research, `docs/research/projection-naming/projection-naming.md`): `CustomerView` keeps its name (a read-time view that persists nothing, not a projection); its `Timeline` method becomes `ToTimeline`, matching `ToResponse` (.NET guidelines: methods are verbs).
+- Carried from 3.8's round-3 review: the raise 201's `transaction.transactionDate` comes from the core-banking snapshot, which Npgsql truncates to microseconds when stored; the fixtures are whole seconds, so it agrees today. When 3.3 returns the snapshot from the read model, a core-banking value finer than a microsecond would differ from the 201; truncate it once where the snapshot is taken, or record the limit in the production path.

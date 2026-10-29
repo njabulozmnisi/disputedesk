@@ -3,23 +3,24 @@ using System.Text.RegularExpressions;
 namespace DisputeDesk.ArchitectureTests;
 
 /// <summary>
-/// The audit log is append-only (AD-14; OWASP ASVS 4.0.3 V7.3.3). The commit override refuses a tracked audit entry
-/// that is modified or deleted, but bulk and raw SQL writes never pass the change tracker, so no production file that
-/// names the audit entries may call them. The database-level grant is on the production path.
+/// The audit log and the stored events are insert only (AD-14; OWASP ASVS 4.0.3 V7.3.3; OWASP Logging Cheat Sheet:
+/// protect the integrity of event data). The commit override refuses a tracked audit entry or stored event that is
+/// modified or deleted, but bulk and raw SQL writes never pass the change tracker, so no production file that names
+/// either may call them. The database-level grant is on the production path.
 /// </summary>
 public partial class AuditLogRulesTests
 {
     [Fact]
-    public void ProductionSource_FileNamingAuditEntries_HasNoBulkOrRawSqlCall()
+    public void ProductionSource_FileNamingAuditEntriesOrStoredEvents_HasNoBulkOrRawSqlCall()
     {
         var violations = Directory.EnumerateFiles(SourceRoots.Src, "*.cs", SearchOption.AllDirectories)
             .Where(file => !SourceRoots.IsBuildOutput(file))
             .Select(file => (File: file, Text: File.ReadAllText(file)))
-            .Where(source => NamesAuditEntries().IsMatch(source.Text) && BulkOrRawSqlCall().IsMatch(source.Text))
+            .Where(source => NamesInsertOnlyRecords().IsMatch(source.Text) && BulkOrRawSqlCall().IsMatch(source.Text))
             .Select(source => Path.GetRelativePath(SourceRoots.Src, source.File))
             .ToList();
 
-        Assert.True(violations.Count == 0, "Bulk or raw SQL call in a file naming the audit entries:\n" + string.Join('\n', violations));
+        Assert.True(violations.Count == 0, "Bulk or raw SQL call in a file naming the audit entries or stored events:\n" + string.Join('\n', violations));
     }
 
     [Theory]
@@ -30,7 +31,10 @@ public partial class AuditLogRulesTests
     [InlineData("db.Set<AuditLogEntry>().FromSqlRaw(sql)", true)]
     [InlineData("db.Database.SqlQueryRaw<int>(sql)", true)]
     [InlineData("db.Database.SqlQuery<Guid>($\"DELETE FROM \\\"AuditLogEntries\\\" RETURNING \\\"Id\\\"\")", true)]
+    [InlineData("db.Set<StoredEventRow>().Where(row => row.Version == 1).ExecuteDeleteAsync()", true)]
+    [InlineData("db.Database.ExecuteSqlAsync($\"UPDATE \\\"StoredEvents\\\" SET \\\"Data\\\" = '{}'\")", true)]
     [InlineData("Set<AuditLogEntry>().Add(entry);", false)]
+    [InlineData("Set<StoredEventRow>().Add(row);", false)]
     [InlineData("// ExecuteUpdate is not called here", false)]
     public void BulkOrRawSqlCall_SampleLine_IsMatchedOnlyWhenCalled(string line, bool expected)
     {
@@ -40,15 +44,20 @@ public partial class AuditLogRulesTests
     [Theory]
     [InlineData("Set<AuditLogEntry>()", true)]
     [InlineData("FROM \"AuditLogEntries\"", true)]
+    [InlineData("Set<StoredEventRow>()", true)]
+    [InlineData("public sealed record DisputeRaised(string CustomerId) : StoredEvent;", true)]
+    [InlineData("new StoredEventConfiguration()", true)]
+    [InlineData("FROM \"StoredEvents\"", true)]
     [InlineData("Set<OutboxMessage>()", false)]
-    public void NamesAuditEntries_SampleText_IsMatchedForTheTypeOrTheTable(string text, bool expected)
+    public void NamesInsertOnlyRecords_SampleText_IsMatchedForTheTypesOrTheTables(string text, bool expected)
     {
-        Assert.Equal(expected, NamesAuditEntries().IsMatch(text));
+        Assert.Equal(expected, NamesInsertOnlyRecords().IsMatch(text));
     }
 
-    // The type, its configuration and the table: AuditLogEntry, AuditLogEntryConfiguration, AuditLogEntries.
-    [GeneratedRegex(@"\bAuditLogEntr")]
-    private static partial Regex NamesAuditEntries();
+    // The types, their configurations and the tables: AuditLogEntry, AuditLogEntryConfiguration, AuditLogEntries;
+    // StoredEvent and StoredEventRow, StoredEventConfiguration, StoredEvents.
+    [GeneratedRegex(@"\b(?:AuditLogEntr|StoredEvent)")]
+    private static partial Regex NamesInsertOnlyRecords();
 
     // ExecuteUpdate(Async), ExecuteDelete(Async), ExecuteSql(Async/Interpolated/Raw), every *SqlRaw variant, and
     // SqlQuery(Raw), which runs any statement it is given, such as DELETE ... RETURNING.

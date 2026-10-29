@@ -1,11 +1,10 @@
 using System.Globalization;
 using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Application.Disputes;
+using DisputeDesk.Contracts.Transactions;
 using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
-using DisputeDesk.Domain.Transactions;
 using Microsoft.EntityFrameworkCore;
-using Wire = DisputeDesk.Contracts.Transactions;
 
 namespace DisputeDesk.Application.Transactions;
 
@@ -24,7 +23,7 @@ public sealed class ListTransactions(CurrentCustomer currentCustomer, ICoreBanki
     /// <param name="cursor">The previous page's <c>nextCursor</c>, or null for the first page.</param>
     /// <param name="limit">1 to <see cref="MaxPageSize"/>, already checked by built-in validation at the edge.</param>
     /// <param name="cancellationToken">Cancels the call to core banking and the dispute query.</param>
-    public async Task<Result<Wire.TransactionPageResponse>> HandleAsync(string? cursor, int limit, CancellationToken cancellationToken)
+    public async Task<Result<TransactionPageResponse>> HandleAsync(string? cursor, int limit, CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
 
@@ -53,25 +52,25 @@ public sealed class ListTransactions(CurrentCustomer currentCustomer, ICoreBanki
             .ToListAsync(cancellationToken);
 
         string? nextCursor = page.Value.NextCursor is null ? null : TransactionCursor.Encode(page.Value.NextCursor);
-        Wire.TransactionResponse[] rows = [.. page.Value.Items.Select(transaction => ToResponse(
+        TransactionResponse[] rows = [.. page.Value.Items.Select(transaction => ToResponse(
             transaction,
             disputes.Find(dispute => dispute.AccountRef == transaction.AccountRef && dispute.TransactionId == transaction.TransactionId),
             now))];
-        return new Wire.TransactionPageResponse(rows, nextCursor);
+        return new TransactionPageResponse(rows, nextCursor);
     }
 
-    private static Wire.TransactionResponse ToResponse(Transaction transaction, RowDispute? dispute, DateTimeOffset now)
+    private static TransactionResponse ToResponse(Transaction transaction, RowDispute? dispute, DateTimeOffset now)
     {
-        NotDisputableReason? reason = Disputability.ReasonNotDisputable(
+        Domain.Transactions.NotDisputableReason? reason = Domain.Transactions.Disputability.ReasonNotDisputable(
             dispute is not null, transaction.Direction, transaction.Kind, transaction.State, transaction.TransactionDate, now);
 
-        return new Wire.TransactionResponse(
+        return new TransactionResponse(
             transaction.TransactionId,
             transaction.AccountRef,
             transaction.AccountLast4,
             transaction.TransactionDate,
             transaction.Description,
-            new Wire.Money(transaction.Amount.ToString("0.00", CultureInfo.InvariantCulture), transaction.Currency),
+            new Money(transaction.Amount.ToString("0.00", CultureInfo.InvariantCulture), transaction.Currency),
             ToWire(transaction.Direction),
             ToWire(transaction.Kind),
             ToWire(transaction.State),
@@ -83,34 +82,34 @@ public sealed class ListTransactions(CurrentCustomer currentCustomer, ICoreBanki
     }
 
     // Contracts reference no other project (AD-1), so the wire enums are their own types with the same members.
-    private static Wire.TransactionDirection ToWire(TransactionDirection direction) => direction switch
+    private static TransactionDirection ToWire(Domain.Transactions.TransactionDirection direction) => direction switch
     {
-        TransactionDirection.Debit => Wire.TransactionDirection.Debit,
-        TransactionDirection.Credit => Wire.TransactionDirection.Credit,
+        Domain.Transactions.TransactionDirection.Debit => TransactionDirection.Debit,
+        Domain.Transactions.TransactionDirection.Credit => TransactionDirection.Credit,
         _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, "Unmapped transaction direction."),
     };
 
-    private static Wire.TransactionKind ToWire(TransactionKind kind) => kind switch
+    private static TransactionKind ToWire(Domain.Transactions.TransactionKind kind) => kind switch
     {
-        TransactionKind.Card => Wire.TransactionKind.Card,
-        TransactionKind.OwnAccountTransfer => Wire.TransactionKind.OwnAccountTransfer,
-        TransactionKind.Transfer => Wire.TransactionKind.Transfer,
-        TransactionKind.Other => Wire.TransactionKind.Other,
+        Domain.Transactions.TransactionKind.Card => TransactionKind.Card,
+        Domain.Transactions.TransactionKind.OwnAccountTransfer => TransactionKind.OwnAccountTransfer,
+        Domain.Transactions.TransactionKind.Transfer => TransactionKind.Transfer,
+        Domain.Transactions.TransactionKind.Other => TransactionKind.Other,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unmapped transaction kind."),
     };
 
-    private static Wire.TransactionState ToWire(TransactionState state) => state switch
+    private static TransactionState ToWire(Domain.Transactions.TransactionState state) => state switch
     {
-        TransactionState.Settled => Wire.TransactionState.Settled,
-        TransactionState.Pending => Wire.TransactionState.Pending,
+        Domain.Transactions.TransactionState.Settled => TransactionState.Settled,
+        Domain.Transactions.TransactionState.Pending => TransactionState.Pending,
         _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Unmapped transaction state."),
     };
 
-    private static Wire.NotDisputableReason ToWire(NotDisputableReason reason) => reason switch
+    private static NotDisputableReason ToWire(Domain.Transactions.NotDisputableReason reason) => reason switch
     {
-        NotDisputableReason.AlreadyDisputed => Wire.NotDisputableReason.AlreadyDisputed,
-        NotDisputableReason.NotEligible => Wire.NotDisputableReason.NotEligible,
-        NotDisputableReason.OutsideWindow => Wire.NotDisputableReason.OutsideWindow,
+        Domain.Transactions.NotDisputableReason.AlreadyDisputed => NotDisputableReason.AlreadyDisputed,
+        Domain.Transactions.NotDisputableReason.NotEligible => NotDisputableReason.NotEligible,
+        Domain.Transactions.NotDisputableReason.OutsideWindow => NotDisputableReason.OutsideWindow,
         _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "Unmapped reason."),
     };
 

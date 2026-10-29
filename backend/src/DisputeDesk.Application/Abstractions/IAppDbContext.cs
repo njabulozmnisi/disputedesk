@@ -15,8 +15,8 @@ public interface IAppDbContext
     DbSet<TEntity> Entities<TEntity>() where TEntity : class;
 
     /// <summary>
-    /// Commits every tracked change in one transaction, with the audit entry and outbox row of each dispute change
-    /// (AD-14). Throws <see cref="UniqueViolationException"/> when a unique index that stands for an expected failure
+    /// Commits every tracked change in one transaction, with the stored event of each dispute change and, for a published
+    /// type, its outbox row (AD-14). Throws <see cref="UniqueViolationException"/> when a unique index that stands for an expected failure
     /// refuses the commit (AD-15).
     /// </summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

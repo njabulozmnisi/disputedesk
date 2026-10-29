@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/njabulozmnisi/disputedesk/blob/main/contracts/events/disputedesk.dispute.status-changed.v1.schema.json",
+  "title": "disputedesk.dispute.status-changed.v1",
+  "description": "A dispute moved from one status to another: review started, escalated, resolved or withdrawn. A CloudEvents 1.0 event in structured JSON mode (architecture AD-19). It carries no personal data: no customer ID, account or card number, amount, note or actor identity. disputeVersion rises within a dispute but can skip the versions of stored events that are not published, so consumers order by it and never treat a gap as a lost event. Consumers dedupe on source + id. Changes within v1 are additive.",
+  "type": "object",
+  "required": ["specversion", "id", "source", "type", "subject", "time", "datacontenttype", "dataschema", "data"],
+  "properties": {
+    "specversion": { "const": "1.0" },
+    "id": { "description": "The event ID, stable across redelivery (the outbox row ID, a UUIDv7).", "type": "string", "format": "uuid" },
+    "source": { "const": "/disputedesk/api" },
+    "type": { "const": "disputedesk.dispute.status-changed.v1" },
+    "subject": { "description": "The dispute ID.", "type": "string", "format": "uuid" },
+    "time": { "description": "When the status changed (RFC 3339, UTC with Z).", "type": "string", "format": "date-time", "pattern": "Z$" },
+    "datacontenttype": { "const": "application/json" },
+    "dataschema": { "const": "https://github.com/njabulozmnisi/disputedesk/blob/main/contracts/events/disputedesk.dispute.status-changed.v1.schema.json" },
+    "data": {
+      "type": "object",
+      "required": ["disputeId", "fromStatus", "toStatus", "action", "actorType", "occurredAt", "disputeVersion"],
+      "properties": {
+        "disputeId": { "type": "string", "format": "uuid" },
+        "fromStatus": { "enum": ["submitted", "underReview", "escalated"] },
+        "toStatus": { "enum": ["underReview", "escalated", "resolved", "withdrawn"] },
+        "action": { "enum": ["startReview", "escalate", "resolve", "withdraw"] },
+        "actorType": { "enum": ["customer", "operations", "automation"] },
+        "outcome": { "description": "Only on a resolve.", "enum": ["upheld", "rejected"] },
+        "occurredAt": { "description": "The same instant as time (RFC 3339, UTC with Z).", "type": "string", "format": "date-time", "pattern": "Z$" },
+        "disputeVersion": { "type": "integer", "minimum": 2 }
+      },
+      "if": { "properties": { "action": { "const": "resolve" } } },
+      "then": { "required": ["outcome"] },
+      "else": { "not": { "required": ["outcome"] } }
+    }
+  }
+}

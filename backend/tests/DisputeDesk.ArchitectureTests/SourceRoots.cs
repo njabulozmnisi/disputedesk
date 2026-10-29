@@ -5,6 +5,8 @@ internal static class SourceRoots
 {
     public static string Src { get; } = Path.Combine(FindBackendRoot(), "src");
 
+    public static string Tests { get; } = Path.Combine(FindBackendRoot(), "tests");
+
     /// <summary>The repository root, above backend/, where infra/, scripts/ and docker-compose.yml live.</summary>
     public static string Repo { get; } = Path.GetFullPath(Path.Combine(FindBackendRoot(), ".."));
 

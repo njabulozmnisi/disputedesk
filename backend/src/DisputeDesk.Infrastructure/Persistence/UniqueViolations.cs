@@ -14,6 +14,7 @@ internal static class UniqueViolations
     private static readonly Dictionary<string, Error> ErrorsByIndex = new(StringComparer.Ordinal)
     {
         [DisputeConfiguration.OneDisputePerTransaction] = DisputeErrors.AlreadyDisputed,
+        [StoredEventConfiguration.OneEventPerVersion] = DisputeErrors.VersionClash,
     };
 
     /// <summary>The error for a commit that failed on one of the mapped unique indexes, otherwise null.</summary>

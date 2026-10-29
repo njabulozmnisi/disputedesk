@@ -1,9 +1,11 @@
 using System.Net;
+using System.Reflection;
 using System.Text.Json;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Application.Audit;
+using DisputeDesk.Application.Disputes;
 using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Domain.Disputes;
@@ -14,7 +16,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DisputeDesk.Api.IntegrationTests.Disputes;
 
-/// <summary>AC6: the one commit path (AD-14) writes all four rows or none, and keeps the audit log append-only.</summary>
+/// <summary>
+/// The one commit path (AD-14): a raise writes its stored event, the read model and the outbox row in one transaction
+/// or nothing, writes no audit row, never leaves a failed save behind to be written later, and keeps stored events and
+/// audit entries insert only.
+/// </summary>
 public class DisputeCommitTests(PostgresFixture postgres, TransactionsStub stub) : IClassFixture<TransactionsStub>
 {
     [Fact]
@@ -36,7 +42,7 @@ public class DisputeCommitTests(PostgresFixture postgres, TransactionsStub stub)
     }
 
     [Fact]
-    public async Task Raise_Succeeds_WritesTheAuditEntryWithTheLoginAsActorAndTheCustomerApart()
+    public async Task Raise_Succeeds_WritesOneStoredEventByTheLoginAndNoAuditEntry()
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
@@ -44,87 +50,208 @@ public class DisputeCommitTests(PostgresFixture postgres, TransactionsStub stub)
         HttpResponseMessage response = await browser.RaiseAsync(DisputesApi.Body());
 
         using JsonDocument body = await response.ReadJsonAsync();
-        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
-        AuditLogEntry audit = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<AuditLogEntry>()
-            .SingleAsync(TestContext.Current.CancellationToken);
-        Assert.Equal(AuditAction.Raise, audit.Action);
-        Assert.Equal(AuditResult.Succeeded, audit.Result);
-        Assert.Equal(ActorType.Customer, audit.ActorType);
-        Assert.Equal("login-a", audit.ActorId);
-        Assert.Equal(TransactionsApi.CustomerA, audit.CustomerId);
-        Assert.Equal(body.RootElement.GetProperty("disputeId").GetGuid(), audit.DisputeId);
-        Assert.Matches("^[0-9a-f]{32}$", audit.TraceId);
-    }
-
-    [Fact]
-    public async Task SaveChanges_AuditEntryModified_IsRefusedAndTheRowIsUnchanged()
-    {
-        await using ApiFactory factory = await RaisedAsync();
-        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
-        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        AuditLogEntry audit = await db.Set<AuditLogEntry>().SingleAsync(TestContext.Current.CancellationToken);
-        db.Entry(audit).Property(entry => entry.ActorId).CurrentValue = "someone-else";
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync(TestContext.Current.CancellationToken));
-
-        Assert.Equal("login-a", await ActorIdInTheDatabaseAsync(factory));
-    }
-
-    [Fact]
-    public async Task SaveChanges_AuditEntryDeleted_IsRefusedAndTheRowRemains()
-    {
-        await using ApiFactory factory = await RaisedAsync();
-        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
-        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Set<AuditLogEntry>().Remove(await db.Set<AuditLogEntry>().SingleAsync(TestContext.Current.CancellationToken));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync(TestContext.Current.CancellationToken));
-
+        // One row each in Disputes, StoredEvents and OutboxMessages, and no dispute audit row (ad-009).
         Assert.Equal(RowCounts.One, await factory.CountRowsAsync());
+        StoredEventRow stored = await SingleStoredEventAsync(factory);
+        Assert.Equal(nameof(DisputeRaised), stored.EventType);
+        Assert.Equal(1, stored.Version);
+        Assert.Equal(ActorType.Customer, stored.ActorType);
+        Assert.Equal("login-a", stored.ActorId);
+        Assert.Equal(body.RootElement.GetProperty("disputeId").GetGuid(), stored.DisputeId);
+        Assert.Matches("^[0-9a-f]{32}$", stored.TraceId);
+        // Data holds only the type's own fields, camelCase; the shared ones are columns (AD-22).
+        using var data = JsonDocument.Parse(stored.Data);
+        Assert.Equal(
+            ["customerId", "disputedAmount", "expectedAmount", "note", "reason", "toStatus", "transaction"],
+            data.RootElement.EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(TransactionsApi.CustomerA, data.RootElement.GetProperty("customerId").GetString());
     }
 
     [Fact]
-    public void SaveChangesSynchronous_AuditEntryModified_IsRefusedToo()
+    public async Task Raise_Succeeds_StoredEventIdIsTheOutboxIdAndOneInstantStampsBoth()
     {
-        using AppDbContext db = postgres.CreateDbContext();
-        AuditLogEntry entry = new()
-        {
-            Id = Guid.NewGuid(),
-            OccurredAtUtc = stub.Now,
-            Action = AuditAction.Raise,
-            Result = AuditResult.Succeeded,
-            ActorType = ActorType.Customer,
-            ActorId = "login-a",
-        };
-        db.Attach(entry);
-        db.Entry(entry).State = EntityState.Modified;
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
 
-        Assert.Throws<InvalidOperationException>(() => db.SaveChanges());
+        HttpResponseMessage response = await browser.RaiseAsync(DisputesApi.Body());
+
+        using JsonDocument body = await response.ReadJsonAsync();
+        StoredEventRow stored = await SingleStoredEventAsync(factory);
+        OutboxMessage outbox = await SingleOutboxMessageAsync(factory);
+        Assert.Equal(stored.Id, outbox.Id);
+        // The clock reads a tick finer than Postgres keeps, so these are equal only if the raise stamped one stored instant.
+        Assert.Equal(stored.OccurredAtUtc, body.RootElement.GetProperty("createdAt").GetDateTimeOffset());
+        // A UUIDv7 whose first 48 bits are the change's instant in Unix milliseconds (RFC 9562, section 5.7).
+        Assert.Equal(7, stored.Id.Version);
+        Assert.Equal(stored.OccurredAtUtc.ToUnixTimeMilliseconds(), Convert.ToInt64(stored.Id.ToString("N")[..12], 16));
+        Assert.Equal(stored.OccurredAtUtc, outbox.CreatedAtUtc);
+        using var payload = JsonDocument.Parse(outbox.Payload);
+        Assert.Equal(stored.Id.ToString(), payload.RootElement.GetProperty("id").GetString());
+        Assert.Equal(stored.OccurredAtUtc, payload.RootElement.GetProperty("time").GetDateTimeOffset());
     }
 
-    [Fact]
-    public async Task SaveChanges_AgainAfterLosingToTheUniqueIndex_WritesNothingMore()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveChanges_StoredEventModified_IsRefusedAndTheRowIsUnchanged(bool synchronous)
     {
-        // After a lost race the context tracks nothing (ChangeTracker.Clear), so a later save on it cannot insert the
-        // losing dispute and its rows a second time.
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string database = await RaisedDatabaseAsync();
+        await using AppDbContext db = Context(database);
+        StoredEventRow stored = await db.Set<StoredEventRow>().IgnoreQueryFilters().SingleAsync(TestContext.Current.CancellationToken);
+        db.Entry(stored).Property(row => row.ActorId).CurrentValue = "someone-else";
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(db, synchronous));
+
+        await using AppDbContext check = Context(database);
+        Assert.Equal("login-a", (await check.Set<StoredEventRow>().IgnoreQueryFilters().SingleAsync(TestContext.Current.CancellationToken)).ActorId);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveChanges_StoredEventDeleted_IsRefusedAndTheRowRemains(bool synchronous)
+    {
+        string database = await RaisedDatabaseAsync();
+        await using AppDbContext db = Context(database);
+        db.Remove(await db.Set<StoredEventRow>().IgnoreQueryFilters().SingleAsync(TestContext.Current.CancellationToken));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(db, synchronous));
+
+        Assert.Equal((1, 1, 1), await CountAsync(database));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveChanges_AuditEntryModified_IsRefusedAndTheRowIsUnchanged(bool synchronous)
+    {
         string database = await postgres.CreateMigratedDatabaseAsync();
-        DbContextOptions<AppDbContext> options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(database).Options;
-        await using (var winner = new AppDbContext(options))
-        {
-            winner.Set<Dispute>().Add(RaisedDispute());
-            await winner.SaveChangesAsync(cancellationToken);
-        }
+        Guid id = await AddAuditEntryAsync(database);
+        await using AppDbContext db = Context(database);
+        AuditLogEntry entry = await db.Set<AuditLogEntry>().SingleAsync(TestContext.Current.CancellationToken);
+        db.Entry(entry).Property(audit => audit.ActorId).CurrentValue = "someone-else";
 
-        await using var loser = new AppDbContext(options);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(db, synchronous));
+
+        await using AppDbContext check = Context(database);
+        Assert.Equal("login-a", (await check.Set<AuditLogEntry>().SingleAsync(audit => audit.Id == id, TestContext.Current.CancellationToken)).ActorId);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveChanges_AuditEntryDeleted_IsRefusedAndTheRowRemains(bool synchronous)
+    {
+        string database = await postgres.CreateMigratedDatabaseAsync();
+        await AddAuditEntryAsync(database);
+        await using AppDbContext db = Context(database);
+        db.Remove(await db.Set<AuditLogEntry>().SingleAsync(TestContext.Current.CancellationToken));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(db, synchronous));
+
+        await using AppDbContext check = Context(database);
+        Assert.Equal(1, await check.Set<AuditLogEntry>().CountAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveChanges_AddedDisputeWithNoPendingStoredEvent_IsRefusedAndWritesNothing(bool synchronous)
+    {
+        string database = await postgres.CreateMigratedDatabaseAsync();
+        await using AppDbContext db = Context(database);
+        Dispute dispute = RaisedDispute();
+        dispute.TakePendingChanges();
+        db.Set<Dispute>().Add(dispute);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(db, synchronous));
+
+        Assert.Equal((0, 0, 0), await CountAsync(database));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveChanges_ModifiedDisputeWithNoPendingStoredEvent_IsRefusedAndTheRowIsUnchanged(bool synchronous)
+    {
+        string database = await RaisedDatabaseAsync();
+        await using AppDbContext db = Context(database);
+        Dispute dispute = await db.Set<Dispute>().IgnoreQueryFilters().SingleAsync(TestContext.Current.CancellationToken);
+        db.Entry(dispute).Property(row => row.Status).CurrentValue = DisputeStatus.Withdrawn;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(db, synchronous));
+
+        await using AppDbContext check = Context(database);
+        Assert.Equal(DisputeStatus.Submitted, (await check.Set<Dispute>().IgnoreQueryFilters().SingleAsync(TestContext.Current.CancellationToken)).Status);
+        Assert.Equal((1, 1, 1), await CountAsync(database));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveChanges_AgainAfterLosingToTheUniqueIndex_WritesNothingMore(bool synchronous)
+    {
+        string database = await RaisedDatabaseAsync();
+        await using AppDbContext loser = Context(database);
         loser.Set<Dispute>().Add(RaisedDispute());
-        await Assert.ThrowsAsync<UniqueViolationException>(() => loser.SaveChangesAsync(cancellationToken));
 
-        Assert.Equal(0, await loser.SaveChangesAsync(cancellationToken));
+        UniqueViolationException violation = await Assert.ThrowsAsync<UniqueViolationException>(() => SaveAsync(loser, synchronous));
+
+        Assert.Equal(DisputeErrors.AlreadyDisputed, violation.Error);
         Assert.Empty(loser.ChangeTracker.Entries());
-        Assert.Equal(1, await loser.Set<Dispute>().IgnoreQueryFilters().CountAsync(cancellationToken));
-        Assert.Equal(1, await loser.Set<OutboxMessage>().CountAsync(cancellationToken));
-        Assert.Equal(1, await loser.Set<AuditLogEntry>().CountAsync(cancellationToken));
+        Assert.Equal(0, await SaveAsync(loser, synchronous));
+        Assert.Equal((1, 1, 1), await CountAsync(database));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveChanges_AgainAfterAFailedInsert_WritesNothingAndRethrowsTheFailureUnchanged(bool synchronous)
+    {
+        string database = await postgres.CreateMigratedDatabaseAsync();
+        var failOutbox = new FailOutboxInsertInterceptor();
+        await using AppDbContext db = Context(database, failOutbox);
+        db.Set<Dispute>().Add(RaisedDispute());
+
+        Exception failure = await Assert.ThrowsAnyAsync<Exception>(() => SaveAsync(db, synchronous));
+
+        Assert.Equal(1, failOutbox.Failed);
+        Assert.IsType<DbUpdateException>(failure);
+        Assert.Empty(db.ChangeTracker.Entries());
+        Assert.Equal(0, await SaveAsync(db, synchronous));
+        Assert.Equal((0, 0, 0), await CountAsync(database));
+    }
+
+    [Fact]
+    public async Task SaveChangesAsync_AgainAfterACancelledSave_WritesNothing()
+    {
+        string database = await postgres.CreateMigratedDatabaseAsync();
+        await using AppDbContext db = Context(database);
+        db.Set<Dispute>().Add(RaisedDispute());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => db.SaveChangesAsync(new CancellationToken(canceled: true)));
+
+        Assert.Empty(db.ChangeTracker.Entries());
+        Assert.Equal(0, await db.SaveChangesAsync(TestContext.Current.CancellationToken));
+        Assert.Equal((0, 0, 0), await CountAsync(database));
+    }
+
+    [Fact]
+    public async Task SaveChanges_PendingTypeTheMappingDoesNotName_ThrowsAndWritesNothing()
+    {
+        string database = await postgres.CreateMigratedDatabaseAsync();
+        await using AppDbContext db = Context(database);
+        Dispute dispute = RaisedDispute();
+        // Only the aggregate appends stored events; reflection stages a type no Domain method can append.
+        List<StoredEvent> pending = (List<StoredEvent>?)typeof(Dispute).GetField("_pendingChanges", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(dispute)
+            ?? throw new InvalidOperationException("Dispute._pendingChanges not found.");
+        pending.Add(new UnmappedStoredEvent { DisputeId = dispute.Id, Version = 2, OccurredAtUtc = stub.Now, ActorId = "login-a" });
+        db.Set<Dispute>().Add(dispute);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => db.SaveChangesAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, await db.SaveChangesAsync(TestContext.Current.CancellationToken));
+        Assert.Equal((0, 0, 0), await CountAsync(database));
     }
 
     private Dispute RaisedDispute()
@@ -137,18 +264,73 @@ public class DisputeCommitTests(PostgresFixture postgres, TransactionsStub stub)
             new Actor(ActorType.Customer, "login-a"), stub.Now).Value;
     }
 
-    private async Task<ApiFactory> RaisedAsync()
+    /// <summary>A fresh database holding one committed raise.</summary>
+    private async Task<string> RaisedDatabaseAsync()
     {
-        ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
-        using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        Assert.Equal(HttpStatusCode.Created, (await browser.RaiseAsync(DisputesApi.Body())).StatusCode);
-        return factory;
+        string database = await postgres.CreateMigratedDatabaseAsync();
+        await using AppDbContext db = Context(database);
+        db.Set<Dispute>().Add(RaisedDispute());
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return database;
     }
 
-    private static async Task<string> ActorIdInTheDatabaseAsync(ApiFactory factory)
+    private async Task<Guid> AddAuditEntryAsync(string database)
+    {
+        await using AppDbContext db = Context(database);
+        var entry = new AuditLogEntry
+        {
+            Id = Guid.CreateVersion7(stub.Now),
+            OccurredAtUtc = stub.Now,
+            Action = AuditAction.LinkingStart,
+            Result = AuditResult.Succeeded,
+            ActorType = ActorType.Customer,
+            ActorId = "login-a",
+        };
+        db.Set<AuditLogEntry>().Add(entry);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return entry.Id;
+    }
+
+    private static AppDbContext Context(string database, FailOutboxInsertInterceptor? interceptor = null)
+    {
+        DbContextOptionsBuilder<AppDbContext> options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(database);
+        if (interceptor is not null)
+        {
+            options.AddInterceptors(interceptor);
+        }
+
+        return new AppDbContext(options.Options);
+    }
+
+    // Both commit paths, SaveChanges and SaveChangesAsync, behind one call for the theories.
+    private static Task<int> SaveAsync(AppDbContext db, bool synchronous) =>
+        synchronous ? Task.FromResult(db.SaveChanges()) : db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+    /// <summary>The rows in <c>Disputes</c>, <c>StoredEvents</c> and <c>OutboxMessages</c>.</summary>
+    private static async Task<(int Disputes, int StoredEvents, int OutboxMessages)> CountAsync(string database)
+    {
+        await using AppDbContext db = Context(database);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        return (
+            await db.Set<Dispute>().IgnoreQueryFilters().CountAsync(cancellationToken),
+            await db.Set<StoredEventRow>().IgnoreQueryFilters().CountAsync(cancellationToken),
+            await db.Set<OutboxMessage>().CountAsync(cancellationToken));
+    }
+
+    private static async Task<StoredEventRow> SingleStoredEventAsync(ApiFactory factory)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<AuditLogEntry>()
-            .Select(entry => entry.ActorId).SingleAsync(TestContext.Current.CancellationToken);
+        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<StoredEventRow>().IgnoreQueryFilters().AsNoTracking()
+            .SingleAsync(TestContext.Current.CancellationToken);
     }
+
+    private static async Task<OutboxMessage> SingleOutboxMessageAsync(ApiFactory factory)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<OutboxMessage>().AsNoTracking()
+            .SingleAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A stored event type the publish mapping does not name.</summary>
+    private sealed record UnmappedStoredEvent : StoredEvent;
 }

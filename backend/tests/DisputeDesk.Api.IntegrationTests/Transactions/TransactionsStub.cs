@@ -9,11 +9,23 @@ namespace DisputeDesk.Api.IntegrationTests.Transactions;
 /// </summary>
 public sealed class TransactionsStub : IAsyncDisposable
 {
-    public DateTimeOffset Now { get; } = TimeProvider.System.GetUtcNow();
-
     private readonly CoreBankingStubFactory _stub;
 
-    public TransactionsStub() => _stub = new CoreBankingStubFactory { ClockNow = Now };
+    public TransactionsStub()
+    {
+        // .1234567 s past the second is a tick finer than the microseconds Postgres keeps, so a test sees any instant
+        // that storing would change; the raise stamps it as .123456 s.
+        var second = DateTimeOffset.FromUnixTimeSeconds(TimeProvider.System.GetUtcNow().ToUnixTimeSeconds());
+        Now = second.AddTicks(1_234_567);
+        NowAsStored = second.AddTicks(1_234_560);
+        _stub = new CoreBankingStubFactory { ClockNow = Now };
+    }
+
+    /// <summary>The instant the stub and the Api read.</summary>
+    public DateTimeOffset Now { get; }
+
+    /// <summary><see cref="Now"/> at the whole microseconds a raise stamps it with.</summary>
+    public DateTimeOffset NowAsStored { get; }
 
     public Uri BaseUrl => _stub.BaseUrl;
 

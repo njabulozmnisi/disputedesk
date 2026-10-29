@@ -12,4 +12,8 @@
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The publish mapping tests call the internal CommitRows directly (InternalsVisibleToAttribute). -->
+    <InternalsVisibleTo Include="DisputeDesk.Api.IntegrationTests" />
+  </ItemGroup>
 </Project>

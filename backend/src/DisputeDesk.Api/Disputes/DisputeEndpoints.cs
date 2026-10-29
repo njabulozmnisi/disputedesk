@@ -4,8 +4,8 @@ using DisputeDesk.Application.Disputes.RaiseDispute;
 using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Domain;
 using Microsoft.AspNetCore.Http.Timeouts;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
-using OpenApiOperationTransformerContext = Microsoft.AspNetCore.OpenApi.OpenApiOperationTransformerContext;
 
 namespace DisputeDesk.Api.Disputes;
 

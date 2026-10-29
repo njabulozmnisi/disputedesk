@@ -66,7 +66,7 @@ owner = "backend"
 lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Application/Disputes/ListDisputes/, GetDispute/, CustomerView/", "backend/src/DisputeDesk.Contracts/Disputes/", "backend/src/DisputeDesk.Contracts/Json/ (UTC timestamps with Z, exact enum reading)", "backend/src/DisputeDesk.Api/Disputes/", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/, Ownership/"]
+touches = ["backend/src/DisputeDesk.Application/Disputes/ListDisputes/, GetDispute/, CustomerView.cs", "backend/src/DisputeDesk.Contracts/Disputes/", "backend/src/DisputeDesk.Contracts/Json/ (UTC timestamps with Z, exact enum reading)", "backend/src/DisputeDesk.Api/Disputes/", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/, Ownership/"]
 
 [[entry]]
 id = 4

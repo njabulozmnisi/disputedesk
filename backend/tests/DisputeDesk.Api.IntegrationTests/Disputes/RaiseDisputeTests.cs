@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
+using DisputeDesk.Application.Disputes;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -93,15 +94,12 @@ public class RaiseDisputeTests(PostgresFixture postgres, TransactionsStub stub) 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         Dispute dispute = await db.Set<Dispute>().IgnoreQueryFilters().SingleAsync(TestContext.Current.CancellationToken);
-        TimelineEntry entry = await db.Set<TimelineEntry>().IgnoreQueryFilters().SingleAsync(TestContext.Current.CancellationToken);
-        Application.Audit.AuditLogEntry audit = await db.Set<Application.Audit.AuditLogEntry>().SingleAsync(TestContext.Current.CancellationToken);
+        StoredEventRow stored = await db.Set<StoredEventRow>().IgnoreQueryFilters().SingleAsync(TestContext.Current.CancellationToken);
         OutboxMessage outbox = await db.Set<OutboxMessage>().SingleAsync(TestContext.Current.CancellationToken);
-        // The Api's clock is fixed at the stub's instant; Postgres keeps microseconds, so compare at that precision.
-        DateTimeOffset now = stub.Now.AddTicks(-(stub.Now.Ticks % 10));
+        DateTimeOffset now = stub.NowAsStored;
         Assert.Equal(now, dispute.CreatedAtUtc);
         Assert.Equal(now.AddHours(240), dispute.SlaDueAtUtc);
-        Assert.Equal(now, entry.OccurredAtUtc);
-        Assert.Equal(now, audit.OccurredAtUtc);
+        Assert.Equal(now, stored.OccurredAtUtc);
         Assert.Equal(now, outbox.CreatedAtUtc);
     }
 

@@ -7,6 +7,7 @@ public static class DisputeEvents
     public const string Source = "/disputedesk/api";
     public const string DataContentType = "application/json";
     public const string RaisedV1 = "disputedesk.dispute.raised.v1";
+    public const string StatusChangedV1 = "disputedesk.dispute.status-changed.v1";
 
     /// <summary>Where the committed schemas are published; <see cref="SchemaFor"/> appends the file name.</summary>
     public const string SchemaPrefix = "https://github.com/njabulozmnisi/disputedesk/blob/main/contracts/events/";

@@ -49,10 +49,10 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
                     ExpectedAmount = table.Column<decimal>(type: "numeric(19,2)", precision: 19, scale: 2, nullable: true),
                     DisputedAmount = table.Column<decimal>(type: "numeric(19,2)", precision: 19, scale: 2, nullable: false),
                     Status = table.Column<string>(type: "text", nullable: false),
+                    Outcome = table.Column<string>(type: "text", nullable: true),
                     Version = table.Column<int>(type: "integer", nullable: false),
                     CreatedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    SlaDueAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)
+                    SlaDueAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -89,24 +89,24 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "TimelineEntries",
+                name: "StoredEvents",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     DisputeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    FromStatus = table.Column<string>(type: "text", nullable: true),
-                    ToStatus = table.Column<string>(type: "text", nullable: false),
-                    Action = table.Column<string>(type: "text", nullable: false),
+                    Version = table.Column<int>(type: "integer", nullable: false),
+                    EventType = table.Column<string>(type: "text", nullable: false),
+                    OccurredAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     ActorType = table.Column<string>(type: "text", nullable: false),
                     ActorId = table.Column<string>(type: "text", nullable: false),
-                    VisibleNote = table.Column<string>(type: "text", nullable: true),
-                    OccurredAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    TraceId = table.Column<string>(type: "text", nullable: true),
+                    Data = table.Column<string>(type: "jsonb", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_TimelineEntries", x => x.Id);
+                    table.PrimaryKey("PK_StoredEvents", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_TimelineEntries_Disputes_DisputeId",
+                        name: "FK_StoredEvents_Disputes_DisputeId",
                         column: x => x.DisputeId,
                         principalTable: "Disputes",
                         principalColumn: "Id",
@@ -131,9 +131,10 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
                 column: "DisputeId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_TimelineEntries_DisputeId",
-                table: "TimelineEntries",
-                column: "DisputeId");
+                name: "UQ_StoredEvents_DisputeId_Version",
+                table: "StoredEvents",
+                columns: new[] { "DisputeId", "Version" },
+                unique: true);
         }
 
         /// <inheritdoc />
@@ -146,7 +147,7 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
                 name: "OutboxMessages");
 
             migrationBuilder.DropTable(
-                name: "TimelineEntries");
+                name: "StoredEvents");
 
             migrationBuilder.DropTable(
                 name: "Disputes");

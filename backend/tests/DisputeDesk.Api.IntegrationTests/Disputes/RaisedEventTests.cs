@@ -53,7 +53,7 @@ public class RaisedEventTests(PostgresFixture postgres, TransactionsStub stub) :
         Assert.Equal(
             "https://github.com/njabulozmnisi/disputedesk/blob/main/contracts/events/disputedesk.dispute.raised.v1.schema.json",
             cloudEvent.GetProperty("dataschema").GetString());
-        Assert.Equal(stub.Now, cloudEvent.GetProperty("time").GetDateTimeOffset());
+        Assert.Equal(stub.NowAsStored, cloudEvent.GetProperty("time").GetDateTimeOffset());
         // RFC 3339 UTC with Z (the architecture's consistency conventions), not +00:00.
         Assert.EndsWith("Z", cloudEvent.GetProperty("time").GetString(), StringComparison.Ordinal);
 
@@ -62,7 +62,7 @@ public class RaisedEventTests(PostgresFixture postgres, TransactionsStub stub) :
         Assert.Equal(disputeId, data.GetProperty("disputeId").GetString());
         Assert.Equal("wrongAmount", data.GetProperty("reason").GetString());
         Assert.Equal("submitted", data.GetProperty("status").GetString());
-        Assert.Equal(stub.Now, data.GetProperty("occurredAt").GetDateTimeOffset());
+        Assert.Equal(stub.NowAsStored, data.GetProperty("occurredAt").GetDateTimeOffset());
         Assert.EndsWith("Z", data.GetProperty("occurredAt").GetString(), StringComparison.Ordinal);
         Assert.Equal(1, data.GetProperty("disputeVersion").GetInt32());
 

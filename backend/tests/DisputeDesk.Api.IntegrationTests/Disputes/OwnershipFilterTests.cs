@@ -1,6 +1,7 @@
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Application.Abstractions;
+using DisputeDesk.Application.Disputes;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Domain.Transactions;
 using DisputeDesk.Infrastructure.Persistence;
@@ -10,7 +11,7 @@ namespace DisputeDesk.Api.IntegrationTests.Disputes;
 
 /// <summary>
 /// AC9, on real Postgres: the <c>Ownership</c> filter (AD-11) reads the customer of each context instance, matches
-/// nothing without one, and reaches timeline entries through their dispute.
+/// nothing without one, and reaches stored events through their dispute.
 /// </summary>
 public sealed class OwnershipFilterTests(PostgresFixture postgres) : IAsyncLifetime
 {
@@ -35,7 +36,7 @@ public sealed class OwnershipFilterTests(PostgresFixture postgres) : IAsyncLifet
         await using AppDbContext db = Context(customerId: null);
 
         Assert.Empty(await db.Set<Dispute>().ToListAsync(TestContext.Current.CancellationToken));
-        Assert.Empty(await db.Set<TimelineEntry>().ToListAsync(TestContext.Current.CancellationToken));
+        Assert.Empty(await db.Set<StoredEventRow>().ToListAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -61,14 +62,17 @@ public sealed class OwnershipFilterTests(PostgresFixture postgres) : IAsyncLifet
     }
 
     [Fact]
-    public async Task TimelineEntries_QueriedDirectly_AreFilteredThroughTheirDispute()
+    public async Task StoredEvents_QueriedDirectly_AreFilteredThroughTheirDispute()
     {
         await using AppDbContext forA = Context(TransactionsApi.CustomerA);
+        await using AppDbContext forB = Context(TransactionsApi.CustomerB);
 
-        List<TimelineEntry> entries = await forA.Set<TimelineEntry>().ToListAsync(TestContext.Current.CancellationToken);
+        StoredEventRow forAOnly = Assert.Single(await forA.Set<StoredEventRow>().ToListAsync(TestContext.Current.CancellationToken));
+        StoredEventRow forBOnly = Assert.Single(await forB.Set<StoredEventRow>().ToListAsync(TestContext.Current.CancellationToken));
 
-        TimelineEntry entry = Assert.Single(entries);
-        Assert.Equal("login-CUS-000001", entry.ActorId);
+        Assert.Equal("login-CUS-000001", forAOnly.ActorId);
+        Assert.Equal("login-CUS-000002", forBOnly.ActorId);
+        Assert.Equal(2, await forA.Set<StoredEventRow>().IgnoreQueryFilters([AppDbContext.OwnershipFilter]).CountAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]

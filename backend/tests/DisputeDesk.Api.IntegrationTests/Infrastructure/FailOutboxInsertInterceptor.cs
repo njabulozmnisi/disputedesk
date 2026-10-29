@@ -20,6 +20,19 @@ public sealed class FailOutboxInsertInterceptor : DbCommandInterceptor
     /// <summary>Whether the dispute was inserted, in this command or an earlier one, before the failing outbox insert.</summary>
     public bool DisputesInsertedFirst { get; private set; }
 
+    public override InterceptionResult<DbDataReader> ReaderExecuting(
+        DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
+    {
+        Break(command);
+        return result;
+    }
+
+    public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
+    {
+        Break(command);
+        return result;
+    }
+
     public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
         DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
     {

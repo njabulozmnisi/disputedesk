@@ -1,10 +1,14 @@
 using System.Globalization;
+using System.Reflection;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Domain.Transactions;
 
 namespace DisputeDesk.Domain.Tests.Disputes;
 
-/// <summary>FR-13 and FR-14 in the aggregate: what a raise stores, the amount and note rules, and the AD-8 check order.</summary>
+/// <summary>
+/// FR-13 and FR-14 in the aggregate: what a raise stores and the one stored event it appends, the amount and note
+/// rules, and the AD-8 check order.
+/// </summary>
 public class DisputeRaiseTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 26, 10, 0, 0, TimeSpan.Zero);
@@ -18,20 +22,33 @@ public class DisputeRaiseTests
     private static readonly TransactionSnapshot Old = Disputable with { TransactionDate = Now.AddDays(-95) };
 
     [Fact]
-    public void Raise_DisputableTransaction_IsSubmittedAtVersion1WithOneRaiseEntryByTheCustomer()
+    public void Raise_DisputableTransaction_IsSubmittedAtVersion1WithOnePendingDisputeRaisedByTheCustomer()
     {
         Dispute dispute = Raise(Disputable, Reason.Unrecognised, note: "Not me").Value;
 
         Assert.Equal(DisputeStatus.Submitted, dispute.Status);
         Assert.Equal(1, dispute.Version);
-        TimelineEntry entry = Assert.Single(dispute.Timeline);
-        Assert.Equal(DisputeAction.Raise, entry.Action);
-        Assert.Null(entry.FromStatus);
-        Assert.Equal(DisputeStatus.Submitted, entry.ToStatus);
-        Assert.Equal(ActorType.Customer, entry.ActorType);
-        Assert.Equal("login-a", entry.ActorId);
-        Assert.Equal("Not me", entry.VisibleNote);
-        Assert.Equal(dispute.Id, entry.DisputeId);
+        DisputeRaised raised = Assert.IsType<DisputeRaised>(Assert.Single(dispute.PendingChanges));
+        Assert.Equal(dispute.Id, raised.DisputeId);
+        Assert.Equal(1, raised.Version);
+        Assert.Equal(ActorType.Customer, raised.ActorType);
+        Assert.Equal("login-a", raised.ActorId);
+        Assert.Null(raised.TraceId);
+        Assert.Equal(DisputeStatus.Submitted, raised.ToStatus);
+        Assert.Equal("Not me", raised.Note);
+    }
+
+    [Fact]
+    public void Raise_WrongAmount_DisputeRaisedHoldsEverythingNeededToRebuildTheDispute()
+    {
+        Dispute dispute = Raise(Disputable, Reason.WrongAmount, note: "Charged twice", expectedAmount: 80m).Value;
+
+        DisputeRaised raised = Assert.IsType<DisputeRaised>(Assert.Single(dispute.PendingChanges));
+        Assert.Equal("CUS-000001", raised.CustomerId);
+        Assert.Equal(Disputable, raised.Transaction);
+        Assert.Equal(Reason.WrongAmount, raised.Reason);
+        Assert.Equal(80m, raised.ExpectedAmount);
+        Assert.Equal(7.23m, raised.DisputedAmount);
     }
 
     [Fact]
@@ -41,8 +58,7 @@ public class DisputeRaiseTests
 
         Assert.Equal(Now, dispute.CreatedAtUtc);
         Assert.Equal(Now.AddHours(240), dispute.SlaDueAtUtc);
-        Assert.Equal(Now, Assert.Single(dispute.Timeline).OccurredAtUtc);
-        Assert.Equal(Now, Assert.Single(dispute.TakePendingChanges()).OccurredAt);
+        Assert.Equal(Now, Assert.Single(dispute.TakePendingChanges()).OccurredAtUtc);
         Assert.Equal(7, dispute.Id.Version);
     }
 
@@ -128,7 +144,7 @@ public class DisputeRaiseTests
         Dispute dispute = Raise(Disputable, Reason.Unrecognised, note: "  \n Not me \t ").Value;
 
         Assert.Equal("Not me", dispute.Note);
-        Assert.Equal("Not me", Assert.Single(dispute.Timeline).VisibleNote);
+        Assert.Equal("Not me", PendingRaise(dispute).Note);
     }
 
     [Theory]
@@ -139,7 +155,7 @@ public class DisputeRaiseTests
         Dispute dispute = Raise(Disputable, Reason.Unrecognised, note: note).Value;
 
         Assert.Null(dispute.Note);
-        Assert.Null(Assert.Single(dispute.Timeline).VisibleNote);
+        Assert.Null(PendingRaise(dispute).Note);
     }
 
     [Fact]
@@ -217,11 +233,25 @@ public class DisputeRaiseTests
     {
         Dispute dispute = Raise(Disputable, Reason.Unrecognised).Value;
 
-        DisputeChange change = Assert.Single(dispute.TakePendingChanges());
+        StoredEvent change = Assert.Single(dispute.TakePendingChanges());
 
-        Assert.Equal(new DisputeChange(DisputeAction.Raise, null, DisputeStatus.Submitted, CustomerA, Now, 1), change);
+        Assert.IsType<DisputeRaised>(change);
+        Assert.Equal(1, change.Version);
         Assert.Empty(dispute.TakePendingChanges());
+        Assert.Empty(dispute.PendingChanges);
     }
+
+    [Fact]
+    public void Dispute_PublicProperties_HavePrivateSettersAndNoTimeline()
+    {
+        // AD-13: only the aggregate's methods change a dispute, and the timeline is built from the stored events.
+        PropertyInfo[] properties = typeof(Dispute).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+        Assert.All(properties, property => Assert.False(property.SetMethod?.IsPublic ?? false, property.Name));
+        Assert.DoesNotContain(properties, property => property.Name.Contains("Timeline", StringComparison.Ordinal));
+    }
+
+    private static DisputeRaised PendingRaise(Dispute dispute) => Assert.IsType<DisputeRaised>(Assert.Single(dispute.PendingChanges));
 
     private static decimal Amount(string value) => decimal.Parse(value, CultureInfo.InvariantCulture);
 
