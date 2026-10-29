@@ -393,7 +393,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
 
 | Name | Version |
 | --- | --- |
-| .NET SDK / runtime | 10.0.403 / 10.0.14 (repo pins 10.0.402 / 10.0.13; bump the SDK, runtime and every `Microsoft.*` 10.0.x package together; stay on 10.0.x when .NET 11 ships) |
+| .NET SDK / runtime | 10.0.403 / 10.0.14 (pinned exactly in `global.json`, the Dockerfile and `Directory.Packages.props`; bump the SDK, runtime and every `Microsoft.*` 10.0.x package together; stay on 10.0.x when .NET 11 ships) |
 | EF Core / Npgsql EF provider | 10.0.14 / 10.0.3 |
 | OpenIdConnect, JwtBearer, DataProtection.EntityFrameworkCore | same patch as the runtime (10.0.14) |
 | Microsoft.Extensions.Http.Resilience | 10.11.0 |
