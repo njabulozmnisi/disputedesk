@@ -3,8 +3,8 @@ id: 1
 type: story
 title: "Operations tools authenticate with bearer tokens and read a dispute"
 parent: epic-5-operations
-covers: [R21, R39]
-after: [3.1, 2.5, 2.6]
+covers: [R21, R10, R41, R39]
+after: [3.8, 2.8, 2.5, 2.6]
 hitl: false
 risk: high
 ---
@@ -13,11 +13,11 @@ risk: high
 
 ## Description
 
-Adds JwtBearer on the operations group (AD-8, AD-9), role policies, the actor mapping, `GET /api/v1/operations/disputes/<disputeId>` and Scalar behind `Scalar:Enabled`.
+Adds JwtBearer on the operations group (AD-8, AD-9), role policies, the actor mapping, `GET /api/v1/operations/disputes/<disputeId>` with every stored event type on its timeline and each read audited as `DisputeRead` through `Audit.Record`, and Scalar behind `Scalar:Enabled`.
 
 ## Requirements
 
-Verify: Integration tests with tokens signed by a test key cover credential pinning, roles, actor mapping and the read shape.
+Verify: Integration tests with tokens signed by a test key cover credential pinning, roles, actor mapping, the read shape with every stored event type, and the `DisputeRead` audit entry.
 
 1. **Credential pinned per group** (R21; FR-25, NFR-SEC-2)
    **Given** a session cookie and a bearer token
@@ -37,7 +37,8 @@ Verify: Integration tests with tokens signed by a test key cover credential pinn
 4. **Read one dispute** (R21; FR-30)
    **Given** a token with `dispute.read`
    **When** it reads a dispute by ID
-   **Then** the body has the snapshot, reason, amount, internal `status`, `outcome` and timeline with `actorType`, and no personal details beyond the snapshot; an unknown ID gets 404
+   **Then** the body has the snapshot, reason, amount, internal `status`, `outcome` and the timeline built from every stored event of the dispute, `SlaWarningRaised` included, each with its stored event type and `actorType`, and no personal details beyond the snapshot; an unknown ID gets 404 (FR-30; AD-13: operations see every type)
+   **And** each successful read writes one `DisputeRead` audit entry with result `Succeeded`, actor type `Operations`, actor ID the token's `sub` and the dispute ID, through `Audit.Record` (story 2.8; AD-14a, FR-25), and `AuditAction` gains `DisputeRead`
 
 5. **Provisioned actor mapping** (R21; FR-25)
    **Given** `provision.sh`
@@ -64,8 +65,8 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 - Owner: backend (backend-builder).
 - Flags: high-stakes.
-- Lane: B.
-- Touches: `backend/src/DisputeDesk.Api/Operations/`; `backend/src/DisputeDesk.Application/Operations/ReadDispute/`; `backend/src/DisputeDesk.Api/Program.cs`; `backend/src/DisputeDesk.Api/appsettings.json`; infra/zitadel/provision/provision.sh (Operations:Actors, dispute.read grant); infra/nginx/templates/ (Scalar CSP); `backend/openapi.json`; `backend/tests/DisputeDesk.Api.IntegrationTests/Operations/`.
+- Lane: M2.
+- Touches: `backend/src/DisputeDesk.Contracts/Audit/AuditAction.cs` (`DisputeRead`); `backend/src/DisputeDesk.Api/Operations/`; `backend/src/DisputeDesk.Application/Operations/ReadDispute/`; `backend/src/DisputeDesk.Api/Program.cs`; `backend/src/DisputeDesk.Api/appsettings.json`; infra/zitadel/provision/provision.sh (Operations:Actors, dispute.read grant); infra/nginx/templates/ (Scalar CSP); `backend/openapi.json`; `backend/tests/DisputeDesk.Api.IntegrationTests/Operations/`.
 
 ## References
 

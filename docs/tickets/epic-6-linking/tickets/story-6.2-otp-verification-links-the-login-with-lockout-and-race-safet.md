@@ -65,7 +65,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 - Owner: backend (backend-builder).
 - Flags: high-stakes.
-- Lane: A.
+- Lane: M2.
 - Touches: `backend/src/DisputeDesk.Application/Linking/VerifyOtp/`; backend/src/DisputeDesk.Infrastructure/Linking/ (attempt update); `backend/src/DisputeDesk.Api/Linking/`; `backend/openapi.json`; `backend/tests/DisputeDesk.Api.IntegrationTests/Linking/`.
 
 ## References

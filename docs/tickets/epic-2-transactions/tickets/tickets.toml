@@ -104,6 +104,23 @@ touches = ["infra/nginx/ (Dockerfile with Node stage, templates/, html/ placehol
 supervisor_checks = ["`docker compose config` validates.", "`curl -I` on `http://localhost:8080/` and on `/api/health/live` shows each security header exactly once; 40 rapid requests to `/api/health/live` get some 429s.", "Customer A signs in through the gateway and sees transactions: the tracer bullet demo."]
 
 [[entry]]
+id = 8
+type = "story"
+title = "Sign-in and sign-out are audited, and every endpoint is denied by default"
+description = "Every sign-in and sign-out writes an audit entry (`SignIn`, `SignOut`) through one new Application method, `Audit.Record`, using the existing audit fields only (AD-14a, R41, NFR-SEC-10). Sign-out goes through the OpenID Connect handler's built-in `SignOutAsync` (AD-7). A deny-by-default fallback authorization policy requires an authenticated user on every endpoint that names no policy (AD-10). The security and error-shape tests also run under the Production environment. The whole-call deadline on core-banking calls is story 2.1's `TotalRequestTimeout` (AD-21), not this story's. No migration."
+verify = "Integration tests for the sign-in and sign-out audit entries and their failure paths, the sign-in log capture, the end-session redirect and signed-out callback, the endpoint enumeration in each environment, the isolated fallback probe and the unmatched-route cases pass; the security and error-shape tests pass in both the Development and Production environments; `openapi.json` has no diff."
+covers = ["R10", "R41", "R3", "R9", "R30", "R31", "R35"]
+after = [2, 3]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "M1"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Application/Audit/Audit.cs (new)", "backend/src/DisputeDesk.Contracts/Audit/AuditAction.cs", "backend/src/DisputeDesk.Api/Bff/BffAuthentication.cs", "backend/src/DisputeDesk.Api/Bff/BffEndpoints.cs", "backend/src/DisputeDesk.Api/Health/HealthEndpoints.cs", "backend/src/DisputeDesk.Api/Program.cs (AllowAnonymous on OpenAPI and Scalar)", "backend/tests/DisputeDesk.Api.IntegrationTests/ (Bff/SignInTests.cs, Bff/SignOutTests.cs, Infrastructure/FakeZitadel.cs, Infrastructure/ApiFactory.cs if needed, Infrastructure/Browser.cs if needed, Infrastructure/FailAuditInsertInterceptor.cs (new), Infrastructure/FallbackProbe.cs (new), Authorization/ new enumeration test, SecurityHeadersTests.cs, ProblemDetailsTests.cs, Transactions/TransactionsAuthorizationTests.cs, Disputes/RaiseDisputeAuthorizationTests.cs)"]
+supervisor_checks = ["Browser sign-in then sign-out for login A through the gateway: lands on `/`, Zitadel shows no session, the end-session request carries `state`, and `qa_readonly` shows one `SignIn` and one `SignOut` row.", "Remove `AllowAnonymous()` from `/health/live` in a throwaway copy: the enumeration test fails."]
+
+[[entry]]
 id = 6
 type = "story"
 title = "Hosted login pages themed from the design tokens"
@@ -114,7 +131,7 @@ after = [4, 2]
 hitl = false
 risk = "low"
 owner = "backend"
-lane = "B"
+lane = "M2"
 high_stakes = false
 migration = false
 touches = ["infra/zitadel/provision/ (label policy generation, provision.sh)", "infra/zitadel/provision/Dockerfile", "docker-compose.yml (provision mounts tokens.css and the font file)"]

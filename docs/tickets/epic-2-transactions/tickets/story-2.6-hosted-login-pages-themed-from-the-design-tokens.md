@@ -41,7 +41,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 - Owner: backend (backend-builder).
 - Flags: none.
-- Lane: B.
+- Lane: M2.
 - Touches: infra/zitadel/provision/ (label policy generation, provision.sh); `infra/zitadel/provision/Dockerfile`; docker-compose.yml (provision mounts tokens.css and the font file).
 
 ## References

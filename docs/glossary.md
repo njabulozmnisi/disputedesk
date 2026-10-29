@@ -20,6 +20,7 @@ Domain terms, settled during grilling. Use these words; avoid the synonyms liste
 | **Action** | A named change to a dispute's status: start review, escalate, resolve, withdraw. Any authorised actor may perform it. | transition (in copy), operation, command |
 | **Actor** | Whoever performed an action: the customer, an operations tool, or an automated process. Recorded, never used to decide. | agent (ambiguous with AI agents), user, staff |
 | **SLA** | The 10 calendar days from submission after which an unresolved dispute is escalated automatically. Internal only: never promised to customers. | deadline, TAT |
-| **Dispute event** | A fact the bank publishes when a dispute is raised or its status changes, for other systems to react to. Carries no personal data. | message, notification, webhook |
-| **Timeline** | The ordered history of a dispute's status changes, with notes meant for the customer. | audit log (that is internal), activity feed |
+| **Dispute event** | A fact the bank publishes when a dispute is raised or its status changes, for other systems to react to. Carries no personal data. | message, notification, webhook, stored event (that is private) |
+| **Stored event** | A fact recorded in a dispute's own history when something happens to it; the dispute's status and timeline are rebuilt from its stored events. Private: never published as is. | dispute event (that is published), log entry, audit entry |
+| **Timeline** | The ordered history of a dispute's status changes, with notes meant for the customer, built from the dispute's stored events. | audit log (that is internal), activity feed |
 | **Quality area** | One of the ten areas the solution must meet: architecture and scalability; resilience and operational readiness; data and domain modelling; API design; security (primary); code quality and maintainability; testing; observability; infrastructure and DevOps; documentation and communication. | assessment area, criterion |

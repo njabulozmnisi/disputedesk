@@ -1,7 +1,7 @@
 ---
 id: 1
 type: story
-title: "Linked customer raises a dispute that commits with its timeline, audit and outbox rows"
+title: "Linked customer raises a dispute that commits with its stored event and outbox row"
 parent: epic-3-disputes
 covers: [R10, R12, R13, R14, R17, R23, R28, R29, R35, R36]
 after: [2.3]
@@ -9,15 +9,15 @@ hitl: false
 risk: high
 ---
 
-# Linked customer raises a dispute that commits with its timeline, audit and outbox rows
+# Linked customer raises a dispute that commits with its stored event and outbox row
 
 ## Description
 
-Adds the `Dispute` aggregate (AD-13), the one commit path (AD-14), the ownership filter (AD-11) and `POST /api/v1/disputes`; the transactions list starts showing each row's dispute status.
+Adds the `Dispute` aggregate (AD-13), whose raise appends the `DisputeRaised` stored event (ad-009), the one commit path (AD-14), the ownership filter (AD-11) and `POST /api/v1/disputes`; the transactions list starts showing each row's dispute status. Story 3.8 completes the stored-event design: every stored event type, loading by replay and the publish mapping.
 
 ## Requirements
 
-Verify: Domain unit tests and Testcontainers integration tests pass; raising for customer A writes one row each in `Disputes`, `TimelineEntries`, `AuditLogEntries` and `OutboxMessages`.
+Verify: Domain unit tests and Testcontainers integration tests pass; raising for customer A writes one row each in `Disputes`, `StoredEvents` and `OutboxMessages` and no `AuditLogEntries` row.
 
 Request inputs (`POST /api/v1/disputes`, JSON body, built-in minimal API validation):
 
@@ -48,7 +48,7 @@ Any other property, such as an amount, date or description, is ignored.
    **Given** two parallel raises for the same transaction
    **When** both commit
    **Then** exactly one returns 201 and the other 409 `already-disputed`, enforced by `UQ_Disputes_AccountRef_TransactionId` and mapped by constraint name in one place (AD-15)
-   **And** afterwards `Disputes`, `TimelineEntries`, `AuditLogEntries` and `OutboxMessages` each hold exactly one row for that transaction
+   **And** afterwards `Disputes`, `StoredEvents` and `OutboxMessages` each hold exactly one row for that transaction
 
 4. **Wrong amount** (R14; FR-14, NFR-TEST-2)
    **Given** the reason `wrongAmount`
@@ -64,8 +64,8 @@ Any other property, such as an amount, date or description, is ignored.
 6. **Atomic commit** (R28, R10; NFR-DATA-2, NFR-SEC-10, NFR-TEST-3)
    **Given** a raise whose save fails in the database after an earlier insert of the same save (a test-only EF Core interceptor fails the `OutboxMessages` insert)
    **When** the transaction rolls back
-   **Then** no dispute, timeline entry, audit entry or outbox row remains, and the response is a 500 ProblemDetails
-   **And** the commit override rejects any modified or deleted audit entry
+   **Then** no dispute, stored event or outbox row remains, and the response is a 500 ProblemDetails
+   **And** a successful raise writes no audit entry, and the commit override rejects any modified or deleted stored event or audit entry
 
 7. **Raised event in the outbox** (R23; FR-27, NFR-SEC-5, NFR-TEST-4)
    **Given** a successful raise
@@ -76,13 +76,13 @@ Any other property, such as an amount, date or description, is ignored.
 8. **Data model rules** (R29; NFR-DATA-1, NFR-DATA-4, NFR-DATA-5, NFR-DATA-7)
    **Given** the migration
    **When** it is applied
-   **Then** money columns are `numeric(19,2)` with `Currency`, instants are `timestamptz` ending in `Utc`, `Disputes` maps `xmin` as a `uint` row version (`IsRowVersion()`, the Npgsql concurrency token) and a `Version`, the partial `IX_Disputes_SlaDueAtUtc` exists, `OutboxMessages` has every AD-22 column the relay needs (`Status`, `Attempts`, `NextAttemptAtUtc`, `SentAtUtc`, `LastError`), and names follow AD-22
+   **Then** money columns are `numeric(19,2)` with `Currency`, instants are `timestamptz` ending in `Utc`, `Disputes` carries a `Version` and maps no concurrency token, `StoredEvents` is unique on (`DisputeId`, `Version`) (AD-15), the partial `IX_Disputes_SlaDueAtUtc` exists, `OutboxMessages` has every AD-22 column the relay needs (`Status`, `Attempts`, `NextAttemptAtUtc`, `SentAtUtc`, `LastError`), and names follow AD-22
 
 9. **Ownership filter and bypass rule** (R17; NFR-SEC-6)
    **Given** the solution
    **When** the architecture tests run
    **Then** `IgnoreQueryFilters(["Ownership"])` appears only under `Operations/` and `Sla/`, `AddDbContextPool` is absent, and with no current customer the filter matches nothing; the filter reads a nullable customer ID held on the context instance (EF Core's documented per-context filter parameter), never `CurrentCustomer.CustomerId`, which throws when unset
-   **And** `TimelineEntry` carries the matching `Ownership` filter through its dispute, as EF Core advises for filters on required navigations
+   **And** `StoredEvent` carries the matching `Ownership` filter through its dispute, as EF Core advises for filters on required navigations
 
 10. **Rows show their dispute** (R12; FR-12)
    **Given** a transaction with any dispute, in any status
@@ -99,7 +99,7 @@ Any other property, such as an amount, date or description, is ignored.
 
 Deliberate-break proofs and Docker checks, run by the supervisor, not the verifier.
 
-- `dev-login.sh` as A, raise through the gateway, then `qa_readonly` shows the four rows with one instant.
+- `dev-login.sh` as A, raise through the gateway, then `qa_readonly` shows the dispute, its stored event and its outbox row with one instant.
 
 ## Build facts
 

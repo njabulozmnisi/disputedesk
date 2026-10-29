@@ -65,7 +65,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Gold-plating watch: no extra services beyond the collector.
-- Decision: 2026-10-27 — Data Protection keys are encrypted at rest in AWS through `Amazon.AspNetCore.DataProtection.SSM` (AD-7); this item moved here from 7.8a and leaves the architecture Deferred table.
+- Decision: 2026-10-27 — Data Protection keys are encrypted at rest in AWS through `Amazon.AspNetCore.DataProtection.SSM` (AD-7); this story owns it.
 - The instance role's SSM and KMS permissions for the key-ring parameter path belong to the Terraform compute module (7.5).
 - Input (from 2.5 challenge, 2026-10-28): the AD-23 AWS edge rules are unowned until here. The AWS nginx template sets `set_real_ip_from` to the CloudFront origin-facing ranges with `real_ip_header CloudFront-Viewer-Address` (port stripped), takes `X-Forwarded-Proto` from `CloudFront-Forwarded-Proto`, and the rendered AWS config is checked with `nginx -t` (nginx realip module; AD-23). Add these as criteria when 7.4 is made ready.
 - Input (from 2.5 security F2, 2026-10-28): `/otlp/v1/*` accepts anonymous POSTs, so in AWS anyone can write spans, logs and metrics into X-Ray and CloudWatch, bounded only by the coarse limit and the 1 MB cap (AD-29 assumption). Decide here whether that is accepted, and cap it in the collector (`memory_limiter`) either way (OWASP ASVS 5.0 V16).

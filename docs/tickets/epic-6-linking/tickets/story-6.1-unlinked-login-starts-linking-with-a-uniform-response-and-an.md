@@ -4,7 +4,7 @@ type: story
 title: "Unlinked login starts linking with a uniform response and an OTP sent after the SIM-swap check"
 parent: epic-6-linking
 covers: [R4, R5, R6, R7, R9, R10, R31, R36]
-after: [2.1, 2.3, 3.2]
+after: [2.1, 2.3, 2.8, 3.2]
 hitl: false
 risk: high
 ---
@@ -57,7 +57,7 @@ Verify: Integration tests prove identical responses, the check order, the cap, f
 8. **Audit without the ID number** (R10, R31; FR-10, NFR-SEC-5)
    **Given** every stop of the job
    **When** entries are written
-   **Then** each carries time, login, outcome and client IP, and a test finds no ID number in any table, log or span
+   **Then** each is written through `Audit.Record` (story 2.8; R41, AD-14) and carries time, login, outcome and client IP, and a test finds no ID number in any table, log or span
 
 9. **Linking metrics** (R36; NFR-OBS-3)
    **Given** starts and capped sends
@@ -74,7 +74,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 - Owner: backend (backend-builder).
 - Flags: high-stakes, migration.
-- Lane: A.
+- Lane: M2.
 - Touches: `backend/src/DisputeDesk.Application/Linking/StartLinking/`; backend/src/DisputeDesk.Infrastructure/Linking/ (job, conditional fill); backend/src/DisputeDesk.Infrastructure/Persistence/ (LinkingChallenge configuration, Migrations/); `backend/src/DisputeDesk.Api/Linking/`; `backend/src/DisputeDesk.Api/Program.cs`; `backend/src/DisputeDesk.Api/appsettings.json`; docker-compose.yml (Linking__OtpHmacKey dev value); `backend/openapi.json`; `backend/tests/DisputeDesk.Api.IntegrationTests/Linking/`.
 
 ## References

@@ -13,7 +13,7 @@ risk: low
 
 ## Description
 
-Writes decision records ad-001 to ad-008 (ad-004 exists) and `docs/production-path.md` with every prd §6.2 deferral and a reason; docs only.
+Writes decision records ad-001 to ad-008 (ad-004 exists; ad-009 stored events exists) and `docs/production-path.md` with every prd §6.2 deferral and every spine Deferred item, each with a reason, written for a large retail bank with tens of millions of clients; docs only.
 
 ## Requirements
 
@@ -22,13 +22,16 @@ Verify: Each new record named below follows the Nygard ADR form (status, context
 1. **Decision records** (R39; NFR-DOC-3)
    **Given** `docs/decisions/`
    **When** it is read
-   **Then** it holds ad-001 Zitadel as the external identity provider, ad-002 `IAppDbContext`, ad-003 Result types, ad-004 model roles (exists, unchanged), ad-005 QA data integrity, ad-006 actor-agnostic dispute actions, ad-007 the BFF session (no tokens in the browser) and ad-008 linking (including the SIM-swap check before the OTP), each citing the AD numbers it records
+   **Then** it holds ad-001 Zitadel as the external identity provider, ad-002 `IAppDbContext`, ad-003 Result types, ad-004 model roles (exists, unchanged), ad-005 QA data integrity, ad-006 actor-agnostic dispute actions, ad-007 the BFF session (no tokens in the browser), ad-008 linking (including the SIM-swap check before the OTP) and ad-009 stored events (exists, unchanged), each citing the AD numbers it records
    **And** ad-008 records the deviation from NIST SP 800-63B's limit on failed attempts: restarting linking creates a fresh challenge with 0 attempts, so the real bound on guesses is the per-login linking rate limit (FR-8) plus the send cap of 3 OTPs per customer per hour (FR-4)
 
 2. **Production path** (R39; NFR-DOC-2, NFR-DATA-7)
    **Given** `docs/production-path.md`
    **When** it is read
    **Then** every prd §6.2 item and every spine Deferred item appears once with a one-line reason, including retention and de-identification jobs
+   **And** its context is "a large retail bank with tens of millions of clients", and every scale figure in it is labelled as an estimate
+   **And** it holds the stored-event items of ad-009 and the spine's Deferred table: order across disputes (Kafka offsets, a high-water mark with `pg_snapshot_xmin`, or change data capture), crypto-shredding of personal data in stored events, stored event schema evolution beyond additive changes, snapshots to shorten replay, and a database-level append-only grant on `AuditLogEntries` and `StoredEvents`
+   **And** it holds the EF-only idempotency claim: replacing the raw-SQL claim (`IdempotencyKeyClaims.ClaimAsync`, `INSERT … ON CONFLICT`) with EF Core alone, as `docs/research/ef-core-upsert/ef-core-upsert.md` recommends, with AD-16's statement updated when it is built
 
 ## Supervisor checks
 
@@ -59,3 +62,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Input (from 2.5 security F4, 2026-10-28): add to `docs/production-path.md`: "Gateway filesystem: `/etc/nginx` is writable by the nginx user, because `nginx-unprivileged` renders its templates there at start. Production runs the gateway with a read-only root filesystem and a tmpfs render directory (CIS Docker 5.12)."
 - Input (from 2.5 review L1, 2026-10-28): add to `docs/production-path.md`: "Gateway base image: `infra/nginx/Dockerfile` runs an unpinned `apk upgrade` of brotli-libs, curl and libcurl (`// shortcut:`) because the pinned `nginx-unprivileged` base lags the Alpine fixes. Drop it when a newer pinned base ships them; consider removing curl (unused at runtime) or the `-alpine-slim` variant."
 - Input (from 3.2 security S2, 2026-10-28): `IdempotencyKeys.ResponseBody` keeps a copy of the customer's dispute view; expiry applies only when a key is reused, so expired rows are never deleted and an erasure on the dispute would miss them (ASVS 4.0.3 V8.3.8). Production path: a retention job deleting expired keys.
+- Decision: 2026-10-29 — the production path is written for a large retail bank with tens of millions of clients, with scale figures labelled as estimates (architecture Deferred); the EF-only idempotency claim is a production-path item.

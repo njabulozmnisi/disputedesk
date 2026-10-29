@@ -14,7 +14,7 @@ description: Procedure for data-integrity and data-movement QA of one story on t
 4. **Trace four hops per criterion, with concrete expected values:**
    - Browser: what the user sees.
    - Network: the right endpoint and status, no extra fields, no other customer's data.
-   - Database, via the read-only role in `infra/db/`: the dispute row, the history row and the outbox row, written in one transaction.
+   - Database, via the read-only role in `infra/db/`: the dispute's stored event, its `Disputes` row and (for a published type) the outbox row with the same ID, written in one transaction; audit rows only for refused or forbidden actions, linking, operations reads, sign-in and sign-out.
    - Events: the right shape and key on the topic, trace context in the headers.
 5. **Standards.** Check observed behaviour against the governing standard: HTTP semantics and status codes (RFC 9110), problem details (RFC 9457), cookie attributes (RFC 6265bis), caching (RFC 9111), OWASP guidance for the area. A deviation is a finding even when the story text is silent.
 6. **ZAP baseline scan** against the running stack; record new alerts.

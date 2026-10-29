@@ -2,7 +2,7 @@
 title: 'Product Brief: DisputeDesk'
 status: final
 created: 2026-10-25
-updated: 2026-10-25
+updated: 2026-10-29
 inputs:
   - docs/glossary.md
   - docs/research/dispute-lifecycle/dispute-lifecycle.md
@@ -39,7 +39,7 @@ There is no moat here, and the brief does not pretend otherwise. The differences
 
 - **Real identity separation.** Authentication belongs to a self-hosted identity provider, which stands in for the bank's identity platform. Authorisation is DisputeDesk's own job. Holding a login gives no access to customer data until the login is linked to a customer, and that customer is always resolved on the server, never taken from the request.
 - **Actions that ignore who the actor is.** A person using an operations tool, an LLM agent and a scheduled process all call the same actions under the same rules. The type of actor is recorded for audit and is never used to decide anything.
-- **A history that can be trusted.** Every status change is written to the timeline and to an event in the same transaction, so the customer's view and the bank's event stream always agree.
+- **A history that can be trusted.** Every status change is recorded as a stored event, and its dispute event is written in the same transaction, so the customer's timeline and the bank's event stream always agree.
 - **Calibrated to real norms.** The windows, reasons and SLA follow the dispute-lifecycle research.
 
 ## Who this serves

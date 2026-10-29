@@ -14,7 +14,8 @@ Diff: `git diff main...HEAD` plus any uncommitted changes in the worktree.
 - No exact-equality timestamp assertions; a fixed `TimeProvider` or a tolerance.
 - Expected failures return `Result` errors mapped to ProblemDetails exactly as architecture AD-3 maps them (400 malformed input, 404 not found or owned by another customer, 409 action not allowed or conflict, 422 business rule broken, 503 dependency unavailable); exceptions only for the unexpected.
 - Ownership is enforced by the global query filter; the customer comes from the identity link, never the request.
-- Outbox row written in the same transaction as the change.
+- A dispute change is one stored event, appended by an aggregate method, written with its `Disputes` read-model row and (if the publish mapping maps its type) its outbox row in one transaction; stored event ID = outbox ID; no audit row for a successful change (ad-009, AD-14).
+- Disputes load by replaying their stored events; a version clash reloads and decides once more, 409 only on a second clash or a forbidding status (AD-15).
 - No null-forgiving `!` in production code.
 
 ## Pass 2: simplicity

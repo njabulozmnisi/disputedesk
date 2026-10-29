@@ -18,6 +18,11 @@
 
 - The outbox row is written in the same transaction as the change it describes. A single relay runs under a Postgres advisory lock, retries with backoff, and sets a `Failed` status after 5 attempts; there is no dead-letter topic (architecture AD-17). `SKIP LOCKED` is used by the SLA sweep, not the relay. The Kafka key is the dispute ID.
 - `Idempotency-Key` on POST dispute, following the IETF Idempotency-Key header draft exactly (architecture AD-16): the value is an RFC 9651 Structured Field String, so it is quoted (`Idempotency-Key: "<uuid>"`), and any other form gets 400 `validation`. Optimistic concurrency on the Dispute aggregate.
+- **Stored events** are the record of dispute changes (decision record `ad-009-stored-events`):
+  - Append only through the `Dispute` aggregate methods, each adding one pending stored event (AD-13). Handlers never write `StoredEvents`, `OutboxMessages` or dispute audit rows by hand (AD-14).
+  - One exhaustive `switch` in Infrastructure maps every stored event type to its integration event or to nothing; an unmapped type throws, and a test enumerates every type (AD-14). The stored event ID is the outbox ID and the CloudEvent `id`.
+  - Insert only: the commit refuses a Modified or Deleted stored event, as it does for `AuditLogEntries` (AD-14).
+  - Load by replay: a handler replays the dispute's stored events in `Version` order and decides from that state; the `Disputes` row is a read model written in the same transaction. On a version clash the handler reloads and decides once more, and only a second clash, or a status that forbids the action, returns 409 (AD-15).
 - Migrations follow expand, migrate, contract. Migrations are always high-stakes and never run in parallel stories.
 - Everything is stored in UTC. Inject `TimeProvider`; never read the system clock (the guard hook blocks it).
 - The customer is resolved from the identity link table, never from a request field or a client-controlled claim. Ownership is the EF Core 10 named query filter `"Ownership"`; bypasses use `IgnoreQueryFilters(["Ownership"])` in the two named places only (the `Operations/` feature folder and the Worker's sweep).
@@ -26,7 +31,7 @@
 
 PascalCase throughout, which is what EF Core and Npgsql generate by default (decided 2026-10-26; architecture AD-22).
 
-- **Tables** are plural PascalCase: `Disputes`, `TimelineEntries`, `CustomerLinks`, `LinkingChallenges`, `OutboxMessages`, `IdempotencyKeys`, `AuditLogEntries`, `Sessions`, `DataProtectionKeys`.
+- **Tables** are plural PascalCase: `Disputes`, `StoredEvents`, `CustomerLinks`, `LinkingChallenges`, `OutboxMessages`, `IdempotencyKeys`, `AuditLogEntries`, `Sessions`, `DataProtectionKeys`.
 - **Columns** are PascalCase and match the C# entity property: `CustomerId`, `CreatedAtUtc`.
 - **Keys.** The primary key is `Id`. A foreign key property and column is `<EntityName>Id` (`DisputeId`).
 - **Instants.** A column holding a UTC instant ends in `Utc`: `CreatedAtUtc`, `SlaDueAtUtc`, `OccurredAtUtc`, `ExpiresAtUtc`.
@@ -45,7 +50,7 @@ PascalCase throughout, which is what EF Core and Npgsql generate by default (dec
 ## Security and privacy
 
 - OWASP ASVS (the security review maps each mechanism to it): validate input at the edge, encode output, least privilege, no secrets in code or logs.
-- POPIA: never store or log ID numbers; no personal data in logs, traces or metrics labels. Audit link, unlink and failed attempts.
+- POPIA: never store or log ID numbers; no personal data in logs, traces or metrics labels. Audit linking, refused or forbidden actions, operations reads, and sign-in and sign-out through `Audit.Record`; a successful dispute change is a stored event, never an audit row (ad-009, AD-14a).
 
 ## Reliability and observability
 

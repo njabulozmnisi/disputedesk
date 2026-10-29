@@ -1,13 +1,13 @@
 # Customers raise, follow and withdraw disputes: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
 
-next_id = 8
+next_id = 9
 
 [[entry]]
 id = 1
 type = "story"
-title = "Linked customer raises a dispute that commits with its timeline, audit and outbox rows"
-description = "Adds the `Dispute` aggregate (AD-13), the one commit path (AD-14), the ownership filter (AD-11) and `POST /api/v1/disputes`; the transactions list starts showing each row's dispute status."
-verify = "Domain unit tests and Testcontainers integration tests pass; raising for customer A writes one row each in `Disputes`, `TimelineEntries`, `AuditLogEntries` and `OutboxMessages`."
+title = "Linked customer raises a dispute that commits with its stored event and outbox row"
+description = "Adds the `Dispute` aggregate (AD-13), whose raise appends the `DisputeRaised` stored event (ad-009), the one commit path (AD-14), the ownership filter (AD-11) and `POST /api/v1/disputes`; the transactions list starts showing each row's dispute status. Story 3.8 completes the stored-event design: every stored event type, loading by replay and the publish mapping."
+verify = "Domain unit tests and Testcontainers integration tests pass; raising for customer A writes one row each in `Disputes`, `StoredEvents` and `OutboxMessages` and no `AuditLogEntries` row."
 covers = ["R10", "R12", "R13", "R14", "R17", "R23", "R28", "R29", "R35", "R36"]
 after = ["2.3"]
 hitl = false
@@ -17,7 +17,7 @@ lane = "A"
 high_stakes = true
 migration = true
 touches = ["backend/src/DisputeDesk.Domain/Disputes/", "backend/src/DisputeDesk.Contracts/Disputes/, Events/, Audit/", "backend/src/DisputeDesk.Application/Disputes/RaiseDispute/", "backend/src/DisputeDesk.Application/Audit/", "backend/src/DisputeDesk.Application/Transactions/ (dispute status on rows)", "backend/src/DisputeDesk.Infrastructure/Persistence/ (configurations, SaveChanges override, ownership filter, Migrations/)", "backend/src/DisputeDesk.Api/Disputes/", "backend/src/DisputeDesk.Api/Program.cs", "backend/openapi.json", "contracts/events/disputedesk.dispute.raised.v1.schema.json and sample", "backend/tests/ (Domain.Tests/Disputes/, Api.IntegrationTests/Disputes/, ArchitectureTests/)"]
-supervisor_checks = ["`dev-login.sh` as A, raise through the gateway, then `qa_readonly` shows the four rows with one instant."]
+supervisor_checks = ["`dev-login.sh` as A, raise through the gateway, then `qa_readonly` shows the dispute, its stored event and its outbox row with one instant."]
 
 [[entry]]
 id = 2
@@ -36,36 +36,53 @@ migration = true
 touches = ["backend/src/DisputeDesk.Api/Disputes/Idempotency/", "backend/src/DisputeDesk.Infrastructure/Persistence/ (IdempotencyKey configuration, Migrations/)", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/Idempotency/"]
 
 [[entry]]
-id = 3
+id = 8
 type = "story"
-title = "Customer follows disputes in the history and on the timeline"
-description = "Adds `GET /api/v1/disputes` and `GET /api/v1/disputes/<disputeId>` with the customer view mapping, and proves ownership on every customer endpoint."
-verify = "Integration tests for list, detail, ownership and the core-banking outage pass."
-covers = ["R16", "R17", "R18", "R11"]
+title = "Dispute changes are recorded as stored events, and disputes load by replay"
+description = "Every dispute change is a stored event in the dispute's own append-only stream in `StoredEvents` (ad-009). The `Dispute` aggregate appends the six stored event types (AD-13, AD-14a), `Dispute.Replay` rebuilds a dispute from its stream, and the one commit path (AD-14) writes the stored event, the `Disputes` read model row and, for a published type, the outbox row in one transaction, with no audit row. One exhaustive mapping in Infrastructure decides what is published. The customer timeline is built from the stored events through a deny-by-default allowlist, and the API contract does not change. `StoredEvents` is created by the migration that creates `Disputes`. Story 3.4 is the first handler that loads a dispute by replay to change it."
+verify = "Domain unit tests, Testcontainers integration tests and the architecture tests pass; `dotnet ef migrations has-pending-model-changes` passes; `openapi.json` has no diff; raising for customer A writes one row each in `Disputes`, `StoredEvents` and `OutboxMessages` and no `AuditLogEntries` row."
+covers = ["R10", "R15", "R16", "R17", "R18", "R23", "R28", "R29", "R31", "R35"]
 after = [2]
 hitl = false
 risk = "high"
 owner = "backend"
-lane = "A"
+lane = "M2"
+high_stakes = true
+migration = true
+touches = ["backend/src/DisputeDesk.Domain/Disputes/", "backend/src/DisputeDesk.Application/Disputes/ (CustomerView.cs, DisputeWire.cs, the stream loading method, RaiseDispute/RaiseDisputeHandler.cs)", "backend/src/DisputeDesk.Contracts/Events/", "backend/src/DisputeDesk.Contracts/Json/DisputeDeskJson.cs", "backend/src/DisputeDesk.Infrastructure/Persistence/ (AppDbContext.cs, the publish mapping, DisputeConfiguration.cs, the StoredEvents configuration, UniqueViolations.cs, Migrations/)", "contracts/events/disputedesk.dispute.status-changed.v1.schema.json and sample", "backend/tests/DisputeDesk.Domain.Tests/Disputes/", "backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/ (every file except RaiseDisputeAuthorizationTests.cs), Infrastructure/FailOutboxInsertInterceptor.cs if needed", "backend/tests/DisputeDesk.ArchitectureTests/AuditLogRulesTests.cs"]
+supervisor_checks = ["On a fresh local database, raise as A through the gateway: `qa_readonly` shows one row each in `Disputes`, `StoredEvents` and `OutboxMessages` with one instant, stored event ID = outbox ID, no `AuditLogEntries` row and no timeline table.", "Drop `StoredEvent` from the insert-only guard in a throwaway copy: the guard test fails."]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Customer follows disputes in the history and on the timeline"
+description = "Adds `GET /api/v1/disputes` and `GET /api/v1/disputes/<disputeId>` on story 3.8's customer view mapping: list rows and the dispute fields of the detail read the `Disputes` read model, and the timeline is built from the dispute's stored events through the deny-by-default allowlist (AD-13). Proves the allowlist against every stored event type and a test-only unknown type, and proves ownership on every customer endpoint."
+verify = "Integration tests for list, detail, the allowlist over every stored event type and a test-only unknown type, ownership, timestamps and the core-banking outage pass."
+covers = ["R16", "R17", "R18", "R11", "R30"]
+after = [8]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Application/Disputes/ListDisputes/, GetDispute/, CustomerView/", "backend/src/DisputeDesk.Contracts/Disputes/", "backend/src/DisputeDesk.Api/Disputes/", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/, Ownership/"]
+touches = ["backend/src/DisputeDesk.Application/Disputes/ListDisputes/, GetDispute/, CustomerView/", "backend/src/DisputeDesk.Contracts/Disputes/", "backend/src/DisputeDesk.Contracts/Json/ (UTC timestamps with Z, exact enum reading)", "backend/src/DisputeDesk.Api/Disputes/", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/, Ownership/"]
 
 [[entry]]
 id = 4
 type = "story"
 title = "Customer withdraws an open dispute"
-description = "Adds `Dispute.Withdraw` and `POST /api/v1/disputes/<disputeId>/withdraw`, the first status change, with the `status-changed.v1` event and its schema."
-verify = "Domain unit tests for the withdraw cells and integration tests for withdraw, closed disputes, races and the event pass."
-covers = ["R19", "R17", "R23", "R10", "R36"]
-after = [3]
+description = "Adds `Dispute.Withdraw` and `POST /api/v1/disputes/<disputeId>/withdraw`. The withdraw handler is the first to load a dispute by replaying its stored events and decide from that state (story 3.8, AD-13); on a version clash it reloads and decides once more (AD-15). A withdraw appends `DisputeWithdrawn`, published as `status-changed.v1` through story 3.8's mapping. Raise and withdraw refusals are audited as `Rejected` through `Audit.Record` (story 2.8, AD-14a)."
+verify = "Domain unit tests for the withdraw cells and integration tests for withdraw, closed disputes, the version-clash reload, refusal audit entries and the event pass."
+covers = ["R19", "R17", "R29", "R23", "R10", "R41", "R36"]
+after = [3, "2.8"]
 hitl = false
 risk = "high"
 owner = "backend"
-lane = "A"
+lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Domain/Disputes/Dispute.cs", "backend/src/DisputeDesk.Application/Disputes/WithdrawDispute/", "backend/src/DisputeDesk.Contracts/Events/", "backend/src/DisputeDesk.Api/Disputes/", "contracts/events/disputedesk.dispute.status-changed.v1.schema.json and sample", "backend/openapi.json", "backend/tests/ (Domain.Tests/Disputes/, Api.IntegrationTests/Disputes/Withdraw/)"]
+touches = ["backend/src/DisputeDesk.Domain/Disputes/Dispute.cs", "backend/src/DisputeDesk.Application/Disputes/WithdrawDispute/", "backend/src/DisputeDesk.Application/Disputes/RaiseDispute/ (refusal audit)", "backend/src/DisputeDesk.Api/Disputes/", "backend/openapi.json", "backend/tests/ (Domain.Tests/Disputes/, Api.IntegrationTests/Disputes/Withdraw/, ArchitectureTests/)"]
 
 [[entry]]
 id = 6

@@ -2,7 +2,7 @@
 title: DisputeDesk
 status: final
 created: 2026-10-25
-updated: 2026-10-26
+updated: 2026-10-29
 inputs:
   - docs/product-brief/product-brief.md
   - docs/glossary.md
@@ -37,7 +37,7 @@ It meets this business requirement: "The bank requires a customer-facing web app
 ### 2.1 Jobs to be done
 
 - **Customer:** When a card transaction is unrecognised or wrong, the customer wants to dispute it in a couple of minutes and then see where it stands, without phoning the bank. They also want to be confident that nobody else can see their transactions or disputes.
-- **Operations tool or automation (actor):** When a dispute arrives, the actor needs to read it, start review on it, escalate it or resolve it through a stable, authorised API, and have every change audited and published.
+- **Operations tool or automation (actor):** When a dispute arrives, the actor needs to read it, start review on it, escalate it or resolve it through a stable, authorised API, and have every change recorded as a stored event and every status change published.
 - **Engineer new to the solution (maintainer):** They need to see within minutes how each quality area is met, run it with one command, and trust the tests.
 
 ### 2.2 Non-users (v1)
@@ -124,7 +124,9 @@ The terms from `docs/glossary.md` are used verbatim. No synonyms appear anywhere
 - **Action:** a named change to a dispute's status: start review, escalate, resolve, withdraw.
 - **Actor:** whoever performed an action: the customer, an operations tool, or an automated process. It is recorded and never used to decide anything.
 - **SLA:** the 10 calendar days from submission after which an unresolved dispute is escalated automatically. It is internal only.
-- **Timeline:** the ordered history of a dispute's status changes, with notes meant for the customer. The internal audit log is separate.
+- **Dispute event:** a fact the bank publishes when a dispute is raised or its status changes, for other systems to react to. It carries no personal data.
+- **Stored event:** a fact recorded in a dispute's own history when something happens to it; the dispute's status and timeline are rebuilt from its stored events. It is private: never published as is.
+- **Timeline:** the ordered history of a dispute's status changes, with notes meant for the customer, built from the dispute's stored events. The internal audit log is separate.
 
 This PRD adds:
 
@@ -136,7 +138,6 @@ This PRD adds:
 - **Customer endpoint:** an endpoint called by the SPA with the BFF cookie. Withdraw is one.
 - **Operations endpoint:** an endpoint called with a bearer token: start review, escalate, resolve, and reading a dispute.
 - **Worker:** the background process that relays dispute events and runs the SLA sweep.
-- **Dispute event:** a fact published to Kafka when a dispute is raised or its status changes.
 - **Transaction date:** the date the core-banking source gives as the date the transaction was made (the authorisation date), not the posting date. It stands in for the scheme's processing date (dispute-lifecycle research, section 1).
 
 The six technical terms above (actor type, authorisation state, role, customer endpoint, operations endpoint, Worker) stay in this PRD only and are not added to `docs/glossary.md`. Settled on 2026-10-26.
@@ -261,6 +262,7 @@ Every link and every linking failure is written to the internal audit log with t
 
 - For rate limiting, only the first rejection per login or IP address in each window is audited. Later rejections are counted as a metric.
 - v1 has no unlink endpoint. Unlinking, and recovery for a customer who has lost their login, are done with the bank's help and recorded in `docs/production-path.md`. Any unlink added later must be audited [ASSUMPTION].
+- Linking stays in the internal audit log (NFR-SEC-10). Linking writes no stored event and publishes no dispute event. Settled on 2026-10-29 (ad-009).
 
 ### 4.3 Transactions
 
@@ -301,7 +303,7 @@ Each transaction row shows either that it is disputable or the status badge of i
 
 ### 4.4 Raising a dispute
 
-**Description:** for a disputable transaction, the customer picks a reason, can add a note, and (for wrong amount only) enters the amount they expected. Raising writes the dispute, its first timeline entry, an audit entry and a `disputedesk.dispute.raised.v1` event in one transaction. Realises UJ-1.
+**Description:** for a disputable transaction, the customer picks a reason, can add a note, and (for wrong amount only) enters the amount they expected. Raising records a `DisputeRaised` stored event, builds the dispute row from it, and writes the `disputedesk.dispute.raised.v1` outbox row, all in one transaction (NFR-DATA-2). Realises UJ-1.
 
 #### FR-13: Raise a dispute
 
@@ -317,7 +319,7 @@ A linked customer can raise a dispute on their own disputable transaction, givin
 - Another customer's transaction, or one that does not exist, returns 404.
 - An unknown reason, or a note longer than 1,000 characters, returns 400 with field errors. Notes are trimmed, and length is counted in characters after trimming. A note that is empty or only whitespace is stored as no note.
 - If the core-banking source is unavailable, the request returns 503. No dispute or event is written, and no idempotent response is stored.
-- The raise is audited, with the login as the actor identity.
+- The raise is recorded as a `DisputeRaised` stored event with actor type `customer` and the login as the actor identity. No audit log entry is written for a successful raise (NFR-SEC-10). Settled on 2026-10-29 (ad-009).
 
 #### FR-14: Wrong amount
 
@@ -369,6 +371,7 @@ A linked customer can open one of their disputes and see its details and its tim
   - the time in South African time (stored in UTC);
   - the actor type;
   - the note meant for the customer, if there is one.
+- The timeline is built from the dispute's stored events. Only the stored event types on an allowlist appear to the customer; every other type is left out, including `SlaWarningRaised` (FR-26) and any type not on the list (deny by default). A test covers every stored event type, and a test-only unknown type is left out. Settled on 2026-10-29 (ad-009).
 - Escalated appears as "Under review (prioritised)" in both the list and the detail.
 - No customer response or screen contains the actor's identity, an SLA date, a due date, or a promised resolution time.
 - When the outcome is Rejected, the detail tells the customer they can complain to the bank and, after that, to the National Financial Ombud Scheme. This follows the Conduct Standard's duty to explain the process (dispute-lifecycle research, section 1) [ASSUMPTION: static copy only].
@@ -384,7 +387,8 @@ The customer who owns a dispute can withdraw it from Submitted, Under review or 
 
 - The status becomes Withdrawn.
 - A timeline entry is added with actor type `customer` and the note.
-- An audit entry is added and a status-changed event is published.
+- The withdrawal is recorded as a `DisputeWithdrawn` stored event with actor type `customer` and the login as the actor identity, and a status-changed event is published. No audit log entry is written (NFR-SEC-10). Settled on 2026-10-29 (ad-009).
+- On a version clash the withdraw follows FR-24.
 - Withdraw is a customer endpoint. It needs the BFF cookie and the antiforgery header, and a bearer token cannot withdraw.
 - If a retried withdraw gets 409 and the dispute's current status is Withdrawn, the SPA treats that as success.
 
@@ -432,13 +436,13 @@ Only the actions in this table are allowed. Any other action on a dispute return
 **Consequences (testable):**
 
 - Start review and escalate take no note [ASSUMPTION]. Their timeline entries show only the status and the actor type.
-- Each dispute carries a version. When two actions race, the version check lets exactly one succeed, and the other returns 409.
+- Each dispute carries a version (NFR-DATA-5). When two actions race, one commits first. The other handler, customer or operations, reloads the dispute's stored events and decides once more: it succeeds if the reloaded status still allows the action, and returns 409 if the status forbids it or a second version clash occurs. Settled on 2026-10-29 (ad-009, AD-15).
 - Repeating an action that already succeeded returns 409. Operations actions are not idempotency-keyed [ASSUMPTION].
 - Checks run in this order: 401, 403, 404, 400, 409. A caller without the role therefore cannot probe which dispute IDs exist.
 
 #### FR-25: Operations authentication and audit
 
-Operations endpoints accept only bearer JWTs issued through client credentials. Each action writes an audit entry. Realises UJ-3.
+Operations endpoints accept only bearer JWTs issued through client credentials. Each successful action is recorded as a stored event; refused, forbidden and read requests are written to the internal audit log. Realises UJ-3.
 
 **Consequences (testable):**
 
@@ -446,8 +450,9 @@ Operations endpoints accept only bearer JWTs issued through client credentials. 
 - A valid token without the endpoint's role returns 403.
 - A credential that does not map to exactly one known actor type returns 403. The mapping is one Zitadel service account per actor type [ASSUMPTION].
 - An action on a dispute ID that does not exist returns 404.
-- The audit entry records the time, dispute ID, action, from-status, to-status, actor type, actor identity (the service account's ID) and trace ID.
-- A rejected operations attempt after authentication (403, 404 or 409) is also audited, with its actor, action and result.
+- A successful action is recorded as a `ReviewStarted`, `DisputeEscalated` or `DisputeResolved` stored event, with the time, dispute ID, action, from-status, to-status, actor type, actor identity (the service account's ID) and trace ID. No audit log entry is written for it (NFR-SEC-10). Settled on 2026-10-29 (ad-009).
+- A rejected operations attempt after authentication (403, 404 or 409) is written to the internal audit log, with its actor, action and result.
+- Each operations read (FR-30) is written to the internal audit log, with its actor and the dispute ID. Settled on 2026-10-29 (ad-009).
 
 #### FR-30: Read a dispute (operations)
 
@@ -468,10 +473,11 @@ The Worker escalates every dispute that is still Submitted or Under review once 
 
 **Consequences (testable):**
 
-- The escalation goes through the same domain operation as FR-22. Its actor type is `automation` and its actor identity is `worker:sla-sweep`. The status change, timeline entry, audit entry and event commit atomically.
+- The escalation goes through the same domain operation as FR-22. Its actor type is `automation` and its actor identity is `worker:sla-sweep`. The escalation is recorded as a `DisputeEscalated` stored event and commits atomically with its outbox row (NFR-DATA-2). No audit log entry is written (NFR-SEC-10).
 - The sweep runs at least once a minute [ASSUMPTION]. It claims due disputes in bounded batches with `FOR UPDATE SKIP LOCKED`, so a second Worker cannot double-escalate. After downtime it catches up.
 - Disputes that are already Escalated, Resolved or Withdrawn are left alone. A dispute escalated by hand before the SLA is not escalated again.
-- If the sweep loses a version race, it reads the dispute again. If the dispute is still Submitted or Under review and past the SLA, it escalates. Otherwise it skips. The timeline never shows a duplicate entry.
+- If the sweep loses a version race, it reloads the dispute's stored events. If the dispute is still Submitted or Under review and past the SLA, it escalates. Otherwise it skips. The timeline never shows a duplicate entry.
+- Before the SLA is due, the sweep records one `SlaWarningRaised` stored event per dispute, never more than once; how long before the SLA is due is settled in story 5.3. It is visible to operations (FR-30), left out of the customer timeline (FR-17), and never published: it has no outbox row. Settled on 2026-10-29 (ad-009).
 - SLA time comes from `TimeProvider`, so tests can move the clock.
 
 ### 4.9 Dispute events
@@ -511,8 +517,8 @@ Every successful action, including withdrawal and SLA escalation, publishes `dis
 - Customer C is not linked and fails the SIM-swap check.
 - Customer D is not linked and passes every check. D is the customer who completes linking in UJ-1 and its E2E test [ASSUMPTION: added so that linking can be demonstrated]. Each E2E (QA) run starts on a fresh stack (`docker compose down -v`, then `docker compose up --wait`), which resets D's link; no test-only database role is used. Settled on 2026-10-26.
 - The README lists the demo logins for A and B and the synthetic ID and account numbers for C and D.
-- Seeded disputes publish no events [ASSUMPTION].
-- The seeder changes a seeded dispute's status only through the same domain actions as FR-21 to FR-24 and FR-18, with a fixed seeding clock; it never sets a status directly. Settled on 2026-10-26.
+- The seeder builds each seeded dispute only by calling the same domain actions as FR-13, FR-18 and FR-21 to FR-24, with back-dated instants; it never sets a status directly. Each seeded dispute goes through the full commit path (NFR-DATA-2), stored events and outbox rows included, so its dispute events are published once per fresh database. Settled on 2026-10-29 (ad-009, AD-30).
+- Relay tests do not depend on an empty outbox.
 - A fresh `docker compose up` produces all of this with no manual steps.
 
 ## 5. Non-functional requirements
@@ -540,21 +546,21 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 ### 5.3 Data and domain modelling
 
 - **NFR-DATA-1:** PostgreSQL is the system of record for:
-  - disputes and their transaction snapshots;
-  - timelines;
+  - each dispute's stored events (`StoredEvents`), its append-only history;
+  - the dispute row with its transaction snapshot, a read model built from the stored events;
   - links and OTP challenges;
   - sessions;
   - idempotency keys;
-  - the audit log;
+  - the audit log (NFR-SEC-10);
   - the outbox.
 
   Transactions stay in the core-banking source and are not copied, apart from the snapshot.
-- **NFR-DATA-2:** a dispute change commits atomically with its timeline entry, its audit entry and its outbox event, or none of them commit.
+- **NFR-DATA-2:** a dispute change commits atomically with its stored event, the dispute row built from it, and its outbox row when the change is published, or none of them commit. A handler loads a dispute by replaying its stored events and decides from that state; the dispute row is a read model written in the same transaction as the stored event and the outbox row, and a test proves that replaying each dispute's stored events reproduces its row and its timeline. Stored events are domain events (`DisputeRaised`, `ReviewStarted`, `DisputeEscalated`, `DisputeResolved`, `DisputeWithdrawn`, `SlaWarningRaised`). One exhaustive mapping decides which are published and as which integration event: `DisputeRaised` as `disputedesk.dispute.raised.v1`, the four status changes as `disputedesk.dispute.status-changed.v1`, and `SlaWarningRaised` never (Microsoft Learn: *.NET Microservices Architecture*, "Domain events versus integration events"). A published stored event's ID is its outbox row ID and its CloudEvent `id`. Settled on 2026-10-29 (ad-009).
 - **NFR-DATA-3:** the allowed actions (FR-24), disputability (FR-12) and the amount rules (FR-14) live in the domain model, not in the handlers.
 - **NFR-DATA-4:** money is `numeric(19,2)` with an ISO 4217 code, and every timestamp is stored in UTC. South African time (UTC+2, no daylight saving) is applied only for display and for the 90-day calendar.
-- **NFR-DATA-5:** each dispute carries a version for optimistic concurrency. One dispute per transaction is enforced by a unique index on (account reference, transaction ID). Links have unique indexes on customer ID and on login.
-- **NFR-DATA-6:** schema changes are EF Core migrations. They are applied at start-up through EF Core's `MigrateAsync`, under its migration lock, on `docker compose up`, and reviewed as high-stakes changes. A production deployment applies them with a migration bundle instead (EF Core documentation), recorded in `docs/production-path.md`.
-- **NFR-DATA-7:** dispute records and their audit entries are never deleted in v1. Retention follows transaction records: five years under the FIC Act, then de-identification under POPIA s14 (dispute-lifecycle research, recommendation 5). The jobs that enforce this are a production-path note.
+- **NFR-DATA-5:** each stored event carries its dispute's version, and a unique index on (dispute ID, version) gives the order within a dispute and optimistic concurrency (FR-24). Publish order is the relay's per-dispute order (FR-28). There is no order across disputes and no index by event type; the options are a production-path note (§6.2). Settled on 2026-10-29 (ad-009). One dispute per transaction is enforced by a unique index on (account reference, transaction ID). Links have unique indexes on customer ID and on login.
+- **NFR-DATA-6:** schema changes are EF Core migrations. `StoredEvents` is part of the dispute data model from the migration that creates the dispute table, and the migration history shows only forward development: no migration creates a table that a later one drops (ad-009). They are applied at start-up through EF Core's `MigrateAsync`, under its migration lock, on `docker compose up`, and reviewed as high-stakes changes. A production deployment applies them with a migration bundle instead (EF Core documentation), recorded in `docs/production-path.md`.
+- **NFR-DATA-7:** dispute records, their stored events and their audit entries are never deleted in v1. Retention follows transaction records: five years under the FIC Act, then de-identification under POPIA s14 (dispute-lifecycle research, recommendation 5). The jobs that enforce this are a production-path note.
 
 ### 5.4 API design
 
@@ -571,7 +577,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - **NFR-SEC-2:** customer and linking endpoints accept only the cookie. Operations endpoints accept only bearer JWTs (client credentials), validated for issuer, audience, lifetime and signature. The wrong kind of credential gets 401.
 - **NFR-SEC-3:** authorisation is enforced in the API on every endpoint and denies by default (OWASP Authorization Cheat Sheet), through the authorisation states (FR-9) and the roles (FR-21 to FR-23, FR-30). The SPA hiding a control is cosmetic only.
 - **NFR-SEC-4:** linking prevents enumeration (FR-4, FR-6). OTPs are HMAC-hashed with a key that is not in the repo. Tests cover the rate limits, the send cap and the lockout (FR-4, FR-7, FR-8).
-- **NFR-SEC-5:** ID numbers are never stored or logged. Card numbers are stored and shown masked only, as the first 6 and last 4 digits (dispute-lifecycle research, recommendation 5) [ASSUMPTION]. Account numbers are shown and stored as their last 4 digits only. The Api checks both masks where data enters from `ICoreBankingClient` and treats an unmasked number as core banking unavailable, so no unmasked number passes the core-banking boundary. Logs, traces, metrics and events carry no personal data (POPIA s10 and s19).
+- **NFR-SEC-5:** ID numbers are never stored or logged. Card numbers are stored and shown masked only, as the first 6 and last 4 digits (dispute-lifecycle research, recommendation 5) [ASSUMPTION]. Account numbers are shown and stored as their last 4 digits only. The Api checks both masks where data enters from `ICoreBankingClient` and treats an unmasked number as core banking unavailable, so no unmasked number passes the core-banking boundary. Logs, traces, metrics and published dispute events carry no personal data (POPIA s10 and s19). Stored events are private records: they hold the customer ID, the account reference, the transaction ID and the snapshot, have the same access as the dispute row, are never logged or traced, and are kept under NFR-DATA-7. Settled on 2026-10-29 (ad-009).
 - **NFR-SEC-6:** ownership of disputes is enforced by an EF Core global query filter on the customer resolved from the link table. Ownership of transactions is checked through `ICoreBankingClient` (FR-11, FR-13). Another customer's resource returns 404, never 403 (RFC 9110 §15.5.4). Integration tests prove this for every customer endpoint. Only the operations endpoints and the Worker bypass the filter, each in one named place.
 - **NFR-SEC-7:** the nginx gateway sets a strict CSP with no inline script, `X-Content-Type-Options`, `Referrer-Policy` and `frame-ancestors 'none'`, plus HSTS in AWS (OWASP HTTP Headers Cheat Sheet). Every `/api` response carries `Cache-Control: no-store` (RFC 9111), so no browser or shared cache keeps customer data. It applies a coarse limit of 10 requests per second per IP address, with a burst of 20 [ASSUMPTION]. Application limits use the built-in rate limiter.
 - **NFR-SEC-8:** CI runs these scans, and any high or critical finding fails the build unless it is triaged in the repo [ASSUMPTION: threshold]:
@@ -581,7 +587,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
   - Trivy image scanning;
   - a ZAP baseline against the running stack.
 - **NFR-SEC-9:** secrets come from the environment, never the repo. In AWS they come from SSM Parameter Store [ASSUMPTION], and Compose uses generated local values.
-- **NFR-SEC-10:** the internal audit log is append-only from the application's side. It records every linking event (FR-10) and every dispute change: raise, withdraw, operations actions and SLA escalation (FR-13, FR-18, FR-25, FR-26).
+- **NFR-SEC-10:** the internal audit log and the stored events are append-only from the application's side, each behind the same insert-only guard. Successful dispute changes (raise, withdraw, operations actions and SLA escalation; FR-13, FR-18, FR-25, FR-26) are recorded only as stored events, with no duplicate audit entry. The audit log records every linking outcome (FR-10), every refused or forbidden action (FR-25), every operations read (FR-25, FR-30), and every sign-in and sign-out (FR-2, FR-3; initiative R41), each with the same audit-entry fields as every other entry (AD-14a). Settled on 2026-10-29 (ad-009, AD-14a).
 - **NFR-SEC-11:** in AWS, Mailpit's web UI sits behind basic auth, with the credentials in SSM, because it shows OTPs. The README notes that a real deployment sends OTPs by SMS.
 
 ### 5.6 Code quality and maintainability
@@ -642,6 +648,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
   - ad-006 actor-agnostic dispute actions;
   - ad-007 the BFF session, with no tokens in the browser;
   - ad-008 linking, including the SIM-swap check before the OTP is sent.
+  - ad-009 stored events as the record of dispute changes (settled on 2026-10-29).
 
   The outbox and having no schema registry are recorded in the architecture spine (AD-14, AD-17, AD-19).
 - **NFR-DOC-4:** Scalar is the API viewer in dev and demo, and stands in for another team's operations tool.
@@ -687,6 +694,8 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - **A general support platform for several departments, and a UI for AI agents.**
 - **Follow-up messages from the customer after raising a dispute.**
 - **Retention and de-identification jobs** (NFR-DATA-7).
+- **Crypto-shredding of personal data in stored events** (NFR-SEC-5).
+- **Event order across disputes:** Kafka offsets, a high-water mark with `pg_snapshot_xmin`, or change data capture, in place of a global position and an index by event type (NFR-DATA-5). The production path frames these for a large retail bank with tens of millions of clients, with its scale figures labelled as estimates.
 - **Scale-out:** several Api and Worker instances, shared rate-limit state, and latency targets under load.
 - **Filters and search on transactions.**
 - **Languages other than English, and currencies other than ZAR.**
@@ -762,7 +771,6 @@ None open. Settled on 2026-10-25:
 - §4.9 FR-28: events leave out the customer ID and the amount.
 - §4.10 FR-29: one seeded dispute passes the SLA a few minutes after start-up.
 - §4.10 FR-29: customer D is added for linking; each E2E run starts on a fresh stack, which resets D's link.
-- §4.10 FR-29: seeded disputes publish no events.
 
 **Non-functional requirements**
 - §5.2 NFR-RES-4: poison outbox rows get a failed state after 5 attempts, with no dead-letter topic.

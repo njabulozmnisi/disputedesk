@@ -3,12 +3,12 @@ name: DisputeDesk
 type: architecture-spine
 purpose: build-substrate
 altitude: initiative
-paradigm: Clean Architecture (ports and adapters) with feature folders, plus a BFF and a transactional outbox
+paradigm: Clean Architecture (ports and adapters) with feature folders, plus a BFF, an event-sourced Dispute (stored events) and a transactional outbox
 scope: The whole DisputeDesk initiative - Api host (BFF and REST), Worker, core-banking stub, SPA, Compose platform, CI and the AWS dev environment
 status: final
 created: '2026-10-26'
-updated: '2026-10-27'
-binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38, R39, R40]
+updated: '2026-10-29'
+binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38, R39, R40, R41]
 sources:
   - docs/initiative-disputedesk.md
   - docs/prd/prd.md
@@ -21,6 +21,8 @@ sources:
   - docs/conventions/frontend.md
   - docs/glossary.md
   - AGENTS.md
+  - docs/verification/brief-es-decisions.md
+  - docs/decisions/ad-009-stored-events.md
   - backend/ (P0-1, P0-3), docker-compose.yml and infra/ (P0-2), .github/workflows/ (P0-4)
 ---
 
@@ -30,11 +32,11 @@ This spine is the consistency contract for every DisputeDesk story. Each `AD-n` 
 
 ## Design Paradigm
 
-**Clean Architecture (ports and adapters) with feature folders.** Dependencies point inward. Domain holds the rules, Application holds the use cases, and Infrastructure is the only layer that knows about Postgres, Kafka, HTTP clients or SMTP. Two hosts compose them: the **Api** (BFF and REST) and the **Worker** (outbox relay and SLA sweep). Two patterns sit on top: a **backend-for-frontend**, so the browser holds only a cookie, and a **transactional outbox**, so every dispute change commits with its dispute event.
+**Clean Architecture (ports and adapters) with feature folders.** Dependencies point inward. Domain holds the rules, Application holds the use cases, and Infrastructure is the only layer that knows about Postgres, Kafka, HTTP clients or SMTP. Two hosts compose them: the **Api** (BFF and REST) and the **Worker** (outbox relay and SLA sweep). Two patterns sit on top: a **backend-for-frontend**, so the browser holds only a cookie, and a **transactional outbox**, so every published dispute event commits with its change. Each dispute change is a **stored event** in the dispute's own append-only stream (ad-009); a handler loads a dispute by replaying its stream, and the `Disputes` row is a read model of that stream.
 
 | Layer | Project (`backend/src/`) | Holds |
 | --- | --- | --- |
-| Domain | `DisputeDesk.Domain` | `Dispute` aggregate and `TimelineEntry`, action rules, disputability, money, `Result`/`Error` |
+| Domain | `DisputeDesk.Domain` | `Dispute` aggregate and its stored event types, action rules, disputability, money, `Result`/`Error` |
 | Contracts | `DisputeDesk.Contracts` | Wire shapes only: API request and response records, dispute event records, problem slugs, audit vocabulary. References nothing |
 | Application | `DisputeDesk.Application` | Feature folders (`Linking/`, `Transactions/`, `Disputes/`, `Operations/`, `Sla/`) with handlers, the three ports, `IAppDbContext`, `CurrentCustomer` |
 | Infrastructure | `DisputeDesk.Infrastructure` | `AppDbContext`, migrations, port adapters, outbox relay, Kafka producer, session store, telemetry |
@@ -82,7 +84,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
 
 - **Binds:** R12, R14, R22, R29, R30
 - **Prevents:** clock reads tests can't control; one change stamped with several instants; floating-point money
-- **Rule:** Each use case reads `TimeProvider.GetUtcNow()` once, at the start of the handler or of each sweep or relay batch, and passes that instant into the aggregate. The aggregate and the AD-14 commit copy it to the timeline entry, `AuditLogEntries.OccurredAtUtc`, `OutboxMessages.CreatedAtUtc`, the CloudEvent `time` and `occurredAt`. Raise sets `CreatedAtUtc` to that instant and `SlaDueAtUtc` to it plus 240 hours. SQL never calls `now()` or `CURRENT_TIMESTAMP`, and no column has a time default. Raw SQL takes `@now` as a parameter, and a source-rules test greps for those functions. Every timestamp is UTC `timestamptz`. South African time is a fixed UTC+02:00 offset, used only by the Domain's 90-day rule and the SPA's display. Money is `decimal` in C# and `numeric(19,2)` plus an ISO 4217 code in Postgres. In JSON, responses carry `{ "amount": "849.00", "currency": "ZAR" }` with exactly two decimals, and requests send a bare decimal string with ZAR implied. Dispute IDs and event IDs are UUIDv7 (RFC 9562; `Guid.CreateVersion7`, from the use-case instant), sent as strings. Note length is counted in UTF-16 code units after trimming, on both sides.
+- **Rule:** Each use case reads `TimeProvider.GetUtcNow()` once, at the start of the handler or of each sweep or relay batch, and passes that instant into the aggregate. The aggregate and the AD-14 commit copy it to `StoredEvents.OccurredAtUtc`, `OutboxMessages.CreatedAtUtc`, the CloudEvent `time` and `occurredAt`; `Audit.Record` stamps an audit row with its caller's instant. The one exception is the seeder (AD-30): it reads the clock once for its anchor and gives each seeded action its own back-dated instant resolved from the fixture. An AD-15 retry takes the later of the use-case instant and the stream's latest instant, without reading the clock again. Raise sets `CreatedAtUtc` to that instant and `SlaDueAtUtc` to it plus 240 hours. SQL never calls `now()` or `CURRENT_TIMESTAMP`, and no column has a time default. Raw SQL takes `@now` as a parameter, and a source-rules test greps for those functions. Every timestamp is UTC `timestamptz`. South African time is a fixed UTC+02:00 offset, used only by the Domain's 90-day rule and the SPA's display. Money is `decimal` in C# and `numeric(19,2)` plus an ISO 4217 code in Postgres. In JSON, responses carry `{ "amount": "849.00", "currency": "ZAR" }` with exactly two decimals, and requests send a bare decimal string with ZAR implied. Dispute IDs and event IDs are UUIDv7 (RFC 9562; `Guid.CreateVersion7`, from the use-case instant), sent as strings. Note length is counted in UTF-16 code units after trimming, on both sides.
 - **Rejected:** `DateTime.UtcNow`; NodaTime; `double`; prefixed string IDs.
 
 ### AD-5 - HTTP API shape [ADOPTED]
@@ -108,7 +110,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
   - **Server-side session.** The cookie holds only a session key. An `ITicketStore` in Api keeps the ticket in `Sessions` (the Worker image lacks the ASP.NET Core shared framework that defines `ITicketStore`). `StoreAsync` always mints a new 256-bit random key, and the row stores its SHA-256 in `KeyHash`. `RetrieveAsync` checks `ExpiresAtUtc` and `AbsoluteExpiresAtUtc` against `TimeProvider`, and deletes and rejects an expired row. `RenewAsync` moves only `ExpiresAtUtc`. A successful link re-issues the session with a new key and deletes the old row (OWASP Session Management: renew the session ID after a privilege change). An hourly timer in the Api deletes expired rows.
   - **Keys and tokens.** Data Protection keys persist to Postgres (`DataProtectionKeys`) locally. In AWS the key ring is stored with AWS's documented `Amazon.AspNetCore.DataProtection.SSM` package (`PersistKeysToAWSSystemsManager`) as SSM Parameter Store SecureStrings, encrypted at rest with KMS (decided 2026-10-27, story 7.4). Only the ID token is kept, inside the protected server-side ticket, for the end-session `id_token_hint`; access and refresh tokens are never stored.
   - **Expiry.** The idle limit is 15 minutes, renewed on every authenticated API request (`ShouldRenew = true` in `OnValidatePrincipal`, not the built-in half-window rule). The absolute limit is 12 hours. The SPA never polls. Two minutes before the idle limit it shows a warning dialog whose "Stay signed in" calls `GET /api/v1/bff/session`, an authenticated request that renews the idle limit (WCAG 2.2 SC 2.2.1 Timing Adjustable; decided 2026-10-27, story 2.4).
-  - **Endpoints.** `GET /api/v1/bff/login?returnUrl=` accepts only local paths (`IsLocalUrl`) and otherwise uses `/`. `GET /api/v1/bff/session` returns `{ "state": "anonymous" | "unlinked" | "linked" }`. `GET /api/v1/bff/antiforgery` returns the request token. `POST /api/v1/bff/logout` is a top-level form POST carrying `__RequestVerificationToken`. It validates antiforgery only for an authenticated caller, deletes any session row the cookie names, clears the session and antiforgery cookies, and redirects to Zitadel end-session with `client_id` `post_logout_redirect_uri` = the app origin's `/`, and the session's `id_token_hint`, so Zitadel ends its session without a prompt (an anonymous logout sends no hint). The ID token crosses the browser only in that one redirect, already spent and short-lived; without it Zitadel asks for a click and its session outlives sign-out. Story 7.9 moves this redirect to the OIDC handler's built-in `SignOutAsync`, which also sends `state` (OpenID Connect RP-Initiated Logout 1.0). Callbacks stay at `/api/signin-oidc` and `/api/signout-callback-oidc`.
+  - **Endpoints.** `GET /api/v1/bff/login?returnUrl=` accepts only local paths (`IsLocalUrl`) and otherwise uses `/`. `GET /api/v1/bff/session` returns `{ "state": "anonymous" | "unlinked" | "linked" }`. `GET /api/v1/bff/antiforgery` returns the request token. `POST /api/v1/bff/logout` is a top-level form POST carrying `__RequestVerificationToken`. It validates antiforgery only for an authenticated caller, deletes any session row the cookie names, clears the session and antiforgery cookies, and redirects to Zitadel end-session with `client_id` `post_logout_redirect_uri` = the app origin's `/api/signout-callback-oidc` (the handler's `SignedOutCallbackPath`, which then lands the browser on `/`), and the session's `id_token_hint`, so Zitadel ends its session without a prompt (an anonymous logout sends no hint). The ID token crosses the browser only in that one redirect, already spent and short-lived; without it Zitadel asks for a click and its session outlives sign-out. The redirect is made by the OIDC handler's built-in `SignOutAsync`, which also sends `state` (OpenID Connect RP-Initiated Logout 1.0); story 2.8 builds it and records `SignOut` (AD-14a). A failed `SignIn` audit save stops the sign-in; a failed `SignOut` audit save is logged as an error and does not stop the sign-out, because logout must end the session (OWASP Session Management Cheat Sheet). Callbacks stay at `/api/signin-oidc` and `/api/signout-callback-oidc`.
   - **CSRF.** `AddAntiforgery(o => o.HeaderName = "X-XSRF-TOKEN")` sets the header, and every unsafe customer and linking endpoint runs an `IAntiforgery` endpoint filter that reads it (OWASP synchronizer token pattern). The built-in antiforgery middleware validates only form-bound endpoints and never short-circuits, so Microsoft Learn documents calling `IAntiforgery` directly for these. No CORS policy is registered.
 - **Rejected:** tokens in the SPA; a static `X-CSRF: 1` header alone; the Duende BFF (banned); Redis or a cookie-held ticket.
 
@@ -130,16 +132,16 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
 
 - **Binds:** R9, R17
 - **Prevents:** the customer taken from a request field or the token subject; a single-implementation interface for the current customer
-- **Rule:** Two policies: `Unlinked` (linking routes) and `Linked` (customer routes). BFF and health endpoints carry no policy (`AllowAnonymous()` once the deny-by-default fallback policy exists, story 7.9). `CurrentCustomer` is a concrete scoped class in `Application/Abstractions`. The `Linked` policy's authorization handler fills it on every customer request by looking up the login (`sub` from the session) in `CustomerLinks`; each policy names the cookie scheme (AD-8), and the documented `IAuthorizationMiddlewareResultHandler` writes the 403 problem, so 401 and 403 always come before binding and validation (400). Handlers and `AppDbContext` read only that class, and the Worker never sets it. An unlinked login on a customer route gets 403 `linking-required`; a linked login on a linking route gets 403 `already-linked`. Handlers never read `HttpContext.User`.
+- **Rule:** Two policies: `Unlinked` (linking routes) and `Linked` (customer routes). A deny-by-default fallback policy requires an authenticated user on every endpoint without its own policy, and the BFF and health endpoints are marked `AllowAnonymous()` (Microsoft Learn, *Policy-based authorization*: require global user authentication; story 2.8). `CurrentCustomer` is a concrete scoped class in `Application/Abstractions`. The `Linked` policy's authorization handler fills it on every customer request by looking up the login (`sub` from the session) in `CustomerLinks`; each policy names the cookie scheme (AD-8), and the documented `IAuthorizationMiddlewareResultHandler` writes the 403 problem, so 401 and 403 always come before binding and validation (400). Handlers and `AppDbContext` read only that class, and the Worker never sets it. An unlinked login on a customer route gets 403 `linking-required`; a linked login on a linking route gets 403 `already-linked`. Handlers never read `HttpContext.User`.
 - **Rejected:** a customer-ID claim stamped at sign-in (stale after linking); an `ICurrentCustomer` interface (AGENTS.md); Zitadel metadata as the link store; an endpoint filter (it runs after built-in validation, so 400 could beat 403); claims transformation (runs on every authenticate call, more than once per request).
 
 ### AD-11 - Ownership by global query filter, two named bypasses [ADOPTED]
 
-- **Binds:** R17, every query over disputes and their timelines
-- **Prevents:** a forgotten `Where` leaking another customer's dispute or timeline; a filter that bakes in the first customer's ID; a customer path reusing an operations loader
+- **Binds:** R17, every query over disputes, their stored events and their timelines
+- **Prevents:** a forgotten `Where` leaking another customer's dispute, stored events or timeline; a filter that bakes in the first customer's ID; a customer path reusing an operations loader
 - **Rule:**
   - **The filter.** `AppDbContext` adds the EF Core 10 named query filter `"Ownership"` to `Dispute`, an expression over an instance member, `d => d.CustomerId == CurrentCustomerId`, set per context from `CurrentCustomer`. It never uses a captured local or a static. With no current customer it matches nothing. `AddDbContextPool` is forbidden.
-  - **Timelines.** `TimelineEntry` is reachable only through `Dispute.Timeline` and also carries a filter through its dispute.
+  - **Stored events and timelines.** `StoredEvent` (ad-009) is reachable only through its dispute's stream and carries the same named filter through its dispute (EF Core *Global query filters*: filter the required dependent through its navigation). Loading by replay and the timeline both read the stored events (AD-13), so no query reads `StoredEvents` without that filter outside the bypasses below.
   - **Bypasses.** `IgnoreQueryFilters(["Ownership"])` appears only in the `Operations/` feature folder and the Worker's sweep. An architecture test fails on any other use, and on `Disputes/` or `Transactions/` referencing `Operations/` or `Sla/`.
   - **Not found.** Another customer's dispute and an unknown ID return identical 404 bodies apart from `traceId`.
   - **Transactions.** Ownership is checked by `ICoreBankingClient`, which only answers for the given customer (AD-21).
@@ -162,30 +164,39 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
 ### AD-13 - The `Dispute` aggregate owns every rule; customers see a mapped view
 
 - **Binds:** R12 to R14, R16, R18 to R20, R22, R29
-- **Prevents:** the FR-24 table or disputability copied and drifting; `escalated`, `automation` or an actor identity reaching a customer; 409 and 422 decided differently by two stories
-- **Rule:** `Dispute.Raise(...)`, `StartReview`, `Escalate`, `Resolve(outcome, note)` and `Withdraw(note)` are the only ways to create or change a dispute. Each takes an `Actor` and the use-case instant and returns `Result`. Status setters are private. The operations escalate and the SLA sweep both call the same `Escalate`. Domain owns the allowed-actions table, the amount rules and note trimming. Disputability returns a reason: `AlreadyDisputed`, `OutsideWindow` or `NotEligible` (on the wire `alreadyDisputed`, `outsideWindow`, `notEligible`). Raise checks run in this order: transaction found (404), earlier dispute (409 `already-disputed`), then window and eligibility (422 `not-disputable` with `reason`). The unique index stays as the race backstop. **Customer wire view**, mapped once in Application: `customerStatus` is one of `submitted`, `underReview`, `underReviewPrioritised`, `resolved`, `withdrawn`, plus `outcome`. The timeline `actor` is `you` or `theBank`. No actor type, actor identity, SLA or due date appears. A customer 409 carries `customerStatus`. Each transaction row carries `disputable`, `notDisputableReason`, and the dispute's `disputeId` and `customerStatus` when one exists. Operations responses use the internal `status` and `actorType`.
-- **Rejected:** rules in handlers; a state-machine library; one response shape for both audiences.
+- **Prevents:** the FR-24 table or disputability copied and drifting; `escalated`, `automation`, an actor identity or an internal stored event reaching a customer; 409 and 422 decided differently by two stories; one story loading by replay and another from the row
+- **Rule:** `Dispute.Raise(...)`, `StartReview`, `Escalate`, `Resolve(outcome, note)`, `Withdraw(note)` and `RecordSlaWarning` (the SLA sweep only, AD-18) are the only ways to create or change a dispute. Each takes an `Actor` and the use-case instant, returns `Result`, and appends exactly one pending stored event (ad-009): `DisputeRaised`, `ReviewStarted`, `DisputeEscalated`, `DisputeResolved`, `DisputeWithdrawn` or `SlaWarningRaised`, carrying the next `Version`. `DisputeRaised` holds everything needed to rebuild the dispute (customer ID, `AccountRef`, `TransactionId`, the transaction snapshot, reason, note and amounts). Status setters are private. The operations escalate and the SLA sweep both call the same `Escalate`. **Loading by replay.** The stored events are the dispute's record. A handler that changes a dispute (withdraw, the operations actions, the SLA sweep) loads it by replaying its stream in `Version` order through `Dispute.Replay(storedEvents)` in Domain, and decides from that state (Microsoft Learn, *Event Sourcing pattern*: the current state is rebuilt by replaying the events). Each method decides, creates its stored event, then changes state only by applying that event through one `Apply` case per type, and `Replay` uses the same `Apply` cases, so loading and deciding share one fold. A stream with no row visible through the ownership filter (AD-11) is 404. **Read model.** The `Disputes` row is a read model of the stream at its latest `Version`, written by the AD-14 commit in the same transaction as the stored event and the outbox row (Microsoft Learn, *Event Sourcing pattern*: materialized views). Lists, the dispute fields of the detail reads, the transaction rows, the unique transaction index and the SLA sweep's claim read it; no handler decides from it. A test replays every stream, over every type, and asserts it reproduces its `Disputes` row and its timeline. **Timeline.** The timeline is built from the dispute's stored events (glossary: Timeline). The customer view passes them through one allowlist in Application that admits only the five lifecycle types and hides every other type, including any type added later (deny by default; 3.3 tests every type and a test-only unknown type). Operations (FR-30) see every type, `SlaWarningRaised` included. In C#, each stored event type is a sealed record deriving from one abstract `StoredEvent` record in Domain, and `EventType` is the record's type name; the allowlist is a set of the five admitted record types checked with a type test, so a test-only record declared in a test project maps to nothing (OWASP Authorization Cheat Sheet: deny by default). A row whose `EventType` the reader does not know is skipped for customers, never an error. **Ownership by story.** 3.8 owns the customer timeline mapping from stored events through the allowlist, the raise 201 body included; the aggregate holds no timeline of its own. 3.3 adds the list and detail reads on that same mapping and the every-type and unknown-type tests. Domain owns the allowed-actions table, the amount rules and note trimming. Disputability returns a reason: `AlreadyDisputed`, `OutsideWindow` or `NotEligible` (on the wire `alreadyDisputed`, `outsideWindow`, `notEligible`). Raise checks run in this order: transaction found (404), earlier dispute (409 `already-disputed`), then window and eligibility (422 `not-disputable` with `reason`). The unique index stays as the race backstop. **Customer wire view**, mapped once in Application: `customerStatus` is one of `submitted`, `underReview`, `underReviewPrioritised`, `resolved`, `withdrawn`, plus `outcome`. The timeline `actor` is `you` or `theBank`. No actor type, actor identity, SLA or due date appears. A customer 409 carries `customerStatus`. Each transaction row carries `disputable`, `notDisputableReason`, and the dispute's `disputeId` and `customerStatus` when one exists. Operations responses use the internal `status` and `actorType`.
+- **Rejected:** rules in handlers; a state-machine library; one response shape for both audiences; deciding from the `Disputes` row (a copy of the record, not the record; ad-009); a customer timeline that shows any type not on the allowlist.
 
 ### AD-14 - One commit path for dispute changes
 
-- **Binds:** R10, R23, R28
-- **Prevents:** a change committed without its timeline entry, audit row or outbox row; two outbox payload shapes
-- **Rule:** Aggregate methods append a `TimelineEntry` and a pending dispute change. One `AppDbContext.SaveChangesAsync` override in Infrastructure turns each pending change into one `AuditLogEntries` row and one `OutboxMessages` row in the same transaction. It serialises the complete structured CloudEvent once, with the shared JSON options, into `OutboxMessages.Payload` (`text`, so the bytes are exactly what was written). `EventType`, `DisputeId` and `DisputeVersion` are copied out for querying. `TraceParent` and `TraceState` come from `Activity.Current`. Handlers never write outbox rows or dispute audit rows by hand. The override rejects any `AuditLogEntry` that is Modified or Deleted. Linking handlers, and handlers recording rejected dispute actions (AD-14a), add audit rows through one Application method, `Audit.Record(...)`.
-- **Rejected:** per-handler writes; MediatR notifications; a separate interceptor; `jsonb` payload (it re-orders keys).
+- **Binds:** R10, R23, R28, R41
+- **Prevents:** a change committed without its stored event or, for a published type, its outbox row; a private fact published by accident; two outbox payload shapes; two records of one successful change; a failed save silently dropping a pending event
+- **Rule:**
+  - **Commit.** Aggregate methods append pending stored events (AD-13). One `AppDbContext.SaveChangesAsync` override in Infrastructure turns each into one `StoredEvents` row and, only when the mapping below publishes its type, one `OutboxMessages` row, and writes the `Disputes` read model row from the aggregate's new state, all in one transaction (EF Core *Transactions*: one `SaveChanges` is one transaction). The stored event ID is a UUIDv7 from the change's instant (AD-4) and is also the outbox row ID and the CloudEvent `id` (ad-009). No `AuditLogEntries` row is written for a successful dispute change: the stream is that record (ad-009).
+  - **One publish mapping.** One exhaustive `switch` in Infrastructure maps every stored event type to its integration event or to nothing: `DisputeRaised` to `raised.v1`, `ReviewStarted`, `DisputeEscalated`, `DisputeResolved` and `DisputeWithdrawn` to `status-changed.v1`, `SlaWarningRaised` to nothing. An unmapped type throws and stops the commit, and a test enumerates every type (Microsoft Learn, *Domain events versus integration events*). A stored event is never published as is.
+  - **Payload.** The mapping serialises the complete structured CloudEvent once, with the shared JSON options, into `OutboxMessages.Payload` (`text`, so the bytes are exactly what was written). `EventType`, `DisputeId` and `DisputeVersion` are copied out for querying. `TraceParent` and `TraceState` come from `Activity.Current`.
+  - **Insert-only guard.** The override rejects any `AuditLogEntry` or `StoredEvent` that is Modified or Deleted, before saving (OWASP Logging Cheat Sheet: protect the integrity of event data). The guard sees only tracked entities, so a source-rules test, like AD-4's `now()` grep, fails on `ExecuteUpdate`, `ExecuteDelete` or raw SQL against either table outside migrations.
+  - **Failed save.** The override takes the pending events before saving, so on any exception from the save it clears the change tracker (`ChangeTracker.Clear()`, EF Core *Change tracking*) and rethrows. Nothing can later save the dispute without its events; the handler reloads (AD-15).
+  - **Hand-written rows.** Handlers never write stored events, outbox rows or dispute audit rows by hand. Linking handlers, handlers recording refused or forbidden dispute actions, operations reads, and sign-in and sign-out (AD-14a) add audit rows through one Application method, `Audit.Record(...)`.
+- **Rejected:** per-handler writes; MediatR notifications; a separate interceptor; `jsonb` payload (it re-orders keys); an audit row beside each stored event; one outbox row per stored event (ad-009).
 
 ### AD-14a - Audit and timeline vocabulary
 
-- **Binds:** R10, R21, every story writing `AuditLogEntries` or `TimelineEntries`
-- **Prevents:** five stories each inventing action names, actor IDs and result values
-- **Rule:** Values are C# enums in Contracts, stored as their PascalCase member names (AD-22). `ActorId` is the `LoginSub` for actor type `Customer`, the token `sub` for `Operations`, and `worker:sla-sweep` for `Automation`. The customer ID goes only in `AuditLogEntries.CustomerId`. `AuditLogEntries.Result` is `Succeeded`, `Rejected` (rule or status), `Denied` (authorisation) or `Failed` (dependency). A dispute's Outcome appears only in `Details.outcome`. `AuditLogEntries.Action` is a closed set: `Raise`, `StartReview`, `Escalate`, `Resolve`, `Withdraw`, `LinkingStart`, `LinkingNoMatch`, `LinkingAlreadyLinked`, `LinkingSimSwapFailed`, `LinkingSendCapped`, `LinkingOtpSent`, `LinkingOtpIncorrect`, `LinkingOtpExpired`, `LinkingLocked`, `LinkingRateLimited`, `Linked`. A dispute's first timeline entry has action `Raise` and no from-status. Rejected operations actions (403, 404 or 409 after authentication) are audited with `Result` = `Rejected` or `Denied` (FR-25).
-- **Rejected:** free-text action names; a dispute outcome stored in the audit result.
+- **Binds:** R10, R21, R41, every story writing `AuditLogEntries` or `StoredEvents`
+- **Prevents:** five stories each inventing action names, stored event types, actor IDs and result values; a successful dispute change recorded twice
+- **Rule:**
+  - **Shared.** Domain owns `ActorType`, `DisputeAction`, `DisputeStatus` and the stored event records; Contracts owns `AuditAction`, `AuditResult` and the wire enums; Application maps between them once. Values are stored as their PascalCase C# names (AD-22). `ActorId` is the `LoginSub` for actor type `Customer`, the token `sub` for `Operations`, and for `Automation` either `worker:sla-sweep` (the SLA sweep) or `worker:seeder` (the seeder's start review, escalate and resolve, AD-30) [ASSUMPTION: the value `worker:seeder`]. Stored events and audit rows use the same actor values.
+  - **Stored events.** The type is a closed set: `DisputeRaised`, `ReviewStarted`, `DisputeEscalated`, `DisputeResolved`, `DisputeWithdrawn`, `SlaWarningRaised` (ad-009). Each carries `OccurredAtUtc`, `ActorType`, `ActorId` and `TraceId`, plus its own data: from- and to-status, the note meant for the customer, `outcome` on `DisputeResolved`, and the transaction snapshot on `DisputeRaised`. `DisputeRaised` has no from-status. Changes within a type are additive; a new shape is a new type name.
+  - **Audit log.** It records linking, refused or forbidden actions, operations reads, and sign-in and sign-out; never a successful dispute change (ad-009). The customer ID goes only in `AuditLogEntries.CustomerId`. `AuditLogEntries.Result` is `Succeeded`, `Rejected` (rule or status), `Denied` (authorisation) or `Failed` (dependency). A dispute's Outcome appears only in `Details.outcome`. `AuditLogEntries.Action` is a closed set: `Raise`, `StartReview`, `Escalate`, `Resolve`, `Withdraw` (each only with `Rejected` or `Denied`), `DisputeRead` (an operations read, FR-30), `SignIn`, `SignOut` (R41, story 2.8), `LinkingStart`, `LinkingNoMatch`, `LinkingAlreadyLinked`, `LinkingSimSwapFailed`, `LinkingSendCapped`, `LinkingOtpSent`, `LinkingOtpIncorrect`, `LinkingOtpExpired`, `LinkingLocked`, `LinkingRateLimited`, `Linked`. Refused or forbidden dispute actions are audited, from customers and operations alike (ad-009; FR-25). Operations (403, 404 or 409 after authentication): the `IAuthorizationMiddlewareResultHandler` (AD-10) records `Denied` through `Audit.Record` for an authenticated caller on an operations route, and handlers record `Rejected` for 404 and 409 (story 5.2). Customers: the raise and withdraw handlers record `Rejected` for their 404, 409 and 422 refusals through `Audit.Record` (both in 3.4, after 2.8 adds `Audit.Record`).
+- **Rejected:** free-text action names; a dispute outcome stored in the audit result; an audit row with `Succeeded` for a dispute change beside its stored event.
 
 ### AD-15 - Concurrency and uniqueness [ADOPTED]
 
 - **Binds:** R7, R13, R20, R22, R29
-- **Prevents:** lost updates; two disputes on one transaction; two logins on one customer
-- **Rule:** `Dispute` maps Postgres `xmin` as its concurrency token. It is a system column, so no migration adds it. The aggregate also keeps a `Version` integer, which actions increment and events carry as `disputeVersion`. On `DbUpdateConcurrencyException`, customer and operations handlers re-read the dispute and return 409 `action-not-allowed` with the current status, as the caller is allowed to see it. They do not retry. The sweep re-evaluates. Unique indexes: `UQ_Disputes_AccountRef_TransactionId` → 409 `already-disputed`; `UQ_CustomerLinks_LoginSub` and `UQ_CustomerLinks_CustomerId`; and the partial `UQ_LinkingChallenges_LoginSub` (filtered on `"SupersededAtUtc" IS NULL AND "ConsumedAtUtc" IS NULL`) allowing one unsuperseded, unconsumed challenge per login. Each sets `HasDatabaseName` explicitly, since EF Core would name them `IX_`. Infrastructure maps each unique violation to its `Error` in one place.
-- **Rejected:** pessimistic locks for customer and operations actions; check-then-insert without the index; retrying withdraw after a lost race (FR-24).
+- **Prevents:** lost updates; two stored events with one version; two disputes on one transaction; two logins on one customer; a clash answered 409 when the action is still allowed; two concurrency checks for one conflict
+- **Rule:** The aggregate keeps a `Version` integer, which each stored event increments and published events carry as `disputeVersion`. `UQ_StoredEvents_DisputeId_Version` is the concurrency check: two handlers that replayed the same stream both append the next version, and the database rejects the second, which rolls back its whole `SaveChanges` transaction, `Disputes` row and outbox row included (Microsoft Learn, *Event Sourcing pattern*: optimistic concurrency on append; EF Core *Handling concurrency conflicts*: optimistic concurrency fails the save, and the application retries the operation on the new data). `Disputes` has no concurrency token and no `xmin` mapping: every write to it commits with a stored event in the same transaction (AD-14), so the unique index already catches every concurrent change, and a row token would detect the same conflict a second way. **Version clash** (ad-009): a violation of `UQ_StoredEvents_DisputeId_Version`, which `UniqueViolations` maps to one `Conflict` error. A `DbUpdateConcurrencyException` is never a clash: in v1 it comes only from the `IdempotencyKeys` lease (AD-16), which is never retried; raise has no version clash. On the first clash a withdraw or operations handler clears the change tracker, replays the stream again, and decides once more with the same request; on the retry the instant is the later of the use-case instant (AD-4) and the reloaded dispute's latest `OccurredAtUtc`, so time never runs backwards within a stream. If the reloaded status forbids the action, or a second clash follows, it returns 409 `action-not-allowed` with the current status as the caller is allowed to see it (the existing slug; no new one). There is exactly one reload, never a loop. The sweep re-evaluates. Unique indexes: `UQ_StoredEvents_DisputeId_Version`; `UQ_Disputes_AccountRef_TransactionId` → 409 `already-disputed`; `UQ_CustomerLinks_LoginSub` and `UQ_CustomerLinks_CustomerId`; and the partial `UQ_LinkingChallenges_LoginSub` (filtered on `"SupersededAtUtc" IS NULL AND "ConsumedAtUtc" IS NULL`) allowing one unsuperseded, unconsumed challenge per login. Each sets `HasDatabaseName` explicitly, since EF Core would name them `IX_`. Infrastructure maps each unique violation to its `Error` in one place.
+- **Rejected:** pessimistic locks for customer and operations actions; check-then-insert without the index; answering a clash with 409 without reloading; an `xmin` concurrency token on `Disputes` beside the stream index (a second check of the same conflict); retrying until success.
 
 ### AD-16 - Idempotent raise [ADOPTED]
 
@@ -204,35 +215,37 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
 ### AD-17 - Transactional outbox with a single relay [ADOPTED]
 
 - **Binds:** R23, R26, R28
-- **Prevents:** an event for a rolled-back change; events out of order per dispute; two relays after a lost lock; Kafka downtime marking rows failed
+- **Prevents:** an event for a rolled-back change; events out of order per dispute; two relays after a lost lock; Kafka downtime marking rows failed; a consumer seeing a different `id` from the stored event
 - **Rule:**
+  - **Rows.** The relay publishes only outbox rows, which AD-14 writes for published types only. A row's ID is its stored event's ID and the CloudEvent `id` (ad-009); the relay never re-mints it. 3.8 tests that each outbox row's ID is its stored event's ID; 4.1 tests that the published CloudEvent `id` is the outbox row's ID.
   - **Leadership.** The relay is a Worker hosted service. It holds `pg_try_advisory_lock` on one fixed key and does every outbox read and update on that same connection. A session-level advisory lock lasts as long as its connection, so before each batch the relay checks that connection with a cheap query. On error it disposes the connection and stops producing. A test terminates the lock connection and checks for handover.
-  - **Order.** Per loop, for each dispute it takes only the lowest-version row whose `Status` isn't `Sent`. A `Failed` or not-yet-due head row means that dispute is skipped. Version n's delivery report is awaited before version n+1 is produced.
+  - **Order.** Order is defined only within one dispute, by `DisputeVersion`; there is no global position and no order across disputes (ad-009; cross-dispute options are deferred to `docs/production-path.md`). Per loop, for each dispute it takes only the lowest-version row whose `Status` isn't `Sent`. A `Failed` or not-yet-due head row means that dispute is skipped. A row's delivery report is awaited before the dispute's next row is produced. Versions held by unpublished stored events leave gaps, which the relay ignores.
+  - **Seeded rows.** Seeded disputes have outbox rows like any other (AD-30), so relay tests set up their own rows and never assume an empty outbox.
   - **Producer.** `Confluent.Kafka` with `EnableIdempotence = true` and `Acks.All`, to `disputedesk.disputes`. The key is the dispute ID, the value is `Payload` byte for byte, and the headers are `traceparent` and `tracestate` (W3C Trace Context) and `content-type: application/cloudevents+json` (CloudEvents Kafka protocol binding, structured mode).
   - **Failures.** A broker-unavailable or timeout error pauses the loop with backoff and doesn't count as an attempt. A per-record error increments `Attempts`, sets `NextAttemptAtUtc` with exponential backoff and jitter, and records `LastError`. The 5th such error sets `Failed`, increments the failed-rows metric and logs the event ID. Later events for that dispute wait for an operator. There is no dead-letter topic.
-- **Rejected:** `SKIP LOCKED` on the relay; a dead-letter topic; CDC; publishing inside the request.
+- **Rejected:** `SKIP LOCKED` on the relay; a dead-letter topic; CDC; publishing inside the request; a `GlobalPosition` sequence as a publish checkpoint (PostgreSQL sequences are not rolled back and commit out of allocation order).
 
 ### AD-18 - SLA sweep [ADOPTED]
 
 - **Binds:** R22
-- **Prevents:** double escalation; a sweep with its own rules; untraced sweep events
-- **Rule:** A Worker hosted service runs every 30 seconds [ASSUMPTION: within "at least once a minute"]. For each batch it starts an Activity `disputedesk.sla_sweep.batch`. In one transaction it claims up to 50 disputes (`SELECT ... FROM "Disputes" WHERE "Status" IN ('Submitted','UnderReview') AND "SlaDueAtUtc" <= @now ORDER BY "SlaDueAtUtc" LIMIT 50 FOR UPDATE SKIP LOCKED`), through one named raw-SQL method and the partial index `IX_Disputes_SlaDueAtUtc` (filtered on those two statuses). It calls `Dispute.Escalate` with `Automation` / `worker:sla-sweep` and commits through AD-14. It repeats until a batch comes back short, which catches up after downtime.
-- **Rejected:** a cron container; Quartz or Hangfire; escalating without the aggregate.
+- **Prevents:** double escalation; a second SLA warning on one dispute; an SLA warning published or shown to a customer; a sweep with its own rules; untraced sweep events
+- **Rule:** A Worker hosted service runs every 30 seconds [ASSUMPTION: within "at least once a minute"]. For each batch it starts an Activity `disputedesk.sla_sweep.batch`. In one transaction it claims up to 50 disputes (`SELECT ... FROM "Disputes" WHERE "Status" IN ('Submitted','UnderReview') AND "SlaDueAtUtc" <= @now ORDER BY "SlaDueAtUtc" LIMIT 50 FOR UPDATE SKIP LOCKED`), through one named raw-SQL method and the partial index `IX_Disputes_SlaDueAtUtc` (filtered on those two statuses). It loads each claimed dispute by replay (AD-13), calls `Dispute.Escalate` with `Automation` / `worker:sla-sweep` and commits through AD-14. It repeats until a batch comes back short, which catches up after downtime. **SLA warning** (ad-009, story 5.3): after the escalation claim, the sweep claims disputes with `"Status" IN ('Submitted','UnderReview')`, `"SlaDueAtUtc" > @now` and `"SlaDueAtUtc" <= @now + <lead time>` that have no warning yet, the same way, and calls `Dispute.RecordSlaWarning`, which appends `SlaWarningRaised` at most once per dispute (the aggregate refuses a second). An overdue dispute is escalated without a warning. 3.8 adds only the `SlaWarningRaised` record and its publish mapping (to nothing); 5.3 adds `RecordSlaWarning`, its `Apply` case, the read model column `SlaWarningRaisedAtUtc` that lets the claim skip warned disputes, and its partial index. `SlaWarningRaised` takes the next `Version`, has no outbox row (AD-14), is hidden from customers (AD-13) and is visible to operations.
+- **Rejected:** a cron container; Quartz or Hangfire; escalating or warning without the aggregate; publishing the warning.
 
 ### AD-19 - Dispute event contract [ADOPTED]
 
 - **Binds:** R23, R31, R35
-- **Prevents:** personal data in events; two event shapes; consumers unable to dedupe
-- **Rule:** Two types, `disputedesk.dispute.raised.v1` and `disputedesk.dispute.status-changed.v1`, as CloudEvents 1.0 structured JSON with no SDK. The attributes:
-  - `id`: the outbox row ID
+- **Prevents:** personal data in events; two event shapes; consumers unable to dedupe; a stored event published as is
+- **Rule:** Two types, `disputedesk.dispute.raised.v1` and `disputedesk.dispute.status-changed.v1`, as CloudEvents 1.0 structured JSON with no SDK. They are integration events built from stored events by the one AD-14 mapping; stored events are private domain events and are never published (ad-009; Microsoft Learn, *Domain events versus integration events*). NFR-SEC-5 and R31 apply to these published events. The attributes:
+  - `id`: the outbox row ID, which is also the stored event ID (CloudEvents 1.0 §`id`: unique within the source)
   - `source`: `/disputedesk/api`
   - `subject`: the dispute ID
   - `time`
   - `datacontenttype`: `application/json`
   - `dataschema`: `https://github.com/njabulozmnisi/disputedesk/blob/main/contracts/events/<type>.schema.json`, the committed schema's resolvable URL; the contract test checks the file exists (decided 2026-10-27, replacing the tag URIs)
 
-  `status-changed.v1` data is `disputeId`, `fromStatus`, `toStatus`, `action`, `actorType`, `outcome` (resolve only), `occurredAt` and `disputeVersion`. `raised.v1` data is in AD-19a. Events carry no customer ID, account or card number, amount, note or actor identity. Changes within v1 are additive; a breaking change is a new type published side by side. The records live in Contracts. The committed JSON Schemas are under `contracts/events/`. The contract test validates samples and checks that the committed v1 samples still deserialise. Consumers dedupe on `source` + `id`. There is no schema registry, and seeded disputes publish no events. The `disputedesk.` type prefix deviates from the CloudEvents reverse-DNS SHOULD, because the project owns no domain. Where the event-versioning research differs, this spine governs: actor types are `customer`, `operations` and `automation` (the glossary's, not the research example's `Agent` and `System`), and enum values are camelCase (the research predates the casing decision of 2026-10-26; its example used PascalCase).
-- **Rejected:** a schema registry; Avro or Protobuf; a custom envelope; a topic per type; a relative `dataschema`.
+  `status-changed.v1` data is `disputeId`, `fromStatus`, `toStatus`, `action`, `actorType`, `outcome` (resolve only), `occurredAt` and `disputeVersion`, published for `ReviewStarted`, `DisputeEscalated`, `DisputeResolved` and `DisputeWithdrawn`. `raised.v1` data is in AD-19a. Events carry no customer ID, account or card number, amount, note or actor identity. `disputeVersion` is the stored event's `Version`: it rises within a dispute but can skip the versions of stored events that are not published (`SlaWarningRaised`), so consumers order by it and never treat a gap as a lost event. Changes within v1 are additive; a breaking change is a new type published side by side. The records live in Contracts. The committed JSON Schemas are under `contracts/events/`. The contract test validates samples and checks that the committed v1 samples still deserialise. Consumers dedupe on `source` + `id`. There is no schema registry. Seeded disputes publish their events once per fresh database (AD-30). The `disputedesk.` type prefix deviates from the CloudEvents reverse-DNS SHOULD, because the project owns no domain. Where the event-versioning research differs, this spine governs: actor types are `customer`, `operations` and `automation` (the glossary's, not the research example's `Agent` and `System`), and enum values are camelCase (the research predates the casing decision of 2026-10-26; its example used PascalCase).
+- **Rejected:** a schema registry; Avro or Protobuf; a custom envelope; a topic per type; a relative `dataschema`; publishing stored events directly (ad-009).
 
 ### AD-19a - `raised.v1` data fields [Accepted 2026-10-26]
 
@@ -260,23 +273,24 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
   - `ISimSwapCheck` against the stub
   - `ISmsSender`, SMTP to Mailpit only
 
-  Customer and account identifiers travel in headers or bodies, never in the path or query. A call for an account or transaction that isn't that customer's returns 404, which the Api maps to `not-found`. The transaction shape is `transactionId`, `accountRef` (opaque, stable), `accountLast4`, `transactionDate`, `description`, `amount`, `currency`, `direction` (`debit`/`credit`), `kind` (`card`, `ownAccountTransfer`, `transfer`, `other`), `state` (`settled`/`pending`) and `maskedCard` (first 6 and last 4, or null). Full account and card numbers never reach the Api. Every account and transaction in the fixtures carries an explicit `accountRef` and `transactionId`. The typed `HttpClient` uses `AddStandardResilienceHandler`, tuned so it can be demonstrated: attempt timeout 2 s, 2 retries from 200 ms with jitter, total 5 s (`TotalRequestTimeout`; story 7.9 replaces the hand-made whole-call deadline), circuit breaker opening when every call in a 30 s window fails (`FailureRatio` 1.0, minimum throughput 5) and breaking for 15 s. Retries cover every method on purpose, since every stub call is read-only. Exhausted policies give 503 `core-banking-unavailable` with nothing written. To show it, stop the stub: raising gets 503 within about 5 s and history still works. This adds a runtime unit, allowed by NFR-ARC-2.
+  Customer and account identifiers travel in headers or bodies, never in the path or query. A call for an account or transaction that isn't that customer's returns 404, which the Api maps to `not-found`. The transaction shape is `transactionId`, `accountRef` (opaque, stable), `accountLast4`, `transactionDate`, `description`, `amount`, `currency`, `direction` (`debit`/`credit`), `kind` (`card`, `ownAccountTransfer`, `transfer`, `other`), `state` (`settled`/`pending`) and `maskedCard` (first 6 and last 4, or null). Full account and card numbers never reach the Api. Every account and transaction in the fixtures carries an explicit `accountRef` and `transactionId`. The typed `HttpClient` uses `AddStandardResilienceHandler`, tuned so it can be demonstrated: attempt timeout 2 s, 2 retries from 200 ms with jitter, total 5 s (`TotalRequestTimeout`, the whole-call deadline from story 2.1), circuit breaker opening when every call in a 30 s window fails (`FailureRatio` 1.0, minimum throughput 5) and breaking for 15 s. Retries cover every method on purpose, since every stub call is read-only. Exhausted policies give 503 `core-banking-unavailable` with nothing written. To show it, stop the stub: raising gets 503 within about 5 s and history still works. This adds a runtime unit, allowed by NFR-ARC-2.
 - **Rejected:** an in-process fake; WireMock (a JVM container); the SPA calling the stub.
 
 ### AD-22 - Data model and table ownership [Accepted 2026-10-26]
 
-- **Binds:** R7, R10, R15, R26, R28, R29
-- **Prevents:** the same table added twice; two writers for one table; a Worker running on an old schema
+- **Binds:** R7, R10, R15, R26, R28, R29, R31
+- **Prevents:** the same table added twice; two writers for one table; a Worker running on an old schema; stored events read, logged or traced more widely than disputes
 - **Rule:** The `disputedesk` database uses plural PascalCase table names and PascalCase column names that match the C# entity properties, as EF Core and Npgsql generate them by default [ADOPTED: decided 2026-10-26]. Every table's primary key is `Id`; a foreign key column is `<EntityName>Id`. Constraints are `PK_<TableName>`, `FK_<DependentTable>_<PrincipalTable>_<ForeignKeyColumn>`, `IX_<TableName>_<ColumnNames>`, `UQ_<TableName>_<ColumnNames>` (set with `HasDatabaseName`, since EF Core names unique indexes `IX_`) and `CK_<TableName>_<Description>`. Columns holding a UTC instant end in `Utc`. Enum values are stored as `text` holding the C# member name (PascalCase, `HasConversion<string>()`), instants as `timestamptz` and money as `numeric(19,2)` plus a currency code. Handwritten SQL double-quotes every identifier. The ER diagram below is the starting schema; the reviewer checks each generated migration against these names.
 
   | Table | Written by |
   | --- | --- |
   | `CustomerLinks`, `LinkingChallenges`, `IdempotencyKeys`, `Sessions`, `DataProtectionKeys` | the Api only |
-  | `Disputes`, `TimelineEntries` | the Api and the Worker, only through AD-13 and AD-14 |
+  | `Disputes` (the read model of each stream) | the Api, the Worker and the seeder, only through AD-13 and AD-14 |
+  | `StoredEvents` | inserted only by AD-14; never updated or deleted (the AD-14 guard) |
   | `OutboxMessages` | inserted only by AD-14, updated only by the relay |
   | `AuditLogEntries` | insert only |
 
-  Transactions are never copied apart from the snapshot. Nothing is deleted from `Disputes`, `TimelineEntries` or `AuditLogEntries` in v1. The Api applies EF Core migrations at start-up, under EF Core's migration lock, before it reports ready. Migrations are forward-only and stay compatible with the previous release's code. The Worker starts after the Api is healthy. No two stories touch migrations at once.
+  **`StoredEvents`** (ad-009) is part of the dispute data model from the migration that creates `Disputes`, and has `Id` (the stored event ID, = outbox ID = CloudEvent `id`), `DisputeId` (FK to `Disputes`), `Version`, `EventType` (text, the AD-14a type), `OccurredAtUtc`, `ActorType`, `ActorId`, `TraceId` and `Data` (`jsonb`: the stored event record's own fields, serialised with the shared JSON options of AD-5, so camelCase keys and enum values; `jsonb` key order is harmless because `Data` is never re-sent byte for byte, unlike AD-14's `Payload`). Its only index besides the key is `UQ_StoredEvents_DisputeId_Version`, which also serves reading a stream in order; there is no `GlobalPosition` column and no `EventType` index. The timeline is built from a dispute's stored events; there is no separate timeline table. **Personal data** (ad-009): stored events are private records that hold `CustomerId`, `AccountRef`, `TransactionId` and the snapshot. They have the same access as `Disputes` (AD-11), are never logged or traced (no log template, span attribute or metric label carries their data; AD-20) and are kept under NFR-DATA-7. `EnableSensitiveDataLogging` stays off outside tests, and AD-20's telemetry test also asserts that no captured log line holds a seeded customer ID or account reference. Transactions are never copied apart from the snapshot. Nothing is deleted from `Disputes`, `StoredEvents` or `AuditLogEntries` in v1. The Api applies EF Core migrations at start-up, under EF Core's migration lock, before it reports ready. From the first release, migrations are forward-only and stay compatible with the previous release's code (EF Core, *Managing migrations*). Before it, no environment holds the schema except disposable local and CI databases, so the history may be reshaped in place, and every database is recreated when it is. The migration history shows only forward development of the data model, so no migration creates a table a later one drops (story 3.8 owns the dispute data model's migrations). The Worker starts after the Api is healthy. No two stories touch migrations at once.
 - **Rejected:** a schema per feature; the Worker applying migrations; storing full account or card numbers.
 
 ### AD-23 - Client IP, forwarded headers and the gateway edge
@@ -348,14 +362,14 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
 ### AD-30 - Seed data path
 
 - **Binds:** R24
-- **Prevents:** seeded disputes publishing events; seed and stub disagreeing; a third query-filter bypass
+- **Prevents:** seeded disputes that bypass the commit path or cannot be replayed; seed and stub disagreeing; a third query-filter bypass; relay tests that pass only on an empty outbox
 - **Rule:**
   - **One source.** `fixtures/local.json` holds customers, logins, links, accounts and transactions (explicit `accountRef` and `transactionId`, relative `daysAgo`) and the seeded disputes. The stub and the seeder resolve `daysAgo` from the same anchor: the start of the current South African day.
-  - **The seeder.** It runs through EF Core's `UseAsyncSeeding` and `UseSeeding` (the documented seeding hooks, run by `MigrateAsync` inside EF's migration lock, so two instances never seed at once) behind `Seed:Enabled`, and is idempotent. It writes `CustomerLinks` (`LoginSub` = the fixture login's `userId`) and, setting `CurrentCustomer` to each seeded customer in turn, writes their disputes and timelines with no bypass. AD-13 governs: each seeded dispute is created with `Dispute.Raise` and reaches its status only through `StartReview`, `Escalate`, `Resolve` and `Withdraw`, each given its `Actor` and an instant from a fixed seeding clock; no status is set directly. It is the one named path that writes disputes without AD-14, so it creates no outbox rows. The seeded-disputes story therefore follows the operations actions story (5.2 before 5.4).
-  - **Seeded values.** A seeded dispute's `Version` equals its number of timeline entries. The SLA demo dispute gets `SlaDueAtUtc` = seeding instant plus 5 minutes and `CreatedAtUtc` = `SlaDueAtUtc` minus 240 hours.
+  - **The seeder.** It runs through EF Core's `UseAsyncSeeding` and `UseSeeding` (the documented seeding hooks, run by `MigrateAsync` inside EF's migration lock, so two instances never seed at once) behind `Seed:Enabled`, and is idempotent. It writes `CustomerLinks` (`LoginSub` = the fixture login's `userId`) and, setting `CurrentCustomer` to each seeded customer in turn, writes their disputes with no bypass. AD-13 governs: each seeded dispute is created with `Dispute.Raise` and reaches its status only through `StartReview`, `Escalate`, `Resolve` and `Withdraw`, each given its `Actor` and a back-dated instant resolved from the fixture against the anchor; no status is set directly (ad-009). Seeded disputes go through the full AD-14 commit, so they get stored events and outbox rows like any other dispute and are published once per fresh database; the seeder's idempotency stops a restart from publishing them again. Relay tests must not depend on an empty outbox (AD-17). The seeded-disputes story therefore follows the operations actions story (5.2 before 5.4).
+  - **Seeded values.** A seeded dispute's `Version` equals its number of stored events, and replaying its stream reproduces its row (AD-13). Customer actions use the fixture login's `userId` as `Customer`; start review, escalate and resolve use `Automation` / `worker:seeder` (AD-14a). Open seeded disputes other than the SLA demo dispute have `SlaDueAtUtc` beyond the warning lead time from the anchor, so the first sweep leaves their streams as seeded. The SLA demo dispute gets `SlaDueAtUtc` = seeding instant plus 5 minutes and `CreatedAtUtc` = `SlaDueAtUtc` minus 240 hours.
   - **Customer D** is added by the linking story.
   - **QA reset.** Each QA run starts on a fresh stack (`docker compose down -v`, then `docker compose up --wait`), so customer D starts unlinked from the seed; there is no test-only database role and no reset endpoint (Gate 2, 2026-10-26).
-- **Rejected:** SQL seed scripts; seeding through the API.
+- **Rejected:** SQL seed scripts; seeding through the API; seeding without stored events or outbox rows.
 
 ### AD-31 - Frontend integration contract [ADOPTED]
 
@@ -375,7 +389,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
 
 | Concern | Convention |
 | --- | --- |
-| Domain words | `docs/glossary.md` terms verbatim in code, routes, JSON, events and copy: `Login`, `LinkedCustomer`, `Linking`, `Dispute`, `Reason`, `Status`, `Outcome`, `Action`, `Actor`, `ActorType`, `Timeline`, `TimelineEntry`. No synonyms such as enrolment, case, claim, user or transition |
+| Domain words | `docs/glossary.md` terms verbatim in code, routes, JSON, events and copy: `Login`, `LinkedCustomer`, `Linking`, `Dispute`, `Reason`, `Status`, `Outcome`, `Action`, `Actor`, `ActorType`, `Timeline`, `StoredEvent` (glossary: Stored event; "dispute event" means only the published fact). No synonyms such as enrolment, case, claim, user or transition |
 | C# naming | `Disputes/RaiseDispute/` holds `RaiseDisputeRequest`/`Response` (Contracts), `RaiseDisputeHandler` (Application) and `RaiseDisputeEndpoint` (Api); configurations are named `<Entity>Configuration` |
 | Routes | Lowercase, with kebab-case action segments: `/api/v1/disputes/<disputeId>/withdraw`, `/api/v1/operations/disputes/<disputeId>/start-review` |
 | Casing | C# enum members PascalCase (`UnderReview`, `StartReview`). Wire values in API JSON and event payloads, including ProblemDetails extension fields, camelCase through `JsonStringEnumConverter(JsonNamingPolicy.CamelCase)`, the same style as Microsoft Graph enums. Enum values in Postgres `text` columns are the C# member names (`HasConversion<string>()`). Zitadel role keys use the same camelCase after the `dispute.` prefix (`dispute.startReview`, AD-9). Table, column and constraint names PascalCase, the EF Core default (plural tables, `Id` keys, `<EntityName>Id` foreign keys, `...Utc` instants). No DisputeDesk-defined name is snake_case; the only snake_case left belongs to protocols, tools and infrastructure (OIDC parameters, OpenTelemetry attributes, Postgres functions, the `qa_readonly` role). Route segments and problem `type` slugs kebab-case. Topic `disputedesk.disputes`; CloudEvents `type` dotted lowercase (`disputedesk.dispute.status-changed.v1`). Metric names OpenTelemetry style (`disputedesk.disputes.raised`). Test methods `Method_Scenario_Expected` (`Withdraw_WhenResolved_Returns409`) |
@@ -486,7 +500,7 @@ sequenceDiagram
   A->>P: insert IdempotencyKeys row InProgress with lease (own transaction)
   A->>C: get transaction (resilience handler, traceparent propagated)
   A->>A: Dispute.Raise (disputability, amount rule, one instant)
-  A->>P: one transaction: Disputes, TimelineEntries, AuditLogEntries, OutboxMessages with TraceParent, key completed
+  A->>P: one transaction: StoredEvents, Disputes read model, OutboxMessages with TraceParent, key completed
   A-->>B: 201 with Location /api/v1/disputes/{id}
   W->>P: on the advisory-lock connection, read head outbox row per dispute
   Note over W: producer span parented by the stored traceparent
@@ -533,20 +547,20 @@ erDiagram
     text Currency "ZAR"
     text Status
     text Outcome
-    int Version "disputeVersion; xmin is the concurrency token"
+    int Version "latest stored event Version; disputeVersion"
     timestamptz CreatedAtUtc
     timestamptz SlaDueAtUtc "IX_Disputes_SlaDueAtUtc, partial"
   }
-  TimelineEntries {
-    uuid Id PK
-    uuid DisputeId FK "FK_TimelineEntries_Disputes_DisputeId"
-    text FromStatus
-    text ToStatus
-    text Action
+  StoredEvents {
+    uuid Id PK "stored event ID = outbox ID = CloudEvent id"
+    uuid DisputeId FK "FK_StoredEvents_Disputes_DisputeId"
+    int Version "UQ_StoredEvents_DisputeId_Version"
+    text EventType "no index"
+    timestamptz OccurredAtUtc
     text ActorType
     text ActorId "never shown to customers"
-    text VisibleNote
-    timestamptz OccurredAtUtc
+    text TraceId
+    jsonb Data "private: holds the snapshot on DisputeRaised"
   }
   OutboxMessages {
     uuid Id PK "CloudEvents id"
@@ -604,9 +618,9 @@ erDiagram
     text Xml
   }
   CustomerLinks ||--o{ Disputes : "CustomerId"
-  Disputes ||--|{ TimelineEntries : "timeline"
+  Disputes ||--|{ StoredEvents : "stream"
   Disputes ||--o{ OutboxMessages : "dispute events"
-  Disputes ||--o{ AuditLogEntries : "changes"
+  Disputes ||--o{ AuditLogEntries : "refused actions and reads"
 ```
 
 This run adds columns and tables beyond the recommended model:
@@ -617,7 +631,7 @@ This run adds columns and tables beyond the recommended model:
 - `IdempotencyKeys`: `LeaseId` and `ResponseLocation` (AD-16)
 - `AuditLogEntries`: the actor, dispute and trace columns, with `outcome` renamed to `Result` (AD-14a)
 - the `Sessions` and `DataProtectionKeys` tables (AD-7). `DataProtectionKeys` is the shape `DataProtection.EntityFrameworkCore` defines, unchanged
-- the recommended history table renamed to `TimelineEntries` (glossary: Timeline)
+- the recommended history table is `StoredEvents`, each dispute's stream of stored events, from which the dispute is loaded and its timeline built (glossary: Stored event, Timeline; ad-009)
 - the naming decision of 2026-10-26 (AD-22): PascalCase names, `Utc` suffixes on instants, and a surrogate `Id` on `CustomerLinks`, `IdempotencyKeys` and `Sessions`, whose former natural keys (`LoginSub`, `CustomerId` + `Key`, `KeyHash`) become unique constraints
 
 ### Endpoint map
@@ -651,31 +665,32 @@ The repository uses one top-level folder per stack (`backend/`, `frontend/`, `e2
 | --- | --- | --- |
 | Architecture and scalability | Six projects and two hosts; a stateless Api (sessions and keys in Postgres); a second Worker would be harmless | AD-1, AD-2, AD-7, AD-17, AD-18, AD-27 |
 | Resilience and operational readiness | Tuned resilience handler on the stub, the outbox through Kafka downtime, heartbeats, graceful shutdown, deploy rollback | AD-17, AD-21, AD-25, AD-28 |
-| Data and domain modelling | `Dispute` aggregate, one commit path, uniqueness and concurrency, one clock read, schema | AD-4, AD-13, AD-14, AD-15, AD-22 |
+| Data and domain modelling | `Dispute` aggregate, stored events loaded by replay with a read model, one commit path, uniqueness and concurrency, one clock read, schema | AD-4, AD-13, AD-14, AD-15, AD-22, ad-009 |
 | API design | `/api/v1`, action endpoints, keyset paging, ProblemDetails, committed OpenAPI, idempotent raise | AD-3, AD-5, AD-8, AD-16 |
 | Security (primary) | BFF, scheme pinning, roles, authorisation states, ownership filter, linking without disclosure, trusted proxies, cookies, audit | AD-6 to AD-12, AD-14a, AD-23, AD-24, AD-26 |
 | Code quality | Layer tests, analysers, glossary terms, no banned libraries | AD-1, AD-3, AD-32, conventions |
 | Testing (important) | Domain unit tests, Testcontainers integration tests, OpenAPI and event contract tests, Playwright and ZAP on the stack | AD-13, AD-19, AD-32, conventions |
 | Observability | One trace from browser to Worker, named business metrics, Aspire and CloudWatch | AD-20, AD-29 |
 | Infrastructure and DevOps | Zero-click Compose, CI and GHCR, the Terraform dev environment, OIDC deploy | AD-26, AD-27, AD-28, AD-32 |
-| Documentation | This spine, plus the NFR-DOC-3 decision records ad-001 to ad-008 (Zitadel, `IAppDbContext`, Result types, model roles, QA data integrity, actor-agnostic actions, BFF session, linking) | all |
+| Documentation | This spine, plus the NFR-DOC-3 decision records ad-001 to ad-008 (Zitadel, `IAppDbContext`, Result types, model roles, QA data integrity, actor-agnostic actions, BFF session, linking), and ad-009 (stored events) | all |
 
 | Requirement | Governed by |
 | --- | --- |
 | R1 to R3 sign-up, sign-in, sign-out | AD-6, AD-7, AD-24 |
+| R41 sign-in and sign-out audit | AD-14, AD-14a |
 | R4 to R8, R10 linking | AD-12, AD-14a, AD-15, AD-23 |
 | R9, R17, R18 authorisation and scoping | AD-10, AD-11, AD-13 |
 | R11, R12 transactions | AD-5, AD-13, AD-21 |
-| R13 to R16, R19 raise, history, withdraw | AD-13 to AD-16 |
+| R13 to R16, R19 raise, history, withdraw | AD-13 to AD-16, ad-009 |
 | R20, R21 operations | AD-8, AD-9, AD-13, AD-14a |
-| R22 SLA | AD-18 |
+| R22 SLA | AD-18, AD-13 |
 | R23, R28 events and atomicity | AD-14, AD-17, AD-19, AD-19a |
-| R24 seed | AD-30 |
+| R24 seed | AD-30, AD-14 |
 | R25, R26 architecture and units | AD-1, AD-21, AD-27 |
 | R27 health | AD-25 |
 | R29 data | AD-4, AD-15, AD-22 |
 | R30 API | AD-3, AD-5 |
-| R31 personal data | AD-19, AD-20, AD-21, conventions |
+| R31 personal data | AD-19, AD-20, AD-21, AD-22, conventions |
 | R32 gateway and secrets | AD-23, AD-26 |
 | R33, R34 CI and code quality | AD-32, AD-1, AD-31 |
 | R35 tests | AD-19, AD-32, conventions |
@@ -702,7 +717,11 @@ Each one is fixed in the named story. Gate 1 (2026-10-26) settled the NFR-ARC-2,
 | Copy for each linking state | Copy only; AD-3 and AD-12 fix the wire contract |
 | Exact relay batch size and backoff curve | Tuning; AD-17 fixes the behaviour |
 | CloudFront caching for static assets | Performance only; caching stays disabled until then |
-| Database-level append-only `AuditLogEntries` (a separate migration role) | Production-path note; AD-14 enforces append-only in the application |
+| Database-level append-only `AuditLogEntries` and `StoredEvents` (a separate migration role) | Production-path note; AD-14 enforces insert only in the application |
+| Order across disputes: Kafka offsets, a high-water mark with `pg_snapshot_xmin`, or change data capture | `docs/production-path.md`. Nothing reads across streams in v1; order is per dispute by `Version` (AD-17, ad-009). The production path is written for a large retail bank with tens of millions of clients, and its scale figures are labelled estimates |
+| Crypto-shredding of personal data in stored events (a per-customer key, destroyed on erasure) | `docs/production-path.md` (ad-009). In v1 stored events are kept under NFR-DATA-7 with the same access as `Disputes` (AD-22) |
+| Stored event schema evolution beyond additive changes (upcasting) | Production-path note; AD-14a allows only additive changes within a type, and a new shape is a new type |
+| Snapshots at intervals to shorten replay | Not needed: streams hold a handful of stored events in v1 (an estimate: 15 to 100 once internal work is recorded) |
 | Scalar holding an operations client secret (story 5.1) | Local stand-in for an operations tool; real tools keep their own credentials in a secret store |
 | Shared rate-limit state, several Api and Worker instances | Out of scope (prd §6.2) |
 | An event consumer and its inbox table | Out of scope; the contract requires dedupe |
@@ -715,3 +734,9 @@ Each one is fixed in the named story. Gate 1 (2026-10-26) settled the NFR-ARC-2,
 ## Open questions
 
 - The new AWS free-plan account doesn't exist yet, so the RDS version, CloudFront verification, instance eligibility and the memory budget are unchecked.
+- AD-15 gives `Disputes` no concurrency token, because the stream's unique `(DisputeId, Version)` catches every concurrent change and every `Disputes` write commits with a stored event. The `xmin` token was settled on 2026-10-26; a human confirms that ad-009's concurrency rule governs.
+- The seeder's start review, escalate and resolve use `Automation` / `worker:seeder` [ASSUMPTION] (AD-14a, AD-30).
+- Story 3.4 records the raise and withdraw handlers' 404, 409 and 422 refusals as `Rejected` through `Audit.Record` (AD-14a), after 2.8 adds `Audit.Record`.
+- The glossary's "Timeline" covers status changes, while operations also see `SlaWarningRaised` on it (AD-13); a wording point for the glossary's owner.
+
+`docs/production-path.md` is written by story 7.6; the Deferred rows point at it. The SLA warning lead time is settled in story 5.3 (AD-18). The audit action for an operations read is `DisputeRead` (AD-14a).

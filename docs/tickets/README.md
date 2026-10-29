@@ -1,6 +1,6 @@
 # Build order
 
-Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, and 7.9 before 7.8a).
+Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, and 7.10 before 7.1).
 
 Status: done (merged on main), in progress, or planned. The supervisor updates it when a story merges.
 
@@ -13,7 +13,6 @@ Status: done (merged on main), in progress, or planned. The supervisor updates i
 | 1.3 | [P0-3 OpenTelemetry baseline and security headers](epic-1-platform-baseline/tickets/story-1.3-opentelemetry-baseline-and-security-headers-plan.md) | backend | done |
 | 1.4 | [P0-4 CI, security scanning and floor guard](epic-1-platform-baseline/tickets/story-1.4-ci-security-scanning-and-floor-guard-plan.md) | backend | done |
 | 1.5 | [P0-5 Microsoft Learn conventions, AD-3 error kinds and EF drift check](epic-1-platform-baseline/tickets/story-1.5-microsoft-learn-conventions-ad-3-error-kinds-and-ef-dri-plan.md) | backend | done |
-| 1.6 | [Workflow and test tooling](epic-1-platform-baseline/tickets/story-1.6-workflow-and-test-tooling.md) | backend | planned |
 
 ## Epic 2: [Linked customers sign in and see their transactions](epic-2-transactions/epic-2-transactions.md)
 
@@ -27,6 +26,7 @@ Needs: epic 1 (the merged P0 baseline).
 | 2.7 | [Problem types resolve to documentation pages](epic-2-transactions/tickets/story-2.7-problem-types-resolve-to-documentation-pages.md) | backend | done |
 | 2.4 | [SPA shell, session routing and the transactions screen](epic-2-transactions/tickets/story-2.4-spa-shell-session-routing-and-the-transactions-screen.md) | frontend | done |
 | 2.5 | [Gateway serves the SPA with the edge rules, and CI checks the frontend](epic-2-transactions/tickets/story-2.5-gateway-serves-the-spa-with-the-edge-rules-and-ci-checks-the.md) | backend | done |
+| 2.8 | [Sign-in and sign-out are audited, and every endpoint is denied by default](epic-2-transactions/tickets/story-2.8-sign-in-and-sign-out-are-audited-and-every-endpoint-is-denied.md) | backend | planned |
 | 2.6 | [Hosted login pages themed from the design tokens](epic-2-transactions/tickets/story-2.6-hosted-login-pages-themed-from-the-design-tokens.md) | backend | planned |
 
 ## Epic 3: [Customers raise, follow and withdraw disputes](epic-3-disputes/epic-3-disputes.md)
@@ -35,8 +35,9 @@ Needs: epic 2 (CurrentCustomer, the Linked policy, the transactions handler and 
 
 | Story | Title | Owner | Status |
 |---|---|---|---|
-| 3.1 | [Linked customer raises a dispute that commits with its timeline, audit and outbox rows](epic-3-disputes/tickets/story-3.1-linked-customer-raises-a-dispute-that-commits-with-its-timel.md) | backend | done |
+| 3.1 | [Linked customer raises a dispute that commits with its stored event and outbox row](epic-3-disputes/tickets/story-3.1-linked-customer-raises-a-dispute-that-commits-with-its-store.md) | backend | done |
 | 3.2 | [Raising is idempotent under an Idempotency-Key](epic-3-disputes/tickets/story-3.2-raising-is-idempotent-under-an-idempotency-key.md) | backend | done |
+| 3.8 | [Dispute changes are recorded as stored events, and disputes load by replay](epic-3-disputes/tickets/story-3.8-dispute-changes-are-recorded-as-stored-events-and-disputes-lo.md) | backend | planned |
 | 3.3 | [Customer follows disputes in the history and on the timeline](epic-3-disputes/tickets/story-3.3-customer-follows-disputes-in-the-history-and-on-the-timeline.md) | backend | planned |
 | 3.4 | [Customer withdraws an open dispute](epic-3-disputes/tickets/story-3.4-customer-withdraws-an-open-dispute.md) | backend | planned |
 | 3.6 | [Raise-a-dispute screens with idempotent submit and browser spans](epic-3-disputes/tickets/story-3.6-raise-a-dispute-screens-with-idempotent-submit-and-browser-s.md) | frontend | planned |
@@ -44,7 +45,7 @@ Needs: epic 2 (CurrentCustomer, the Linked policy, the transactions handler and 
 
 ## Epic 4: [Dispute events reach Kafka in per-dispute order](epic-4-events/epic-4-events.md)
 
-Needs: epic 3 (outbox rows written by the one commit path (AD-14)).
+Needs: epic 3 (outbox rows written by the one commit path (AD-14), with outbox ID = stored event ID).
 
 | Story | Title | Owner | Status |
 |---|---|---|---|
@@ -52,7 +53,7 @@ Needs: epic 3 (outbox rows written by the one commit path (AD-14)).
 
 ## Epic 5: [Operations tools and the SLA sweep act on disputes](epic-5-operations/epic-5-operations.md)
 
-Needs: epic 2 (the gateway templates and provisioning from stories 2.5 and 2.6); epic 3 (the Dispute aggregate and the one commit path); epic 4 (the Worker heartbeat health check).
+Needs: epic 2 (the gateway templates and provisioning from stories 2.5 and 2.6); epic 3 (the Dispute aggregate, loading by replay and the one commit path); epic 4 (the Worker heartbeat health check).
 
 | Story | Title | Owner | Status |
 |---|---|---|---|
@@ -63,7 +64,7 @@ Needs: epic 2 (the gateway templates and provisioning from stories 2.5 and 2.6);
 
 ## Epic 6: [Logins link to customers without revealing a match](epic-6-linking/epic-6-linking.md)
 
-Needs: epic 2 (the Unlinked policy, `CustomerLinks` and the core-banking port); epic 3 (`AuditLogEntries` and `Audit.Record`).
+Needs: epic 2 (the Unlinked policy, `CustomerLinks`, the core-banking port and `Audit.Record`); epic 3 (`AuditLogEntries`).
 
 | Story | Title | Owner | Status |
 |---|---|---|---|
@@ -82,10 +83,7 @@ Needs: epic 2 (the themed hosted login for UJ-1); epic 3 (dispute screens for UJ
 | 7.1 | [QA journey UJ-1 on the real stack with axe and ZAP](epic-7-release/tickets/story-7.1-qa-journey-uj-1-on-the-real-stack-with-axe-and-zap.md) | qa | planned |
 | 7.2 | [QA journeys UJ-2, UJ-5a, UJ-5b and UJ-5d](epic-7-release/tickets/story-7.2-qa-journeys-uj-2-uj-5a-uj-5b-and-uj-5d.md) | qa | planned |
 | 7.3 | [CI runs the journeys with ZAP and publishes images to GHCR](epic-7-release/tickets/story-7.3-ci-runs-the-journeys-with-zap-and-publishes-images-to-ghcr.md) | backend | planned |
-| 7.4 | [AWS Compose override and OpenTelemetry collector](epic-7-release/tickets/story-7.4-aws-compose-override-and-opentelemetry-collector.md) | backend | planned |
-| 7.5 | [Terraform dev environment and OIDC deploy](epic-7-release/tickets/story-7.5-terraform-dev-environment-and-oidc-deploy.md) | backend | planned |
 | 7.6 | [Decision records and the production path](epic-7-release/tickets/story-7.6-decision-records-and-the-production-path.md) | docs | planned |
 | 7.7 | [README, runbook and onboarding](epic-7-release/tickets/story-7.7-readme-runbook-and-onboarding.md) | docs | planned |
-| 7.9 | [Standards hardening (backend)](epic-7-release/tickets/story-7.9-standards-hardening-backend.md) | backend | planned |
-| 7.8a | [Closing refactor sweep: backend](epic-7-release/tickets/story-7.8a-closing-refactor-sweep-backend.md) | backend | planned |
-| 7.8b | [Closing refactor sweep: frontend](epic-7-release/tickets/story-7.8b-closing-refactor-sweep-frontend.md) | frontend | planned |
+| 7.4 | [AWS Compose override and OpenTelemetry collector](epic-7-release/tickets/story-7.4-aws-compose-override-and-opentelemetry-collector.md) | backend | planned |
+| 7.5 | [Terraform dev environment and OIDC deploy](epic-7-release/tickets/story-7.5-terraform-dev-environment-and-oidc-deploy.md) | backend | planned |
