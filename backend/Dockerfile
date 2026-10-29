@@ -4,9 +4,9 @@
 #   docker build -t disputedesk-worker --target worker backend
 # Images are pinned by tag and by multi-arch index digest. The SDK tag matches global.json.
 
-ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.402-noble@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2
-ARG ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0.13-noble-chiseled-extra@sha256:9e3919aff68057f3e45125c5255a71d3b5f40364e45ede883348688851b9f0df
-ARG RUNTIME_IMAGE=mcr.microsoft.com/dotnet/runtime:10.0.13-noble-chiseled-extra@sha256:2e4f4e0a8f0807397c91585b3b6142989b43e9030a6494af1b7abd251b915de1
+ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.403-noble@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b
+ARG ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0.14-noble-chiseled-extra@sha256:9b755ea799ae649141a073e30d8b62d8095a5465af2b7694d17866e8c05131d8
+ARG RUNTIME_IMAGE=mcr.microsoft.com/dotnet/runtime:10.0.14-noble-chiseled-extra@sha256:2fbc014e87df3d50948f8710f200ddca0183388904ec35c8ad7e481ef6f8a230
 ARG PROBE_IMAGE=busybox:1.38.0-musl@sha256:ea2b9914a16a4ac1981994af97b318f7c7d4db76b580c56177f08bf76f4a0be8
 
 FROM ${SDK_IMAGE} AS build
