@@ -34,9 +34,9 @@ Verify: Worker integration tests on Testcontainers Postgres and Redpanda pass fo
    **And** a Failed or not-yet-due head row, set directly by the test, holds back the later rows of that dispute only, while the second dispute publishes
 
 3. **One leader, on its own lock connection** (R26; NFR-ARC-4)
-   **Given** two Worker hosts against one database, each with its own in-memory span exporter
+   **Given** two Worker hosts against one database, in one test process
    **When** both run over the same pending rows
-   **Then** only the host holding `pg_try_advisory_lock` on the fixed key produces: the other host's exporter records no producer span, and each row is published once (PostgreSQL, *Advisory Locks*)
+   **Then** only the host holding `pg_try_advisory_lock` on the fixed key produces: exactly one host logs that it holds the lock, each row has one record on the topic, and the process records exactly one producer span per row (ActivitySource listeners are process-wide, so a per-host exporter cannot tell the hosts apart) (PostgreSQL, *Advisory Locks*)
    **And** the relay holds the lock on one dedicated `NpgsqlConnection` and does every outbox read and update on that same connection, through a short-lived `AppDbContext` built on it (`UseNpgsql(connection)`, the context not owning the connection; EF Core, *DbContext configuration*, using an existing connection); before each batch it checks the connection with a cheap query, and on an error it disposes the connection and produces nothing until it holds the lock again (AD-17, Leadership)
    **And** the only raw SQL is the lock call and the check query: parameterised (`NpgsqlParameter`, no interpolation), identifiers double-quoted (AD-22), no `now()` or `CURRENT_TIMESTAMP` (AD-4; a reviewer check), no table other than `"OutboxMessages"`, on the existing `ConnectionStrings:DisputeDesk` with no new credential; updates set only `Status`, `Attempts`, `NextAttemptAtUtc`, `SentAtUtc` and `LastError`; the AD-14 source-rules test stays green unedited; the report cites AD-17's same-connection rule as the evidence for the raw SQL
 
@@ -60,7 +60,7 @@ Verify: Worker integration tests on Testcontainers Postgres and Redpanda pass fo
    **And** the Compose worker health check fails when the relay file is older than 30 seconds, the worker `depends_on` the api being healthy, and story 5.3 adds the sweep file
 
 7. **No personal data at the Kafka boundary** (R31; NFR-SEC-5)
-   **Given** a dispute raised with marker values in every private field of `DisputeRaised` (customer ID, account reference, transaction ID, the snapshot's description and masked card, note, expected and disputed amounts) and in the actor ID
+   **Given** a dispute raised with marker values in every private field of `DisputeRaised` (customer ID, account reference, transaction ID, the snapshot's description, masked card, account last four digits and transaction date, note, expected and disputed amounts) and in the actor ID
    **When** the relay publishes its row
    **Then** no captured log line, span attribute, metric tag or Kafka header holds any marker, and the record value is `Payload`, whose content 3.8's tests already guard (`PublishMappingTests`, `RaisedEventTests`) (OWASP Logging Cheat Sheet, data to exclude; AD-20; 3.8 Known pitfall: check every private field)
    **And** story 4.2 extends this test to the failure surfaces (`LastError`, the Failed log line, `disputedesk.outbox.failed`, `error.type`)

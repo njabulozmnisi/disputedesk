@@ -66,3 +66,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - design — docs/ux/mockups/link-rate-limited.html
 - experience — docs/ux/EXPERIENCE.md, Copy deck
 - Input (from 2.4 QA, 2026-10-28): until this story, an unlinked login lands on `/link`, which renders the not-found screen ("We can't find that dispute", with "Go to your disputes" leading to the also-unbuilt `/disputes`). This story's route replaces it.
+- Handoff (2026-10-30, 6.1 refine): start can also answer 429 `rate-limited` without `Retry-After` when the linking queue is full (story 6.5); the rate-limited screen handles it with no countdown.

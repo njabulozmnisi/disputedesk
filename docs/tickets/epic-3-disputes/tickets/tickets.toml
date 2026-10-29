@@ -1,6 +1,6 @@
 # Customers raise, follow and withdraw disputes: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
 
-next_id = 10
+next_id = 12
 
 [[entry]]
 id = 1
@@ -74,7 +74,7 @@ id = 9
 type = "story"
 title = "Customer lists their disputes newest first, a page at a time"
 description = "Adds `GET /api/v1/disputes`, the history list, on story 3's customer view mapping, with keyset paging through the ownership filter (AD-5, AD-11). Proves paging bounds, ownership across pages and cursors, the authorization states and privacy on the list, wire timestamps and enums on every customer route, and the alias-rule fix carried from 3.8."
-verify = "Integration tests for the list, paging bounds and cursor validation, list ownership, the authorization states, privacy, the core-banking outage and snapshot precision, and wire timestamps and enums on every customer route pass; the architecture tests pass; `openapi.json` changes only by the list operation, `DisputeSummaryResponse` and the page shape."
+verify = "Integration tests (Testcontainers PostgreSQL) for the list, paging bounds and cursor validation, list ownership and its telemetry, the authorization states, privacy, the core-banking outage and snapshot precision, and wire timestamps and enums on every customer route pass; the architecture tests pass; `openapi.json` changes only by the list operation, `DisputeSummaryResponse` and the page shape, and `frontend/src/api/generated/` matches it."
 covers = ["R16", "R17", "R18", "R11", "R30", "R31"]
 after = [3]
 hitl = false
@@ -83,8 +83,8 @@ owner = "backend"
 lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Application/Disputes/ (ListDisputes/, CustomerView.cs)", "backend/src/DisputeDesk.Contracts/Disputes/ (DisputeSummaryResponse.cs, DisputePageResponse.cs, DisputeRoutes.cs)", "backend/src/DisputeDesk.Api/Disputes/DisputeEndpoints.cs", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/ (never RaiseDisputeAuthorizationTests.cs), Ownership/", "backend/tests/DisputeDesk.ArchitectureTests/UsingAliasRulesTests.cs, SourceRoots.cs"]
-supervisor_checks = ["In a throwaway copy, drop the ownership filter from the list query: the list ownership test fails.", "In a throwaway copy, accept a cursor instant with a non-zero offset: the paging test fails."]
+touches = ["backend/src/DisputeDesk.Application/Disputes/ (ListDisputes/, CustomerView.cs)", "backend/src/DisputeDesk.Contracts/Disputes/ (DisputeSummaryResponse.cs, DisputePageResponse.cs, DisputeRoutes.cs)", "backend/src/DisputeDesk.Api/Disputes/DisputeEndpoints.cs", "backend/openapi.json", "frontend/src/api/generated/ (regenerated)", "backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/ (never RaiseDisputeAuthorizationTests.cs), Ownership/", "backend/tests/DisputeDesk.ArchitectureTests/UsingAliasRulesTests.cs, SourceRoots.cs"]
+supervisor_checks = ["In a throwaway copy, drop the ownership filter from the list query: the list ownership test fails.", "In a throwaway copy, accept a cursor instant with a non-zero offset: the paging test fails.", "In a throwaway copy, take `limit` rows instead of `limit + 1`: the last-page test fails."]
 
 [[entry]]
 id = 4
@@ -105,20 +105,55 @@ touches = ["backend/src/DisputeDesk.Domain/Disputes/Dispute.cs", "backend/src/Di
 [[entry]]
 id = 6
 type = "story"
-title = "Raise-a-dispute screens with idempotent submit and browser spans"
-description = "Adds the raise and review screens (4a, 4b) with reason, note and expected amount, one `Idempotency-Key` per draft, error routing, and the SPA's OpenTelemetry spans for SM-1 and SM-2."
-verify = "Vitest component tests pass, with API responses mocked from `openapi.json` shapes."
-covers = ["R12", "R13", "R14", "R15", "R36", "R40"]
-after = ["2.4", "2.5", 2]
+title = "Raise-a-dispute screens with idempotent submit"
+description = "Adds the raise and review screens (4a, 4b): reason, note and expected amount on a shadcn/ui `Field` form, one frozen request and one `Idempotency-Key` per draft, and every submit outcome routed by problem type. Consumes the client story 3.3 regenerates; story 10 adds the row badges and story 11 the browser spans."
+verify = "Vitest component tests pass, with API responses mocked from `openapi.json` shapes; typecheck and lint pass."
+covers = ["R12", "R13", "R14", "R15", "R40"]
+after = ["2.4", "2.5", 2, 3]
 hitl = false
 risk = "medium"
 owner = "frontend"
 lane = "B"
 high_stakes = false
 migration = false
-touches = ["frontend/src/features/disputes/raise/", "frontend/src/telemetry/", "frontend/src/app/ (routes)", "frontend/src/components/ui/ (shadcn/ui Form)", "frontend/package.json (React Hook Form, zod and the resolver, each verified and pinned per AGENTS.md)", "frontend/src/api/generated/"]
-supervisor_checks = ["The Aspire Dashboard shows one trace from `dispute.raise.submit` to the Api raise span."]
-references = ["design — docs/ux/mockups/dispute-new.html", "design — docs/ux/mockups/dispute-new-wrong-amount.html", "design — docs/ux/mockups/dispute-review.html", "design — docs/ux/mockups/dispute-review-retry.html", "design — docs/ux/mockups/transactions-after.html", "experience — docs/ux/EXPERIENCE.md, Copy deck"]
+touches = ["frontend/src/features/disputes/raise/", "frontend/src/features/transactions/TransactionRow.tsx (Dispute control as a router Link)", "frontend/src/app/router.tsx (raise routes)", "frontend/src/api/queryClient.ts (401 returnUrl)", "frontend/src/api/problems.ts (new slugs)", "frontend/src/components/ui/ (shadcn/ui field, radio-group, input, textarea, label)", "frontend/package.json and package-lock.json (React Hook Form, zod, @hookform/resolvers, each verified and pinned per AGENTS.md)"]
+supervisor_checks = ["In a throwaway copy, make Try again mint a new key: criterion 6's same-key test fails.", "In a throwaway copy, remove `aria-describedby` from the expected amount field: criterion 4's test fails.", "In a throwaway copy, clear the key between in-progress resends: criterion 6's five-resend test fails."]
+references = ["design — docs/ux/mockups/dispute-new.html", "design — docs/ux/mockups/dispute-new-wrong-amount.html", "design — docs/ux/mockups/dispute-review.html", "design — docs/ux/mockups/dispute-review-retry.html", "design — docs/ux/mockups/dispute-already-disputed.html", "design — docs/ux/mockups/dispute-not-disputable.html", "experience — docs/ux/EXPERIENCE.md, Copy deck"]
+
+[[entry]]
+id = 10
+type = "story"
+title = "Dispute status badges on transaction rows"
+description = "A transaction row with a dispute shows its customer-facing status as a badge linking to the dispute, in place of the Dispute control and any hint; a resolved row shows plain \"Resolved\" (decided 2026-10-30). Uses `disputeId` and `customerStatus` from story 3.1; no contract change."
+verify = "Vitest component tests pass, with API responses mocked from `openapi.json` shapes; typecheck and lint pass."
+covers = ["R12", "R18"]
+after = [6]
+hitl = false
+risk = "low"
+owner = "frontend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["frontend/src/features/transactions/ (TransactionRow.tsx, notDisputableHint.ts, the new status badge, tests)"]
+supervisor_checks = ["In a throwaway copy, map `underReviewPrioritised` to \"Escalated\": criterion 1's test fails."]
+references = ["design — docs/ux/mockups/transactions-after.html", "design — docs/ux/mockups/transactions.html", "experience — docs/ux/EXPERIENCE.md, Copy deck"]
+
+[[entry]]
+id = 11
+type = "story"
+title = "Raise screens emit browser spans that join the API trace"
+description = "Adds the SPA's OpenTelemetry web SDK: fetch instrumentation puts `traceparent` on same-origin `/api` fetches, and the raise flow emits `dispute.raise.open` and `dispute.raise.submit` (linked) for SM-1 and SM-2, exported over OTLP/HTTP to `/otlp/`, with no personal data in any span (AD-20). Builds on story 6's routes and submit."
+verify = "Vitest tests with an in-memory span exporter and MSW pass; typecheck and lint pass."
+covers = ["R36"]
+after = [6]
+hitl = false
+risk = "medium"
+owner = "frontend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["frontend/src/telemetry/ (new)", "frontend/src/main.tsx", "frontend/src/app/router.tsx (raise flow onEnter)", "frontend/src/features/disputes/raise/ (submit span)", "vite.config.ts (/otlp proxy)", "frontend/package.json and package-lock.json (OpenTelemetry web packages, each verified and pinned per AGENTS.md)"]
+supervisor_checks = ["The Aspire Dashboard shows one trace from `dispute.raise.submit` to the Api raise span.", "In a throwaway copy, add a span attribute holding the `transactionId`: criterion 4's test fails."]
 
 [[entry]]
 id = 7
@@ -127,7 +162,7 @@ title = "Disputes history, dispute detail and withdraw screens"
 description = "Adds the Disputes screen grouped open and closed, the dispute detail with timeline, Withdraw where allowed, and the guidance after a Rejected outcome."
 verify = "Vitest component tests pass, with API responses mocked from `openapi.json` shapes."
 covers = ["R16", "R18", "R19", "R40"]
-after = [4, 6, 9]
+after = [4, 6, 9, 11]
 hitl = false
 risk = "medium"
 owner = "frontend"
