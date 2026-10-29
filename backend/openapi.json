@@ -245,6 +245,17 @@
         "tags": [
           "Disputes"
         ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "An RFC 9651 String, so quoted, such as \"8e03978e-40d5-43e8-bc93-6894a57f9324\": 1 to 255 printable characters once decoded. One key per raise attempt; resend the same key to retry it.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -338,6 +349,16 @@
           },
           "503": {
             "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
             "content": {
               "application/problem+json": {
                 "schema": {
