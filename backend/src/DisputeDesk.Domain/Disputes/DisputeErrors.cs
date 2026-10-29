@@ -16,6 +16,13 @@ public static class DisputeErrors
         AlreadyDisputed.Message,
         new Dictionary<string, object?> { ["disputeId"] = disputeId, ["customerStatus"] = customerStatus });
 
+    /// <summary>
+    /// A version clash (AD-15): another change appended the same stored event version first, so
+    /// <c>UQ_StoredEvents_DisputeId_Version</c> refused this one. The handler replays the stream and decides once more.
+    /// </summary>
+    public static readonly Error VersionClash =
+        Error.Conflict("action-not-allowed", "The dispute was changed by another action at the same time.");
+
     public static readonly Error NoteTooLong =
         Error.Validation("validation", "The note must be at most 1000 characters after trimming.", "Note");
 

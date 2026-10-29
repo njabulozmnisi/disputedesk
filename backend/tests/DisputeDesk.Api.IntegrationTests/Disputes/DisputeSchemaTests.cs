@@ -7,12 +7,12 @@ using Microsoft.EntityFrameworkCore.Metadata;
 namespace DisputeDesk.Api.IntegrationTests.Disputes;
 
 /// <summary>
-/// AC8: the migrated schema, read back from Postgres's catalogue: money, instants, the row version, the indexes and
-/// the outbox columns follow AD-4, AD-15, AD-17 and AD-22.
+/// The migrated schema, read back from Postgres's catalogue: money, instants, the stored events, the indexes and the
+/// outbox columns follow AD-4, AD-15, AD-17 and AD-22, and <c>Disputes</c> has no concurrency token (ad-009).
 /// </summary>
 public class DisputeSchemaTests(PostgresFixture postgres)
 {
-    private static readonly string[] DisputeTables = ["Disputes", "TimelineEntries", "AuditLogEntries", "OutboxMessages"];
+    private static readonly string[] DisputeTables = ["Disputes", "StoredEvents", "AuditLogEntries", "OutboxMessages"];
 
     [Theory]
     [InlineData("TransactionAmount")]
@@ -59,19 +59,60 @@ public class DisputeSchemaTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task Disputes_RowVersion_IsTheXminConcurrencyTokenAndVersionIsAnInteger()
+    public async Task Disputes_Model_HasNoConcurrencyTokenAndVersionIsAnInteger()
     {
+        // AD-15: UQ_StoredEvents_DisputeId_Version is the one concurrency check, so Disputes maps no row version.
         await using AppDbContext db = postgres.CreateDbContext();
         IEntityType dispute = db.Model.FindEntityType(typeof(Dispute)) ?? throw new InvalidOperationException("Dispute is not mapped.");
 
-        IProperty rowVersion = dispute.FindProperty("RowVersion") ?? throw new InvalidOperationException("No row version.");
-        Assert.Equal(typeof(uint), rowVersion.ClrType);
-        Assert.True(rowVersion.IsConcurrencyToken);
-        Assert.Equal(ValueGenerated.OnAddOrUpdate, rowVersion.ValueGenerated);
-        Assert.Equal("xmin", rowVersion.GetColumnName());
+        Assert.DoesNotContain(dispute.GetProperties(), property => property.IsConcurrencyToken);
+        Assert.DoesNotContain(dispute.GetProperties(), property => property.GetColumnName() is "xmin" or "RowVersion");
         Column version = Assert.Single(await ColumnsAsync(), column => column.Table == "Disputes" && column.Name == "Version");
         Assert.Equal("integer", version.Type);
-        Assert.DoesNotContain(await ColumnsAsync(), column => column.Table == "Disputes" && column.Name is "xmin" or "RowVersion");
+    }
+
+    [Fact]
+    public async Task StoredEvents_Columns_AreTheAd22Columns()
+    {
+        List<Column> storedEvents = [.. (await ColumnsAsync()).Where(column => column.Table == "StoredEvents")];
+
+        Assert.Equal(
+            [
+                ("ActorId", "text", "NO"), ("ActorType", "text", "NO"), ("Data", "jsonb", "NO"), ("DisputeId", "uuid", "NO"),
+                ("EventType", "text", "NO"), ("Id", "uuid", "NO"), ("OccurredAtUtc", "timestamp with time zone", "NO"),
+                ("TraceId", "text", "YES"), ("Version", "integer", "NO"),
+            ],
+            storedEvents.Select(column => (column.Name, column.Type, column.Nullable)).OrderBy(column => column.Name, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task StoredEvents_Indexes_AreOnlyTheKeyAndTheUniqueVersion()
+    {
+        await using AppDbContext db = postgres.CreateDbContext();
+
+        List<string> definitions = await db.Database
+            .SqlQuery<string>($"SELECT indexdef AS \"Value\" FROM pg_indexes WHERE tablename = 'StoredEvents' ORDER BY indexname")
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [
+                "CREATE UNIQUE INDEX \"PK_StoredEvents\" ON public.\"StoredEvents\" USING btree (\"Id\")",
+                "CREATE UNIQUE INDEX \"UQ_StoredEvents_DisputeId_Version\" ON public.\"StoredEvents\" USING btree (\"DisputeId\", \"Version\")",
+            ],
+            definitions);
+    }
+
+    [Fact]
+    public async Task StoredEvents_ForeignKeyToDisputes_RestrictsDelete()
+    {
+        await using AppDbContext db = postgres.CreateDbContext();
+
+        // confdeltype 'r' is ON DELETE RESTRICT (PostgreSQL docs, pg_constraint).
+        List<string> foreignKeys = await db.Database
+            .SqlQuery<string>($"SELECT conname || ' ' || confdeltype::text AS \"Value\" FROM pg_constraint WHERE contype = 'f' AND conrelid::regclass::text = '\"StoredEvents\"'")
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(["FK_StoredEvents_Disputes_DisputeId r"], foreignKeys);
     }
 
     [Fact]
@@ -98,10 +139,10 @@ public class DisputeSchemaTests(PostgresFixture postgres)
         await using AppDbContext db = postgres.CreateDbContext();
 
         List<string> foreignKeys = await db.Database
-            .SqlQuery<string>($"SELECT conname AS \"Value\" FROM pg_constraint WHERE contype = 'f' AND conrelid::regclass::text IN ('\"TimelineEntries\"', '\"OutboxMessages\"', '\"AuditLogEntries\"') ORDER BY conname")
+            .SqlQuery<string>($"SELECT conname AS \"Value\" FROM pg_constraint WHERE contype = 'f' AND conrelid::regclass::text IN ('\"StoredEvents\"', '\"OutboxMessages\"', '\"AuditLogEntries\"') ORDER BY conname")
             .ToListAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(["FK_OutboxMessages_Disputes_DisputeId", "FK_TimelineEntries_Disputes_DisputeId"], foreignKeys);
+        Assert.Equal(["FK_OutboxMessages_Disputes_DisputeId", "FK_StoredEvents_Disputes_DisputeId"], foreignKeys);
     }
 
     [Fact]

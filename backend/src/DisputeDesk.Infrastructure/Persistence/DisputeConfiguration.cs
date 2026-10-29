@@ -23,10 +23,13 @@ public sealed class DisputeConfiguration : IEntityTypeConfiguration<Dispute>
 
         builder.Property(dispute => dispute.Reason).HasConversion<string>();
         builder.Property(dispute => dispute.Status).HasConversion<string>();
+        builder.Property(dispute => dispute.Outcome).HasConversion<string>();
 
-        // Postgres's xmin system column as the concurrency token (Npgsql: a uint row version maps to xmin), so no
-        // migration adds a column. A shadow property keeps it out of the Domain (AD-15).
-        builder.Property<uint>("RowVersion").IsRowVersion();
+        // No concurrency token: every write to Disputes commits with a stored event, so UQ_StoredEvents_DisputeId_Version
+        // already catches every concurrent change (AD-15, ad-009).
+
+        // The pending stored events become StoredEvents rows at the commit (AD-14), never a navigation.
+        builder.Ignore(dispute => dispute.PendingChanges);
 
         builder.HasIndex(dispute => new { dispute.AccountRef, dispute.TransactionId })
             .IsUnique()
@@ -36,11 +39,5 @@ public sealed class DisputeConfiguration : IEntityTypeConfiguration<Dispute>
         builder.HasIndex(dispute => dispute.SlaDueAtUtc)
             .HasDatabaseName("IX_Disputes_SlaDueAtUtc")
             .HasFilter("\"Status\" IN ('Submitted', 'UnderReview')");
-
-        // Nothing is deleted from Disputes in v1 (AD-22), so a delete must never take the timeline with it.
-        builder.HasMany(dispute => dispute.Timeline)
-            .WithOne(entry => entry.Dispute)
-            .HasForeignKey(entry => entry.DisputeId)
-            .OnDelete(DeleteBehavior.Restrict);
     }
 }

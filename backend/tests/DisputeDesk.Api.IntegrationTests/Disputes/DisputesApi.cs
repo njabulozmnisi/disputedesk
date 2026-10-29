@@ -4,6 +4,8 @@ using System.Text.Json;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Application.Audit;
+using DisputeDesk.Application.Disputes;
+using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
@@ -25,6 +27,9 @@ public static class DisputesApi
     public const string Pending = "TXN-A-0030";
     public const string Old = "TXN-A-0001";
     public const string AccountA = "ACC-A-1";
+
+    private static readonly AuditAction[] DisputeAuditActions =
+        [AuditAction.Raise, AuditAction.StartReview, AuditAction.Escalate, AuditAction.Resolve, AuditAction.Withdraw];
 
     /// <summary>A browser signed in as <paramref name="loginSub"/>, linked to <paramref name="customerId"/>.</summary>
     public static async Task<HttpClient> SignInLinkedAsync(this ApiFactory factory, string loginSub, string customerId)
@@ -102,7 +107,10 @@ public static class DisputesApi
     public static async Task<HttpResponseMessage> RaiseWithKeyAsync(this HttpClient browser, string json, string? idempotencyKey) =>
         await browser.RaiseAsync(json, await browser.AntiforgeryTokenAsync(), idempotencyKey);
 
-    /// <summary>The rows in the four tables a raise writes, read past the ownership filter.</summary>
+    /// <summary>
+    /// The rows a raise writes, and the dispute audit rows it must not write (ad-009), read past the ownership filter.
+    /// Only audit rows of a dispute action count, so a sign-in or linking audit row never changes the counts.
+    /// </summary>
     public static async Task<RowCounts> CountRowsAsync(this ApiFactory factory)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
@@ -110,8 +118,8 @@ public static class DisputesApi
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         return new RowCounts(
             await db.Set<Dispute>().IgnoreQueryFilters().CountAsync(cancellationToken),
-            await db.Set<TimelineEntry>().IgnoreQueryFilters().CountAsync(cancellationToken),
-            await db.Set<AuditLogEntry>().CountAsync(cancellationToken),
+            await db.Set<StoredEventRow>().IgnoreQueryFilters().CountAsync(cancellationToken),
+            await db.Set<AuditLogEntry>().CountAsync(entry => DisputeAuditActions.Contains(entry.Action), cancellationToken),
             await db.Set<OutboxMessage>().CountAsync(cancellationToken));
     }
 
@@ -142,10 +150,11 @@ public static class DisputesApi
     }
 }
 
-/// <summary>Row counts of <c>Disputes</c>, <c>TimelineEntries</c>, <c>AuditLogEntries</c> and <c>OutboxMessages</c>.</summary>
-public sealed record RowCounts(int Disputes, int TimelineEntries, int AuditLogEntries, int OutboxMessages)
+/// <summary>Row counts of <c>Disputes</c>, <c>StoredEvents</c>, dispute <c>AuditLogEntries</c> and <c>OutboxMessages</c>.</summary>
+public sealed record RowCounts(int Disputes, int StoredEvents, int AuditLogEntries, int OutboxMessages)
 {
     public static RowCounts None { get; } = new(0, 0, 0, 0);
 
-    public static RowCounts One { get; } = new(1, 1, 1, 1);
+    /// <summary>What one raise writes: the dispute, its stored event and its outbox row, and no audit row (ad-009).</summary>
+    public static RowCounts One { get; } = new(1, 1, 0, 1);
 }

@@ -1,5 +1,4 @@
 using System.Globalization;
-using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Contracts.Transactions;
 using DisputeDesk.Domain.Disputes;
 
@@ -7,16 +6,16 @@ namespace DisputeDesk.Application.Disputes;
 
 /// <summary>
 /// A dispute as its customer sees it (AD-13), mapped once here: the customer status, "you" or "the bank" for the
-/// actor, and no actor identity, SLA or due date.
+/// actor, and no actor identity, SLA or due date. The timeline is built from the dispute's stored events.
 /// </summary>
 public static class CustomerView
 {
-    public static DisputeResponse ToResponse(Dispute dispute) => new(
+    public static Contracts.Disputes.DisputeResponse ToResponse(Dispute dispute, IEnumerable<StoredEvent> storedEvents) => new(
         dispute.Id,
         DisputeWire.ToCustomerStatus(dispute.Status),
         DisputeWire.ToWire(dispute.Reason),
         dispute.Note,
-        new TransactionSnapshotResponse(
+        new Contracts.Disputes.TransactionSnapshotResponse(
             dispute.TransactionId,
             dispute.AccountRef,
             dispute.AccountLast4,
@@ -27,14 +26,32 @@ public static class CustomerView
         dispute.ExpectedAmount is decimal expected ? ToMoney(expected, dispute.Currency) : null,
         ToMoney(dispute.DisputedAmount, dispute.Currency),
         dispute.CreatedAtUtc,
-        [.. dispute.Timeline.Select(ToResponse)]);
+        Timeline(storedEvents));
 
-    private static TimelineEntryResponse ToResponse(TimelineEntry entry) => new(
-        DisputeWire.ToWire(entry.Action),
-        DisputeWire.ToCustomerStatus(entry.ToStatus),
-        DisputeWire.ToTimelineActor(entry.ActorType),
-        entry.OccurredAtUtc,
-        entry.VisibleNote);
+    /// <summary>The customer's timeline: one entry for each stored event the allowlist admits, in stream order.</summary>
+    public static IReadOnlyList<Contracts.Disputes.TimelineEntryResponse> Timeline(IEnumerable<StoredEvent> storedEvents) =>
+        [.. storedEvents.Select(ToTimelineEntry).OfType<Contracts.Disputes.TimelineEntryResponse>()];
+
+    /// <summary>
+    /// The allowlist (AD-13; OWASP Authorization Cheat Sheet, deny by default): a type test admits exactly the five
+    /// lifecycle types. Every other type, <see cref="SlaWarningRaised"/> and any type added later, gives no entry.
+    /// </summary>
+    private static Contracts.Disputes.TimelineEntryResponse? ToTimelineEntry(StoredEvent storedEvent) => storedEvent switch
+    {
+        DisputeRaised raised => Entry(raised, DisputeAction.Raise, raised.ToStatus, raised.Note),
+        ReviewStarted started => Entry(started, DisputeAction.StartReview, started.ToStatus, note: null),
+        DisputeEscalated escalated => Entry(escalated, DisputeAction.Escalate, escalated.ToStatus, note: null),
+        DisputeResolved resolved => Entry(resolved, DisputeAction.Resolve, resolved.ToStatus, resolved.Note),
+        DisputeWithdrawn withdrawn => Entry(withdrawn, DisputeAction.Withdraw, withdrawn.ToStatus, withdrawn.Note),
+        _ => null,
+    };
+
+    private static Contracts.Disputes.TimelineEntryResponse Entry(StoredEvent storedEvent, DisputeAction action, DisputeStatus toStatus, string? note) => new(
+        DisputeWire.ToWire(action),
+        DisputeWire.ToCustomerStatus(toStatus),
+        DisputeWire.ToTimelineActor(storedEvent.ActorType),
+        storedEvent.OccurredAtUtc,
+        note);
 
     // AD-4: exactly two decimals, as a string.
     private static Money ToMoney(decimal amount, string currency) => new(amount.ToString("0.00", CultureInfo.InvariantCulture), currency);

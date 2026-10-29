@@ -20,7 +20,7 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.13")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -61,6 +61,48 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("AuditLogEntries", (string)null);
+                });
+
+            modelBuilder.Entity("DisputeDesk.Application.Disputes.StoredEventRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Data")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("DisputeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TraceId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DisputeId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("UQ_StoredEvents_DisputeId_Version");
+
+                    b.ToTable("StoredEvents", (string)null);
                 });
 
             modelBuilder.Entity("DisputeDesk.Domain.Disputes.Dispute", b =>
@@ -106,15 +148,12 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
                     b.Property<string>("Note")
                         .HasColumnType("text");
 
+                    b.Property<string>("Outcome")
+                        .HasColumnType("text");
+
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<uint>("RowVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
 
                     b.Property<DateTimeOffset>("SlaDueAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -148,46 +187,6 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("UQ_Disputes_AccountRef_TransactionId");
 
                     b.ToTable("Disputes", (string)null);
-                });
-
-            modelBuilder.Entity("DisputeDesk.Domain.Disputes.TimelineEntry", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ActorId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ActorType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("DisputeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("FromStatus")
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset>("OccurredAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ToStatus")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("VisibleNote")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DisputeId");
-
-                    b.ToTable("TimelineEntries", (string)null);
                 });
 
             modelBuilder.Entity("DisputeDesk.Infrastructure.Persistence.CustomerLink", b =>
@@ -321,10 +320,10 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
                     b.ToTable("DataProtectionKeys");
                 });
 
-            modelBuilder.Entity("DisputeDesk.Domain.Disputes.TimelineEntry", b =>
+            modelBuilder.Entity("DisputeDesk.Application.Disputes.StoredEventRow", b =>
                 {
                     b.HasOne("DisputeDesk.Domain.Disputes.Dispute", "Dispute")
-                        .WithMany("Timeline")
+                        .WithMany()
                         .HasForeignKey("DisputeId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
@@ -339,11 +338,6 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
                         .HasForeignKey("DisputeId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("DisputeDesk.Domain.Disputes.Dispute", b =>
-                {
-                    b.Navigation("Timeline");
                 });
 #pragma warning restore 612, 618
         }

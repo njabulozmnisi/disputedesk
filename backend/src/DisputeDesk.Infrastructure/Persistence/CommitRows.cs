@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
-using DisputeDesk.Application.Audit;
 using DisputeDesk.Application.Disputes;
-using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Events;
 using DisputeDesk.Contracts.Json;
 using DisputeDesk.Domain.Disputes;
@@ -10,81 +8,83 @@ using DisputeDesk.Domain.Disputes;
 namespace DisputeDesk.Infrastructure.Persistence;
 
 /// <summary>
-/// The audit entry and the outbox row the commit (AD-14) writes for each dispute change, both stamped with the
-/// change's instant (AD-4) and the current trace (AD-20).
+/// The publish mapping of the commit (AD-14): the one place a stored event becomes an integration event, or nothing.
+/// Stored events are private domain events and never leave as they are; only the fields AD-19 and AD-19a list do
+/// (Microsoft Learn, "Domain events versus integration events").
 /// </summary>
 internal static class CommitRows
 {
-    // The API's JSON settings (AD-5), so events and responses spell names and enum values the same way.
-    private static readonly JsonSerializerOptions EventJson = CreateEventJson();
-
-    public static AuditLogEntry AuditEntry(Dispute dispute, DisputeChange change, Activity? activity) => new()
+    /// <summary>
+    /// The outbox row of <paramref name="storedEvent"/> under its stored event ID <paramref name="id"/>, or null for a
+    /// type that is never published. A type this switch does not name throws, which stops the commit.
+    /// </summary>
+    public static OutboxMessage? OutboxMessage(Guid id, StoredEvent storedEvent, Activity? activity) => storedEvent switch
     {
-        Id = Guid.CreateVersion7(change.OccurredAt),
-        OccurredAtUtc = change.OccurredAt,
-        Action = ToAuditAction(change.Action),
-        Result = AuditResult.Succeeded,
-        ActorType = change.Actor.Type,
-        ActorId = change.Actor.Id,
-        CustomerId = dispute.CustomerId,
-        DisputeId = dispute.Id,
-        TraceId = activity?.TraceId.ToHexString(),
+        DisputeRaised raised => Message(
+            id,
+            raised,
+            DisputeEvents.RaisedV1,
+            new DisputeRaisedV1(raised.DisputeId, DisputeWire.ToWire(raised.Reason), DisputeWire.ToWire(raised.ToStatus), Utc(raised), raised.Version),
+            activity),
+        ReviewStarted started => StatusChanged(id, started, started.FromStatus, started.ToStatus, Contracts.Disputes.DisputeAction.StartReview, outcome: null, activity),
+        DisputeEscalated escalated => StatusChanged(id, escalated, escalated.FromStatus, escalated.ToStatus, Contracts.Disputes.DisputeAction.Escalate, outcome: null, activity),
+        DisputeResolved resolved => StatusChanged(id, resolved, resolved.FromStatus, resolved.ToStatus, Contracts.Disputes.DisputeAction.Resolve, DisputeWire.ToWire(resolved.Outcome), activity),
+        DisputeWithdrawn withdrawn => StatusChanged(id, withdrawn, withdrawn.FromStatus, withdrawn.ToStatus, Contracts.Disputes.DisputeAction.Withdraw, outcome: null, activity),
+        // For operations only: never published (AD-18).
+        SlaWarningRaised => null,
+        _ => throw new ArgumentOutOfRangeException(nameof(storedEvent), storedEvent.GetType().Name, "No publish mapping for this stored event type."),
     };
 
-    /// <summary>
-    /// The structured CloudEvent, serialised once into <see cref="OutboxMessage.Payload"/> (AD-19). The trace context is
-    /// the W3C <c>traceparent</c> of the current activity, which <see cref="Activity.Id"/> is in the default W3C format.
-    /// </summary>
-    public static OutboxMessage OutboxMessage(Dispute dispute, DisputeChange change, Activity? activity)
-    {
-        if (change.Action != DisputeAction.Raise)
-        {
-            throw new NotSupportedException($"No dispute event is defined yet for the action {change.Action}.");
-        }
+    private static OutboxMessage StatusChanged(
+        Guid id, StoredEvent storedEvent, DisputeStatus from, DisputeStatus to, Contracts.Disputes.DisputeAction action, Contracts.Disputes.Outcome? outcome, Activity? activity) =>
+        Message(
+            id,
+            storedEvent,
+            DisputeEvents.StatusChangedV1,
+            new DisputeStatusChangedV1(
+                storedEvent.DisputeId,
+                DisputeWire.ToWire(from),
+                DisputeWire.ToWire(to),
+                action,
+                DisputeWire.ToWire(storedEvent.ActorType),
+                outcome,
+                Utc(storedEvent),
+                storedEvent.Version),
+            activity);
 
-        var eventId = Guid.CreateVersion7(change.OccurredAt);
-        // A UTC DateTime, which System.Text.Json writes with Z (the event records say why).
-        DateTime occurredAt = change.OccurredAt.UtcDateTime;
-        var raised = new CloudEvent<DisputeRaisedV1>(
+    /// <summary>
+    /// The structured CloudEvent, serialised once into <see cref="Persistence.OutboxMessage.Payload"/> (AD-19), stamped with
+    /// the stored event's instant (AD-4). The trace context is the W3C <c>traceparent</c> of the current activity, which
+    /// <see cref="Activity.Id"/> is in the default W3C format.
+    /// </summary>
+    private static OutboxMessage Message<TData>(Guid id, StoredEvent storedEvent, string type, TData data, Activity? activity)
+    {
+        var cloudEvent = new CloudEvent<TData>(
             DisputeEvents.SpecVersion,
-            eventId.ToString(),
+            id.ToString(),
             DisputeEvents.Source,
-            DisputeEvents.RaisedV1,
-            dispute.Id.ToString(),
-            occurredAt,
+            type,
+            storedEvent.DisputeId.ToString(),
+            Utc(storedEvent),
             DisputeEvents.DataContentType,
-            DisputeEvents.SchemaFor(DisputeEvents.RaisedV1),
-            new DisputeRaisedV1(dispute.Id, DisputeWire.ToWire(dispute.Reason), DisputeWire.ToWire(change.ToStatus), occurredAt, change.Version));
+            DisputeEvents.SchemaFor(type),
+            data);
 
         return new OutboxMessage
         {
-            Id = eventId,
-            EventType = DisputeEvents.RaisedV1,
-            DisputeId = dispute.Id,
-            DisputeVersion = change.Version,
-            Payload = JsonSerializer.Serialize(raised, EventJson),
+            Id = id,
+            EventType = type,
+            DisputeId = storedEvent.DisputeId,
+            DisputeVersion = storedEvent.Version,
+            Payload = JsonSerializer.Serialize(cloudEvent, DisputeDeskJson.Options),
             TraceParent = activity?.Id,
             TraceState = activity?.TraceStateString,
             Status = OutboxStatus.Pending,
-            NextAttemptAtUtc = change.OccurredAt,
-            CreatedAtUtc = change.OccurredAt,
+            NextAttemptAtUtc = storedEvent.OccurredAtUtc,
+            CreatedAtUtc = storedEvent.OccurredAtUtc,
         };
     }
 
-    private static AuditAction ToAuditAction(DisputeAction action) => action switch
-    {
-        DisputeAction.Raise => AuditAction.Raise,
-        DisputeAction.StartReview => AuditAction.StartReview,
-        DisputeAction.Escalate => AuditAction.Escalate,
-        DisputeAction.Resolve => AuditAction.Resolve,
-        DisputeAction.Withdraw => AuditAction.Withdraw,
-        _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unmapped action."),
-    };
-
-    private static JsonSerializerOptions CreateEventJson()
-    {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        DisputeDeskJson.Apply(options);
-        return options;
-    }
+    // A UTC DateTime, which System.Text.Json writes with Z (the event records say why).
+    private static DateTime Utc(StoredEvent storedEvent) => storedEvent.OccurredAtUtc.UtcDateTime;
 }
