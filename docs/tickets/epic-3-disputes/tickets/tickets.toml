@@ -1,6 +1,6 @@
 # Customers raise, follow and withdraw disputes: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
 
-next_id = 9
+next_id = 10
 
 [[entry]]
 id = 1
@@ -55,10 +55,10 @@ supervisor_checks = ["On a fresh local database, raise as A through the gateway:
 [[entry]]
 id = 3
 type = "story"
-title = "Customer follows disputes in the history and on the timeline"
-description = "Adds `GET /api/v1/disputes` and `GET /api/v1/disputes/<disputeId>` on story 3.8's customer view mapping: list rows and the dispute fields of the detail read the `Disputes` read model, and the timeline is built from the dispute's stored events through the deny-by-default allowlist (AD-13). Proves the allowlist against every stored event type and a test-only unknown type, and proves ownership on every customer endpoint."
-verify = "Integration tests for list, detail, the allowlist over every stored event type and a test-only unknown type, ownership, timestamps and the core-banking outage pass."
-covers = ["R16", "R17", "R18", "R11", "R30"]
+title = "Customer opens a dispute and follows its timeline"
+description = "Adds `GET /api/v1/disputes/<disputeId>` on story 3.8's customer view mapping: the dispute fields read the `Disputes` read model, and the timeline is built from the dispute's stored events through the deny-by-default allowlist (AD-13); an unknown stored row is skipped, never a 500. Proves ownership, the authorization states and privacy on the detail, and starts the independent customer route list. Story 9 adds the history list."
+verify = "Integration tests for the detail, its timeline and `outcome`, privacy of every field, the identical 404, the authorization states, the independent route list, unknown and corrupt stored rows, the core-banking outage and snapshot precision pass; the architecture tests pass; `openapi.json` changes only by the detail operation, `outcome` and the `Outcome` component."
+covers = ["R16", "R17", "R18", "R11", "R30", "R31"]
 after = [8]
 hitl = false
 risk = "high"
@@ -66,23 +66,41 @@ owner = "backend"
 lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Application/Disputes/ListDisputes/, GetDispute/, CustomerView.cs", "backend/src/DisputeDesk.Contracts/Disputes/", "backend/src/DisputeDesk.Contracts/Json/ (UTC timestamps with Z, exact enum reading)", "backend/src/DisputeDesk.Api/Disputes/", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/, Ownership/"]
+touches = ["backend/src/DisputeDesk.Application/Disputes/ (GetDispute/GetDisputeHandler.cs, CustomerView.cs, StoredEventRow.cs, RaiseDispute/RaiseDisputeHandler.cs)", "backend/src/DisputeDesk.Contracts/Disputes/ (DisputeResponse.cs, DisputeRoutes.cs)", "backend/src/DisputeDesk.Api/Disputes/DisputeEndpoints.cs", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/ (never RaiseDisputeAuthorizationTests.cs), Ownership/ (new)"]
+supervisor_checks = ["In a throwaway copy, map a new customer GET without adding it to the route list: the route-list test fails.", "In a throwaway copy, remove the unknown-row skip from the detail read: the unknown-row test fails."]
 
 [[entry]]
-id = 4
+id = 9
 type = "story"
-title = "Customer withdraws an open dispute"
-description = "Adds `Dispute.Withdraw` and `POST /api/v1/disputes/<disputeId>/withdraw`. The withdraw handler is the first to load a dispute by replaying its stored events and decide from that state (story 3.8, AD-13); on a version clash it reloads and decides once more (AD-15). A withdraw appends `DisputeWithdrawn`, published as `status-changed.v1` through story 3.8's mapping. Raise and withdraw refusals are audited as `Rejected` through `Audit.Record` (story 2.8, AD-14a)."
-verify = "Domain unit tests for the withdraw cells and integration tests for withdraw, closed disputes, the version-clash reload, refusal audit entries and the event pass."
-covers = ["R19", "R17", "R29", "R23", "R10", "R41", "R36"]
-after = [3, "2.8"]
+title = "Customer lists their disputes newest first, a page at a time"
+description = "Adds `GET /api/v1/disputes`, the history list, on story 3's customer view mapping, with keyset paging through the ownership filter (AD-5, AD-11). Proves paging bounds, ownership across pages and cursors, the authorization states and privacy on the list, wire timestamps and enums on every customer route, and the alias-rule fix carried from 3.8."
+verify = "Integration tests for the list, paging bounds and cursor validation, list ownership, the authorization states, privacy, the core-banking outage and snapshot precision, and wire timestamps and enums on every customer route pass; the architecture tests pass; `openapi.json` changes only by the list operation, `DisputeSummaryResponse` and the page shape."
+covers = ["R16", "R17", "R18", "R11", "R30", "R31"]
+after = [3]
 hitl = false
 risk = "high"
 owner = "backend"
 lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Domain/Disputes/Dispute.cs", "backend/src/DisputeDesk.Application/Disputes/WithdrawDispute/", "backend/src/DisputeDesk.Application/Disputes/RaiseDispute/ (refusal audit)", "backend/src/DisputeDesk.Api/Disputes/", "backend/openapi.json", "backend/tests/ (Domain.Tests/Disputes/, Api.IntegrationTests/Disputes/Withdraw/, ArchitectureTests/)"]
+touches = ["backend/src/DisputeDesk.Application/Disputes/ (ListDisputes/, CustomerView.cs)", "backend/src/DisputeDesk.Contracts/Disputes/ (DisputeSummaryResponse.cs, DisputePageResponse.cs, DisputeRoutes.cs)", "backend/src/DisputeDesk.Api/Disputes/DisputeEndpoints.cs", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/ (never RaiseDisputeAuthorizationTests.cs), Ownership/", "backend/tests/DisputeDesk.ArchitectureTests/UsingAliasRulesTests.cs, SourceRoots.cs"]
+supervisor_checks = ["In a throwaway copy, drop the ownership filter from the list query: the list ownership test fails.", "In a throwaway copy, accept a cursor instant with a non-zero offset: the paging test fails."]
+
+[[entry]]
+id = 4
+type = "story"
+title = "Customer withdraws an open dispute"
+description = "Adds `Dispute.Withdraw` and `POST /api/v1/disputes/<disputeId>/withdraw`. The withdraw handler is the first to load a dispute by replaying its stored events and decide from that state (story 3.8, AD-13); on a version clash it reloads and decides once more (AD-15). A withdraw appends `DisputeWithdrawn`, published as `status-changed.v1` through story 3.8's mapping. Raise and withdraw refusals are audited as `Rejected` through `AuditLog.Record` (story 2.8, AD-14a)."
+verify = "Domain unit tests for the withdraw cells and integration tests for withdraw, closed disputes, the version-clash reload, refusal audit entries and the event pass."
+covers = ["R19", "R17", "R29", "R23", "R10", "R41", "R36"]
+after = [9, "2.8"]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "M2"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Domain/Disputes/Dispute.cs", "backend/src/DisputeDesk.Application/Disputes/WithdrawDispute/", "backend/src/DisputeDesk.Application/Disputes/RaiseDispute/ (refusal audit)", "backend/src/DisputeDesk.Api/Disputes/", "backend/openapi.json", "backend/tests/ (Domain.Tests/Disputes/, Api.IntegrationTests/Disputes/Withdraw/, Api.IntegrationTests/Ownership/, ArchitectureTests/)"]
 
 [[entry]]
 id = 6
@@ -109,7 +127,7 @@ title = "Disputes history, dispute detail and withdraw screens"
 description = "Adds the Disputes screen grouped open and closed, the dispute detail with timeline, Withdraw where allowed, and the guidance after a Rejected outcome."
 verify = "Vitest component tests pass, with API responses mocked from `openapi.json` shapes."
 covers = ["R16", "R18", "R19", "R40"]
-after = [4, 6]
+after = [4, 6, 9]
 hitl = false
 risk = "medium"
 owner = "frontend"

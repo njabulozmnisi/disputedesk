@@ -1,18 +1,37 @@
 # Dispute events reach Kafka in per-dispute order: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
 
+next_id = 3
+
 [[entry]]
 id = 1
 type = "story"
 title = "Outbox relay publishes dispute events to Kafka with a Worker heartbeat"
-description = "Adds the single-leader relay (AD-17) with trace propagation (AD-20), the relay heartbeat health check and graceful shutdown on both hosts (AD-25)."
-verify = "Worker integration tests on Testcontainers Postgres and Redpanda pass for publish, order, outage, failed rows and lock handover."
-covers = ["R23", "R26", "R27", "R28", "R36"]
-after = ["3.1"]
+description = "Adds the single-leader relay (AD-17) on its own lock connection, with trace propagation (AD-20), its Kafka options (AD-26) and the relay heartbeat health check (AD-25); no personal data at the Kafka boundary. Story 2 adds the failure paths, leader handover and graceful shutdown."
+verify = "Worker integration tests on Testcontainers Postgres and Redpanda pass for publish, per-dispute order, one leader, trace context, the Kafka options and unreachable dependencies, the heartbeat and privacy; the existing `WorkerHostTests` pass unedited."
+covers = ["R23", "R26", "R27", "R28", "R31", "R36"]
+after = ["3.8"]
 hitl = false
 risk = "high"
 owner = "backend"
 lane = "M1"
-high_stakes = false
+high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Worker/", "backend/src/DisputeDesk.Infrastructure/Outbox/", "backend/Directory.Packages.props (Confluent.Kafka)", "backend/Dockerfile (worker-local target)", "docker-compose.yml (worker health check, depends_on api healthy, stop_grace_period)", "backend/tests/DisputeDesk.Worker.IntegrationTests/"]
-supervisor_checks = ["Re-run the telemetry smoke check: one trace from the browser raise to the Worker producer span in the Aspire Dashboard.", "`docker compose stop redpanda`, raise twice, start it: both events arrive in order.", "`docker compose ps` shows the worker healthy and starting after the api."]
+touches = ["backend/src/DisputeDesk.Worker/ (WorkerHost.cs, appsettings.json, DisputeDesk.Worker.csproj)", "backend/src/DisputeDesk.Infrastructure/Outbox/ (new: OutboxRelay.cs, KafkaOptions.cs)", "backend/src/DisputeDesk.Infrastructure/Observability/Telemetry.cs (ActivitySourceName, AddSource)", "backend/src/DisputeDesk.Infrastructure/DisputeDesk.Infrastructure.csproj (Confluent.Kafka reference)", "backend/Directory.Packages.props (Confluent.Kafka, Testcontainers.Redpanda)", "backend/Dockerfile (worker-local target)", "docker-compose.yml (worker service: Kafka__BootstrapServers, relay-file health check, depends_on api healthy)", "backend/tests/DisputeDesk.Worker.IntegrationTests/ (new relay tests and fixtures; WorkerHostTests.cs unedited)"]
+supervisor_checks = ["Re-run the telemetry smoke check: one trace from the browser raise to the Worker producer span in the Aspire Dashboard.", "`docker compose ps` shows the worker healthy and starting after the api.", "Trivy on the `worker-local` image; the worker runs as a non-root user.", "In a throwaway copy, drop the lock check so both hosts produce: the one-leader test fails."]
+
+[[entry]]
+id = 2
+type = "story"
+title = "Relay rides out broker outages, failed records, leader handover and shutdown"
+description = "Adds the failure paths to story 1's relay: a broker outage pauses without counting an attempt, a per-record error counts toward Failed after 5, a fatal producer error recreates the producer (AD-17, Failures), a leader handover during an in-flight send loses nothing (AD-17, Delivery guarantee), and SIGTERM finishes the in-flight send (AD-25)."
+verify = "Worker integration tests on Testcontainers Postgres and Redpanda pass for the broker outage, the error classification, Failed rows, leader handover during an in-flight send, graceful shutdown and the privacy of the failure surfaces."
+covers = ["R23", "R26", "R27", "R28", "R31"]
+after = [1]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "M1"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Infrastructure/Outbox/OutboxRelay.cs", "docker-compose.yml (stop_grace_period on the api and worker services)", "backend/tests/DisputeDesk.Worker.IntegrationTests/ (new failure, handover and shutdown tests)"]
+supervisor_checks = ["`docker compose stop redpanda`, raise twice, start it: both events arrive in order.", "In a throwaway copy, write the Sent update on the scoped `AppDbContext`: the handover test fails.", "In a throwaway copy, count a broker-unavailable error as an attempt: the outage test fails."]

@@ -45,14 +45,14 @@ R35 (parent R35): Every FR consequence not tagged `[manual check]` maps to an au
 R36 (parent R36): The SPA, Api host and Worker emit OpenTelemetry traces, metrics and logs, and one trace runs browser to API to outbox to Kafka to Worker with trace context injected by hand; the business metrics in NFR-OBS-3 are emitted; the Aspire Dashboard (locally) and CloudWatch (AWS) show them with no manual setup. This epic delivers: the same-origin `/otlp/` proxy.
 R37 (parent R37): `docker compose up` starts the whole stack with zero clicks, including Zitadel configuration, seed data and migrations, from multi-stage images running as non-root. This epic delivers: the core-banking service and the gateway image with the SPA.
 R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard access, visible focus, labelled errors, reflow at 320px), checked by axe in the E2E tests, plus a recorded manual keyboard pass. This epic delivers: the shell and transactions screens.
-R41 (parent R41): Every sign-in and every sign-out writes an audit entry, with the actions `SignIn` and `SignOut`, and every audit entry is written through one `Audit.Record` method. This epic delivers: `Audit.Record` and the sign-in and sign-out entries (story 8).
+R41 (parent R41): Every sign-in and every sign-out writes an audit entry, with the actions `SignIn` and `SignOut`, and every audit entry is written through one `AuditLog.Record` method. This epic delivers: `AuditLog.Record` and the sign-in and sign-out entries (story 8).
 
 ## Done when
 
 - Seeded customer A signs in on the themed hosted login and sees transactions newest first in the SPA served by the gateway.
 - Anonymous, unlinked and linked callers get 401, 403 `linking-required` and 200 on `GET /api/v1/transactions`.
 - Stopping the core-banking service gives 503 `core-banking-unavailable` and a retry in the SPA.
-- Every sign-in and sign-out writes one audit entry through `Audit.Record`, and an endpoint that names no policy answers 401 to an anonymous caller.
+- Every sign-in and sign-out writes one audit entry through `AuditLog.Record`, and an endpoint that names no policy answers 401 to an anonymous caller.
 - CI runs the frontend job; every story passed verifier, QA and reviewer (integrated verification).
 
 ## Boundaries
@@ -76,6 +76,6 @@ R41 (parent R41): Every sign-in and every sign-out writes an audit entry, with t
 - Waits on 1.2 because: 1 needs what those stories build (see its References and Description).
 - Waits on 1.2, 1.5 because: 2 needs what those stories build (see its References and Description).
 - Waits on: epic 1 (the merged P0 baseline).
-- Decision: 2026-10-29 — story 8 (sign-in and sign-out audit through `Audit.Record`, sign-out through the OIDC handler, the deny-by-default fallback policy, the Production-environment tests) runs on M1 in parallel with 3.8 on M2, after a collision check; it waits on stories 2 and 3, whose sign-in, sign-out and customer routes it changes.
+- Decision: 2026-10-29 — story 8 (sign-in and sign-out audit through `AuditLog.Record`, sign-out through the OIDC handler, the deny-by-default fallback policy, the Production-environment tests) runs on M1 in parallel with 3.8 on M2, after a collision check; it waits on stories 2 and 3, whose sign-in, sign-out and customer routes it changes.
 - Decision: 2026-10-27 — new story 2.7 (problem types resolve to documentation pages) runs in lane A after 2.3 and is built before 2.4, which now waits on it; its id is 7 because ids are never renumbered.
 - Decision: 2026-10-26 — Gate 2: code in every builder-owned story of this epic is stupid simple and logical, per AGENTS.md (smallest change that meets the criteria; every abstraction earns its place).

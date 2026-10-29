@@ -57,7 +57,7 @@ Verify: Integration tests prove identical responses, the check order, the cap, f
 8. **Audit without the ID number** (R10, R31; FR-10, NFR-SEC-5)
    **Given** every stop of the job
    **When** entries are written
-   **Then** each is written through `Audit.Record` (story 2.8; R41, AD-14) and carries time, login, outcome and client IP, and a test finds no ID number in any table, log or span
+   **Then** each is written through `AuditLog.Record` (story 2.8; R41, AD-14) and carries time, login, outcome and client IP, and a test finds no ID number in any table, log or span
 
 9. **Linking metrics** (R36; NFR-OBS-3)
    **Given** starts and capped sends

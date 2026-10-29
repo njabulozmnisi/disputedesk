@@ -28,7 +28,7 @@ id = 4
 slug = "epic-4-events"
 title = "Dispute events reach Kafka in per-dispute order"
 description = "The Worker's outbox relay publishes every outbox row to `disputedesk.disputes` as a CloudEvent, keyed by dispute ID with trace headers, in per-dispute order, through Kafka outages, with failed rows parked after 5 attempts and a heartbeat health check."
-covers = ["R23", "R26", "R27", "R28", "R36"]
+covers = ["R23", "R26", "R27", "R28", "R31", "R36"]
 after = [{ epic = 3, needs = "outbox rows written by the one commit path (AD-14), with outbox ID = stored event ID" }]
 
 [[epic]]
@@ -45,7 +45,7 @@ slug = "epic-6-linking"
 title = "Logins link to customers without revealing a match"
 description = "An unlinked login links to its customer with an ID number, an account number and an OTP sent off the request path after the SIM-swap check, under the send cap, lockout and rate limits, with every step audited and nothing revealing whether the details matched."
 covers = ["R4", "R5", "R6", "R7", "R8", "R9", "R10", "R31", "R36", "R40"]
-after = [{ epic = 2, needs = "the Unlinked policy, `CustomerLinks`, the core-banking port and `Audit.Record`" }, { epic = 3, needs = "`AuditLogEntries`" }]
+after = [{ epic = 2, needs = "the Unlinked policy, `CustomerLinks`, the core-banking port and `AuditLog.Record`" }, { epic = 3, needs = "`AuditLogEntries`" }]
 
 [[epic]]
 id = 7

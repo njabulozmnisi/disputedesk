@@ -1,6 +1,6 @@
 # Build order
 
-Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, and 7.10 before 7.1).
+Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, 3.9 right after 3.3, and 7.10 before 7.1).
 
 Status: done (merged on main), in progress, or planned. The supervisor updates it when a story merges.
 
@@ -38,7 +38,8 @@ Needs: epic 2 (CurrentCustomer, the Linked policy, the transactions handler and 
 | 3.1 | [Linked customer raises a dispute that commits with its stored event and outbox row](epic-3-disputes/tickets/story-3.1-linked-customer-raises-a-dispute-that-commits-with-its-store.md) | backend | done |
 | 3.2 | [Raising is idempotent under an Idempotency-Key](epic-3-disputes/tickets/story-3.2-raising-is-idempotent-under-an-idempotency-key.md) | backend | done |
 | 3.8 | [Dispute changes are recorded as stored events, and disputes load by replay](epic-3-disputes/tickets/story-3.8-dispute-changes-are-recorded-as-stored-events-and-disputes-lo.md) | backend | done |
-| 3.3 | [Customer follows disputes in the history and on the timeline](epic-3-disputes/tickets/story-3.3-customer-follows-disputes-in-the-history-and-on-the-timeline.md) | backend | planned |
+| 3.3 | [Customer opens a dispute and follows its timeline](epic-3-disputes/tickets/story-3.3-customer-opens-a-dispute-and-follows-its-timeline.md) | backend | planned |
+| 3.9 | [Customer lists their disputes newest first, a page at a time](epic-3-disputes/tickets/story-3.9-customer-lists-their-disputes-newest-first-a-page-at-a-time.md) | backend | planned |
 | 3.4 | [Customer withdraws an open dispute](epic-3-disputes/tickets/story-3.4-customer-withdraws-an-open-dispute.md) | backend | planned |
 | 3.6 | [Raise-a-dispute screens with idempotent submit and browser spans](epic-3-disputes/tickets/story-3.6-raise-a-dispute-screens-with-idempotent-submit-and-browser-s.md) | frontend | planned |
 | 3.7 | [Disputes history, dispute detail and withdraw screens](epic-3-disputes/tickets/story-3.7-disputes-history-dispute-detail-and-withdraw-screens.md) | frontend | planned |
@@ -50,6 +51,7 @@ Needs: epic 3 (outbox rows written by the one commit path (AD-14), with outbox I
 | Story | Title | Owner | Status |
 |---|---|---|---|
 | 4.1 | [Outbox relay publishes dispute events to Kafka with a Worker heartbeat](epic-4-events/tickets/story-4.1-outbox-relay-publishes-dispute-events-to-kafka-with-a-worker.md) | backend | planned |
+| 4.2 | [Relay rides out broker outages, failed records, leader handover and shutdown](epic-4-events/tickets/story-4.2-relay-rides-out-broker-outages-failed-records-leader-handove.md) | backend | planned |
 
 ## Epic 5: [Operations tools and the SLA sweep act on disputes](epic-5-operations/epic-5-operations.md)
 
@@ -64,7 +66,7 @@ Needs: epic 2 (the gateway templates and provisioning from stories 2.5 and 2.6);
 
 ## Epic 6: [Logins link to customers without revealing a match](epic-6-linking/epic-6-linking.md)
 
-Needs: epic 2 (the Unlinked policy, `CustomerLinks`, the core-banking port and `Audit.Record`); epic 3 (`AuditLogEntries`).
+Needs: epic 2 (the Unlinked policy, `CustomerLinks`, the core-banking port and `AuditLog.Record`); epic 3 (`AuditLogEntries`).
 
 | Story | Title | Owner | Status |
 |---|---|---|---|

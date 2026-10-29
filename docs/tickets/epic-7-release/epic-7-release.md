@@ -59,7 +59,7 @@ R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard acce
 - Waits on 5.4 because: 2 needs what those stories build (see its References and Description).
 - Waits on 5.1 because: 4 needs what those stories build (see its References and Description).
 - Waits on 5.1 because: 7 needs what those stories build (see its References and Description).
-- Waits on 2.6, 2.8, 3.7, 4.1, 5.3, 5.4, 6.4 because: 10 reviews the merged system those stories complete (see its Description).
+- Waits on 2.6, 2.8, 3.7, 4.1, 4.2, 5.3, 5.4, 6.4 because: 10 reviews the merged system those stories complete (see its Description).
 - Waits on: epic 2 (the themed hosted login for UJ-1), epic 3 (dispute screens for UJ-1, UJ-2 and UJ-5), epic 4 (events on the topic for the four-hop trace), epic 5 (Scalar and the sweep for the README and the sweep story), epic 6 (linking screens for UJ-1).
 - Decision: 2026-10-29 — the release stories run in the order 7.10, 7.1, 7.2, 7.3, 7.6, 7.7, then the AWS stories 7.4 and 7.5 last; the production readiness review checks glossary terms and suppressions across the codebase (story 10), and the project has no separate closing refactor-sweep story.
 - Decision: 2026-10-26 — Gate 2: the docs stories 7.6 (decision records and production path) and 7.7 (README, runbook and onboarding) change owner to `docs`, a docs agent rather than a builder; runbook and onboarding stay short.

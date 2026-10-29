@@ -4,7 +4,7 @@ type: story
 title: "Production readiness review"
 parent: epic-7-release
 covers: [R9, R11, R28, R30, R31, R32, R34, R35, R36]
-after: [2.6, 2.8, 3.7, 4.1, 5.3, 5.4, 6.4]
+after: [2.6, 2.8, 3.7, 4.1, 4.2, 5.3, 5.4, 6.4]
 hitl: true
 risk: high
 ---

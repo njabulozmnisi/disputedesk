@@ -84,6 +84,8 @@ A failed stage sends the story back to its builder with the findings. After two 
 
 A fix round goes to one fresh builder, whose isolated worktree starts at the base commit, not at the story's uncommitted change. The supervisor runs `scripts/story-patch.sh <story-worktree> <base> <patch>`, which writes the change as one binary patch and fails unless the patch reproduces the worktree; the fix brief starts with `git apply --binary --exclude='docs/*' <patch>`, and the builder's worktree becomes the story worktree.
 
+A lane on a worker machine runs through `scripts/lane.sh start|wait|collect <host> <story> ...`: it starts a headless builder in a tmux session, waits for its exit file, and brings back the report and a verified patch.
+
 Every push goes through `scripts/push-and-watch.sh`, which pushes the branch and exits non-zero unless the CI and Security workflows succeed on the pushed commit, so a red main is seen at once.
 
 ## 3. What enforces the rules

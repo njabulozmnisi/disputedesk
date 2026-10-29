@@ -4,7 +4,7 @@ type: story
 title: "Customer withdraws an open dispute"
 parent: epic-3-disputes
 covers: [R19, R17, R29, R23, R10, R41, R36]
-after: [3, 2.8]
+after: [9, 2.8]
 hitl: false
 risk: high
 ---
@@ -13,7 +13,7 @@ risk: high
 
 ## Description
 
-Adds `Dispute.Withdraw` and `POST /api/v1/disputes/<disputeId>/withdraw`. The withdraw handler is the first to load a dispute by replaying its stored events and decide from that state (story 3.8, AD-13); on a version clash it reloads and decides once more (AD-15). A withdraw appends `DisputeWithdrawn`, published as `status-changed.v1` through story 3.8's mapping. Raise and withdraw refusals are audited as `Rejected` through `Audit.Record` (story 2.8, AD-14a).
+Adds `Dispute.Withdraw` and `POST /api/v1/disputes/<disputeId>/withdraw`. The withdraw handler is the first to load a dispute by replaying its stored events and decide from that state (story 3.8, AD-13); on a version clash it reloads and decides once more (AD-15). A withdraw appends `DisputeWithdrawn`, published as `status-changed.v1` through story 3.8's mapping. Raise and withdraw refusals are audited as `Rejected` through `AuditLog.Record` (story 2.8, AD-14a).
 
 ## Requirements
 
@@ -45,7 +45,7 @@ Verify: Domain unit tests for the withdraw cells and integration tests for withd
    **Given** customer A, a dispute of customer B and an unknown ID
    **When** A withdraws each
    **Then** both get 404 `not-found` with bodies identical apart from `traceId`
-   **And** the endpoint enumeration test includes withdraw
+   **And** withdraw is added to the independent customer route list in `Ownership/CustomerRoutesTests.cs` and to the identical-404 test in `Ownership/NotFoundResponsesTests.cs` (stories 3.3 and 3.9)
 
 6. **Version clash: reload and decide once more** (R29, R19; NFR-DATA-5, NFR-TEST-3)
    **Given** two parallel withdraws of one dispute, and a withdraw whose first save loses `UQ_StoredEvents_DisputeId_Version` to a test-only append
@@ -66,13 +66,13 @@ Verify: Domain unit tests for the withdraw cells and integration tests for withd
 9. **Refusals audited as `Rejected`** (R10, R41; FR-10, NFR-SEC-10)
    **Given** a raise that gets 404 `not-found`, 409 `already-disputed` or 422 `not-disputable`, and a withdraw that gets 404 `not-found` or 409 `action-not-allowed`
    **When** each answers
-   **Then** each writes one audit entry through `Audit.Record` with action `Raise` or `Withdraw`, result `Rejected`, actor type `Customer`, actor ID the login's `sub`, `CustomerId` the caller's customer, and `DisputeId` only when the dispute is the caller's (AD-14a)
+   **Then** each writes one audit entry through `AuditLog.Record` with action `Raise` or `Withdraw`, result `Rejected`, actor type `Customer`, actor ID the login's `sub`, `CustomerId` the caller's customer, and `DisputeId` only when the dispute is the caller's (AD-14a)
    **And** a successful raise or withdraw writes no audit entry, a replayed stored 4xx under the same `Idempotency-Key` writes no second entry, and body-shape 400s and 401 and 403 write none
 
-10. **Only `Audit.Record` writes audit entries** (R41; NFR-SEC-10)
+10. **Only `AuditLog.Record` writes audit entries** (R41; NFR-SEC-10)
     **Given** the production source
     **When** the architecture source-rules tests run
-    **Then** a test fails when any file other than the one holding `Audit.Record` creates an `AuditLogEntry`
+    **Then** a test fails when any file other than the one holding `AuditLog.Record` creates an `AuditLogEntry`
 
 ## Supervisor checks
 
@@ -85,7 +85,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Owner: backend (backend-builder).
 - Flags: high-stakes.
 - Lane: M2.
-- Touches: `backend/src/DisputeDesk.Domain/Disputes/Dispute.cs`; `backend/src/DisputeDesk.Application/Disputes/WithdrawDispute/`; `backend/src/DisputeDesk.Application/Disputes/RaiseDispute/` (refusal audit); `backend/src/DisputeDesk.Api/Disputes/`; `backend/openapi.json`; backend/tests/ (Domain.Tests/Disputes/, Api.IntegrationTests/Disputes/Withdraw/, ArchitectureTests/).
+- Touches: `backend/src/DisputeDesk.Domain/Disputes/Dispute.cs`; `backend/src/DisputeDesk.Application/Disputes/WithdrawDispute/`; `backend/src/DisputeDesk.Application/Disputes/RaiseDispute/` (refusal audit); `backend/src/DisputeDesk.Api/Disputes/`; `backend/openapi.json`; backend/tests/ (Domain.Tests/Disputes/, Api.IntegrationTests/Disputes/Withdraw/, Api.IntegrationTests/Ownership/, ArchitectureTests/).
 
 ## References
 
@@ -95,6 +95,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 - Decision: 2026-10-27 — withdraw success is 200 with the updated customer view of the dispute, so the SPA needs no second read.
 - Risk high: a final status set wrongly; beyond the criteria, QA checks the transaction row stays not disputable after withdraw.
-- Decision: 2026-10-29 — raise and withdraw refusals are audited here, the first story built after both `Audit.Record` (2.8) and the stored-event commit (3.8); a version clash reloads and decides once more (AD-14a, AD-15, ad-009).
+- Decision: 2026-10-29 — raise and withdraw refusals are audited here, the first story built after both `AuditLog.Record` (2.8) and the stored-event commit (3.8); a version clash reloads and decides once more (AD-14a, AD-15, ad-009).
 - Input (from 3.2 QA finding 1, 2026-10-28): a raise that loses the unique-index race answers 409 correctly, but EF Core logs two `fail:` errors (23505 on `UQ_Disputes_AccountRef_TransactionId`), which would trip an error-rate alert in production; a version clash on `UQ_StoredEvents_DisputeId_Version` logs the same way. Decide whether to filter those log events (EF Core logging configuration) or document them, and add a test for the choice.
 - Input (from 2.7 review finding 3, 2026-10-27): each problem's `title` is the same for every occurrence of its type and matches its documentation page (RFC 9457 §3.1.3); `action-not-allowed` first appears here, so add one test over the problem catalogue that every response of a type carries that type's title.
+- Carried from 2.8's review (nit): rename `SignOutTests.Login_AlreadySignedIn_RecordsSignOutForTheEndedSessionBeforeTheNewSignIn` to drop "BeforeTheNewSignIn" (the test asserts no order), or assert the order.

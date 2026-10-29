@@ -14,15 +14,16 @@ The input is a story file, `docs/tickets/epic-<epic>-<slug>/tickets/story-<epic>
    - Frontend: Vitest against the Orval-generated mocks.
    - **Input boundaries.** For each request input (query, route, header, body field), add a test for missing, wrong type, out of range and oversized (boundary-value analysis). Each must give its documented 4xx, never a 500.
    - **Logic down the pyramid.** Put decisions (rules, state changes, calculations) in fast domain unit tests; keep integration tests for wiring, the database and HTTP behaviour. Drive timeouts and delays with an injected `TimeProvider` (`FakeTimeProvider` in tests), never real waits.
-4. **Run every available check.**
+4. **Self-check before the checks.** Read `.claude/skills/review-story/SKILL.md` and `.claude/skills/security-story/SKILL.md`, Known pitfalls included, and go through your own diff with each checklist as the reviewer and security agent will. Fix what you find; list anything you leave, with the reason, in the report's `assumptions`.
+5. **Run every available check.**
    - Backend: `dotnet build` (warnings are errors), unit, integration and architecture tests, the OpenAPI drift check, `scripts/floor-guard.sh`.
    - Frontend: Vitest, `tsc --noEmit`, lint.
    - Both: `scripts/secret-scan.sh` (gitleaks over the whole uncommitted change, untracked files included, as the pre-commit hook will see it). Fix a hit in the source, for example a low-entropy placeholder instead of an example UUID; never an allowlist entry.
-5. **Developer smoke check, before reporting `built`.**
+6. **Developer smoke check, before reporting `built`.**
    - Backend: start the API, its Postgres and the shared dev Zitadel; sign in a seeded user with `scripts/dev-login.sh`; call the endpoints with the committed `backend/http/*.http` requests; confirm the rows landed. No browser, no shared lock except during sign-in.
    - Frontend: run the UI against the real API and do one headless Playwright happy path with a screenshot, under `scripts/test-lock.sh run stack <story> -- ...`.
    - **Any container the builder starts directly** (a throwaway Postgres, a dashboard, the Compose stack) runs under `scripts/test-lock.sh run stack <story> -- ...`, because the stack binds fixed ports (8080, 8025, 18888, 4317, 4318, 5433, 19092) and other lanes share the Docker daemon. Testcontainers in tests use the `testcontainers` lock instead.
-6. **Stop rules.** After two failed attempts at the same problem, return `blocked`. Never weaken, skip or delete a test to make it pass. Never commit, push, or mark the story done.
+7. **Stop rules.** After two failed attempts at the same problem, return `blocked`. Never weaken, skip or delete a test to make it pass. Never commit, push, or mark the story done.
 
 ## Report
 

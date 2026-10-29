@@ -4,7 +4,7 @@ type: story
 title: "Disputes history, dispute detail and withdraw screens"
 parent: epic-3-disputes
 covers: [R16, R18, R19, R40]
-after: [4, 6]
+after: [4, 6, 9]
 hitl: false
 risk: medium
 ---
