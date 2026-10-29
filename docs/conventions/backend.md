@@ -51,7 +51,7 @@ PascalCase throughout, which is what EF Core and Npgsql generate by default (dec
 ## Security and privacy
 
 - OWASP ASVS (the security review maps each mechanism to it): validate input at the edge, encode output, least privilege, no secrets in code or logs.
-- POPIA: never store or log ID numbers; no personal data in logs, traces or metrics labels. Audit linking, refused or forbidden actions, operations reads, and sign-in and sign-out through `Audit.Record`; a successful dispute change is a stored event, never an audit row (ad-009, AD-14a).
+- POPIA: never store or log ID numbers; no personal data in logs, traces or metrics labels. Audit linking, refused or forbidden actions, operations reads, and sign-in and sign-out through `AuditLog.Record`; a successful dispute change is a stored event, never an audit row (ad-009, AD-14a).
 
 ## Reliability and observability
 

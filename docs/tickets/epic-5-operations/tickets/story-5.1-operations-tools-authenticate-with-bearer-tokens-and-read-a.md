@@ -13,7 +13,7 @@ risk: high
 
 ## Description
 
-Adds JwtBearer on the operations group (AD-8, AD-9), role policies, the actor mapping, `GET /api/v1/operations/disputes/<disputeId>` with every stored event type on its timeline and each read audited as `DisputeRead` through `Audit.Record`, and Scalar behind `Scalar:Enabled`.
+Adds JwtBearer on the operations group (AD-8, AD-9), role policies, the actor mapping, `GET /api/v1/operations/disputes/<disputeId>` with every stored event type on its timeline and each read audited as `DisputeRead` through `AuditLog.Record`, and Scalar behind `Scalar:Enabled`.
 
 ## Requirements
 
@@ -38,7 +38,7 @@ Verify: Integration tests with tokens signed by a test key cover credential pinn
    **Given** a token with `dispute.read`
    **When** it reads a dispute by ID
    **Then** the body has the snapshot, reason, amount, internal `status`, `outcome` and the timeline built from every stored event of the dispute, `SlaWarningRaised` included, each with its stored event type and `actorType`, and no personal details beyond the snapshot; an unknown ID gets 404 (FR-30; AD-13: operations see every type)
-   **And** each successful read writes one `DisputeRead` audit entry with result `Succeeded`, actor type `Operations`, actor ID the token's `sub` and the dispute ID, through `Audit.Record` (story 2.8; AD-14a, FR-25), and `AuditAction` gains `DisputeRead`
+   **And** each successful read writes one `DisputeRead` audit entry with result `Succeeded`, actor type `Operations`, actor ID the token's `sub` and the dispute ID, through `AuditLog.Record` (story 2.8; AD-14a, FR-25), and `AuditAction` gains `DisputeRead`
 
 5. **Provisioned actor mapping** (R21; FR-25)
    **Given** `provision.sh`

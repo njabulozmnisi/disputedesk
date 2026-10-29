@@ -36,6 +36,7 @@ A story is ready to build only when:
 - each criterion names the mechanism that implements it and the documented source for it (Microsoft Learn, the RFC, OWASP);
 - every request input is listed with its bounds;
 - it has no open questions;
+- it has at most about 8 acceptance criteria; a larger story is split into vertical slices;
 - the challenger's verdict is "proceed", or its `[story]` points are fixed in the story and a human has decided on its `[decision]` points (`docs/verification/<story>-challenge.md`).
 
 ## Ticket numbering
@@ -81,17 +82,19 @@ A supervisor session plans, dispatches, tracks and merges. It never writes produ
 
 ## Commits
 
-Nothing is committed, pushed or merged without explicit approval for that change. Stage the change, show what goes in, wait.
+Nothing is committed, pushed or merged without explicit approval for that change, with one standing approval (2026-10-29): a story below the high-stakes tier is committed and pushed once every stage passes, through `scripts/push-and-watch.sh`, which fails unless CI and Security succeed. A high-stakes story waits for the human's diff review, done while the next story builds. Otherwise stage the change, show what goes in, wait.
 
 ## Story flow
 
 ```
-challenger → builder → verifier → security (high-stakes only) ∥ reviewer → QA → merge
+challenger ∥ pre-build review → builder (self-check) → verifier ∥ security (high-stakes only) ∥ reviewer → one fix round → QA → merge
 ```
 
 The challenger (`scripts/challenge-with-copilot.sh`, a different model family from the builders) reads only the story, the architecture and the code it would touch, never the supervisor's view, and answers proceed, simplify or rethink, tagging each point `[story]` or `[decision]`. `[story]` points (a bound, a missing criterion, a gap against the code) go to the product owner (Sofia), who fixes the story with no human gate; `[decision]` points contradict a PRD requirement or an architecture decision, so they are a model disagreement and a human decides before the builder starts.
 
-**Decision-time challenge.** Before stories are written from a new or changed architecture decision, a PRD change or a brief, the supervisor runs the challenger in decision mode on that document (`scripts/challenge-with-copilot.sh <id> <file> decision`), without the supervisor's evaluation, and brings its findings to the human beside the supervisor's own. Security and the reviewer are read-only and run in parallel; QA, the most expensive stage, runs last, once their findings are fixed. For high-stakes stories the human review of the diff (Stakes tiers) happens in the review blocks, before the commit is approved.
+**Pre-build review.** Beside the challenger, the reviewer reads the story as a design against the architecture and the code, and security reads it against its checklist (`docs/verification/<story>-prebuild-review.md`, `-prebuild-security.md`); their `[story]` points go to Sofia with the challenger's, and `[decision]` points to the human. The builder runs the review and security checklists on its own diff before reporting.
+
+**Decision-time challenge.** Before stories are written from a new or changed architecture decision, a PRD change or a brief, the supervisor runs the challenger in decision mode on that document (`scripts/challenge-with-copilot.sh <id> <file> decision`), without the supervisor's evaluation, and brings its findings to the human beside the supervisor's own. The verifier, security and the reviewer start together the moment a build lands, and their findings make one fix round; QA, the most expensive stage, runs last, once those findings are fixed. For high-stakes stories the human review of the diff (Stakes tiers) happens in the review blocks, before the commit is approved.
 
 - **One supervisor session per story.** Start from `docs/tickets/README.md`, the story file and its `docs/verification/<story>-*.md`; hand over in files, not in the conversation; clear the session after the merge and the capture below.
 - **Fix rounds.** Collect every stage's findings for one commit into `docs/verification/<story>-fixes.md` and give them to one fresh builder, not a resumed one; `scripts/story-patch.sh` carries the story's uncommitted change to that builder (`docs/process/agentic-sdlc.md`). At most one fix round per stage pass.
@@ -108,7 +111,7 @@ Merge only when every stage passes and CI is green.
 
 - Two builder lanes at most per machine, one Testcontainers slot, one verifier story at a time, one QA run at a time behind `scripts/test-lock.sh`.
 - Sized for a build machine with 16 GB RAM, 12 cores and the Docker VM capped at 8 GB. A backend lane peaks near 2 GB on the host (build plus the full suite); the Compose stack can take up to 5.8 GB of the VM, so only one stack runs at a time.
-- Memory gate: dispatch a new lane only while `sysctl -n kern.memorystatus_vm_pressure_level` prints `1` (normal); on `2` or `4`, wait for a lane to finish. Read-only stages (reviewer, security, challenger, verifier) cost little locally and may run beside a builder.
+- No machine sits idle while a ready story exists. Memory gate (`sysctl -n kern.memorystatus_vm_pressure_level`): at `1` (normal) dispatch freely within the lane limits; at `2` a machine with no builder lane running may start one (one lane, the suite run once); at `4` (critical) wait for a lane to finish. Read-only stages (reviewer, security, challenger, verifier) cost little locally and may run beside a builder.
 - Stop the Compose stack (`docker compose stop`) whenever no one holds the `stack` lock.
 - The story (a vertical slice) is the parallel unit. Start sequentially (platform baseline, then the tracer bullet), run the middle in parallel, finish with a sequential refactor sweep.
 - Collision check before dispatching two stories together: no shared files, never two migrations at once.

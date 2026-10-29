@@ -4,7 +4,7 @@
 id = 1
 type = "story"
 title = "Operations tools authenticate with bearer tokens and read a dispute"
-description = "Adds JwtBearer on the operations group (AD-8, AD-9), role policies, the actor mapping, `GET /api/v1/operations/disputes/<disputeId>` with every stored event type on its timeline and each read audited as `DisputeRead` through `Audit.Record`, and Scalar behind `Scalar:Enabled`."
+description = "Adds JwtBearer on the operations group (AD-8, AD-9), role policies, the actor mapping, `GET /api/v1/operations/disputes/<disputeId>` with every stored event type on its timeline and each read audited as `DisputeRead` through `AuditLog.Record`, and Scalar behind `Scalar:Enabled`."
 verify = "Integration tests with tokens signed by a test key cover credential pinning, roles, actor mapping, the read shape with every stored event type, and the `DisputeRead` audit entry."
 covers = ["R21", "R10", "R41", "R39"]
 after = ["3.8", "2.8", "2.5", "2.6"]

@@ -13,7 +13,7 @@ risk: high
 
 ## Description
 
-Every sign-in and sign-out writes an audit entry (`SignIn`, `SignOut`) through one new Application method, `Audit.Record`, using the existing audit fields only (AD-14a, R41, NFR-SEC-10). Sign-out goes through the OpenID Connect handler's built-in `SignOutAsync` (AD-7). A deny-by-default fallback authorization policy requires an authenticated user on every endpoint that names no policy (AD-10). The security and error-shape tests also run under the Production environment. The whole-call deadline on core-banking calls is story 2.1's `TotalRequestTimeout` (AD-21), not this story's. No migration.
+Every sign-in and sign-out writes an audit entry (`SignIn`, `SignOut`) through one new Application method, `AuditLog.Record`, using the existing audit fields only (AD-14a, R41, NFR-SEC-10). Sign-out goes through the OpenID Connect handler's built-in `SignOutAsync` (AD-7). A deny-by-default fallback authorization policy requires an authenticated user on every endpoint that names no policy (AD-10). The security and error-shape tests also run under the Production environment. The whole-call deadline on core-banking calls is story 2.1's `TotalRequestTimeout` (AD-21), not this story's. No migration.
 
 ## Requirements
 
@@ -22,7 +22,7 @@ Verify: Integration tests for the sign-in and sign-out audit entries and their f
 Request inputs: none new. `GET /api/v1/bff/login` keeps `returnUrl` (at most 2,048 characters, local paths only) and `POST /api/v1/bff/logout` keeps the `__RequestVerificationToken` form field (story 2.2).
 
 1. **One method writes every audit entry** (R41, R10; NFR-SEC-10)
-   **Given** `Audit.Record(...)` in `DisputeDesk.Application/Audit/`
+   **Given** `AuditLog.Record(...)` in `DisputeDesk.Application/Audit/`
    **When** it is called with an action, a result, an actor, the caller's instant and optional customer ID and dispute ID
    **Then** it adds one `AuditLogEntries` row with exactly the existing fields (`Id` as a UUIDv7 from the instant, `OccurredAtUtc`, `Action`, `Result`, `ActorType`, `ActorId`, `CustomerId`, `DisputeId`, `TraceId` from the current activity), never reads the clock itself (AD-4), and needs no migration (AD-14, AD-14a)
    **And** `AuditAction` gains `SignIn` and `SignOut`, stored as their member names (AD-22)
@@ -30,7 +30,7 @@ Request inputs: none new. `GET /api/v1/bff/login` keeps `returnUrl` (at most 2,0
 2. **Sign-in is audited** (R41, R10; NFR-SEC-10, FR-2)
    **Given** a login completing the code flow at `/api/signin-oidc`
    **When** the OpenID Connect handler receives the ticket (`OnTicketReceived`, which `OpenIdConnectEvents` inherits from `RemoteAuthenticationEvents`, Microsoft Learn), after `OnTokenValidated` has accepted it and before the cookie handler writes the session
-   **Then** one `SignIn` entry with result `Succeeded` is written through `Audit.Record` and saved, where `Succeeded` means the code flow completed and the handler accepted the ticket (the session is written after it)
+   **Then** one `SignIn` entry with result `Succeeded` is written through `AuditLog.Record` and saved, where `Succeeded` means the code flow completed and the handler accepted the ticket (the session is written after it)
    **And** the actor type is `Customer` and the actor ID is the login's `sub` for every login; `CustomerId` is the customer ID that `CustomerLinks` holds for that `sub`, found by one query at sign-in, and null when the login is unlinked (the ticket holds no customer ID, AD-10); a test signs in one linked and one unlinked login and asserts all three fields of each entry
    **And** a callback that fails (`OnRemoteFailure`: the unverified-email and wrong-client-secret callbacks) writes no `SignIn` entry, and a session renewed by an authenticated request writes no further one
 
@@ -49,7 +49,7 @@ Request inputs: none new. `GET /api/v1/bff/login` keeps `returnUrl` (at most 2,0
 5. **Sign-out through the OIDC handler, audited** (R3, R41; FR-3, NFR-SEC-10)
    **Given** a signed-in login
    **When** it posts `POST /api/v1/bff/logout`
-   **Then** the endpoint, in this order: reads the session's ID token (`GetTokenAsync` on the cookie scheme); writes and saves one `SignOut` entry with result `Succeeded`, actor type `Customer`, actor ID the login's `sub` and `CustomerId` as in criterion 2, through `Audit.Record`; signs out of the cookie scheme, which deletes the session row, and deletes the antiforgery cookie; then calls `SignOutAsync` on the OpenID Connect scheme with `AuthenticationProperties` whose `RedirectUri` is `/` and whose `Parameters` carry the ID token, and the handler's `OnRedirectToIdentityProviderForSignOut` event sets `ProtocolMessage.IdTokenHint` from that parameter (Microsoft Learn: `AuthenticationProperties.Parameters` flow data to the handler and are never serialised; `OpenIdConnectEvents.OnRedirectToIdentityProviderForSignOut`)
+   **Then** the endpoint, in this order: signs out of the cookie scheme, which deletes the session row, and deletes the antiforgery cookie; records one `SignOut` entry with result `Succeeded`, actor type `Customer`, actor ID the login's `sub` and `CustomerId` as in criterion 2, through `AuditLog.Record` (a failed save is logged and does not stop the sign-out, criterion 6); then calls `SignOutAsync` on the OIDC scheme, whose handler adds `id_token_hint` from the session's saved ID token, `client_id`, `state` and `post_logout_redirect_uri` itself (Microsoft Learn, *Configure OpenID Connect web authentication*; AD-7)
    **And** the hand-built end-session query and the `ConfigurationManager` read in the logout endpoint are deleted; the handler builds the end-session request from discovery
    **And** a test follows the actual redirect: it goes to the fake's `end_session_endpoint` with `id_token_hint` equal to the ID token the fake issued at sign-in, `client_id`, a `state`, and `post_logout_redirect_uri` = the app origin's `/api/signout-callback-oidc` (the handler's `SignedOutCallbackPath`); a request to that callback with the returned `state` lands the browser on `/` (OpenID Connect RP-Initiated Logout 1.0, sections 2 and 3; Microsoft Learn, *Configure OpenID Connect web authentication in ASP.NET Core*, signed-out callback path)
    **And** the 2.2 sign-out behaviour holds: the session row is deleted, both cookies are cleared, a replayed old cookie gets 401, and an anonymous caller is redirected to end-session with a `state` and no `id_token_hint` and writes no audit entry
@@ -88,7 +88,7 @@ Request inputs: none new. `GET /api/v1/bff/login` keeps `returnUrl` (at most 2,0
 ## Boundaries
 
 - No migration, no new audit column, no new endpoint, no response shape change; `openapi.json` does not change.
-- Linking, dispute refusals and operations reads are audited by their own stories (6.1 to 6.3, 3.4, 5.1, 5.2); each uses `Audit.Record`. The source-rules test that only `Audit.Record` creates an audit entry is in story 3.4, the first story built after both 2.8 and 3.8.
+- Linking, dispute refusals and operations reads are audited by their own stories (6.1 to 6.3, 3.4, 5.1, 5.2); each uses `AuditLog.Record`. The source-rules test that only `AuditLog.Record` creates an audit entry is in story 3.4, the first story built after both 2.8 and 3.8.
 - The core-banking whole-call deadline is 2.1's `TotalRequestTimeout` (AD-21).
 - `AllowedHosts` is story 6.3's.
 - Failed sign-in callbacks are logged (criterion 4) but not audited; only a completed code flow writes `SignIn`.
@@ -111,13 +111,14 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Flags: high-stakes (auth).
 - Lane: M1 (parallel with 3.8 on M2; collision check below). First story of the worker-tmux trial; 4.1 follows it on M1.
 - Touches:
-  - `backend/src/DisputeDesk.Application/Audit/Audit.cs` (new)
+  - `backend/src/DisputeDesk.Application/Audit/AuditLog.cs` (new)
   - `backend/src/DisputeDesk.Contracts/Audit/AuditAction.cs`
   - `backend/src/DisputeDesk.Api/Bff/BffAuthentication.cs` (fallback policy, `OnTicketReceived`, `OnRedirectToIdentityProviderForSignOut`, the `OnRemoteFailure` log if criterion 4 needs it)
   - `backend/src/DisputeDesk.Api/Bff/BffEndpoints.cs` (`SignOutAsync` on the OIDC scheme, the hand-built end-session query deleted, `AllowAnonymous()`)
   - `backend/src/DisputeDesk.Api/Health/HealthEndpoints.cs` (`AllowAnonymous()`)
   - `backend/src/DisputeDesk.Api/Program.cs` (`AllowAnonymous()` on the OpenAPI document and Scalar)
   - `backend/tests/DisputeDesk.Api.IntegrationTests/Bff/SignInTests.cs`, `Bff/SignOutTests.cs`, `Infrastructure/FakeZitadel.cs` (end-session `state`, if needed), `Infrastructure/ApiFactory.cs` (only if the Production runs need a setting), `Infrastructure/Browser.cs` (only if a signed-in helper is needed), a new `Infrastructure/FailAuditInsertInterceptor.cs`, a new `Infrastructure/FallbackProbe.cs` (criterion 8), `Infrastructure/TelemetryCapture.cs` used unchanged, a new `Authorization/` endpoint-enumeration test file, `SecurityHeadersTests.cs`, `ProblemDetailsTests.cs`, `Transactions/TransactionsAuthorizationTests.cs`, `Disputes/RaiseDisputeAuthorizationTests.cs`
+  - `backend/tests/DisputeDesk.Api.IntegrationTests/ApiReferenceTests.cs` (Production rows signed in, plus the anonymous 401 case), `CoreBanking/CoreBankingStubFactory.cs` and a new `CoreBanking/CoreBankingStubStartTests.cs` (the test host sets its port in Kestrel's options; fix round 1)
 - Not touched: `backend/openapi.json` (no diff).
 
 ## References

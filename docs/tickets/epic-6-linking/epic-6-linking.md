@@ -59,6 +59,6 @@ R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard acce
 - Decision: 2026-10-26 — tracer bullet: story 1, Unlinked login starts linking with a uniform response and an OTP sent after the SIM-swap check; it is the thinnest path through every layer this epic touches.
 - Waits on 2.1, 2.3, 2.8, 3.2 because: 1 needs what those stories build (see its References and Description).
 - Waits on 2.4, 3.7 because: 4 needs what those stories build (see its References and Description).
-- Waits on: epic 2 (the Unlinked policy, `CustomerLinks`, the core-banking port and `Audit.Record` from story 2.8), epic 3 (`AuditLogEntries`).
+- Waits on: epic 2 (the Unlinked policy, `CustomerLinks`, the core-banking port and `AuditLog.Record` from story 2.8), epic 3 (`AuditLogEntries`).
 - Decision: 2026-10-26 — Gate 2: code in every builder-owned story of this epic is stupid simple and logical, per AGENTS.md (smallest change that meets the criteria; every abstraction earns its place).
-- Open question (from 3.1 review, 2026-10-28): this epic needs the `LoginSub`, `ClientIp` and `Details` audit columns; `AuditLogEntries` has only the columns `Audit.Record` (story 2.8) writes. Decide which story adds them and their migration (likely 6.1) before epic 6 starts.
+- Open question (from 3.1 review, 2026-10-28): this epic needs the `LoginSub`, `ClientIp` and `Details` audit columns; `AuditLogEntries` has only the columns `AuditLog.Record` (story 2.8) writes. Decide which story adds them and their migration (likely 6.1) before epic 6 starts.

@@ -121,7 +121,7 @@ Request inputs: none new. `POST /api/v1/disputes` keeps the inputs and bounds in
 ## Boundaries
 
 - No new endpoint, request input or response field; `openapi.json` does not change.
-- Raise refusals are not audited here and this story writes no audit row at all; story 3.4 owns raise and withdraw refusal auditing through `Audit.Record` (story 2.8; AD-14a).
+- Raise refusals are not audited here and this story writes no audit row at all; story 3.4 owns raise and withdraw refusal auditing through `AuditLog.Record` (story 2.8; AD-14a).
 - No `Withdraw`, `StartReview`, `Escalate`, `Resolve` or `RecordSlaWarning` method: stories 3.4, 5.2 and 5.3 add them, each using the `Apply` case and publish mapping of its type.
 - `Program.cs`, `DependencyInjection.cs`, the Bff, Health and Authorization folders, `AuditAction.cs` and `ApiFactory.cs` are not touched (collision check with 2.8).
 - `DisputesApi.cs` keeps its existing helper signatures stable (names, parameters and return types), because 2.8 runs `RaiseDisputeAuthorizationTests.cs`, which uses them, in the Production environment; 2.8 does not touch `DisputesApi.cs`.

@@ -43,7 +43,7 @@ Verify: Domain unit tests cover every FR-24 cell; integration tests cover check 
 5. **Refused and forbidden actions audited** (R21, R10; FR-25, NFR-SEC-10)
    **Given** actions refused after authentication: 403 for a missing role or no actor mapping, 404, and 409
    **When** they finish
-   **Then** the 403s are recorded as `Denied` by the authorization result handler (`IAuthorizationMiddlewareResultHandler`, AD-10) and the 404s and 409s as `Rejected` by the handlers, each one entry through `Audit.Record` with actor type, actor ID and action, and a refused resolve's outcome only in `Details.outcome` (AD-14a)
+   **Then** the 403s are recorded as `Denied` by the authorization result handler (`IAuthorizationMiddlewareResultHandler`, AD-10) and the 404s and 409s as `Rejected` by the handlers, each one entry through `AuditLog.Record` with actor type, actor ID and action, and a refused resolve's outcome only in `Details.outcome` (AD-14a)
    **And** a successful action appends its stored event (`ReviewStarted`, `DisputeEscalated` or `DisputeResolved`) and writes no audit entry (ad-009)
 
 6. **Events and customer view** (R23, R18; FR-28, NFR-API-5)
