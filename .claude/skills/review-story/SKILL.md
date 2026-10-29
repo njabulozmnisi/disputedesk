@@ -30,6 +30,10 @@ On a re-review, review only the delta since the approved version and say for eac
 
 ## Report
 
+## Known pitfalls
+
+- An invariant a design decision relies on (for example "every `Disputes` write commits with a stored event") must be enforced in code and proved by a test, not assumed (3.8).
+
 Rank findings by severity with file and line.
 
 ```json

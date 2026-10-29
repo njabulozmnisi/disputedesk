@@ -82,6 +82,8 @@ sequenceDiagram
 
 A failed stage sends the story back to its builder with the findings. After two failed attempts the builder returns `blocked` and the supervisor escalates for a decision.
 
+A fix round goes to one fresh builder, whose isolated worktree starts at the base commit, not at the story's uncommitted change. The supervisor runs `scripts/story-patch.sh <story-worktree> <base> <patch>`, which writes the change as one binary patch and fails unless the patch reproduces the worktree; the fix brief starts with `git apply --binary --exclude='docs/*' <patch>`, and the builder's worktree becomes the story worktree.
+
 ## 3. What enforces the rules
 
 Prose rules get violated, so the critical ones are tooling.

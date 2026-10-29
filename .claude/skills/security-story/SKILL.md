@@ -16,6 +16,10 @@ Run the scanners that apply and read the diff against this list.
 - **Headers:** CSP and security headers unchanged or tightened.
 - **Standards:** each security mechanism (authentication, authorization, sessions, antiforgery, crypto, secrets, input validation) uses the framework's documented form and maps to an OWASP ASVS requirement; cite both. A home-grown security mechanism where a standard exists is at least a medium finding.
 
+## Known pitfalls
+
+- A privacy test checks every private field of the record it guards, and a record holding personal data seals `ToString` (3.8).
+
 ## Report
 
 Severity per finding (high, medium, low). Any high finding is escalated for a decision before merge.
