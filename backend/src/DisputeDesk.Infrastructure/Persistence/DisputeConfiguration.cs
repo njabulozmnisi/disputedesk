@@ -39,5 +39,10 @@ public sealed class DisputeConfiguration : IEntityTypeConfiguration<Dispute>
         builder.HasIndex(dispute => dispute.SlaDueAtUtc)
             .HasDatabaseName("IX_Disputes_SlaDueAtUtc")
             .HasFilter("\"Status\" IN ('Submitted', 'UnderReview')");
+
+        // The SLA warning claim (AD-18) reads only the open disputes not yet warned. A named index, as a second index on
+        // the same column needs one (EF Core, Indexes: index name).
+        builder.HasIndex(dispute => dispute.SlaDueAtUtc, "IX_Disputes_SlaWarning")
+            .HasFilter("\"SlaWarningRaisedAtUtc\" IS NULL AND \"Status\" IN ('Submitted', 'UnderReview')");
     }
 }

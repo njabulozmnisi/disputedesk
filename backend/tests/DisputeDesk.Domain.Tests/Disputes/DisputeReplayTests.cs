@@ -59,6 +59,22 @@ public class DisputeReplayTests
     };
 
     [Fact]
+    public void Replay_StreamWithAnSlaWarning_SetsTheWarningInstantAndKeepsTheStatus()
+    {
+        Assert.Null(Dispute.Replay([RaisedEvent(), Started(2)]).SlaWarningRaisedAtUtc);
+        var warning = new SlaWarningRaised { DisputeId = DisputeId, Version = 3, OccurredAtUtc = Now.AddDays(9) };
+
+        var warned = Dispute.Replay([RaisedEvent(), Started(2), warning]);
+        var escalated = Dispute.Replay([RaisedEvent(), Started(2), warning, Escalated(4, DisputeStatus.UnderReview)]);
+
+        Assert.Equal(DisputeStatus.UnderReview, warned.Status);
+        Assert.Equal(3, warned.Version);
+        Assert.Equal(Now.AddDays(9), warned.SlaWarningRaisedAtUtc);
+        Assert.Equal(DisputeStatus.Escalated, escalated.Status);
+        Assert.Equal(Now.AddDays(9), escalated.SlaWarningRaisedAtUtc);
+    }
+
+    [Fact]
     public void Replay_ResolveStream_TakesTheOutcomeOfDisputeResolved()
     {
         Assert.Null(Dispute.Replay([RaisedEvent(), Started(2)]).Outcome);
@@ -85,8 +101,6 @@ public class DisputeReplayTests
         { "out of order", [Started(2), RaisedEvent()] },
         { "raised twice", [RaisedEvent(), RaisedEvent() with { Version = 2 }] },
         { "a type with no Apply case", [RaisedEvent(), new UnknownStoredEvent { DisputeId = DisputeId, Version = 2 }] },
-        // Story 5.3 adds RecordSlaWarning with this type's Apply case (AD-18).
-        { "an SLA warning, not applied yet", [RaisedEvent(), new SlaWarningRaised { DisputeId = DisputeId, Version = 2 }] },
     };
 
     private static DisputeRaised RaisedEvent() =>

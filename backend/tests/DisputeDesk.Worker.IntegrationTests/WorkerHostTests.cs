@@ -1,4 +1,6 @@
 using DisputeDesk.Application.Abstractions;
+using DisputeDesk.Infrastructure.Outbox;
+using DisputeDesk.Worker.Sla;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -12,7 +14,10 @@ public class WorkerHostTests
     public async Task WorkerHost_StartThenStop_CompletesCleanly()
     {
         // Development turns on ValidateOnBuild and ValidateScopes, so a broken registration fails here.
-        using IHost host = WorkerHost.CreateBuilder(["--environment", "Development"]).Build();
+        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development"]);
+        // No SLA sweep: a started host would escalate the due disputes of whatever database its configuration names.
+        builder.Services.Remove(builder.Services.Single(service => service.ImplementationType == typeof(SlaSweep)));
+        using IHost host = builder.Build();
         IHostApplicationLifetime lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
         using var stopTimeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         stopTimeout.CancelAfter(ShutdownBudget);
@@ -35,5 +40,15 @@ public class WorkerHostTests
         Assert.Same(TimeProvider.System, host.Services.GetRequiredService<TimeProvider>());
         using IServiceScope scope = host.Services.CreateScope();
         Assert.NotNull(scope.ServiceProvider.GetService<IAppDbContext>());
+    }
+
+    [Fact]
+    public void CreateBuilder_Build_RunsTheOutboxRelayAndTheSlaSweep()
+    {
+        using IHost host = WorkerHost.CreateBuilder(["--environment", "Development"]).Build();
+
+        Assert.Equal(
+            [typeof(OutboxRelay), typeof(SlaSweep)],
+            host.Services.GetServices<IHostedService>().Select(service => service.GetType()).Where(type => type.Namespace?.StartsWith("DisputeDesk.", StringComparison.Ordinal) == true));
     }
 }

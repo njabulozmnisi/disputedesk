@@ -284,11 +284,12 @@ services:
     # AD-25: the host's 30-second shutdown timeout finishes the record in flight; Compose waits 5 s more before SIGKILL.
     stop_grace_period: 35s
     # AD-25: the relay touches its file every loop (at least every 10 s); older than 30 s means a hung relay.
-    # The relay writes it under the system temporary directory, so the worker must not set TMPDIR.
-    # Story 5.3 adds the sweep's file.
+    # The SLA sweep touches its own every 30-second loop and after each batch; older than 90 s (three missed loops,
+    # decided 2026-10-27) means a hung sweep. Both write under the system temporary directory, so the worker must not
+    # set TMPDIR.
     healthcheck:
       test: ["CMD", "/usr/local/bin/busybox", "sh", "-c",
-             "test $$(( $$(/usr/local/bin/busybox date +%s) - $$(/usr/local/bin/busybox stat -c %Y /tmp/heartbeat-relay) )) -le 30"]
+             "now=$$(/usr/local/bin/busybox date +%s) && test $$(( now - $$(/usr/local/bin/busybox stat -c %Y /tmp/heartbeat-relay) )) -le 30 && test $$(( now - $$(/usr/local/bin/busybox stat -c %Y /tmp/heartbeat-sweep) )) -le 90"]
       interval: 10s
       timeout: 5s
       retries: 3

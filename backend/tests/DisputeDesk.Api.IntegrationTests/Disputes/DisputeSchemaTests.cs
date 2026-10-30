@@ -116,8 +116,9 @@ public class DisputeSchemaTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task Disputes_Indexes_AreTheUniqueTransactionIndexAndThePartialSlaIndex()
+    public async Task Disputes_Indexes_AreTheUniqueTransactionIndexAndThePartialSlaAndSlaWarningIndexes()
     {
+        // Story 5.3 adds IX_Disputes_SlaWarning, the warning claim's partial index (AD-18).
         await using AppDbContext db = postgres.CreateDbContext();
 
         List<string> definitions = await db.Database
@@ -127,6 +128,7 @@ public class DisputeSchemaTests(PostgresFixture postgres)
         Assert.Equal(
             [
                 "CREATE INDEX \"IX_Disputes_SlaDueAtUtc\" ON public.\"Disputes\" USING btree (\"SlaDueAtUtc\") WHERE (\"Status\" = ANY (ARRAY['Submitted'::text, 'UnderReview'::text]))",
+                "CREATE INDEX \"IX_Disputes_SlaWarning\" ON public.\"Disputes\" USING btree (\"SlaDueAtUtc\") WHERE ((\"SlaWarningRaisedAtUtc\" IS NULL) AND (\"Status\" = ANY (ARRAY['Submitted'::text, 'UnderReview'::text])))",
                 "CREATE UNIQUE INDEX \"PK_Disputes\" ON public.\"Disputes\" USING btree (\"Id\")",
                 "CREATE UNIQUE INDEX \"UQ_Disputes_AccountRef_TransactionId\" ON public.\"Disputes\" USING btree (\"AccountRef\", \"TransactionId\")",
             ],

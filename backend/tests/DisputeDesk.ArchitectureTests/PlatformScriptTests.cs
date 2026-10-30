@@ -326,6 +326,23 @@ public partial class PlatformScriptTests
         Assert.Contains("fixtures/local.json", script, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("heartbeat-relay", 30)] // AD-25: the relay's loop is at most 10 seconds
+    [InlineData("heartbeat-sweep", 90)] // story 5.3 AC7: three missed 30-second sweep loops (decided 2026-10-27)
+    public void Compose_WorkerHealthCheck_FailsWhenTheHeartbeatIsOlderThanItsThreshold(string file, int seconds)
+    {
+        // The worker's health check compares each file's modification time with now, in seconds, as one shell test.
+        Match check = Regex.Match(
+            Compose,
+            @"\$\$\(\( now - \$\$\(/usr/local/bin/busybox stat -c %Y /tmp/" + Regex.Escape(file) + @"\) \)\) -le (?<seconds>\d+)",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(1));
+
+        Assert.True(check.Success, $"The worker's health check does not test /tmp/{file}.");
+        Assert.Equal(seconds, int.Parse(check.Groups["seconds"].Value, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Contains("now=$$(/usr/local/bin/busybox date +%s) && test", Compose, StringComparison.Ordinal);
+    }
+
     // From the "is the file current" test up to the log line it ends with.
     [GeneratedRegex(@"if \[ -s ""\$OUT_FILE"" \][^;]*;[^\n]*then\s*\n\s*log ""\$OUT_FILE is current; secrets not rotated""")]
     private static partial Regex CurrentCheck();
