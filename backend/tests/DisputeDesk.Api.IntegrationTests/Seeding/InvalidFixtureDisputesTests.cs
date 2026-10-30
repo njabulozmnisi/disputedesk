@@ -29,8 +29,10 @@ public sealed class InvalidFixtureDisputesTests(PostgresFixture postgres) : IDis
         { "a note on an escalate", "disputes[2]" },
         { "hoursAfterRaise on a dispute that is not the SLA demo", "disputes[1]" },
         { "hoursAfterRaise beside daysAgo and time", "disputes[6]" },
-        { "no SLA demo dispute", "disputes" },
-        { "a second SLA demo dispute", "disputes" },
+        // No position: the count is checked over all entries. The count in the message keeps another entry's failure,
+        // which also starts "Fixture disputes", from passing for it.
+        { "no SLA demo dispute", "disputes cannot be seeded: 0 entries" },
+        { "a second SLA demo dispute", "disputes cannot be seeded: 2 entries" },
     };
 
     // The shape faults on a later action: planning finds them, so no fixture dispute is written before the seed fails.

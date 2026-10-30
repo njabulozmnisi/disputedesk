@@ -8,8 +8,10 @@
 # to start; server_name takes no variables, so there it would stay a literal name that no request matches.
 #
 # This is the edge: upstreams get a fixed Host for their origin (never the client's raw Host, which only has to match
-# server_name, port aside) and X-Forwarded-For is the peer address, not a client-supplied chain. This is the local
-# edge; trusting CloudFront's client address and scheme in AWS is story 7.4.
+# server_name, port aside) and X-Forwarded-For is the peer address, not a client-supplied chain. A client's RFC 7239
+# Forwarded header is dropped (an empty proxy_set_header value is not passed), because Zitadel resolves its instance
+# from it; each proxied location says so itself, since a location that sets any proxy_set_header inherits none. This
+# is the local edge; trusting CloudFront's client address and scheme in AWS is story 7.4.
 worker_processes 1;
 pid /tmp/nginx.pid;
 
@@ -79,6 +81,7 @@ http {
       proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
     }
 
     # Everything else under /api/ keeps its path: the api serves /api/v1/... itself.
@@ -91,6 +94,7 @@ http {
       proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
     }
 
     # Scalar and the runtime OpenAPI document, served by the api when Scalar:Enabled is true and its 401 otherwise
@@ -107,6 +111,7 @@ http {
       proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
     }
 
     location /scalar/ {
@@ -119,6 +124,7 @@ http {
       proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
     }
 
     location = /openapi/v1.json {
@@ -131,6 +137,7 @@ http {
       proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
     }
 
     # The SPA's telemetry, same origin so the CSP keeps connect-src 'self' (AD-29). OTLP/HTTP exporters only POST
@@ -153,6 +160,7 @@ http {
       proxy_set_header Cookie "";
       proxy_set_header Authorization "";
       proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
     }
   }
 
@@ -174,6 +182,7 @@ http {
       proxy_set_header X-Forwarded-Host ${GATEWAY_AUTH_HOST};
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
     }
 
     location = / { return 302 /ui/v2/login/; }
@@ -187,6 +196,7 @@ http {
       proxy_set_header X-Forwarded-Host ${GATEWAY_AUTH_HOST};
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
       proxy_buffering off;
     }
   }

@@ -45,7 +45,8 @@ public class SnapshotPrecisionTests(PostgresFixture postgres)
             await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, coreBanking.BaseUrl, now);
             using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
             JsonElement created = await browser.RaiseCreatedAsync(DisputesApi.Body());
-            // The outage: core banking stops here. The finally below stops it again if anything before this line fails.
+            // The outage: core banking stops here. The finally below always disposes it too; disposing twice is harmless, and
+            // it stops core banking when a line before this one fails.
             await coreBanking.DisposeAsync();
 
             HttpResponseMessage response = await browser.ListDisputesAsync();

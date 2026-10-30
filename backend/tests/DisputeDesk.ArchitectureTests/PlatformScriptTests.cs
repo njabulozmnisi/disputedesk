@@ -257,19 +257,37 @@ public partial class PlatformScriptTests
     public void GatewayTemplate_IdentityOriginAccessLog_RecordsThePathWithoutTheQuery()
     {
         // 6.6 AC2 (AD-20, ASVS 5.0 V14.2.1): the end-session GET carries the ID token as id_token_hint in its query.
-        string template = File.ReadAllText(Path.Combine(SourceRoots.Repo, "infra/nginx/templates/nginx.conf.template"));
-        int start = template.IndexOf("server_name ${GATEWAY_AUTH_SERVER_NAME};", StringComparison.Ordinal);
-        // The identity server block, up to its closing brace (two-space indent), its locations included.
-        string identityServer = template[start..template.IndexOf("\n  }\n", start, StringComparison.Ordinal)];
+        string template = GatewayTemplate();
+        int serverName = template.IndexOf("server_name ${GATEWAY_AUTH_SERVER_NAME};", StringComparison.Ordinal);
+        // The identity server block, from its `server {` to its closing brace (two-space indent), its locations included.
+        int start = template.LastIndexOf("\n  server {", serverName, StringComparison.Ordinal);
+        string identityServer = template[start..template.IndexOf("\n  }\n", serverName, StringComparison.Ordinal)];
 
         // Every access_log in the block, at server or location level, so a location cannot log with another format.
         string[] formats = [.. AccessLog().Matches(identityServer).Select(match => match.Groups["format"].Value)];
         string definition = LogFormat("identity").Match(template).Groups["definition"].Value;
 
-        Assert.NotEmpty(formats);
+        // The server-level line (four-space indent) covers every location, so one location's own line is not enough.
+        Assert.Matches(ServerLevelIdentityAccessLog(), identityServer);
         Assert.All(formats, format => Assert.Equal("identity", format));
         Assert.Contains("$uri", definition, StringComparison.Ordinal);
         Assert.DoesNotMatch(QueryVariables(), definition);
+    }
+
+    [Fact]
+    public void GatewayTemplate_ProxiedLocations_DropTheClientsForwardedHeader()
+    {
+        // 6.6 QA O1: Zitadel resolves its instance from an RFC 7239 Forwarded header, so a client's own must not reach an
+        // upstream. An empty proxy_set_header value is not passed on, and a location that sets any proxy_set_header
+        // inherits none from its server (nginx, proxy_set_header), so each proxied location drops it itself.
+        string template = GatewayTemplate();
+        string[] proxied = [.. MultiLineLocation().Matches(template)
+            .Select(match => match.Value)
+            .Where(block => block.Contains("proxy_pass ", StringComparison.Ordinal))];
+
+        // Every proxy_pass in the file sits in one of the blocks found, so none is missed.
+        Assert.Equal(ProxyPass().Count(template), proxied.Length);
+        Assert.All(proxied, block => Assert.Contains("\n      proxy_set_header Forwarded \"\";\n", block, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -387,6 +405,20 @@ public partial class PlatformScriptTests
     /// <summary>An access_log directive anywhere on a line; the format is empty when none is named (nginx's combined).</summary>
     [GeneratedRegex(@"\baccess_log\s+(?<path>[^\s;]+)\s*(?<format>[^\s;]*)[^;]*;")]
     private static partial Regex AccessLog();
+
+    /// <summary>A server-level access_log (four-space indent) with the identity format.</summary>
+    [GeneratedRegex(@"\n    access_log\s+[^\s;]+\s+identity\s*;")]
+    private static partial Regex ServerLevelIdentityAccessLog();
+
+    /// <summary>A location written over several lines: from its opening line to its closing brace (four-space indent).</summary>
+    [GeneratedRegex(@"^    location [^\n]*\{\n.*?^    \}$", RegexOptions.Multiline | RegexOptions.Singleline)]
+    private static partial Regex MultiLineLocation();
+
+    [GeneratedRegex(@"\bproxy_pass\s")]
+    private static partial Regex ProxyPass();
+
+    private static string GatewayTemplate() =>
+        File.ReadAllText(Path.Combine(SourceRoots.Repo, "infra/nginx/templates/nginx.conf.template"));
 
     /// <summary>The definition of a log_format: its quoted strings, up to the semicolon.</summary>
     private static Regex LogFormat(string name) => new(@"\n  log_format\s+" + Regex.Escape(name) + @"\s+(?<definition>[^;]+);", RegexOptions.None, TimeSpan.FromSeconds(1));
