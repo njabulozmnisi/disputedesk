@@ -17,6 +17,9 @@ public sealed class LinkingMetrics
         _events = meter.CreateCounter<long>("disputedesk.linking.events", description: "Linking events, by event.");
     }
 
-    /// <summary>Counts a start the Api accepted with 202.</summary>
+    /// <summary>Counts a well-formed start the Api saved, answered 202 or, on a full queue, 429.</summary>
     public void RecordStarted() => _events.Add(1, new KeyValuePair<string, object?>("event", "started"));
+
+    /// <summary>Counts a job stopped by the hourly send cap.</summary>
+    public void RecordCapped() => _events.Add(1, new KeyValuePair<string, object?>("event", "capped"));
 }

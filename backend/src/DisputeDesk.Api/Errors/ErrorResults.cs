@@ -36,6 +36,7 @@ public static class ErrorResults
         ErrorKind.ActionNotAllowed or ErrorKind.Conflict => StatusCodes.Status409Conflict,
         ErrorKind.BusinessRule => StatusCodes.Status422UnprocessableEntity,
         ErrorKind.Unavailable => StatusCodes.Status503ServiceUnavailable,
+        ErrorKind.RateLimited => StatusCodes.Status429TooManyRequests,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unmapped error kind."),
     };
 }

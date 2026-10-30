@@ -25,4 +25,7 @@ public enum ErrorKind
 
     /// <summary>A dependency the request needs is unavailable (503).</summary>
     Unavailable,
+
+    /// <summary>Too many requests are waiting, such as a full linking queue (429).</summary>
+    RateLimited,
 }

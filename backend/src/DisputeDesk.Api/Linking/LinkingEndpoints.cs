@@ -1,6 +1,8 @@
 using System.Net;
+using DisputeDesk.Api.Errors;
 using DisputeDesk.Application.Linking.StartLinking;
 using DisputeDesk.Contracts.Linking;
+using DisputeDesk.Domain;
 using DisputeDesk.Infrastructure.Linking;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -15,7 +17,8 @@ public static class LinkingEndpoints
     public static RouteGroupBuilder MapLinkingStart(this RouteGroupBuilder linkingRoutes)
     {
         linkingRoutes.MapPost("/start", StartAsync)
-            .ProducesValidationProblem();
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
         return linkingRoutes;
     }
 
@@ -23,13 +26,13 @@ public static class LinkingEndpoints
     /// Starts linking the signed-in, unlinked login to the customer holding this ID number and account number. Every
     /// well-formed start gets 202 with an empty body, whether or not the details match a customer: the checks and the OTP
     /// to the cellphone on the bank's record happen afterwards. 400 <c>validation</c> names the field and never repeats
-    /// its value.
+    /// its value. 429 <c>rate-limited</c>, with no <c>Retry-After</c>, when the linking queue is full, whatever the details.
     /// </summary>
     /// <remarks>
     /// The checks run 401, 403 (<c>already-linked</c> for a linked login), then 400 (AD-8): the <c>Unlinked</c> policy
     /// runs in the authorization middleware, before binding. A start replaces the login's earlier one.
     /// </remarks>
-    private static async Task<Accepted> StartAsync(
+    private static async Task<Results<Accepted, ProblemHttpResult>> StartAsync(
         StartLinkingRequest request,
         StartLinkingHandler handler,
         LinkingMetrics metrics,
@@ -38,9 +41,9 @@ public static class LinkingEndpoints
     {
         // The Unlinked policy has checked this login; the handler takes its sub, never the principal (AD-10).
         string loginSub = http.User.FindFirst("sub")?.Value ?? throw new InvalidOperationException("The signed-in principal has no sub claim.");
-        await handler.HandleAsync(request, loginSub, ClientIp(http), cancellationToken);
+        Result started = await handler.HandleAsync(request, loginSub, ClientIp(http), cancellationToken);
         metrics.RecordStarted();
-        return TypedResults.Accepted((string?)null);
+        return started.IsSuccess ? TypedResults.Accepted((string?)null) : started.Error.ToProblem();
     }
 
     /// <summary>

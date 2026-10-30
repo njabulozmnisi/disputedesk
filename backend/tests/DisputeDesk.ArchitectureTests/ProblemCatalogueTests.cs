@@ -119,7 +119,7 @@ public partial class ProblemCatalogueTests
         projects.SelectMany(project => Directory.EnumerateFiles(Path.Combine(SourceRoots.Src, project), "*.cs", SearchOption.AllDirectories))
             .Where(file => !SourceRoots.IsBuildOutput(file));
 
-    [GeneratedRegex(@"Error\.(?:NotFound|Validation|Forbidden|ActionNotAllowed|Conflict|BusinessRule|Unavailable)\(\s*(?<code>[^,)]*)")]
+    [GeneratedRegex(@"Error\.(?:NotFound|Validation|Forbidden|ActionNotAllowed|Conflict|BusinessRule|Unavailable|RateLimited)\(\s*(?<code>[^,)]*)")]
     private static partial Regex ErrorFactoryCall();
 
     /// <summary>A <c>- Status: </c> line that starts with a 3-digit HTTP status (<c>409</c>, <c>400, or another 4xx…</c>).</summary>

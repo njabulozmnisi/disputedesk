@@ -14,6 +14,9 @@ public sealed class FailAuditInsertInterceptor : DbCommandInterceptor
     /// <summary>While armed, every audit insert fails. A test disarms it to let an earlier step through.</summary>
     public bool Armed { get; set; } = true;
 
+    /// <summary>When set, only an audit insert of this action fails, such as a second save beside a first that must pass.</summary>
+    public string? OnlyAction { get; init; }
+
     public int Failed { get; private set; }
 
     public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
@@ -33,6 +36,11 @@ public sealed class FailAuditInsertInterceptor : DbCommandInterceptor
     private void Break(DbCommand command)
     {
         if (!Armed || !command.CommandText.Contains(AuditInsert, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (OnlyAction is not null && !command.Parameters.Cast<DbParameter>().Any(parameter => Equals(parameter.Value, OnlyAction)))
         {
             return;
         }

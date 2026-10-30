@@ -166,6 +166,7 @@ public class ProblemDetailsTests(PostgresFixture postgres)
         { Error.Conflict("already-disputed", "This transaction already has an open dispute."), StatusCodes.Status409Conflict },
         { Error.BusinessRule("not-disputable", "The transaction is older than 90 days."), StatusCodes.Status422UnprocessableEntity },
         { Error.Unavailable("core-banking-unavailable", "Core banking is unavailable."), StatusCodes.Status503ServiceUnavailable },
+        { Error.RateLimited("rate-limited", "Too many linking starts are waiting."), StatusCodes.Status429TooManyRequests },
     };
 
     public static TheoryData<Error, int, string> ErrorsAndStatusesInEachEnvironment()

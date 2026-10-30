@@ -44,4 +44,6 @@ public sealed record Error(ErrorKind Kind, string Code, string Message)
         new(ErrorKind.BusinessRule, code, message) { Extensions = new Dictionary<string, object?> { [extension] = value } };
 
     public static Error Unavailable(string code, string message) => new(ErrorKind.Unavailable, code, message);
+
+    public static Error RateLimited(string code, string message) => new(ErrorKind.RateLimited, code, message);
 }

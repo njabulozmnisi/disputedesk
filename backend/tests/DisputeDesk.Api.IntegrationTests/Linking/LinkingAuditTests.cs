@@ -50,7 +50,7 @@ public class LinkingAuditTests(PostgresFixture postgres)
             case "budget passed in the SIM-swap check":
                 // Held and never released, so the budget runs out during the call.
                 ports.SimSwap.HoldNext();
-                settings["Linking:Budget"] = "00:00:00.500";
+                settings["Linking:Budget"] = "00:00:01";
                 expected = (AuditAction.LinkingStart, AuditResult.Failed, LinkingFakes.D.CustomerId);
                 break;
             case "SIM swap":

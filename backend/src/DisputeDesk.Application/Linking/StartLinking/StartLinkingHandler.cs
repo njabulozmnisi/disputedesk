@@ -5,6 +5,7 @@ using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Application.Audit;
 using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Linking;
+using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -16,12 +17,13 @@ namespace DisputeDesk.Application.Linking.StartLinking;
 /// details are, it does the same writes and nothing else: it supersedes the login's current challenge, inserts a blank
 /// one and records <c>LinkingStart</c>, in one save, then queues the job that checks the details off the request path.
 /// The request never calls core banking, the SIM-swap check or the SMS sender, so neither its response nor its timing
-/// can tell whether the details matched (OWASP Forgot Password Cheat Sheet).
+/// can tell whether the details matched (OWASP Forgot Password Cheat Sheet). A full queue answers
+/// <see cref="LinkingErrors.QueueFull"/> to every start alike.
 /// </summary>
 public sealed partial class StartLinkingHandler(
     IAppDbContext db, TimeProvider time, ChannelWriter<LinkingJob> jobs, ILogger<StartLinkingHandler> logger)
 {
-    public async Task HandleAsync(StartLinkingRequest request, string loginSub, IPAddress? clientIp, CancellationToken cancellationToken)
+    public async Task<Result> HandleAsync(StartLinkingRequest request, string loginSub, IPAddress? clientIp, CancellationToken cancellationToken)
     {
         // The one clock reading (AD-4).
         DateTimeOffset now = time.GetUtcNow();
@@ -47,17 +49,40 @@ public sealed partial class StartLinkingHandler(
         {
             // A parallel start by the same login committed first. Nothing of this one was written, and that start's job
             // does the checks, so this one gets the same 202 and queues nothing.
-            return;
+            return Result.Success();
         }
 
+        // The challenge is saved before the job is queued, so a job never runs ahead of its row.
         var job = new LinkingJob(challenge.Id, loginSub, clientIp, Activity.Current?.Context ?? default, request.IdNumber, request.AccountNumber);
-        if (!jobs.TryWrite(job))
+        if (jobs.TryWrite(job))
         {
-            // shortcut: a full queue answers 202, until story 6.5 adds the audited 429
-            LogQueueFull(logger, challenge.Id);
+            return Result.Success();
+        }
+
+        // A full bounded channel refuses the write rather than wait (System.Threading.Channels, bounded channels). The
+        // blank challenge stays current and unclaimed, so it can only ever verify as a wrong code.
+        await RecordQueueFullAsync(challenge.Id, loginSub, clientIp, now);
+        return LinkingErrors.QueueFull;
+    }
+
+    /// <summary>
+    /// Records <c>LinkingRateLimited</c> in a second save, which runs to completion whatever is cancelled. A failed save
+    /// is logged with only the challenge ID and the action; the start still answers the same 429.
+    /// </summary>
+    private async Task RecordQueueFullAsync(Guid challengeId, string loginSub, IPAddress? clientIp, DateTimeOffset now)
+    {
+        AuditLog.Record(db, AuditAction.LinkingRateLimited, AuditResult.Rejected, new Actor(ActorType.Customer, loginSub), now, clientIp: clientIp);
+        try
+        {
+            await db.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            // The exception is not logged: a database error can quote the row, which holds the login and the address.
+            LogAuditFailed(logger, challengeId, AuditAction.LinkingRateLimited);
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The linking queue is full; challenge {ChallengeId} was not queued")]
-    private static partial void LogQueueFull(ILogger logger, Guid challengeId);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Saving the {Action} audit entry of linking challenge {ChallengeId} failed")]
+    private static partial void LogAuditFailed(ILogger logger, Guid challengeId, AuditAction action);
 }

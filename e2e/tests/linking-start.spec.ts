@@ -1,4 +1,5 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { request as httpRequest } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
@@ -42,7 +43,10 @@ let topicBaseline = 0;
 const startedAt = new Date().toISOString();
 
 async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
+  return signInAs(browser, fixtureLogin(loginKey));
+}
+
+async function signInAs(browser: Browser, login: { username: string; password: string }): Promise<BrowserContext> {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto('/api/v1/bff/login');
@@ -362,4 +366,295 @@ test('criterion 8: no ID number, account number, cellphone or OTP in any table, 
   for (const secret of secrets) expect(topic.includes(secret), 'topic holds a secret').toBe(false);
   expect(topicRecords().length).toBe(topicBaseline);
   expect(mailBaseline).toBeGreaterThanOrEqual(0);
+});
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Story 6.5: the send cap, the parallel cap, an unexpected stop, the budget and the full queue, on the real stack.
+// Runs after story 6.1's tests above, in the same serial run, on a fresh database: customer D then holds exactly the two
+// delivered sends those tests made, which is the "2 sends in the last hour" state of criterion 2. The cap lasts an hour,
+// so a re-run needs a fresh stack (docker compose down -v).
+//
+// Customer D has no login of its own, and only customer C's login is unlinked, so this block creates eight more
+// throwaway logins in Zitadel (the IAM_OWNER token is read from its volume and never printed) and signs each in.
+// The "held job" of the story's parallel test is held here with Postgres: a session-level advisory lock on D's key pair
+// (the same key the job's transaction takes) keeps every D job waiting on its first statement.
+//   Full queue and budget need a small queue and a short budget, set outside the tree:
+//   E2E_LINKING_QUEUE_CAPACITY (the Api's Linking:QueueCapacity) and E2E_LINKING_BUDGET_SECONDS (Linking:Budget);
+//   those two tests skip when the variables are not set.
+// ---------------------------------------------------------------------------------------------------------------------
+const queueCapacity = Number(process.env.E2E_LINKING_QUEUE_CAPACITY ?? 0);
+const budgetSeconds = Number(process.env.E2E_LINKING_BUDGET_SECONDS ?? 0);
+const jobsAtOnce = 4; // LinkingJobService.JobsAtOnce
+const lockNamespace = 6005; // OtpSends.CustomerLockNamespace
+const poolSize = 8;
+
+type PoolLogin = { username: string; password: string; sub: string; context: BrowserContext; token: string };
+const pool: PoolLogin[] = [];
+const secondKey = `(('x' || substr(encode(sha256(convert_to('${customerD.customerId}', 'UTF8')), 'hex'), 1, 8))::bit(32)::int)`;
+
+function zitadel(path: string, token: string, body: unknown, method = 'POST'): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? '' : JSON.stringify(body);
+    const call = httpRequest(
+      { host: '127.0.0.1', port: 8080, path, method, timeout: 30_000,
+        headers: { Host: 'auth.localhost:8080', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', 'Content-Length': Buffer.byteLength(payload) } },
+      (response) => {
+        let text = '';
+        response.on('data', (chunk) => (text += chunk));
+        response.on('end', () => resolve({ status: response.statusCode ?? 0, text }));
+      });
+    call.on('error', reject);
+    call.end(payload);
+  });
+}
+
+/** Creates the throwaway logins (email verified, fixed user IDs) with the provisioner's token, which is read from the volume and never printed. */
+async function createPoolLogins(): Promise<{ username: string; password: string; sub: string }[]> {
+  const image = execFileSync('docker', ['inspect', 'disputedesk-postgres-1', '--format', '{{.Config.Image}}'], { encoding: 'utf8' }).trim();
+  const adminToken = execFileSync('docker', ['run', '--rm', '--entrypoint', 'cat', '-v', 'disputedesk_zitadel-bootstrap:/b:ro', image, '/b/admin.pat'], { encoding: 'utf8' }).trim();
+  const me = await zitadel('/auth/v1/users/me', adminToken, undefined, 'GET');
+  const organizationId = (JSON.parse(me.text) as { user: { details: { resourceOwner: string } } }).user.details.resourceOwner;
+  const logins = [];
+  for (let index = 1; index <= poolSize; index++) {
+    const login = { username: `qa65.login${index}`, password: `Qa-Only-65-Login-${index}!`, sub: `qa65-login-${index}` };
+    const created = await zitadel('/zitadel.user.v2.UserService/CreateUser', adminToken, {
+      organizationId, userId: login.sub, username: login.username,
+      human: { profile: { givenName: 'Qa', familyName: `Login${index}`, preferredLanguage: 'en' }, email: { email: `${login.username}@disputedesk.test`, isVerified: true }, password: { password: login.password, changeRequired: false } },
+    });
+    // A re-run on the same stack finds the user: Zitadel answers 400 AlreadyExisting.
+    expect(created.status === 200 || created.text.includes('AlreadyExisting'), `creating ${login.username}`).toBe(true);
+    logins.push(login);
+  }
+  return logins;
+}
+
+/** Holds D's customer lock from a read-only session until released (or this process ends). */
+function holdCustomerLock(): { release: () => Promise<void> } {
+  const child: ChildProcessWithoutNullStreams = spawn('docker',
+    ['exec', '-i', '-e', `PGPASSWORD=${process.env.QA_DB_PASSWORD ?? 'dev-only-qa-db'}`, 'disputedesk-postgres-1', 'psql', '-h', 'localhost', '-U', 'qa_readonly', '-d', 'disputedesk', '-At'],
+    { stdio: 'pipe' });
+  child.stdin.write(`select pg_advisory_lock(${lockNamespace}, ${secondKey});\n`);
+  return {
+    release: () => new Promise((resolve) => {
+      child.on('close', () => resolve());
+      child.stdin.end(); // ends the session, which releases the lock
+    }),
+  };
+}
+
+const lockWaiters = () => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and not granted`));
+const lockHolders = () => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and granted and classid = ${lockNamespace}`));
+async function until(description: string, check: () => boolean | Promise<boolean>, seconds = 40): Promise<void> {
+  const deadline = Date.now() + seconds * 1000;
+  while (Date.now() < deadline) {
+    if (await check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  throw new Error(`timed out waiting for ${description}`);
+}
+async function untilLockHeld(): Promise<void> {
+  await until('the lock holder', () => lockHolders() === 1);
+}
+
+/** A start without the pacing delay, for the parallel starts. */
+async function startAt(login: PoolLogin, body: string): Promise<Observed> {
+  const response = await login.context.request.post(startPath, { data: body, headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': login.token }, maxRedirects: 0 });
+  return { status: response.status(), headers: response.headers(), text: await response.text() };
+}
+
+const sendsToD = () => Number(sql(`select count(*) from "LinkingChallenges" where "CustomerId" = '${customerD.customerId}' and "OtpSentAtUtc" > now() - interval '1 hour'`));
+const auditSummary = (skip: string) => sql(`select "Action" || '|' || "Result" || '|' || coalesce("CustomerId", 'null') || '|' || ("ClientIp" is not null)::text || '|' || "ActorId" from "AuditLogEntries"
+  where "OccurredAtUtc" > '${skip}' and "Action" like 'Linking%' order by "OccurredAtUtc"`).split('\n').filter(Boolean);
+const count = (rows: string[], prefix: string) => rows.filter((row) => row.startsWith(prefix)).length;
+const dPrefix = (action: string, result: string) => `${action}|${result}|${customerD.customerId}|true|`;
+const tail = (rows: string[], sub: string) => rows.filter((row) => row.endsWith(`|${sub}`));
+
+test.describe('story 6.5', () => {
+  test.beforeAll(async ({ browser }) => {
+    test.setTimeout(300_000);
+    for (const login of await createPoolLogins()) {
+      const context = await signInAs(browser, login);
+      pool.push({ ...login, context, token: await antiforgeryToken(context.request) });
+    }
+  });
+
+  test.afterAll(async () => {
+    for (const login of pool) await login.context.close();
+  });
+
+  test('criterion 1, 2: with D at 2 delivered sends, 6 logins start in parallel while the lock is held and the SMS sender is down: exactly 1 claim (its send fails), 5 capped, and the failed claim still holds its slot', async () => {
+    expect(sendsToD(), 'D starts this block with the two delivered sends of the 6.1 tests').toBe(2);
+    const deliveredBefore = sql(`select count(*) from "LinkingChallenges" where "CustomerId" = '${customerD.customerId}' and "OtpHmac" is not null`);
+    expect(deliveredBefore).toBe('2');
+    const mark = auditMark();
+    execFileSync('docker', ['stop', 'disputedesk-mailpit-1'], { encoding: 'utf8' });
+    try {
+      const holder = holdCustomerLock();
+      await untilLockHeld();
+      const results = await Promise.all(pool.slice(0, 6).map((login) => startAt(login, details(customerD))));
+      for (const result of results) {
+        expect(result.status).toBe(202);
+        expect(result.text).toBe('');
+      }
+      // Every job reaches the lock (4 at once; the other 2 wait in the queue) and none has counted or claimed yet.
+      await until('4 jobs waiting on the lock', () => lockWaiters() === jobsAtOnce);
+      expect(sendsToD(), 'nothing is claimed while the lock is held').toBe(2);
+      await holder.release();
+      await until('6 job stops', () => auditSummary(mark).filter((row) => !row.startsWith('LinkingStart|')).length === 6);
+    } finally {
+      execFileSync('docker', ['start', 'disputedesk-mailpit-1'], { encoding: 'utf8' });
+    }
+
+    const rows = auditSummary(mark);
+    expect(count(rows, 'LinkingStart|Succeeded|null|true|')).toBe(6);
+    expect(count(rows, dPrefix('LinkingOtpSent', 'Failed'))).toBe(1);
+    expect(count(rows, dPrefix('LinkingSendCapped', 'Rejected'))).toBe(5);
+    expect(count(rows, dPrefix('LinkingOtpSent', 'Succeeded'))).toBe(0);
+    // Six different logins, one stop each.
+    const stopActors = rows.filter((row) => !row.startsWith('LinkingStart|')).map((row) => row.split('|')[4]);
+    expect(new Set(stopActors).size).toBe(6);
+    // The failed claim: stamped (holds its slot), OTP cleared (can never verify, no lifetime).
+    expect(sendsToD(), '2 delivered + 1 failed claim').toBe(3);
+    expect(sql(`select count(*) from "LinkingChallenges" where "CustomerId" = '${customerD.customerId}' and "OtpSentAtUtc" > now() - interval '1 hour' and "OtpHmac" is null and "ExpiresAtUtc" is null`)).toBe('1');
+    expect(sql(`select count(*) from "LinkingChallenges" where "CustomerId" = '${customerD.customerId}' and "OtpHmac" is not null`)).toBe('2');
+    // The five capped challenges stayed blank.
+    expect(sql(`select count(*) from "LinkingChallenges" where "LoginSub" like 'qa65-login-%' and "CustomerId" is null and "OtpSentAtUtc" is null and "OtpHmac" is null and "SupersededAtUtc" is null`)).toBe('5');
+    await until('mailpit', async () => (await fetch(`${mailpit}/api/v1/info`).catch(() => null))?.ok === true);
+    expect((await smsTo(customerD.cellphone)).length, 'the sender was down, so no SMS exists for D').toBe(0);
+  });
+
+  test('criterion 1: a 4th start from another login, and one from customer C\'s login, get the identical 202, no SMS, and audit LinkingSendCapped with D\'s CustomerId', async () => {
+    expect(sendsToD()).toBe(3);
+    const mark = auditMark();
+    const smsBefore = (await smsMessages()).length;
+    const challengesBefore = Number(sql('select count(*) from "LinkingChallenges"'));
+    const reference = await startAt(pool[6], details(unmatchedDetails));
+    const fourth = await startAt(pool[7], details(customerD));
+    const fromC = await start(unlinked.request, details(customerD), await antiforgeryToken(unlinked.request));
+    for (const result of [reference, fourth, fromC]) {
+      expect(result.status).toBe(202);
+      expect(result.text).toBe('');
+      expect(comparable(result.headers)).toEqual(comparable(reference.headers));
+    }
+    await until('3 stops', () => auditSummary(mark).filter((row) => !row.startsWith('LinkingStart|')).length === 3);
+    const rows = auditSummary(mark);
+    expect(rows.filter((row) => row.startsWith('LinkingNoMatch|Rejected|null|true|'))).toHaveLength(1);
+    expect(tail(rows, pool[7].sub).filter((row) => row.startsWith(dPrefix('LinkingSendCapped', 'Rejected')))).toHaveLength(1);
+    expect(tail(rows, cSub).filter((row) => row.startsWith(dPrefix('LinkingSendCapped', 'Rejected')))).toHaveLength(1);
+    expect(count(rows, 'LinkingOtpSent'), 'no send was claimed').toBe(0);
+    expect(sendsToD()).toBe(3);
+    expect((await smsMessages()).length - smsBefore, 'no SMS for any of the three').toBe(0);
+    expect(Number(sql('select count(*) from "LinkingChallenges"'))).toBe(challengesBefore + 3);
+    expect(sql(`select count(*) from "LinkingChallenges" where "LoginSub" in ('${pool[7].sub}', '${cSub}') and "CustomerId" is not null and "SupersededAtUtc" is null`)).toBe('0');
+  });
+
+  test('criterion 3: a job that dies on an unexpected exception (its database session killed while it waits for the lock) audits LinkingStart Failed, claims nothing, logs only the type, and the next job still runs', async () => {
+    const mark = auditMark();
+    const logsFrom = new Date().toISOString();
+    const holder = holdCustomerLock();
+    await untilLockHeld();
+    const result = await startAt(pool[0], details(customerD));
+    expect(result.status).toBe(202);
+    await until('the job waiting on the lock', () => lockWaiters() === 1);
+    const killed = execFileSync('docker', ['exec', 'disputedesk-postgres-1', 'psql', '-U', 'postgres', '-d', 'disputedesk', '-At', '-c',
+      `select count(*) from (select pg_terminate_backend(pid) from pg_locks where locktype = 'advisory' and not granted) killed`], { encoding: 'utf8' }).trim();
+    expect(killed).toBe('1');
+    await until('the Failed entry', () => auditSummary(mark).some((row) => row.startsWith(dPrefix('LinkingStart', 'Failed'))));
+    await holder.release();
+    const rows = auditSummary(mark);
+    expect(tail(rows, pool[0].sub).filter((row) => row.startsWith(dPrefix('LinkingStart', 'Failed')))).toHaveLength(1);
+    expect(count(rows, 'LinkingSendCapped')).toBe(0);
+    expect(count(rows, 'LinkingOtpSent')).toBe(0);
+    expect(sendsToD(), 'nothing claimed').toBe(3);
+    // The log line holds the challenge ID and the exception type only.
+    const challengeId = latestChallengeId(pool[0].sub);
+    const logs = execFileSync('sh', ['-c', `docker logs --since ${logsFrom} disputedesk-api-1 2>&1`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const line = logs.split('\n').find((entry) => entry.includes(challengeId) && entry.includes('stopped on an unexpected'));
+    expect(line, 'the unexpected-stop log line').toBeDefined();
+    expect(line).toMatch(new RegExp(`Linking challenge ${challengeId} stopped on an unexpected \\w+$`));
+    for (const secret of [customerD.idNumber, customerD.cellphone, customerD.accountNumber, customerD.customerId]) expect(logs.includes(secret)).toBe(false);
+    // The next job still runs: a start for D now ends as an audited cap stop.
+    const next = auditMark();
+    expect((await startAt(pool[1], details(customerD))).status).toBe(202);
+    await untilAudited(next, 'LinkingSendCapped', pool[1].sub);
+  });
+
+  test('criterion 2: a lock wait past the budget ends as LinkingStart Failed and claims nothing', async () => {
+    test.skip(budgetSeconds === 0, 'needs E2E_LINKING_BUDGET_SECONDS, the Api\'s Linking:Budget');
+    test.setTimeout((budgetSeconds + 90) * 1000);
+    const mark = auditMark();
+    const holder = holdCustomerLock();
+    await untilLockHeld();
+    const startedWait = Date.now();
+    expect((await startAt(pool[2], details(customerD))).status).toBe(202);
+    await until('the Failed entry', () => auditSummary(mark).some((row) => row.startsWith(dPrefix('LinkingStart', 'Failed'))), budgetSeconds + 30);
+    const waited = (Date.now() - startedWait) / 1000;
+    await holder.release();
+    expect(waited, 'the job waited for about the budget').toBeGreaterThanOrEqual(budgetSeconds - 2);
+    expect(waited).toBeLessThan(budgetSeconds + 15);
+    expect(count(auditSummary(mark), 'LinkingSendCapped')).toBe(0);
+    expect(sendsToD()).toBe(3);
+    // The budget's own path, not the unexpected-exception path: no "unexpected" log line for this challenge. (A budget
+    // over 30 seconds would end at Npgsql's 30-second command timeout instead, as an unexpected NpgsqlException.)
+    const challengeId = latestChallengeId(pool[2].sub);
+    expect(apiLogsSinceStart()).not.toContain(`Linking challenge ${challengeId} stopped on an unexpected`);
+  });
+
+  test('criterion 4: with the queue full, a start with matching details and one with details that match nothing both get the same 429 without Retry-After, audited, and are not queued', async () => {
+    test.skip(queueCapacity === 0, 'needs E2E_LINKING_QUEUE_CAPACITY, the Api\'s Linking:QueueCapacity');
+    const accepted = jobsAtOnce + queueCapacity;
+    expect(accepted).toBeLessThanOrEqual(pool.length - 2);
+    const mark = auditMark();
+    const holder = holdCustomerLock();
+    await untilLockHeld();
+    // 4 jobs run (waiting on the lock) and `queueCapacity` wait in the channel: all accepted.
+    for (const login of pool.slice(0, accepted)) expect((await startAt(login, details(customerD))).status).toBe(202);
+    await until('4 jobs waiting on the lock', () => lockWaiters() === jobsAtOnce);
+    const matching = await startAt(pool[accepted], details(customerD));
+    const nonMatching = await startAt(pool[accepted + 1], details(unmatchedDetails));
+    for (const result of [matching, nonMatching]) {
+      expect(result.status).toBe(429);
+      expect(result.headers['content-type']).toMatch(/^application\/problem\+json/);
+      expect(Object.keys(result.headers)).not.toContain('retry-after');
+    }
+    const body = (result: Observed) => ({ ...JSON.parse(result.text), traceId: undefined });
+    expect(body(matching)).toEqual(body(nonMatching));
+    expect(JSON.parse(matching.text)).toMatchObject({ type: problemType('rate-limited'), status: 429 });
+    expect(typeof JSON.parse(matching.text).traceId).toBe('string');
+    expect(matching.text).not.toMatch(/Exception|StackTrace/);
+    expect(comparable(matching.headers)).toEqual(comparable(nonMatching.headers));
+    // Evidence for the QA record: no cookies, no trace headers, no traceId.
+    console.log('full-queue 429', JSON.stringify({ status: matching.status, headers: comparable(matching.headers), body: body(matching) }));
+
+    const rows = auditSummary(mark);
+    for (const login of [pool[accepted], pool[accepted + 1]]) {
+      const own = tail(rows, login.sub);
+      expect(own, login.username).toEqual([`LinkingStart|Succeeded|null|true|${login.sub}`, `LinkingRateLimited|Rejected|null|true|${login.sub}`]);
+      // Saved but never queued: the blank challenge stays current and unclaimed.
+      expect(sql(`select count(*) from "LinkingChallenges" where "LoginSub" = '${login.sub}' and "SupersededAtUtc" is null and "ConsumedAtUtc" is null and "CustomerId" is null and "OtpHmac" is null and "OtpSentAtUtc" is null`)).toBe('1');
+    }
+    await holder.release();
+    // The accepted starts all run to their stop (D is at the cap) and the two refused ones never do.
+    await until('the accepted jobs to stop', () => auditSummary(mark).filter((row) => row.startsWith('LinkingSendCapped|')).length === accepted, 60);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const finalRows = auditSummary(mark);
+    expect(count(finalRows, 'LinkingSendCapped|')).toBe(accepted);
+    expect(finalRows.filter((row) => /LinkingNoMatch/.test(row))).toHaveLength(0);
+    expect(sendsToD()).toBe(3);
+  });
+
+  test('criterion 1, 3, 4: no ID number, account number, cellphone, customer ID or OTP HMAC in the Api logs, the dashboard\'s spans and logs, or the topic', async () => {
+    const hmacs = sql(`select encode("OtpHmac", 'hex') from "LinkingChallenges" where "OtpHmac" is not null`).split('\n').filter(Boolean);
+    expect(hmacs.length).toBeGreaterThan(0);
+    const secrets = [customerD.idNumber, customerD.cellphone, customerD.cellphone.replace('+', ''), customerD.accountNumber, ...hmacs];
+    const dashboard = `http://localhost:${process.env.DISPUTEDESK_DASHBOARD_PORT ?? '18888'}/api/telemetry`;
+    const spans = await (await fetch(`${dashboard}/spans?limit=5000`)).text();
+    const logs = await (await fetch(`${dashboard}/logs?limit=5000`)).text();
+    expect(spans.length).toBeGreaterThan(1000);
+    for (const [name, text] of [['api logs', apiLogsSinceStart()], ['spans', spans], ['dashboard logs', logs], ['topic', JSON.stringify(topicRecords())]] as const) {
+      for (const secret of secrets) expect(text.includes(secret), `${name} holds a secret`).toBe(false);
+    }
+    expect(spans).toContain('linking job');
+  });
 });

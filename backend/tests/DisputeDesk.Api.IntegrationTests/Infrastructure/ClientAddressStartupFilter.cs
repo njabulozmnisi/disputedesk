@@ -11,11 +11,14 @@ namespace DisputeDesk.Api.IntegrationTests.Infrastructure;
 /// </summary>
 public sealed class ClientAddressStartupFilter(IPAddress address) : IStartupFilter
 {
+    /// <summary>The address of the next request; a test can change it between requests to start from another client.</summary>
+    public IPAddress Address { get; set; } = address;
+
     public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
     {
         app.Use((context, nextMiddleware) =>
         {
-            context.Connection.RemoteIpAddress = address;
+            context.Connection.RemoteIpAddress = Address;
             return nextMiddleware(context);
         });
         next(app);
