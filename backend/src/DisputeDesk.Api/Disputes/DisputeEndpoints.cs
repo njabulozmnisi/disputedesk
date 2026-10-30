@@ -4,6 +4,7 @@ using DisputeDesk.Api.Errors;
 using DisputeDesk.Application.Disputes.GetDispute;
 using DisputeDesk.Application.Disputes.ListDisputes;
 using DisputeDesk.Application.Disputes.RaiseDispute;
+using DisputeDesk.Application.Disputes.WithdrawDispute;
 using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Domain;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -14,8 +15,8 @@ using Microsoft.OpenApi;
 namespace DisputeDesk.Api.Disputes;
 
 /// <summary>
-/// <c>POST /api/v1/disputes</c>, <c>GET /api/v1/disputes</c> and <c>GET /api/v1/disputes/{disputeId}</c>, on the
-/// customer routes.
+/// <c>POST /api/v1/disputes</c>, <c>GET /api/v1/disputes</c>, <c>GET /api/v1/disputes/{disputeId}</c> and
+/// <c>POST /api/v1/disputes/{disputeId}/withdraw</c>, on the customer routes.
 /// </summary>
 public static class DisputeEndpoints
 {
@@ -29,8 +30,10 @@ public static class DisputeEndpoints
         services.AddScoped<RaiseDisputeHandler>()
             .AddScoped<GetDisputeHandler>()
             .AddScoped<ListDisputesHandler>()
+            .AddScoped<WithdrawDisputeHandler>()
             .AddScoped<ClaimedIdempotencyKey>()
             .AddSingleton<RaiseMetrics>()
+            .AddSingleton<DisputeActionMetrics>()
             .Configure<RequestTimeoutOptions>(options => options.AddPolicy(RaiseTimeoutPolicy, TimeSpan.FromSeconds(30)));
 
     public static RouteGroupBuilder MapDisputes(this RouteGroupBuilder customerRoutes)
@@ -54,6 +57,13 @@ public static class DisputeEndpoints
             .WithTags("Disputes")
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound);
+        customerRoutes.MapPost(DisputeRoutes.Withdraw, WithdrawAsync)
+            .WithTags("Disputes")
+            // The note is checked by the aggregate after the dispute is loaded, so 404 comes before 400 (AD-8).
+            .DisableValidation()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
         return customerRoutes;
     }
 
@@ -77,6 +87,34 @@ public static class DisputeEndpoints
     {
         Result<DisputePageResponse> result = await handler.HandleAsync(cursor, limit, cancellationToken);
         return result.IsSuccess ? TypedResults.Ok(result.Value) : result.Error.ToProblem();
+    }
+
+    /// <summary>
+    /// Withdraws one of the linked customer's open disputes. 200 with the dispute as the detail shows it, its last
+    /// timeline item the withdraw. 404 <c>not-found</c> for an unknown dispute and for another customer's alike; 400
+    /// <c>validation</c> for a note over 500 characters after trimming; 409 <c>action-not-allowed</c> with
+    /// <c>customerStatus</c> for a resolved or withdrawn dispute. A body or <paramref name="disputeId"/> that does not
+    /// bind gets 400 before the lookup.
+    /// </summary>
+    /// <remarks>
+    /// The checks run 401, 403, 404, 400, 409 (AD-8). Not idempotency-keyed: a repeat gets 409 with
+    /// <c>customerStatus</c> <c>withdrawn</c>, which a client retrying may treat as success (FR-18).
+    /// </remarks>
+    private static async Task<Results<Ok<DisputeResponse>, ProblemHttpResult>> WithdrawAsync(
+        Guid disputeId,
+        WithdrawDisputeRequest request,
+        WithdrawDisputeHandler handler,
+        DisputeActionMetrics metrics,
+        CancellationToken cancellationToken)
+    {
+        Result<DisputeResponse> result = await handler.HandleAsync(disputeId, request, cancellationToken);
+        if (result.IsFailure)
+        {
+            return result.Error.ToProblem();
+        }
+
+        metrics.RecordWithdrawn(result.Value);
+        return TypedResults.Ok(result.Value);
     }
 
     /// <summary>

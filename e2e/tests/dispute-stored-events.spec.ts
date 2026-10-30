@@ -207,7 +207,8 @@ test.describe.serial('raise as customer A', () => {
     const problem = await again.json();
     expect(expectProblemShape(problem, 'already-disputed', 409)).toEqual([]);
     expect(problem).toMatchObject({ disputeId: raisedByA.disputeId, customerStatus: 'submitted' });
-    expect(totals()).toEqual(before);
+    // Story 3.4: the 409 is a refusal on rule, so it is audited (one Rejected row); the 422 mismatch is not; nothing else is written.
+    expect(totals()).toEqual({ ...before, audit: before.audit + 1 });
   });
 
   test('wrong amount without a note: the disputed amount is the difference and Data holds only the raise fields', async () => {
@@ -254,7 +255,9 @@ test.describe('customer B and the refused requests', () => {
     // B's list shows none of A's disputes, and nothing was written for B.
     const bList = await (await contexts.b.request.get('/api/v1/transactions?limit=50')).json();
     expect(JSON.stringify(bList)).not.toContain(raisedByA.disputeId);
-    expect(totals()).toEqual(before);
+    // Story 3.4: each refused raise (404) is audited as one Rejected row with no dispute ID; no dispute, event or outbox row is written.
+    expect(totals()).toEqual({ ...before, audit: before.audit + 2 });
+    expect(rows(`select 1 from "AuditLogEntries" where "Action" = 'Raise' and "DisputeId" is null and "CustomerId" is not null and "OccurredAtUtc" > now() - interval '1 minute'`).length).toBeGreaterThanOrEqual(2);
     expect(rows(`select 1 from "StoredEvents" where "DisputeId" = '${raisedByA.disputeId}'`)).toHaveLength(1);
   });
 

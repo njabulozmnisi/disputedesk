@@ -54,6 +54,45 @@ public partial class AuditLogRulesTests
         Assert.Equal(expected, NamesInsertOnlyRecords().IsMatch(text));
     }
 
+    [Fact]
+    public void ProductionSource_FileOtherThanAuditLog_NeverConstructsOrAddsAnAuditEntry()
+    {
+        // AD-14a: AuditLog.Record is the one way to write an audit entry. The configuration, the context and the
+        // migrations name the type for the model only.
+        var violations = Directory.EnumerateFiles(SourceRoots.Src, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !SourceRoots.IsBuildOutput(file) && !MayNameAuditEntries(file))
+            .Where(file => ConstructsOrAddsAuditEntry().IsMatch(File.ReadAllText(file)))
+            .Select(file => Path.GetRelativePath(SourceRoots.Src, file))
+            .ToList();
+
+        Assert.True(violations.Count == 0, "An audit entry is written outside AuditLog.Record in:\n" + string.Join('\n', violations));
+    }
+
+    [Theory]
+    [InlineData("db.Entities<AuditLogEntry>().Add(new AuditLogEntry { Id = id });", true)]
+    [InlineData("db.Add(new AuditLogEntry\n{", true)]
+    [InlineData("db.Entities<AuditLogEntry>().Add(new() { Id = id, Action = action });", true)]
+    [InlineData("Set<AuditLogEntry>().AddRange(entries);", true)]
+    [InlineData("AuditLogEntry entry = new() { Id = id };", true)]
+    [InlineData("var entry = new AuditLogEntry();", true)]
+    [InlineData("AuditLog.Record(db, AuditAction.Raise, AuditResult.Rejected, actor, now);", false)]
+    [InlineData("await db.Set<AuditLogEntry>().CountAsync(cancellationToken);", false)]
+    [InlineData("db.Entities<AuditLogEntry>().AsNoTracking().Where(entry => entry.Action == action)", false)]
+    [InlineData("public sealed class AuditLogEntry", false)]
+    public void ConstructsOrAddsAuditEntry_SampleLine_IsMatchedOnlyForAWrite(string line, bool expected)
+    {
+        Assert.Equal(expected, ConstructsOrAddsAuditEntry().IsMatch(line));
+    }
+
+    private static bool MayNameAuditEntries(string file) =>
+        Path.GetFileName(file) is "AuditLog.cs" or "AuditLogEntryConfiguration.cs" or "AppDbContext.cs"
+        || Path.GetRelativePath(SourceRoots.Src, file).Split(Path.DirectorySeparatorChar).Contains("Migrations");
+
+    // A construction (new AuditLogEntry, or a target-typed new() assigned to one) or an Add, Attach or Update (Async, Range)
+    // on the audit entry set.
+    [GeneratedRegex(@"\bnew\s+AuditLogEntry\b|\bAuditLogEntry\s+\w+\s*=\s*new\s*\(|<AuditLogEntry>\(\)\s*\.(?:Add|Attach|Update)\w*\s*\(")]
+    private static partial Regex ConstructsOrAddsAuditEntry();
+
     // The types, their configurations and the tables: AuditLogEntry, AuditLogEntryConfiguration, AuditLogEntries;
     // StoredEvent and StoredEventRow, StoredEventConfiguration, StoredEvents.
     [GeneratedRegex(@"\b(?:AuditLogEntr|StoredEvent)")]

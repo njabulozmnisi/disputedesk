@@ -189,6 +189,43 @@ public class DisputeCommitTests(PostgresFixture postgres, TransactionsStub stub)
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public async Task SaveChanges_ReplayedDisputeWithdrawnAndAttachedNotUpdated_IsRefusedAndWritesNothing(bool synchronous)
+    {
+        // Attach leaves the replayed dispute Unchanged, so its row would keep the old status beside the new stored event.
+        string database = await RaisedDatabaseAsync();
+        await using AppDbContext db = Context(database);
+        Dispute dispute = await ReplayedWithdrawnAsync(db);
+        db.Set<Dispute>().Attach(dispute);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SaveAsync(db, synchronous));
+
+        await using AppDbContext check = Context(database);
+        Assert.Equal(DisputeStatus.Submitted, (await check.Set<Dispute>().IgnoreQueryFilters().SingleAsync(TestContext.Current.CancellationToken)).Status);
+        Assert.Equal((1, 1, 1), await CountAsync(database));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveChanges_ReplayedDisputeWithdrawnAndUpdated_WritesTheRowTheStoredEventAndTheOutboxRow(bool synchronous)
+    {
+        string database = await RaisedDatabaseAsync();
+        await using AppDbContext db = Context(database);
+        Dispute dispute = await ReplayedWithdrawnAsync(db);
+        db.Set<Dispute>().Update(dispute);
+
+        await SaveAsync(db, synchronous);
+
+        await using AppDbContext check = Context(database);
+        Dispute row = await check.Set<Dispute>().IgnoreQueryFilters().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(DisputeStatus.Withdrawn, row.Status);
+        Assert.Equal(2, row.Version);
+        Assert.Equal((1, 2, 2), await CountAsync(database));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public async Task SaveChanges_AgainAfterLosingToTheUniqueIndex_WritesNothingMore(bool synchronous)
     {
         string database = await RaisedDatabaseAsync();
@@ -262,6 +299,16 @@ public class DisputeCommitTests(PostgresFixture postgres, TransactionsStub stub)
         return Dispute.Raise(
             TransactionsApi.CustomerA, transaction, everDisputed: false, Reason.Unrecognised, note: null, expectedAmount: null,
             new Actor(ActorType.Customer, "login-a"), stub.Now).Value;
+    }
+
+    /// <summary>The one dispute replayed from its stream, as the withdraw handler loads it, then withdrawn; not tracked.</summary>
+    private static async Task<Dispute> ReplayedWithdrawnAsync(AppDbContext db)
+    {
+        List<StoredEventRow> rows = await db.Set<StoredEventRow>().IgnoreQueryFilters().AsNoTracking()
+            .OrderBy(row => row.Version).ToListAsync(TestContext.Current.CancellationToken);
+        var dispute = Dispute.Replay([.. rows.Select(row => row.ToStoredEvent())]);
+        Assert.True(dispute.Withdraw("Found it", new Actor(ActorType.Customer, "login-a"), dispute.CreatedAtUtc.AddMinutes(5)).IsSuccess);
+        return dispute;
     }
 
     /// <summary>A fresh database holding one committed raise.</summary>

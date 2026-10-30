@@ -35,6 +35,12 @@ public sealed record RaiseDisputeRequest(
     /// <summary>0.00 or more, with at most 2 decimals, within <c>numeric(19,2)</c>.</summary>
     public const string AmountPattern = @"^[0-9]{1,17}(\.[0-9]{1,2})?$";
 
+    /// <summary>
+    /// Only the type name: a record's generated <c>ToString</c> prints every property, and the note is free text that
+    /// may hold personal data (OWASP Logging Cheat Sheet: data to exclude).
+    /// </summary>
+    public override string ToString() => nameof(RaiseDisputeRequest);
+
     /// <summary>The rules between fields, and the note's length after trimming (AD-4), which no attribute expresses.</summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

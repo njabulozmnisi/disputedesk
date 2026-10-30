@@ -39,7 +39,8 @@ import type {
   ProblemDetails,
   RaiseDisputeRequest,
   SessionResponse,
-  TransactionPageResponse
+  TransactionPageResponse,
+  WithdrawDisputeRequest
 } from './model';
 
 import { customFetch } from '../mutator';
@@ -937,3 +938,92 @@ export function useGetApiV1DisputesDisputeId<TData = Awaited<ReturnType<typeof g
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
+
+
+export const getPostApiV1DisputesDisputeIdWithdrawUrl = (disputeId: string,) => {
+
+
+
+
+  return `/api/v1/disputes/${disputeId}/withdraw`
+}
+
+export const postApiV1DisputesDisputeIdWithdraw = async (disputeId: string,
+    withdrawDisputeRequest: WithdrawDisputeRequest, options?: Parameters<typeof customFetch>[1]): Promise<DisputeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<DisputeResponse>(getPostApiV1DisputesDisputeIdWithdrawUrl(disputeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(withdrawDisputeRequest)
+  }
+);}
+
+
+
+
+
+export const getPostApiV1DisputesDisputeIdWithdrawMutationKey = () => ['postApiV1DisputesDisputeIdWithdraw'] as const;
+
+export const getPostApiV1DisputesDisputeIdWithdrawMutationOptions = <TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1DisputesDisputeIdWithdraw>>, TError,PostApiV1DisputesDisputeIdWithdrawMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1DisputesDisputeIdWithdraw>>, TError,PostApiV1DisputesDisputeIdWithdrawMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1DisputesDisputeIdWithdrawMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1DisputesDisputeIdWithdraw>>, PostApiV1DisputesDisputeIdWithdrawMutationVariables> = (props) => {
+          const {disputeId,data} = props ?? {};
+
+          return  postApiV1DisputesDisputeIdWithdraw(disputeId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiV1DisputesDisputeIdWithdrawMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1DisputesDisputeIdWithdraw>>>
+    export type PostApiV1DisputesDisputeIdWithdrawMutationBody = WithdrawDisputeRequest
+    export type PostApiV1DisputesDisputeIdWithdrawMutationError = ErrorType<HttpValidationProblemDetails | ProblemDetails>
+    export type PostApiV1DisputesDisputeIdWithdrawMutationVariables = {disputeId: string;data: WithdrawDisputeRequest}
+
+    export const usePostApiV1DisputesDisputeIdWithdraw = <TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1DisputesDisputeIdWithdraw>>, TError,PostApiV1DisputesDisputeIdWithdrawMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiV1DisputesDisputeIdWithdraw>>,
+        TError,
+        PostApiV1DisputesDisputeIdWithdrawMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiV1DisputesDisputeIdWithdrawMutationOptions(options), queryClient);
+    }

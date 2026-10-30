@@ -90,7 +90,7 @@ public class StoredEventReplayTests(PostgresFixture postgres, TransactionsStub s
     }
 
     [Fact]
-    public async Task Replay_EveryRaisedDispute_ReproducesItsDisputesRowAndTheTimelineTheApiReturned()
+    public async Task Replay_EveryRaisedOrWithdrawnDispute_ReproducesItsDisputesRowAndTheTimelineTheApiReturned()
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         using HttpClient a = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
@@ -103,6 +103,9 @@ public class StoredEventReplayTests(PostgresFixture postgres, TransactionsStub s
             await CreatedAsync(a, DisputesApi.Body("TXN-A-0027", reason: "duplicateCharge")),
             await CreatedAsync(b, DisputesApi.Body("TXN-B-0027", "ACC-B-1", reason: "notReceived", note: "Never arrived")),
         ];
+        // Withdrawn by its owner (story 3.4): the row is written back from the replayed dispute, and the 200 is the timeline.
+        created.Add(await a.WithdrawOkAsync(created[0].GetProperty("disputeId").GetString() ?? "", DisputesApi.WithdrawBody("  Found it  ")));
+        created.RemoveAt(0);
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         IEntityType disputeType = db.Model.FindEntityType(typeof(Dispute)) ?? throw new InvalidOperationException("Dispute is not mapped.");

@@ -107,3 +107,29 @@ Cookie: disputedesk-session={{session}}
 ### A cursor no page returned: 400 validation naming cursor, without echoing it
 GET {{app}}/api/v1/disputes?cursor=not-a-cursor
 Cookie: disputedesk-session={{session}}
+
+### Withdraw: 200 with the dispute as the detail shows it, its last timeline item the withdraw (paste a disputeId from a raise)
+# Not idempotency-keyed (AD-16 covers only the raise). The note is optional, at most 500 characters after trimming.
+@disputeId = paste-a-disputeId-from-the-raise
+POST {{app}}/api/v1/disputes/{{disputeId}}/withdraw
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Content-Type: application/json
+
+{"note": "Found it on my statement."}
+
+### Withdraw again: 409 action-not-allowed with customerStatus withdrawn (Withdrawn is final)
+POST {{app}}/api/v1/disputes/{{disputeId}}/withdraw
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Content-Type: application/json
+
+{}
+
+### Withdraw an unknown dispute: 404 not-found, the same as for another customer's
+POST {{app}}/api/v1/disputes/{{$guid}}/withdraw
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Content-Type: application/json
+
+{}

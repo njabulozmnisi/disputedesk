@@ -10,9 +10,9 @@ using Microsoft.Net.Http.Headers;
 namespace DisputeDesk.Api.IntegrationTests.Ownership;
 
 /// <summary>
-/// AC3 (AD-11, Not found; RFC 9457): on every customer route that takes a resource ID, the detail and the raise, another
-/// customer's resource and an unknown ID get the same 404 <c>not-found</c>: the same status, <c>Content-Type</c>, headers
-/// and body byte for byte apart from <c>traceId</c>, and neither echoes the ID (AD-3).
+/// AC3 (AD-11, Not found; RFC 9457): on every customer route that takes a resource ID, the detail, the raise and the
+/// withdraw, another customer's resource and an unknown ID get the same 404 <c>not-found</c>: the same status,
+/// <c>Content-Type</c>, headers and body byte for byte apart from <c>traceId</c>, and neither echoes the ID (AD-3).
 /// </summary>
 public class NotFoundResponsesTests(PostgresFixture postgres, TransactionsStub stub) : IClassFixture<TransactionsStub>
 {
@@ -29,6 +29,24 @@ public class NotFoundResponsesTests(PostgresFixture postgres, TransactionsStub s
 
         HttpResponseMessage forTheirs = await customerA.GetDisputeAsync(theirs.ToString());
         HttpResponseMessage forUnknown = await customerA.GetDisputeAsync(unknown);
+
+        await AssertSameNotFoundAsync(forTheirs, forUnknown, theirs.ToString(), unknown);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Withdraw_AnotherCustomersDisputeAndAnUnknownId_GetTheSame404(bool withNoteTooLong)
+    {
+        // The note is checked only after the dispute is loaded, so a 501-unit note changes neither 404 (AD-8).
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        Guid theirs = await RaiseWithEveryStoredEventTypeAsync(factory);
+        string unknown = Guid.CreateVersion7().ToString();
+        using HttpClient customerA = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
+        string json = DisputesApi.WithdrawBody(withNoteTooLong ? new string('a', 501) : "Found it");
+
+        HttpResponseMessage forTheirs = await customerA.WithdrawAsync(theirs.ToString(), json);
+        HttpResponseMessage forUnknown = await customerA.WithdrawAsync(unknown, json);
 
         await AssertSameNotFoundAsync(forTheirs, forUnknown, theirs.ToString(), unknown);
     }

@@ -93,7 +93,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
     /// (EF Core docs, Transactions: one SaveChanges is one transaction). Stored events and audit entries are insert
     /// only, so a modified or deleted one stops the commit before anything is written. A dispute is written only with
     /// its stored event, so an added or modified dispute with none pending stops it too: the unique version is then the
-    /// one concurrency check on every write to <c>Disputes</c> (AD-15, ad-009).
+    /// one concurrency check on every write to <c>Disputes</c> (AD-15, ad-009); and a dispute with stored events pending
+    /// that is neither added nor modified stops it, so the read model is never left behind its stream.
     /// </summary>
     private void AddRowsForDisputeChanges()
     {
@@ -115,6 +116,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
             if (storedEvents.Count == 0 && entry.State is EntityState.Added or EntityState.Modified)
             {
                 throw new InvalidOperationException("A dispute is written only with its stored event: one was added or modified with none pending.");
+            }
+
+            // The other way round: a stored event commits only with its read model, so a replayed dispute must be marked
+            // with Update, not Attach, or its row would keep the old status (AD-13, AD-14).
+            if (storedEvents.Count > 0 && entry.State is not (EntityState.Added or EntityState.Modified))
+            {
+                throw new InvalidOperationException("A dispute's stored event is written only with the dispute: one was pending on a dispute neither added nor modified.");
             }
 
             foreach (StoredEvent storedEvent in storedEvents)
