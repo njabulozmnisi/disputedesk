@@ -46,3 +46,11 @@ Items 1 (renamed to `Login_AlreadySignedIn_RecordsSignOutForTheEndedSession`: on
 
 - browserTelemetrySwitch.test.tsx "window is not defined": each test ran `main.tsx`, whose React root and tracer provider were never stopped, so React's scheduler fired after jsdom teardown (reproduced under CPU stress, 1 in 8; 0 in 54 after). `afterEach` now unmounts every root (`createRoot` spied as a pass-through) and shuts down every provider. Remaining limit: the fetch instrumentation `startTracing` registers stays patched after shutdown, recording nothing once the globals are disabled.
 - raiseTelemetry.test.tsx unhandled `GET /api/v1/disputes/<id>`: the app opens the detail screen as soon as the raise ends (twice under StrictMode) before the test registered that handler; the dispute is now served before the raise.
+
+## The e2e tooling fix (one QA-owned batch, after 7.2 lands, since it shares e2e/ files)
+
+Not production defects; every item makes the regression project reliable on one fresh stack.
+- Span privacy scans (`linking-screens.spec.ts:578`, `linking-start.spec.ts:647`, `linking-rate-limits.spec.ts:408`, and `linking-verify.spec.ts` if it scans the same way) match six-digit codes inside random hex trace, span and parent ids and nanosecond timestamps (`span-privacy-check.md`: no leak; ID and account numbers never appear). Parse the JSON, compare attribute and exception values only, keep the raw check for the 10- and 13-digit values, and require a non-hex boundary around a six-digit code.
+- Customer D's single link is shared by `linking-screens`, `linking-start` and `linking-verify` (and the 6.5 block uses D's hourly send cap): `linking-start.spec.ts:141` audits `LinkingAlreadyLinked` when the screens spec ran first. Give the D-link specs their own fresh stack or reset D's link and cap between them, in a documented run order.
+- The regression run needs the raised linking limits and the small queue as committed Compose override files (6.3 QA C1, C3), with the rate-limit spec run alone at the production limits (`E2E_LINKING_RATE_LIMITS=production`).
+- The data budget still fails `dispute-withdraw.spec.ts:332/:347` in a full run (6.3 QA C2, 5.3 QA F2); `outbox-relay-failure-paths` failed twice in the span-check run.
