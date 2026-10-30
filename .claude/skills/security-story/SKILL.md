@@ -18,7 +18,7 @@ Run the scanners that apply and read the diff against this list.
 
 ## Known pitfalls
 
-- A privacy test checks every private field of the record it guards, and a record holding personal data seals `ToString` (3.8).
+- A privacy test checks every private field of the record it guards (3.8); sealed `ToString` on records holding personal data is enforced by `PersonalDataRecordTests`.
 
 ## Report
 

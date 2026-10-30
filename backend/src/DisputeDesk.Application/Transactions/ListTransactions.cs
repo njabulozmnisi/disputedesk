@@ -114,5 +114,9 @@ public sealed class ListTransactions(CurrentCustomer currentCustomer, ICoreBanki
     };
 
     /// <summary>The dispute of one transaction on the page.</summary>
-    private sealed record RowDispute(string AccountRef, string TransactionId, Guid Id, DisputeStatus Status);
+    private sealed record RowDispute(string AccountRef, string TransactionId, Guid Id, DisputeStatus Status)
+    {
+        /// <summary>Only the type name: a record's generated <c>ToString</c> would print the account reference and transaction ID.</summary>
+        public sealed override string ToString() => nameof(RowDispute);
+    }
 }

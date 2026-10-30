@@ -25,6 +25,9 @@ internal sealed record Fixtures(
     public static Fixtures Read(string path) =>
         JsonSerializer.Deserialize<Fixtures>(File.ReadAllText(path), Options)
             ?? throw new InvalidOperationException("The fixtures file holds no fixtures.");
+
+    /// <summary>Only the type name, like the fixture records it holds.</summary>
+    public sealed override string ToString() => nameof(Fixtures);
 }
 
 // The records below hold personal data (customer IDs, login subs, account numbers and references, transaction IDs,

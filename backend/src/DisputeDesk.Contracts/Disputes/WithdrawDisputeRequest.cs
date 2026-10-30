@@ -13,5 +13,5 @@ public sealed record WithdrawDisputeRequest(string? Note = null)
     /// Only the type name: a record's generated <c>ToString</c> prints every property, and the note is free text that
     /// may hold personal data (OWASP Logging Cheat Sheet: data to exclude).
     /// </summary>
-    public override string ToString() => nameof(WithdrawDisputeRequest);
+    public sealed override string ToString() => nameof(WithdrawDisputeRequest);
 }

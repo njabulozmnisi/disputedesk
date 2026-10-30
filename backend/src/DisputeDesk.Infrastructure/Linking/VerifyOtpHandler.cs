@@ -167,6 +167,6 @@ public sealed partial class VerifyOtpHandler(
         public Actor Actor => new(ActorType.Customer, LoginSub);
 
         /// <summary>Only the type name: a record's generated <c>ToString</c> would print the login and the address.</summary>
-        public override string ToString() => nameof(Attempt);
+        public sealed override string ToString() => nameof(Attempt);
     }
 }

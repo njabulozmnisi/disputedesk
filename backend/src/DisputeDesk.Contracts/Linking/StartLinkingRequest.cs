@@ -25,7 +25,7 @@ public sealed record StartLinkingRequest(
     /// Only the type name: a record's generated <c>ToString</c> prints every property, and this one holds the ID number
     /// (OWASP Logging Cheat Sheet: data to exclude).
     /// </summary>
-    public override string ToString() => nameof(StartLinkingRequest);
+    public sealed override string ToString() => nameof(StartLinkingRequest);
 
     /// <summary>The ID number's check digit, which no attribute expresses. Checked only once the 13 digits are there.</summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
