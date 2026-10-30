@@ -9,7 +9,9 @@ import { startTracing } from '@/telemetry/startTracing';
 
 import './index.css';
 
-startTracing();
+// The gateway in AWS takes in no browser telemetry (AD-29), so that build sets VITE_BROWSER_TELEMETRY=off. Only the
+// exact value `off` turns tracing off; Vite replaces the variable at build time.
+if (import.meta.env.VITE_BROWSER_TELEMETRY !== 'off') startTracing();
 
 const router = createAppRouter();
 const queryClient = createQueryClient(router);
