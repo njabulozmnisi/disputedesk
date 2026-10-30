@@ -106,26 +106,24 @@ public class ForwardedHeadersTests(PostgresFixture postgres)
     [InlineData("10.201.89.0")] // no prefix length
     [InlineData("10.201.89.0/33")]
     [InlineData("10.201.89.0/24 ")]
-    public void ApiStart_InvalidTrustedNetwork_StopsTheApiWithAnErrorNamingTheKey(string? network)
+    public async Task ApiStart_InvalidTrustedNetwork_StopsTheApiWithAnErrorNamingTheKey(string? network)
     {
-        using var factory = new ApiFactory(connectionString: null, settings: new Dictionary<string, string?> { ["ForwardedHeaders:TrustedNetwork"] = network });
+        (int exitCode, string output) = await ApiProcess.RunUntilExitAsync(new Dictionary<string, string?> { ["ForwardedHeaders:TrustedNetwork"] = network }, TestContext.Current.CancellationToken);
 
-        Exception refused = Assert.ThrowsAny<Exception>(() => factory.Services);
-
-        Assert.Contains("ForwardedHeaders:TrustedNetwork must be a network in CIDR notation", refused.ToString(), StringComparison.Ordinal);
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("ForwardedHeaders:TrustedNetwork must be a network in CIDR notation", output, StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData(" ")]
-    public void ApiStart_EmptyAllowedHosts_StopsTheApiWithAnErrorNamingTheKey(string? host)
+    public async Task ApiStart_EmptyAllowedHosts_StopsTheApiWithAnErrorNamingTheKey(string? host)
     {
-        using var factory = new ApiFactory(connectionString: null, settings: new Dictionary<string, string?> { ["ForwardedHeaders:AllowedHosts"] = host });
+        (int exitCode, string output) = await ApiProcess.RunUntilExitAsync(new Dictionary<string, string?> { ["ForwardedHeaders:AllowedHosts"] = host }, TestContext.Current.CancellationToken);
 
-        Exception refused = Assert.ThrowsAny<Exception>(() => factory.Services);
-
-        Assert.Contains("ForwardedHeaders:AllowedHosts must hold the public app host", refused.ToString(), StringComparison.Ordinal);
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("ForwardedHeaders:AllowedHosts must hold the public app host", output, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -133,13 +131,12 @@ public class ForwardedHeadersTests(PostgresFixture postgres)
     [InlineData("[::1]")]
     [InlineData("*")] // the middleware takes * as any host
     [InlineData("*.localhost")] // and *.x as any subdomain of x
-    public void ApiStart_AllowedHostsWithAPortOrAWildcard_StopsTheApiWithAnErrorNamingTheKey(string host)
+    public async Task ApiStart_AllowedHostsWithAPortOrAWildcard_StopsTheApiWithAnErrorNamingTheKey(string host)
     {
-        using var factory = new ApiFactory(connectionString: null, settings: new Dictionary<string, string?> { ["ForwardedHeaders:AllowedHosts"] = host });
+        (int exitCode, string output) = await ApiProcess.RunUntilExitAsync(new Dictionary<string, string?> { ["ForwardedHeaders:AllowedHosts"] = host }, TestContext.Current.CancellationToken);
 
-        Exception refused = Assert.ThrowsAny<Exception>(() => factory.Services);
-
-        Assert.Contains("ForwardedHeaders:AllowedHosts must be one host name, without a port or a wildcard", refused.ToString(), StringComparison.Ordinal);
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("ForwardedHeaders:AllowedHosts must be one host name, without a port or a wildcard", output, StringComparison.Ordinal);
     }
 
     /// <summary>Every request's connection address is <paramref name="address"/>, registered over ApiFactory's.</summary>
