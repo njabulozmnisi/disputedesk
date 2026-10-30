@@ -22,4 +22,10 @@ public sealed class LinkingMetrics
 
     /// <summary>Counts a job stopped by the hourly send cap.</summary>
     public void RecordCapped() => _events.Add(1, new KeyValuePair<string, object?>("event", "capped"));
+
+    /// <summary>Counts a challenge locking, once, on the attempt that locks it.</summary>
+    public void RecordLocked() => _events.Add(1, new KeyValuePair<string, object?>("event", "locked"));
+
+    /// <summary>Counts a link, once its transaction has committed.</summary>
+    public void RecordCompleted() => _events.Add(1, new KeyValuePair<string, object?>("event", "completed"));
 }

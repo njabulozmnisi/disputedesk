@@ -102,6 +102,7 @@ public static class LinkingFakes
     public sealed class CoreBankingFake : Holdable, ICoreBankingClient
     {
         private static readonly Customer[] Customers = [A, C, D];
+        private readonly ConcurrentQueue<string> _transactionReads = new();
         private int _calls;
 
         public bool Unavailable { get; set; }
@@ -124,8 +125,15 @@ public static class LinkingFakes
         public Task<Result<IReadOnlyList<Account>>> GetAccountsAsync(string customerId, CancellationToken cancellationToken) =>
             throw new NotSupportedException("Linking never reads accounts.");
 
-        public Task<Result<TransactionPage>> GetTransactionsAsync(string customerId, string? cursor, int limit, CancellationToken cancellationToken) =>
-            throw new NotSupportedException("Linking never reads transactions.");
+        /// <summary>The customer of each transaction read, in order: only a linked login's request reads them.</summary>
+        public IReadOnlyCollection<string> TransactionReads => _transactionReads;
+
+        /// <summary>An empty page, recording whose transactions were read.</summary>
+        public Task<Result<TransactionPage>> GetTransactionsAsync(string customerId, string? cursor, int limit, CancellationToken cancellationToken)
+        {
+            _transactionReads.Enqueue(customerId);
+            return Task.FromResult<Result<TransactionPage>>(new TransactionPage([], NextCursor: null));
+        }
 
         public Task<Result<Transaction>> GetTransactionAsync(string customerId, string accountRef, string transactionId, CancellationToken cancellationToken) =>
             throw new NotSupportedException("Linking never reads a transaction.");

@@ -58,6 +58,7 @@ public class EndpointAuthorizationTests(PostgresFixture postgres)
         Assert.Equal([null], AuthorizeData(endpoints, "/api/v1/bff/antiforgery").Select(data => data.Policy));
         Assert.Contains("Linked", AuthorizeData(endpoints, "/api/v1/transactions").Select(data => data.Policy));
         Assert.Contains("Unlinked", AuthorizeData(endpoints, "/api/v1/linking/start").Select(data => data.Policy));
+        Assert.Contains("Unlinked", AuthorizeData(endpoints, "/api/v1/linking/verify").Select(data => data.Policy));
     }
 
     [Theory]

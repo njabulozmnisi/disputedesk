@@ -17,6 +17,8 @@ internal static class UniqueViolations
         [DisputeConfiguration.OneDisputePerTransaction] = DisputeErrors.AlreadyDisputed,
         [StoredEventConfiguration.OneEventPerVersion] = DisputeErrors.VersionClash,
         [LinkingChallengeConfiguration.OneCurrentChallengePerLogin] = LinkingErrors.ChallengeClash,
+        [CustomerLinkConfiguration.OneLinkPerLogin] = LinkingErrors.LinkClash,
+        [CustomerLinkConfiguration.OneLinkPerCustomer] = LinkingErrors.LinkClash,
     };
 
     /// <summary>The error for a commit that failed on one of the mapped unique indexes, otherwise null.</summary>

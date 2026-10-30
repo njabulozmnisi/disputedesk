@@ -50,3 +50,21 @@ X-XSRF-TOKEN: {{token.response.body.requestToken}}
 Content-Type: application/json
 
 {"idNumber": "8804125123081", "accountNumber": "1000000041"}
+
+### Verify the OTP from Mailpit (the latest message to +27820000004): 204 with an empty body links the login to
+### customer D, and the same session cookie then reaches /api/v1/transactions. A wrong code answers 422 otp-incorrect
+### with attemptsRemaining; three wrong codes answer 409 linking-locked, and the person starts linking again.
+POST {{app}}/api/v1/linking/verify
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Content-Type: application/json
+
+{"code": "paste-the-six-digit-otp"}
+
+### A code of five digits: 400 validation naming code, without the value; no attempt is counted
+POST {{app}}/api/v1/linking/verify
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Content-Type: application/json
+
+{"code": "12345"}

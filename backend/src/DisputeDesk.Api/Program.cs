@@ -80,6 +80,6 @@ RouteGroupBuilder apiV1 = app.MapApiV1();
 apiV1.MapBff();
 apiV1.MapCustomerRoutes().MapTransactions().MapDisputes();
 apiV1.MapOperations();
-apiV1.MapLinkingRoutes().MapLinkingStart();
+apiV1.MapLinkingRoutes().MapLinkingStart().MapLinkingVerify();
 
 await app.RunAsync();

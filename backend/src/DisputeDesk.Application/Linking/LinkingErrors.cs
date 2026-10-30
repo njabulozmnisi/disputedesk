@@ -16,4 +16,22 @@ public static class LinkingErrors
     /// <c>Retry-After</c>: a full queue has no window to report.
     /// </summary>
     public static readonly Error QueueFull = Error.RateLimited("rate-limited", "Too many linking starts are waiting. Try again later.");
+
+    /// <summary>
+    /// The customer or the login already has a link that another verification committed first (AD-15). The verify handler
+    /// answers it as a wrong code, so it never reaches HTTP.
+    /// </summary>
+    public static readonly Error LinkClash = Error.Conflict("action-not-allowed", "Another verification linked this customer or login first.");
+
+    /// <summary>Three codes were wrong: this challenge takes no more attempts, and the person starts linking again (FR-7).</summary>
+    public static readonly Error Locked = Error.Conflict("linking-locked", "Too many incorrect codes. Start linking again to get a new code.");
+
+    /// <summary>
+    /// A wrong, expired or unknown code, with the attempts left. Every kind of challenge, and a login with none, gets this
+    /// same answer (OWASP Authentication Cheat Sheet, generic responses).
+    /// </summary>
+    public static Error OtpIncorrect(int attemptsRemaining) => Error.BusinessRule(
+        "otp-incorrect",
+        "The code is incorrect or has expired.",
+        new Dictionary<string, object?> { ["attemptsRemaining"] = attemptsRemaining });
 }
