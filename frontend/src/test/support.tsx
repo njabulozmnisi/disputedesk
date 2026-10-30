@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { http, HttpResponse } from 'msw';
+import { StrictMode } from 'react';
 
 import type { DisputeResponse, SessionState, TransactionResponse } from '@/api/generated/model';
 import { problemType, type ProblemSlug } from '@/api/problems';
@@ -15,13 +16,19 @@ type RenderOptions = {
   path?: string;
   /** Use fake timers: the user-event clock then follows them. */
   fakeTimers?: boolean;
+  /** Render inside `<StrictMode>`, as `main.tsx` does. */
+  strictMode?: boolean;
 };
 
 /**
  * Renders the whole app at `path` with a memory history and a real QueryClient. The API is whatever handlers the test
  * has added to the MSW server. Reads retry with no delay so a 503 test does not wait a second.
  */
-export function renderApp({ path = '/', fakeTimers = false }: RenderOptions = {}) {
+export function renderApp({
+  path = '/',
+  fakeTimers = false,
+  strictMode = false,
+}: RenderOptions = {}) {
   const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
   const queryClient = createQueryClient(router);
   queryClient.setDefaultOptions({
@@ -29,11 +36,12 @@ export function renderApp({ path = '/', fakeTimers = false }: RenderOptions = {}
     queries: { ...queryClient.getDefaultOptions().queries, retryDelay: 0 },
   });
   const user = userEvent.setup(fakeTimers ? { advanceTimers: vi.advanceTimersByTime } : undefined);
-  render(
+  const app = (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  render(strictMode ? <StrictMode>{app}</StrictMode> : app);
   return { router, queryClient, user };
 }
 

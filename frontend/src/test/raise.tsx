@@ -37,12 +37,12 @@ export function recordRaiseRequests(respond: (attempt: number) => Response = cre
 /** Signs in a linked customer, lists `rows` and opens screen 4a from the first row's Dispute control. */
 export async function openRaiseScreen(
   rows: TransactionResponse[] = [makeRow()],
-  { fakeTimers = false } = {},
+  { fakeTimers = false, strictMode = false } = {},
 ) {
   signInAs('linked');
   serveAntiforgeryToken();
   serveTransactions(rows);
-  const app = renderApp({ path: '/transactions', fakeTimers });
+  const app = renderApp({ path: '/transactions', fakeTimers, strictMode });
   await app.user.click(await screen.findByRole('link', { name: 'Dispute this transaction' }));
   await screen.findByRole('heading', { level: 1, name: 'Dispute this transaction' });
   return app;
@@ -59,7 +59,7 @@ export async function continueToReview(user: UserEvent) {
 }
 
 /** Opens 4a, picks Unrecognised, continues, and returns the app on screen 4b. */
-export async function openReviewScreen(options?: { fakeTimers?: boolean }) {
+export async function openReviewScreen(options?: { fakeTimers?: boolean; strictMode?: boolean }) {
   const app = await openRaiseScreen([makeRow()], options);
   await chooseReason(app.user, 'Unrecognised');
   await continueToReview(app.user);
