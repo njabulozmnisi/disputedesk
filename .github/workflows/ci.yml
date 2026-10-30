@@ -144,6 +144,9 @@ jobs:
           rejects "a token declared twice"    's/--primary: #2b57c9;/--primary: #2b57c9; --primary: #2b57c9;/' --primary
           rejects "a twice-declared token with a space before its colon" \
             's/--primary: #2b57c9;/--primary: #2b57c9; --primary : #000000;/' --primary
+          rejects "a twice-declared token with a newline before its colon" 's/--primary: #2b57c9;/--primary: #2b57c9; --primary\
+          : #000000;/' --primary
+          rejects "a value that repeats the token name" 's/--primary: #2b57c9;/--primary: --primary: #2b57c9;/' --primary
           rejects "only a prefixed token"     '/--primary: #2b57c9;/d'                                       --primary
           rejects "a dark token missing"      '/--foreground: #eef1f5;/d'                                    --foreground
           rejects "only a commented-out token" 's|--primary: #2b57c9;|/* --primary: #2b57c9; */|'             --primary

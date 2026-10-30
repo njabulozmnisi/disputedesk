@@ -95,8 +95,11 @@ public class OutboxRelayHeartbeatTests(OutboxFixture outbox)
 
         await stopTicking.CancelAsync();
         await ticking;
-        // One send's 10-second delivery timeout, plus up to a second for librdkafka's once-a-second timeout scan.
-        Assert.InRange(oldest, TimeSpan.Zero, TimeSpan.FromSeconds(11));
+        // One send's 10-second delivery timeout, plus up to a second for librdkafka's once-a-second timeout scan, plus a
+        // second for thread scheduling on a loaded machine (11.1 s was seen once against an 11-second bound). Real time,
+        // not the fake clock, sets the send's length, so the bound needs that margin. Without the touch just before the
+        // send, the 4-second table-lock wait adds to the age (about 14 s), which this bound still fails.
+        Assert.InRange(oldest, TimeSpan.Zero, TimeSpan.FromSeconds(12));
     }
 
     private static DateTime? HeartbeatAt() =>

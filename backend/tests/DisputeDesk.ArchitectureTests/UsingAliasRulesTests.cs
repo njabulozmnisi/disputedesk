@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace DisputeDesk.ArchitectureTests;
 
@@ -38,9 +40,8 @@ public partial class UsingAliasRulesTests
     public void ProjectAndPropsFiles_MsBuildUsingAlias_IsAbsent()
     {
         var violations = ProjectAndPropsFiles()
-            .SelectMany(file => File.ReadLines(file).Select((line, index) => (file, line, number: index + 1)))
-            .Where(entry => IsMsBuildUsingAlias(entry.line))
-            .Select(entry => $"{Path.GetRelativePath(SourceRoots.Repo, entry.file)}:{entry.number}: {entry.line.Trim()}")
+            .SelectMany(file => MsBuildUsingAliases(XDocument.Load(file, LoadOptions.SetLineInfo))
+                .Select(item => $"{Path.GetRelativePath(SourceRoots.Repo, file)}:{((IXmlLineInfo)item).LineNumber}: {item}"))
             .ToList();
 
         Assert.True(violations.Count == 0, "MSBuild Using items with an Alias found:\n" + string.Join('\n', violations));
@@ -59,18 +60,22 @@ public partial class UsingAliasRulesTests
 
     [Theory]
     [InlineData("<Using Include=\"DisputeDesk.Contracts.Disputes\" Alias=\"Wire\" />", true)]
-    [InlineData("    <Using Alias=\"Wire\" Include=\"DisputeDesk.Contracts.Disputes\" />", true)]
+    [InlineData("<Using Alias=\"Wire\" Include=\"DisputeDesk.Contracts.Disputes\" />", true)]
     [InlineData("<Using Include=\"Xunit\" />", false)]
     [InlineData("<Using Include=\"System.Math\" Static=\"true\" />", false)]
-    [InlineData("<ItemGroup><Using Include=\"DisputeDesk.Contracts.Disputes\" Alias=\"Wire\" /></ItemGroup>", true)]
     [InlineData("<using Include=\"DisputeDesk.Contracts.Disputes\" alias=\"Wire\" />", true)]
+    [InlineData("<Using Include=\"DisputeDesk.Contracts.Disputes\"><Alias>Wire</Alias></Using>", true)]
+    [InlineData("<USING Include=\"DisputeDesk.Contracts.Disputes\"><alias>Wire</alias></USING>", true)]
+    [InlineData("<Using\n    Include=\"DisputeDesk.Contracts.Disputes\"\n    Alias=\"Wire\" />", true)]
     [InlineData("<!-- shared --> <Using Include=\"DisputeDesk.Contracts.Disputes\" Alias=\"Wire\" />", true)]
     [InlineData("<!-- <Using Include=\"X\" Alias=\"Y\" /> -->", false)]
-    [InlineData("<ItemGroup><!-- <Using Include=\"X\" Alias=\"Y\" /> --></ItemGroup>", false)]
-    [InlineData("<!-- <Using Include=\"X\" Alias=\"Y\" />", false)]
-    public void MsBuildUsingAlias_SampleLine_IsMatchedOnlyForAnAlias(string line, bool expected)
+    [InlineData("<!--\n  <Using Include=\"X\" Alias=\"Y\" />\n-->", false)]
+    [InlineData("<Compile Include=\"Alias.cs\" Alias=\"Wire\" />", false)]
+    public void MsBuildUsingAlias_SampleItemGroup_IsMatchedOnlyForAnAlias(string items, bool expected)
     {
-        Assert.Equal(expected, IsMsBuildUsingAlias(line));
+        XDocument project = XDocument.Parse($"<Project><ItemGroup>{items}</ItemGroup></Project>");
+
+        Assert.Equal(expected, MsBuildUsingAliases(project).Any());
     }
 
     [Theory]
@@ -106,16 +111,16 @@ public partial class UsingAliasRulesTests
     [GeneratedRegex(@"^\s*(?:global\s+)?using\s+@?\w+\s*=")]
     private static partial Regex UsingAliasDirective();
 
-    // The line, without its XML comments, holds a `<Using` element with an `Alias` attribute.
-    private static bool IsMsBuildUsingAlias(string line) => MsBuildUsingAlias().IsMatch(XmlComment().Replace(line, ""));
+    // `Using` items with `Alias` metadata, written as an attribute or as a child element (Microsoft Learn, Item element
+    // (MSBuild): "Specify metadata as attributes"). The XML parser skips comments and joins multi-line elements. Names are
+    // compared ignoring case, because MSBuild item and metadata names are not case-sensitive (Microsoft Learn, MSBuild
+    // items: "Metadata name matching is case-insensitive"; MSBuild, Project file).
+    private static IEnumerable<XElement> MsBuildUsingAliases(XDocument project) =>
+        project.Descendants()
+            .Where(element => IsNamed(element.Name, "Using"))
+            .Where(element => element.Attributes().Any(attribute => IsNamed(attribute.Name, "Alias"))
+                || element.Elements().Any(child => IsNamed(child.Name, "Alias")));
 
-    // Matched one line at a time: a `<Using` element that has an `Alias` attribute, anywhere on the line and in either
-    // attribute order. Case is ignored, because MSBuild item and metadata names are not case-sensitive (Microsoft Learn,
-    // Item definitions).
-    [GeneratedRegex(@"<Using\b[^>]*\sAlias\s*=", RegexOptions.IgnoreCase)]
-    private static partial Regex MsBuildUsingAlias();
-
-    // An XML comment, or the start of one that closes on a later line.
-    [GeneratedRegex(@"<!--.*?(?:-->|$)")]
-    private static partial Regex XmlComment();
+    private static bool IsNamed(XName name, string expected) =>
+        string.Equals(name.LocalName, expected, StringComparison.OrdinalIgnoreCase);
 }

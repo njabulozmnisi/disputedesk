@@ -25,15 +25,17 @@ css=$(awk '{ text = text $0 "\n" } END {
 block(){ awk -v start="$1" 'on && /}/ {exit} on {print} !on && index($0, start) {on=1}' <<< "$css"; }
 
 # colour BLOCK-TEXT BLOCK-NAME TOKEN: the token's one #rrggbb value. `--primary:` never matches `--primary-hover:`.
-# CSS Syntax Level 3 (consume a declaration) allows whitespace between the name and the colon.
+# CSS Syntax Level 3 (consume a declaration) allows whitespace, newlines included, between the name and the colon, so
+# the block's lines are joined into one before the search.
 colour(){
   local declarations count value
-  declarations=$(grep -oE -- "(^|[[:space:];{])$3[[:space:]]*:[^;]*" <<< "$1" || true)
+  declarations=$(tr '\n' ' ' <<< "$1" | grep -oE -- "(^|[[:space:];{])$3[[:space:]]*:[^;]*" || true)
   count=$(grep -c . <<< "$declarations" || true)
   if [ "$count" != 1 ]; then
     echo "label-policy: $3 is declared $count times in the $2 block, not once" >&2; exit 1
   fi
-  value=$(sed -E "s/^.*$3[[:space:]]*:[[:space:]]*//; s/[[:space:]]+$//" <<< "$declarations")
+  # The name is cut from the start of the match only, so a value that repeats the name stays in the value.
+  value=$(sed -E "s/^[[:space:];{]?$3[[:space:]]*:[[:space:]]*//; s/[[:space:]]+$//" <<< "$declarations")
   if ! [[ "$value" =~ ^#[0-9a-fA-F]{6}$ ]]; then
     echo "label-policy: $3 in the $2 block is '$value', not #rrggbb" >&2; exit 1
   fi
