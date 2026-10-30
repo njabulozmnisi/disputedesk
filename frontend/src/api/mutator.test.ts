@@ -93,6 +93,21 @@ describe('the Orval mutator', () => {
     expect(error).toMatchObject({ status: 502, problem: undefined });
   });
 
+  it('keeps the Retry-After header of an error response, raw, and null when there is none', async () => {
+    server.use(
+      http.get(
+        '*/api/v1/transactions',
+        () => new HttpResponse(null, { status: 429, headers: { 'Retry-After': '900' } }),
+      ),
+    );
+    const withHeader = await getApiV1Transactions().catch((caught: unknown) => caught);
+    failWith('/api/v1/transactions', 'core-banking-unavailable', 503);
+    const without = await getApiV1Transactions().catch((caught: unknown) => caught);
+
+    expect(withHeader).toMatchObject({ status: 429, retryAfter: '900' });
+    expect(without).toMatchObject({ status: 503, retryAfter: null });
+  });
+
   it('tells listeners the status of every response, success or failure', async () => {
     const statuses: number[] = [];
     const stopListening = onApiResponse((status) => statuses.push(status));

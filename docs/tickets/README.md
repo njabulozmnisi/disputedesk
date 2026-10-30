@@ -81,7 +81,7 @@ Needs: epic 2 (`CustomerLinks`, the core-banking port and `AuditLog.Record`); ep
 | 6.2 | [OTP verification links the login, with lockout and race safety](epic-6-linking/tickets/story-6.2-otp-verification-links-the-login-with-lockout-and-race-safet.md) | backend | done |
 | 6.6 | [Trusted forwarded headers and an identity log without id_token_hint](epic-6-linking/tickets/story-6.6-trusted-forwarded-headers-and-an-identity-log-without-id-tok.md) | backend | done |
 | 6.3 | [Linking rate limits per login and per IP](epic-6-linking/tickets/story-6.3-linking-rate-limits-per-login-and-per-ip.md) | backend | done |
-| 6.4 | [Linking screens for details, OTP, lockout and rate limits](epic-6-linking/tickets/story-6.4-linking-screens-for-details-otp-lockout-and-rate-limits.md) | frontend | planned |
+| 6.4 | [Linking screens for details, OTP, lockout and rate limits](epic-6-linking/tickets/story-6.4-linking-screens-for-details-otp-lockout-and-rate-limits.md) | frontend | done |
 
 Build-order constraint: once 6.1 merges, 6.5, 6.2 and 6.6 build in parallel (5.3 may run beside them); 6.3 starts once both 6.5 and 6.2 have merged (it needs 6.5's `ErrorKind.RateLimited` and 6.2's verify route); 6.4 follows 6.3. 6.5 and 6.2 share `LinkingEndpoints.cs`, `Infrastructure/Linking/` and the generated contract files in different sections, so the later of the two rebases and regenerates `openapi.json` and `frontend/src/api/generated/`.
 

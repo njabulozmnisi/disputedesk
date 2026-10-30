@@ -38,6 +38,10 @@ export function createQueryClient(router: Pick<AppRouter, 'navigate' | 'state'>)
 
   function handleError(error: Error) {
     if (isProblem(error, 'linking-required')) {
+      // The server says the login is not linked, so the SPA's view of it changes too: /link only shows to `unlinked`.
+      queryClient.setQueryData<SessionResponse>(getGetApiV1BffSessionQueryKey(), {
+        state: 'unlinked',
+      });
       void router.navigate({ href: '/link' });
     } else if (error instanceof ApiError && error.status === 401 && isSignedIn()) {
       // The server has ended the session, so the SPA's view of it ends too.

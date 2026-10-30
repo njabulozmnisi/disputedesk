@@ -9,12 +9,15 @@ export type Problem = ProblemDetails & { traceId?: string };
 export class ApiError extends Error {
   readonly status: number;
   readonly problem: Problem | undefined;
+  /** The raw `Retry-After` header (RFC 9110 section 10.2.3), or null when the response had none. */
+  readonly retryAfter: string | null;
 
-  constructor(status: number, problem: Problem | undefined) {
+  constructor(status: number, problem: Problem | undefined, retryAfter: string | null = null) {
     super(`API request failed with status ${String(status)}`);
     this.name = 'ApiError';
     this.status = status;
     this.problem = problem;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -53,7 +56,10 @@ async function send(url: string, options: RequestInit, callerContext: Context): 
   responseListeners.forEach((listener) => {
     listener(response.status);
   });
-  if (!response.ok) throw new ApiError(response.status, await readProblem(response));
+  if (!response.ok) {
+    const problem = await readProblem(response);
+    throw new ApiError(response.status, problem, response.headers.get('Retry-After'));
+  }
   return response;
 }
 

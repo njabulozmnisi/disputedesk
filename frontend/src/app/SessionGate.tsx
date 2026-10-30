@@ -8,8 +8,7 @@ import { Page } from '@/components/Page';
 import { ProblemNotice } from '@/components/ProblemNotice';
 import { Button } from '@/components/ui/button';
 
-// Where each authorisation state belongs (EXPERIENCE.md, Information Architecture). /link has no route until the
-// linking story, so it shows the not-found screen.
+// Where each authorisation state belongs (EXPERIENCE.md, Information Architecture).
 const homeOf: Record<SessionState, string> = {
   anonymous: '/',
   unlinked: '/link',

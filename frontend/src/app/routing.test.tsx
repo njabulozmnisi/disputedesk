@@ -17,6 +17,7 @@ import {
 
 const startHeading = 'Something wrong with a card transaction?';
 const notFoundHeading = "We can't find that dispute";
+const linkHeading = 'Link your login';
 
 beforeEach(() => {
   serveTransactions();
@@ -60,13 +61,11 @@ describe('routing by authorisation state', () => {
     expect(screen.queryByText(startHeading)).not.toBeInTheDocument();
   });
 
-  it('sends an unlinked visitor of / to /link, which has no screen yet and so shows not-found', async () => {
+  it('sends an unlinked visitor of / to /link, which shows the details form', async () => {
     signInAs('unlinked');
     const { router } = renderApp({ path: '/' });
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: notFoundHeading }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: linkHeading })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/link');
   });
 
@@ -87,9 +86,7 @@ describe('routing by authorisation state', () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/link');
     });
-    expect(
-      await screen.findByRole('heading', { level: 1, name: notFoundHeading }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: linkHeading })).toBeInTheDocument();
   });
 
   it('shows the transactions screen to a linked visitor', async () => {
@@ -101,14 +98,22 @@ describe('routing by authorisation state', () => {
     ).toBeInTheDocument();
   });
 
-  it('sends a 403 linking-required from the API to /link', async () => {
+  // The cache says linked; the 403 sets it to unlinked first, so /link shows 2a instead of bouncing back.
+  it('sends a 403 linking-required from the API to /link, and stays there', async () => {
     signInAs('linked');
-    failWith('/api/v1/transactions', 'linking-required', 403);
+    let transactionRequests = 0;
+    server.use(
+      http.get('*/api/v1/transactions', () => {
+        transactionRequests += 1;
+        return problemResponse('linking-required', 403);
+      }),
+    );
     const { router } = renderApp({ path: '/transactions' });
 
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/link');
-    });
+    expect(await screen.findByRole('heading', { level: 1, name: linkHeading })).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(router.state.location.pathname).toBe('/link');
+    expect(transactionRequests).toBe(1);
   });
 });
 
@@ -325,17 +330,74 @@ describe('the disputes route', () => {
   );
 });
 
-// Criterion 10: screens whose story has not landed render not-found until it adds its route.
-describe('screens not built yet', () => {
-  it.each(['/link', '/link/otp'])('shows not-found at %s for a linked customer', async (path) => {
-    signInAs('linked');
-    renderApp({ path });
+// Story 6.4: the linking routes, for an unlinked login only.
+describe('the linking routes', () => {
+  it.each([
+    ['/link', linkHeading],
+    ['/link/otp', 'Enter your OTP'],
+  ])('shows %s to an unlinked login', async (path, heading) => {
+    signInAs('unlinked');
+    const { router } = renderApp({ path });
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: notFoundHeading }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(path);
+    expect(screen.queryByText(notFoundHeading)).not.toBeInTheDocument();
   });
 
+  it.each(['/link', '/link/otp'])(
+    'sends a linked customer from %s to /transactions before any linking request',
+    async (path) => {
+      signInAs('linked');
+      const linkingRequests: string[] = [];
+      server.events.on('request:start', ({ request }) => {
+        if (new URL(request.url).pathname.startsWith('/api/v1/linking')) {
+          linkingRequests.push(request.url);
+        }
+      });
+      const { router } = renderApp({ path });
+
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Transactions' }),
+      ).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe('/transactions');
+      expect(linkingRequests).toEqual([]);
+    },
+  );
+
+  it.each(['/link', '/link/otp'])(
+    'sends an anonymous visitor of %s to the start page',
+    async (path) => {
+      signInAs('anonymous');
+      const { router } = renderApp({ path });
+
+      expect(
+        await screen.findByRole('heading', { level: 1, name: startHeading }),
+      ).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe('/');
+    },
+  );
+
+  it('shows only the wordmark and Sign out in the header, and the same help line on both screens', async () => {
+    signInAs('unlinked');
+    const { router } = renderApp({ path: '/link' });
+    await screen.findByRole('heading', { level: 1, name: linkHeading });
+
+    const onlyWordmarkAndSignOut = () => {
+      expect(screen.getByRole('link', { name: 'DisputeDesk' })).toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+      expect(screen.getByText("Can't link online? Contact the bank.")).toBeInTheDocument();
+    };
+    onlyWordmarkAndSignOut();
+
+    await router.navigate({ to: '/link/otp' });
+    await screen.findByRole('heading', { level: 1, name: 'Enter your OTP' });
+    onlyWordmarkAndSignOut();
+  });
+});
+
+// Criterion 10: screens whose story has not landed render not-found until it adds its route.
+describe('screens not built yet', () => {
   // The route exists (story 3.12), but `params.parse` refuses an ID that is not a GUID.
   it('shows not-found at /disputes/abc for a linked customer, through params.parse', async () => {
     signInAs('linked');
