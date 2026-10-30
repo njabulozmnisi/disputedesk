@@ -341,26 +341,150 @@ describe('disputability', () => {
     expect(within(row).getByText(hint)).toBeInTheDocument();
     expect(within(row).queryByRole('link')).not.toBeInTheDocument();
   });
+});
 
-  // A card payment that has a dispute is not "not a card payment". Story 3.10 shows its status badge; until then the
-  // row has no hint and no Dispute link.
-  it('shows no hint and no Dispute link on a row that is already disputed', async () => {
+const disputeId = '3f2b8c1e-7d4a-4e5b-9a60-1c2d3e4f5a6b';
+const statusCases = [
+  ['submitted', 'Submitted'],
+  ['underReview', 'Under review'],
+  ['underReviewPrioritised', 'Under review (prioritised)'],
+  ['resolved', 'Resolved'],
+  ['withdrawn', 'Withdrawn'],
+] as const;
+
+/** A row the way the API sends it once a dispute exists: not disputable, `alreadyDisputed`. */
+function disputedRow(overrides: Partial<TransactionResponse>) {
+  return makeRow({
+    description: 'Already raised',
+    disputable: false,
+    notDisputableReason: 'alreadyDisputed',
+    disputeId,
+    customerStatus: 'submitted',
+    ...overrides,
+  });
+}
+
+// Story 3.10, criterion 2: a disputed row shows its status badge as a link.
+describe('dispute status badge on a row', () => {
+  it.each(statusCases)(
+    'shows %s as the only link, with no Dispute control and no hint',
+    async (customerStatus, label) => {
+      serveTransactions([disputedRow({ customerStatus })]);
+      renderApp({ path: '/transactions' });
+
+      const row = (await screen.findByText('Already raised')).closest('li') as HTMLElement;
+      const links = within(row).getAllByRole('link');
+      expect(links).toHaveLength(1);
+      expect(links[0]).toHaveAccessibleName(`Dispute status: ${label}`);
+      expect(links[0]).toHaveAttribute('href', `/disputes/${disputeId}`);
+      expect(within(row).queryByText(/Dispute this transaction/)).not.toBeInTheDocument();
+      expect(
+        within(row).queryByText(/Not a card payment|Contact the bank|Not disputable/),
+      ).toBeNull();
+      expect(within(row).queryByText('ⓘ', { exact: false })).not.toBeInTheDocument();
+    },
+  );
+
+  it('hides the icon from the accessible name and keeps the dispute id out of the text', async () => {
+    serveTransactions([disputedRow({ customerStatus: 'underReviewPrioritised' })]);
+    renderApp({ path: '/transactions' });
+
+    const link = await screen.findByRole('link', {
+      name: 'Dispute status: Under review (prioritised)',
+    });
+    expect(link.querySelector('[aria-hidden="true"]')).toHaveTextContent('▲');
+    expect(screen.queryByText(new RegExp(disputeId))).not.toBeInTheDocument();
+    expect(link).not.toHaveAccessibleName(expect.stringContaining(disputeId));
+  });
+
+  it('encodes the dispute id in the href', async () => {
+    serveTransactions([disputedRow({ disputeId: '../x?y#z' })]);
+    renderApp({ path: '/transactions' });
+
+    expect(await screen.findByRole('link', { name: 'Dispute status: Submitted' })).toHaveAttribute(
+      'href',
+      '/disputes/..%2Fx%3Fy%23z',
+    );
+  });
+
+  // Criterion 3: defence in depth, the server's mapping is the control.
+  it('shows no badge, no Dispute control and no hint for an unknown status, a half-set pair or a missing or empty id', async () => {
+    const idKeyOmitted = disputedRow({
+      transactionId: 'TXN-O',
+      description: 'Id omitted',
+      customerStatus: 'resolved',
+    });
+    Reflect.deleteProperty(idKeyOmitted, 'disputeId');
     serveTransactions([
-      makeRow({
-        description: 'Already raised',
-        disputable: false,
-        notDisputableReason: 'alreadyDisputed',
-        disputeId: 'DSP-1',
+      disputedRow({
+        transactionId: 'TXN-U',
+        description: 'Unknown status',
+        customerStatus: 'escalated' as TransactionResponse['customerStatus'],
       }),
+      disputedRow({ transactionId: 'TXN-H', description: 'Half set', customerStatus: null }),
+      disputedRow({
+        transactionId: 'TXN-S',
+        description: 'Status only',
+        disputeId: null,
+        customerStatus: 'resolved',
+      }),
+      disputedRow({
+        transactionId: 'TXN-E',
+        description: 'Empty id',
+        disputeId: '',
+        customerStatus: 'resolved',
+      }),
+      idKeyOmitted,
     ]);
     renderApp({ path: '/transactions' });
 
-    const row = (await screen.findByText('Already raised')).closest('li') as HTMLElement;
-    expect(
-      within(row).queryByText(/Not a card payment|Contact the bank|Not disputable/),
-    ).toBeNull();
-    expect(within(row).queryByText('ⓘ', { exact: false })).not.toBeInTheDocument();
-    expect(within(row).queryByRole('link')).not.toBeInTheDocument();
+    await screen.findByText('Unknown status');
+    expect(screen.getAllByRole('listitem')).toHaveLength(5);
+    expect(within(screen.getByRole('list')).queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.queryByText(/escalated/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Not a card payment|Contact the bank|Not disputable/)).toBeNull();
+  });
+
+  // Criterion 4: rows without a dispute are unchanged.
+  it('shows no badge on a disputable row, which keeps its Dispute link', async () => {
+    serveTransactions([makeRow({ description: 'Open row' })]);
+    renderApp({ path: '/transactions' });
+
+    const row = (await screen.findByText('Open row')).closest('li') as HTMLElement;
+    expect(within(row).getByRole('link', { name: 'Dispute this transaction' })).toBeInTheDocument();
+    expect(within(row).queryByRole('link', { name: /Dispute status/ })).not.toBeInTheDocument();
+  });
+
+  // Criterion 5: the badge reads only the list row.
+  it('makes no request beyond the session and the transactions list', async () => {
+    const paths: string[] = [];
+    server.events.on('request:start', ({ request }) => {
+      paths.push(new URL(request.url).pathname);
+    });
+    serveTransactions(
+      statusCases.map(([customerStatus], index) =>
+        disputedRow({
+          transactionId: `TXN-${String(index)}`,
+          description: `Row ${String(index)}`,
+          customerStatus,
+        }),
+      ),
+    );
+    renderApp({ path: '/transactions' });
+    await screen.findByRole('link', { name: 'Dispute status: Withdrawn' });
+
+    expect(new Set(paths)).toEqual(new Set(['/api/v1/bff/session', '/api/v1/transactions']));
+  });
+
+  // Mockup a.badge:hover: the label underlines on hover, and the link is full-radius so its focus ring matches.
+  it('rounds the link and underlines the label on hover', async () => {
+    serveTransactions([disputedRow({})]);
+    renderApp({ path: '/transactions' });
+
+    const link = await screen.findByRole('link', { name: 'Dispute status: Submitted' });
+    expect(link).toHaveClass('rounded-full');
+    expect(link).toHaveClass('group');
+    expect(within(link).getByText('Submitted')).toHaveClass('group-hover:underline');
   });
 });
 
