@@ -9,11 +9,21 @@ const dayFormat = new Intl.DateTimeFormat('en-US', {
   timeZone: 'Africa/Johannesburg',
 });
 
+const yearFormat = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  timeZone: 'Africa/Johannesburg',
+});
+
 /** "Mon 26 Oct": the day the transaction was made, in South African time. */
 export function formatDay(isoDateTime: string): string {
   const parts = dayFormat.formatToParts(new Date(isoDateTime));
   const part = (type: string) => parts.find((candidate) => candidate.type === type)?.value ?? '';
   return `${part('weekday')} ${part('day')} ${part('month')}`;
+}
+
+/** "Mon 26 Oct 2026": the same day with its year, for the raise and review screens. */
+export function formatFullDay(isoDateTime: string): string {
+  return `${formatDay(isoDateTime)} ${yearFormat.format(new Date(isoDateTime))}`;
 }
 
 function isDecimalString(value: string): value is `${number}` {

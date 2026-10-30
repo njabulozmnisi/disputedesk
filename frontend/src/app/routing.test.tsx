@@ -246,21 +246,17 @@ describe('public routes render for any state', () => {
 
 // Criterion 10: screens whose story has not landed render not-found until it adds its route.
 describe('screens not built yet', () => {
-  it.each([
-    '/link',
-    '/link/otp',
-    '/disputes',
-    '/disputes/abc',
-    '/transactions/TXN-1/dispute',
-    '/transactions/TXN-1/dispute/review',
-  ])('shows not-found at %s for a linked customer', async (path) => {
-    signInAs('linked');
-    renderApp({ path });
+  it.each(['/link', '/link/otp', '/disputes', '/disputes/abc'])(
+    'shows not-found at %s for a linked customer',
+    async (path) => {
+      signInAs('linked');
+      renderApp({ path });
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: notFoundHeading }),
-    ).toBeInTheDocument();
-  });
+      expect(
+        await screen.findByRole('heading', { level: 1, name: notFoundHeading }),
+      ).toBeInTheDocument();
+    },
+  );
 
   it('offers a way on from not-found', async () => {
     signInAs('linked');

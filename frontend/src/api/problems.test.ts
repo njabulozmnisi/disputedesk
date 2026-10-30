@@ -1,5 +1,5 @@
 import { ApiError } from './mutator';
-import { isProblem, problemType, traceIdOf } from './problems';
+import { isProblem, problemExtension, problemType, traceIdOf } from './problems';
 
 // Criterion 2: problems are identified by the full `type` URI (RFC 9457 section 3.1.1), compared with ===.
 describe('problem types', () => {
@@ -36,5 +36,18 @@ describe('traceIdOf', () => {
     expect(traceIdOf(new ApiError(500, { traceId: 'trace-9' }))).toBe('trace-9');
     expect(traceIdOf(new ApiError(502, undefined))).toBeUndefined();
     expect(traceIdOf(new TypeError('Failed to fetch'))).toBeUndefined();
+  });
+});
+
+describe('problemExtension', () => {
+  it('reads a string extension member, and nothing for a missing or non-string one', () => {
+    // Variables, not literals: the extension members are not in the generated ProblemDetails type.
+    const alreadyDisputed = { type: problemType('already-disputed'), disputeId: 'D-1' };
+    const numeric = { title: 'x', reason: 5 };
+
+    expect(problemExtension(new ApiError(409, alreadyDisputed), 'disputeId')).toBe('D-1');
+    expect(problemExtension(new ApiError(409, alreadyDisputed), 'reason')).toBeUndefined();
+    expect(problemExtension(new ApiError(422, numeric), 'reason')).toBeUndefined();
+    expect(problemExtension(new ApiError(502, undefined), 'reason')).toBeUndefined();
   });
 });

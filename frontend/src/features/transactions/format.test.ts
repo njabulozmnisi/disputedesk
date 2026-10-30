@@ -1,4 +1,4 @@
-import { formatDay, formatMoney } from './format';
+import { formatDay, formatFullDay, formatMoney } from './format';
 
 describe('formatMoney', () => {
   it.each([
@@ -34,5 +34,15 @@ describe('formatDay', () => {
   it('names the day in South African time (UTC+2), not in UTC', () => {
     expect(formatDay('2026-10-26T21:59:59Z')).toBe('Mon 26 Oct');
     expect(formatDay('2026-10-26T22:00:00Z')).toBe('Tue 27 Oct');
+  });
+});
+
+describe('formatFullDay', () => {
+  it('adds the year, as the review screen shows it: "Mon 26 Oct 2026"', () => {
+    expect(formatFullDay('2026-10-26T09:14:00Z')).toBe('Mon 26 Oct 2026');
+  });
+
+  it('names the day in South African time', () => {
+    expect(formatFullDay('2026-12-31T22:00:00Z')).toBe('Fri 1 Jan 2027');
   });
 });
