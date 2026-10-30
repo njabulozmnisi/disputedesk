@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Confluent.Kafka;
 using DisputeDesk.Infrastructure.Observability;
 using DisputeDesk.Infrastructure.Outbox;
+using DisputeDesk.Worker.Sla;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry.Logs;
@@ -63,6 +64,8 @@ public sealed class RelayHost : IAsyncDisposable
             $"--Kafka:BootstrapServers={bootstrapServers}",
         ]);
         builder.Services.AddSingleton(clock);
+        // No SLA sweep: its timer would also wait on the relay's test clock, which counts the relay's waits.
+        builder.Services.Remove(builder.Services.Single(service => service.ImplementationType == typeof(SlaSweep)));
         if (buildProducer is not null)
         {
             builder.Services.AddSingleton(buildProducer);

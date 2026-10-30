@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using DisputeDesk.Worker.Sla;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
@@ -39,6 +40,8 @@ public class WorkerTelemetryTests
     {
         var spans = new List<Activity>();
         HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development"]);
+        // No SLA sweep: a started host would escalate the due disputes of whatever database its configuration names.
+        builder.Services.Remove(builder.Services.Single(service => service.ImplementationType == typeof(SlaSweep)));
         builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddInMemoryExporter(spans));
         using IHost host = builder.Build();
         await host.StartAsync(TestContext.Current.CancellationToken);

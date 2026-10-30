@@ -21,6 +21,9 @@ public sealed class Dispute
     /// <summary>An unresolved dispute is escalated this long after it was raised (FR-26).</summary>
     public static readonly TimeSpan Sla = TimeSpan.FromHours(240);
 
+    /// <summary>The SLA sweep warns operations once this long or less before the SLA is due (AD-18; decided 2026-10-30).</summary>
+    public static readonly TimeSpan SlaWarningLeadTime = TimeSpan.FromHours(48);
+
     private readonly List<StoredEvent> _pendingChanges = [];
 
     // EF Core materialises the read model through this constructor and then sets every property from the row; Raise
@@ -80,6 +83,9 @@ public sealed class Dispute
     public DateTimeOffset CreatedAtUtc { get; private set; }
 
     public DateTimeOffset SlaDueAtUtc { get; private set; }
+
+    /// <summary>When the SLA sweep warned operations that the SLA is close; null until then (AD-18).</summary>
+    public DateTimeOffset? SlaWarningRaisedAtUtc { get; private set; }
 
     /// <summary>The stored events appended since the dispute was raised or replayed and not yet committed, in order.</summary>
     public IReadOnlyList<StoredEvent> PendingChanges => _pendingChanges;
@@ -250,6 +256,25 @@ public sealed class Dispute
     }
 
     /// <summary>
+    /// The SLA sweep warns operations that the SLA is close (AD-18, FR-26): allowed once per dispute, on a submitted or
+    /// under-review dispute whose SLA is due <see cref="SlaWarningLeadTime"/> or less after <paramref name="now"/> and not
+    /// yet due. Appends one <see cref="SlaWarningRaised"/> at the next version; it changes no status. Every other case is
+    /// refused, so an overdue dispute is escalated without a warning.
+    /// </summary>
+    public Result RecordSlaWarning(Actor actor, DateTimeOffset now)
+    {
+        bool open = Status is DisputeStatus.Submitted or DisputeStatus.UnderReview;
+        bool withinLeadTime = SlaDueAtUtc > now && SlaDueAtUtc <= now + SlaWarningLeadTime;
+        if (!open || !withinLeadTime || SlaWarningRaisedAtUtc is not null)
+        {
+            return DisputeErrors.ActionNotAllowed;
+        }
+
+        Append(Stamped(new SlaWarningRaised(), actor, now));
+        return Result.Success();
+    }
+
+    /// <summary>
     /// The allowed-actions table (FR-24): whether a dispute in <paramref name="status"/> allows <paramref name="action"/>.
     /// Every other pair is refused with 409. Raise creates a dispute, so it is never an action on one.
     /// </summary>
@@ -323,8 +348,10 @@ public sealed class Dispute
             case DisputeWithdrawn withdrawn:
                 Status = withdrawn.ToStatus;
                 break;
+            case SlaWarningRaised warning:
+                SlaWarningRaisedAtUtc = warning.OccurredAtUtc;
+                break;
             default:
-                // SlaWarningRaised too: story 5.3 adds its case with RecordSlaWarning (AD-18).
                 throw new InvalidOperationException($"No Apply case for the stored event type {storedEvent.GetType().Name}.");
         }
 

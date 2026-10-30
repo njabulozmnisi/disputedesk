@@ -252,6 +252,9 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("SlaDueAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("SlaWarningRaisedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
@@ -279,6 +282,9 @@ namespace DisputeDesk.Infrastructure.Persistence.Migrations
                     b.HasIndex("AccountRef", "TransactionId")
                         .IsUnique()
                         .HasDatabaseName("UQ_Disputes_AccountRef_TransactionId");
+
+                    b.HasIndex(new[] { "SlaDueAtUtc" }, "IX_Disputes_SlaWarning")
+                        .HasFilter("\"SlaWarningRaisedAtUtc\" IS NULL AND \"Status\" IN ('Submitted', 'UnderReview')");
 
                     b.ToTable("Disputes", (string)null);
                 });

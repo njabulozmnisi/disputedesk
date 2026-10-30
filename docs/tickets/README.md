@@ -66,7 +66,7 @@ Needs: epic 2 (the gateway templates and provisioning from stories 2.5 and 2.6);
 | 5.5 | [Scalar drives the operations API with a pasted bearer token behind a switch](epic-5-operations/tickets/story-5.5-scalar-drives-the-operations-api-with-a-pasted-bearer-token.md) | backend | done |
 | 5.2 | [Operations actions start review, escalate and resolve under the allowed-actions table](epic-5-operations/tickets/story-5.2-operations-actions-start-review-escalate-and-resolve-under-t.md) | backend | done |
 | 5.4 | [Seeded disputes for customers A and B in every status](epic-5-operations/tickets/story-5.4-seeded-disputes-for-customers-a-and-b-in-every-status.md) | backend | done |
-| 5.3 | [SLA sweep escalates overdue disputes](epic-5-operations/tickets/story-5.3-sla-sweep-escalates-overdue-disputes.md) | backend | planned |
+| 5.3 | [SLA sweep escalates overdue disputes](epic-5-operations/tickets/story-5.3-sla-sweep-escalates-overdue-disputes.md) | backend | done |
 
 Build-order constraint: 5.3 builds after 5.2 and 5.4, and its migration never builds beside 6.1's (both change `AppDbContextModelSnapshot`), so 5.3 starts once 6.1 has merged. From then it may build beside 6.5, 6.2, 6.6 and 6.3, none of which adds a migration.
 
