@@ -35,7 +35,7 @@ colors:
   status-success-fg: '#156038'     # 6.66:1
   status-danger-bg: '#FDECEA'      # Resolved, Rejected; error banners
   status-danger-fg: '#9A1C13'      # 7.20:1
-  status-neutral-bg: '#EEF0F3'     # Withdrawn; not-disputable hints
+  status-neutral-bg: '#EEF0F3'     # Withdrawn; plain Resolved on a transaction row; not-disputable hints
   status-neutral-fg: '#454D5C'     # 7.45:1
   # Dark theme (follows prefers-color-scheme). Surfaces are slate.
   background-dark: '#12171E'
@@ -248,6 +248,7 @@ One accent, everything else neutral or semantic.
 | Under review (prioritised) | priority (amber) | magnifier with up-arrow |
 | Resolved · Upheld | success (green) | check |
 | Resolved · Rejected | danger (red) | cross |
+| Resolved (transaction row, no outcome) | neutral (grey) | flag |
 | Withdrawn | neutral (grey) | arrow-back |
 
 Colour is never the only signal: every badge carries its text label and an icon.
@@ -339,7 +340,7 @@ shadcn components used as-is with the tokens above: `Button`, `Card`, `Input`, `
 - **Empty state.** A flat surface (`{rounded.lg}`): an h2 saying what isn't here, one sentence on why or what fills it, and the next action where there is one ("Go to transactions").
 - **Problem notice.** `Alert` in danger tone: plain sentence, what to do next, and "Reference" with the `traceId` in mono plus a pill Copy button.
 - **OTP input.** Six cells, 48px wide on phone, 24px/800 digits, `{rounded.md}`, one real input underneath (`inputmode="numeric"`, `autocomplete="one-time-code"`).
-- **Wordmark.** "DisputeDesk" in navy 20/800 with a small cobalt dot. It is a placeholder logo; the theme file and the label policy hold its asset path.
+- **Wordmark.** "DisputeDesk" in navy 20/800 with a small cobalt dot. It is a placeholder logo. The SPA draws it in HTML and CSS; the hosted login pages get it as two PNGs (`frontend/src/theme/wordmark.png` and `wordmark-dark.png`, light in navy with a cobalt dot, dark in #C9D6FF with a #8CAAF7 dot), which a comment in the theme file names (story 2.6).
 
 ## Theme file and hosted-login theming
 
@@ -353,7 +354,7 @@ The identity provider's hosted sign-in and sign-up pages are themed from the sam
 | Background colour | `{colors.background}` / `{colors.background-dark}` | #F4F5F7 / #12171E |
 | Warning colour | `{colors.destructive}` / `{colors.destructive-dark}` | #B42318 / #FF8A7E |
 | Font colour | `{colors.foreground}` / `{colors.foreground-dark}` | #1E2430 / #EEF1F5 |
-| Logo and icon (light, dark) | the wordmark assets named in the theme file | |
+| Logo (light, dark) | `wordmark.png` / `wordmark-dark.png` beside the theme file, named in its comment; PNG only, at most 512 KiB (Login v2 never reads an icon, so none is uploaded) | |
 | Font | Nunito Sans: upload the 400 WOFF2 from `fonts/` (the policy takes one font file) | |
 | Theme mode | auto (follows the device) | |
 

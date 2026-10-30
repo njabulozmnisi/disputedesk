@@ -21,3 +21,15 @@ Throwaway APFS copy of the round 1 worktree, filtered runs under the `testcontai
 - Control: both tests pass (2/2).
 - `BffAuthentication.cs` from `8134305` (cookie renewed on every request): `Logout_WhileAnotherRequestIsInFlight_...` fails (and the expiry test, since the old ticket expiry differs).
 - Slide filtered on `KeyHash` only: `Request_WhoseRowExpiresBetweenTheReadAndTheSlide_...` fails; the race test passes.
+
+## Escapes
+
+| Finding | Caught by | Should have | Category | Countermeasure |
+|---|---|---|---|---|
+| `Assert.DoesNotContain("eyJ", cookie)` matched random ciphertext | CI (intermittent) | reviewer (2.8) | flaky | review-story pitfall on absence assertions (2026-10-30) |
+| `ShouldRenew` on every request let an in-flight request set the cookie again after logout | QA (3.3 rerun, intermittent e2e) | security (2.8) | auth | AD-7 now places the idle limit in the ticket store; the e2e `session-cookie-never-renewed` spec guards it |
+| The idle slide could revive a row that ended between read and update | security | builder | auth | conditional `UPDATE` on a live row, with a test |
+
+## Metrics
+
+Fix rounds: 1. Full-suite runs: builder 1 (750), fix round 1, re-verify 1 (751). Supervisor breaks: 2, both caught. QA: 13/13 runs of the formerly flaky spec. CI and Security green on `1b5fc87`. Tokens and wall time: not recorded.

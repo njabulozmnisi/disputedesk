@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Runs one headless builder lane on a worker machine over SSH and brings its result back, so the supervisor dispatches
 # a story with one command instead of hand-written remote scripts.
-#   scripts/lane.sh start <host> <story> <prompt-file> [<base>]  copy the prompt, start `claude -p --agent backend-builder`
+#   scripts/lane.sh start <host> <story> <prompt-file>          copy the prompt, start `claude -p --agent $LANE_AGENT`
 #                                                                 in a tmux session (new worktree, or the existing one)
 #   scripts/lane.sh wait <host> <story>                           wait for the lane's exit file; print exit code and status
 #   scripts/lane.sh collect <host> <story> <base> <out-dir>       copy the report and a verified patch of the worktree
+#   LANE_AGENT  the builder agent to run (default backend-builder; frontend-builder for frontend stories)
 # Lane files live in ~/disputedesk-lanes on the host; the session is lane-<story> with dots as dashes (tmux reads a dot
 # as a pane separator). Never attach to a lane without -r (read-only): Ctrl-C there kills the builder.
 # Exit codes: 0 done; 1 the lane failed or reported blocked; 2 usage or tooling.
@@ -28,7 +29,7 @@ case "$command" in
 lanes=~/disputedesk-lanes
 worktree=~/Projects/Dojo/disputedesk/.claude/worktrees/$story
 if [ -d "\$worktree" ]; then cd "\$worktree"; flag=(); else cd ~/Projects/Dojo/disputedesk; flag=(-w $story); fi
-claude -p --agent backend-builder "\${flag[@]}" --permission-mode dontAsk --output-format json "\$(cat \$lanes/$story.prompt)" > \$lanes/$story.out 2> \$lanes/$story.err
+claude -p --agent ${LANE_AGENT:-backend-builder} "\${flag[@]}" --permission-mode dontAsk --output-format json "\$(cat \$lanes/$story.prompt)" > \$lanes/$story.out 2> \$lanes/$story.err
 echo \$? > \$lanes/$story.exit
 RUN
     remote "$host" "mkdir -p $lanes; rm -f $lanes/$story.out $lanes/$story.err $lanes/$story.exit"

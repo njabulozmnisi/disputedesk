@@ -66,7 +66,8 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Owner: frontend (frontend-builder).
 - Flags: none.
 - Lane: B.
-- Touches: `frontend/src/features/disputes/history/, detail/, withdraw/`; frontend/src/app/ (routes, the shell's skip link).
+- Touches: `frontend/src/features/disputes/history/, detail/, withdraw/`; frontend/src/app/ (routes, the shell's skip link); `frontend/src/features/transactions/TransactionRow.tsx` and `frontend/src/features/disputes/raise/SubmitFailure.tsx` (their plain `/disputes/<id>` anchors become typed TanStack Router `Link`s once the dispute route exists, story 3.10's and 3.6's shortcuts).
+- Reuses, not rewrites: `frontend/src/features/disputes/customerStatus.ts` (`describeCustomerStatus`) and `DisputeStatusBadge.tsx` from story 3.10 for the status labels and badges on history rows, the detail header and timeline entries; no second status switch.
 
 ## References
 
@@ -80,6 +81,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 
 ## Notes
 
-- Input (from 2.4 QA, 2026-10-28): each route change focuses the `<h1>`, so the first Tab skips the header and there is no skip link; criterion 7 adds one. Also from 2.4's review: the bare `reason satisfies never;` statement passes ESLint only because `no-unused-expressions` does not unwrap `satisfies`; write the exhaustiveness check as an assignment (`const unreachable: never = reason;`) where this story touches it.
+- Input (from 2.4 QA, 2026-10-28): each route change focuses the `<h1>`, so the first Tab skips the header and there is no skip link; criterion 7 adds one. Also from 2.4's review: the bare `reason satisfies never;` statement passes ESLint only because `no-unused-expressions` does not unwrap `satisfies`; write the exhaustiveness check as an assignment to a `never` variable that is also read, so `noUnusedLocals` and ESLint accept it with no suppression, where this story touches it; at runtime an unknown value renders nothing, never the raw value (3.10 pre-build review and security T2).
 - Waits on 3.11 because: both edit `frontend/src/app/router.tsx` (3.11 adds the raise flow's `onEnter`); collision check 2026-10-30.
 - Carried from 3.6 (2026-10-30, AD-31): after a 401 on the dispute detail, `returnUrl` carries no dispute ID from the route.
+- Carried from 3.6's round 2 review (2026-10-30): `frontend/src/components/ui/field.tsx` keeps `FieldSet` and `FieldLegend`, unused since the reason group became a named `radiogroup`; remove them unless this story's withdraw form uses them. The reason label `<p>` in `RaiseScreen.tsx` lost `text-body`; add it back (`className="text-body font-strong"`).

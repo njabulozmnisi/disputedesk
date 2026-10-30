@@ -23,7 +23,7 @@ Verify: Vitest component tests pass, with API responses mocked by MSW from `open
    **Given** the route `/transactions/<transactionId>/dispute` or `/dispute/review`
    **When** it opens
    **Then** it takes the row from the cached pages of the transactions list query (there is no GET for one transaction), and the screen shows that row's description, date, masked number and amount
-   **And** when no cached row has that `transactionId` (a deep link, a reload) or the row is not disputable, the route redirects to `/transactions` with `replace`; 4b with no draft redirects to 4a; the Dispute control on a disputable row is a TanStack Router `Link` (the 2.4 full-page-load shortcut is removed)
+   **And** when no cached row has that `transactionId` (a deep link, a reload) or the row is not disputable, the route redirects to `/transactions` with `replace` (a TanStack Router `<Navigate replace>` rendered inside the session gate, once the session check has passed); 4b with no draft redirects to 4a; the Dispute control on a disputable row is a TanStack Router `Link` (the 2.4 full-page-load shortcut is removed)
 
 2. **Reason and expected amount** (R13, R14; FR-13, FR-14)
    **Given** screen 4a
@@ -39,15 +39,15 @@ Verify: Vitest component tests pass, with API responses mocked by MSW from `open
 4. **Accessible field and form errors** (R40, R13; NFR-CODE-6)
    **Given** invalid input on Continue, or a 400 `validation` response to Submit
    **When** the errors show
-   **Then** the form is shadcn/ui `Field` with React Hook Form's `Controller` and a zod schema; each field sets `aria-invalid="true"` and an `aria-describedby` naming its error element itself, and the test asserts both on every field; an error summary at the top, titled "Check the details below", links to each field and takes focus (EXPERIENCE.md, Field errors; WCAG 2.2 SC 3.3.1)
-   **And** a 400 on 4b returns to 4a with the draft's values and sets each `errors` key `reason`, `note` or `expectedAmount` on its field with that field's copy below; any other key, or a 400 with no `errors` (a body binding failure), shows the form-level error "We couldn't check your dispute. Review the details and try again." in the summary
+   **Then** the form is shadcn/ui `Field` with React Hook Form's `Controller` and a zod schema; each field sets `aria-invalid="true"` and an `aria-describedby` naming its error element itself, and the test asserts both on every field; an error summary at the top, titled "Check the details below", links to each field and takes focus, with `role="alert"` on a wrapper inside the focused summary (EXPERIENCE.md, Field errors and Accessibility Floor; GOV.UK Design System, Error summary; WCAG 2.2 SC 3.3.1)
+   **And** a 400 on 4b returns to 4a with the draft's values and sets each `errors` key `reason`, `note` or `expectedAmount` on its field with that field's copy below; the API's one `expectedAmount` key covers four rules and the SPA never reads its message text (AD-3), so an `expectedAmount` key from the API shows "Enter an amount less than R{amount}, with at most 2 decimals." ({amount} the transaction amount), while the client-side checks keep their own lines; any other key, or a 400 with no `errors` (a body binding failure), shows the form-level error "We couldn't check your dispute. Review the details and try again." in the summary
    **And** the copy is: reason missing "Choose why you're disputing this transaction."; expected amount missing "Enter the amount you expected to pay."; not a valid amount "Enter an amount like 80.00, with at most 2 decimals."; not below the transaction amount "The expected amount must be less than R{amount}."; note too long "Your note must be 1,000 characters or fewer."
 
 5. **One draft, one request, one key** (R15; FR-15)
    **Given** valid input on 4a
    **When** the customer chooses Continue and then Submit dispute, once or many times
    **Then** Continue builds one immutable request (`accountRef` and `transactionId` from the cached row, `reason`, the trimmed `note` or null, `expectedAmount` or null) and a draft key `"<crypto.randomUUID()>"`, the quoted RFC 9651 Structured Field String (AD-16); 4b reads it back (transaction, date, card or account, reason, note, "You're disputing R{amount}") with Change returning to 4a with the values kept
-   **And** every attempt for the draft sends that same body and key through the generated mutation and `customFetch`, so each carries `X-XSRF-TOKEN` (ASVS 5.0 V3.5.1); continuing again with a request equal to the draft's keeps its key, and a different request gets a new key; while an attempt is pending Submit shows "Submitting…", has `aria-disabled="true"`, keeps focus and ignores presses (no `disabled`, so focus is not lost)
+   **And** every attempt for the draft sends that same body and key through the generated mutation and `customFetch`, so each carries `X-XSRF-TOKEN` (ASVS 5.0 V3.5.1); continuing again with a request equal to the draft's keeps its key, and a different request gets a new key; while an attempt is pending Submit shows "Submitting…", has `aria-disabled="true"`, keeps focus and ignores presses (no `disabled`, so focus is not lost), and Change and Cancel are `aria-disabled="true"` and ignore presses too, until the attempt and its in-progress resends end; a 201 that arrives after the customer left 4b by browser Back still invalidates the queries and marks the draft submitted (criterion 7) but does not navigate
    **And** the draft and key live only in React state held above 4a and 4b: never in the URL, router state or `history.state`, storage, a query key, a span attribute or `console`; a reload loses them (EXPERIENCE.md, Session ended)
 
 6. **Retries keep the request and key** (R15; FR-15)
@@ -100,7 +100,7 @@ Deliberate-break proofs, run by the supervisor in a throwaway copy, not the veri
 - Owner: frontend (frontend-builder).
 - Flags: none.
 - Lane: B.
-- Mechanisms and sources: shadcn/ui *Forms* (`Field`, React Hook Form `Controller`, zod) per AD-31 (2026-10-30); Radix `RadioGroup`; TanStack Query mutation `retry` and `retryDelay`, `invalidateQueries`; TanStack Router `Link`, `redirect` in `beforeLoad`, `navigate({ replace: true })`; RFC 9651 Structured Field String and draft-ietf-httpapi-idempotency-key-header; GOV.UK Design System *Character count*; WCAG 2.2 SC 3.3.1, 4.1.3.
+- Mechanisms and sources: shadcn/ui *Forms* (`Field`, React Hook Form `Controller`, zod) per AD-31 (2026-10-30); Radix `RadioGroup`; TanStack Query mutation `retry` and `retryDelay`, `invalidateQueries`; TanStack Router `Link`, `<Navigate replace>` inside the session gate (built so, accepted at review; not `redirect` in `beforeLoad`), `navigate({ replace: true })`; GOV.UK Design System *Error summary*; RFC 9651 Structured Field String and draft-ietf-httpapi-idempotency-key-header; GOV.UK Design System *Character count*; WCAG 2.2 SC 3.3.1, 4.1.3.
 - Packages: React Hook Form, zod and `@hookform/resolvers`, and the shadcn/ui `field`, `radio-group`, `input`, `textarea` and `label` components, each verified (publisher, downloads, repository, latest stable) and pinned exactly (AGENTS.md, Dependency verification); `npm audit` shows no new high finding.
 - Touches:
   - `frontend/src/features/disputes/raise/` (new: the 4a and 4b screens, the draft state, the zod schema, the amount-in-cents helper, their tests)
@@ -109,6 +109,8 @@ Deliberate-break proofs, run by the supervisor in a throwaway copy, not the veri
   - `frontend/src/api/queryClient.ts` (the 401 `returnUrl` for the raise routes)
   - `frontend/src/api/problems.ts` (the new slugs: `already-disputed`, `not-disputable`, `idempotency-in-progress`, `idempotency-mismatch`, `not-found`, `validation`)
   - `frontend/src/components/ui/` (new shadcn/ui components)
+  - `frontend/src/features/transactions/format.ts`, `frontend/src/features/transactions/notDisputableHint.ts` (shared with the raise screens; added after the build)
+  - `frontend/src/test/setup.ts`, `frontend/src/test/support.tsx` (test setup and helpers; added after the build)
   - `frontend/package.json`, `frontend/package-lock.json`
 - Consumed, not edited: `frontend/src/api/generated/` (story 3.3), `frontend/src/api/mutator.ts`, `frontend/src/app/LiveRegion.tsx`, `frontend/src/components/ProblemNotice.tsx`.
 
@@ -127,7 +129,8 @@ Deliberate-break proofs, run by the supervisor in a throwaway copy, not the veri
 - standard — <https://www.rfc-editor.org/rfc/rfc9651>
 - standard — <https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/>
 - standard — <https://design-system.service.gov.uk/components/character-count/>
-- verification — docs/verification/3.6-challenge.md, docs/verification/3.6-prebuild-review.md, docs/verification/3.6-prebuild-security.md
+- standard — <https://design-system.service.gov.uk/components/error-summary/>
+- verification — docs/verification/3.6-challenge.md, docs/verification/3.6-prebuild-review.md, docs/verification/3.6-prebuild-security.md, docs/verification/3.6-review.md (Resolution)
 
 ## Notes
 
@@ -140,5 +143,9 @@ Deliberate-break proofs, run by the supervisor in a throwaway copy, not the veri
 - Decision: 2026-10-30 (Sofia) — 3.6 waits on 3.3 for the regenerated client (the header parameter and `DisputeResponse`), not on 3.9: the 201 invalidates by key prefix, so the history list story needs nothing from 3.6.
 - Assumption: 2026-10-30 (Sofia) — the copy not in EXPERIENCE.md (the field error lines, the form-level error, the 503, 404 and `notEligible` lines in criteria 4, 6 and 8) is proposed here in the copy deck's voice; confirm at review.
 - Assumption: 2026-10-30 (Sofia, challenger) — a Continue with a request equal to the draft's keeps the key, so a customer who opens Change and continues unchanged after an uncertain submit still replays rather than meeting `already-disputed`.
+- Decision: 2026-10-30 (Sofia, 3.6 review) — an API 400 on `expectedAmount` shows one line naming the rules a customer can break, "Enter an amount less than R{amount}, with at most 2 decimals.", because the key alone cannot say which of the four rules failed and the SPA routes on keys, never on message text (AD-3). Proposed copy in the deck's voice; confirm with the other proposed copy.
+- Decision: 2026-10-30 (Sofia, 3.6 review) — while an attempt is pending, Change and Cancel are inert like Submit (EXPERIENCE.md is silent; Idempotent submit only covers Submit): the attempt ends within about 5 seconds plus the request, and an inert control is plainer than a navigation that must be cancelled while a dispute may already exist. Browser Back cannot be held, so a late 201 after Back does not navigate but still marks the draft submitted.
+- Decision: 2026-10-30 (Sofia, 3.6 review) — the error summary keeps focus and carries `role="alert"` on an inner wrapper, as GOV.UK Design System's Error summary does, which meets both EXPERIENCE.md lines (an error summary that takes focus; errors use `role="alert"`).
+- Decision: 2026-10-30 (reviewer, accepted) — the row guard is a `<Navigate replace>` inside the session gate, not `redirect` in `beforeLoad`; criterion 1 and Build facts updated.
 - Carried from 3.1 QA (2026-10-28): body binding failures (unknown `reason`, a JSON-number `expectedAmount`, malformed JSON) return 400 `validation` with no `errors` naming the field; criterion 4 maps them to the form-level error.
 - Carried from 3.2 (2026-10-28): a replay returns the stored status, body and `Location` byte for byte; a 5xx (504 included) releases the key, so a retry with the same key is safe (AD-16).

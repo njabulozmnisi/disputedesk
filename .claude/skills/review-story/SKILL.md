@@ -32,9 +32,12 @@ On a re-review, review only the delta since the approved version and say for eac
 
 ## Known pitfalls
 
+- A named library method is checked for the layer that will call it, not only that it exists: Application references no database provider, so a provider-specific EF function belongs in Infrastructure (`LayerTests`; 3.9).
 - A test that deletes or bulk-updates rows it did not create (a sweep, a cleanup, `ExecuteDelete`) runs on its own database (`PostgresFixture.CreateMigratedDatabaseAsync`), never the shared one: on the shared database it removes parallel tests' rows (2.8, the session sweep).
 - A test that compares an instant with a stored column runs on a fixed clock that is not microsecond-aligned and expects the stored, microsecond value (Npgsql truncates on write); the code truncates where it reads the clock only when the same instant is also returned or published (AD-4, the raise). macOS clocks read whole microseconds and hide the mismatch that Linux CI (100 ns) shows (2.8).
 - An invariant a design decision relies on (for example "every `Disputes` write commits with a stored event") must be enforced in code and proved by a test, not assumed (3.8).
+- An absence assertion checks the field that could echo the input, or the body with its random fields (`traceId`, ciphertext, IDs) removed; never a short literal against the whole body, which a random value matches by chance (`eyJ` in the session fix, `abc` in 3.9).
+- Every ARIA role that requires an accessible name (radiogroup, group, dialog, region) is asserted by name with `getByRole(role, { name })`; a `<legend>` names its `<fieldset>`, not a radiogroup inside it (3.6). Delete this line once the component tests run an axe check.
 
 Rank findings by severity with file and line.
 

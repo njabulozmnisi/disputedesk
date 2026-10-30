@@ -4,18 +4,35 @@
 id = 1
 type = "story"
 title = "Operations tools authenticate with bearer tokens and read a dispute"
-description = "Adds JwtBearer on the operations group (AD-8, AD-9), role policies, the actor mapping, `GET /api/v1/operations/disputes/<disputeId>` with every stored event type on its timeline and each read audited as `DisputeRead` through `AuditLog.Record`, and Scalar behind `Scalar:Enabled`."
-verify = "Integration tests with tokens signed by a test key cover credential pinning, roles, actor mapping, the read shape with every stored event type, and the `DisputeRead` audit entry."
-covers = ["R21", "R10", "R41", "R39"]
-after = ["3.8", "2.8", "2.5", "2.6"]
+description = "Adds JwtBearer on the operations group (AD-8, AD-9) with the `dispute.read` policy and the actor mapping, `GET /api/v1/operations/disputes/<disputeId>` with every stored event type on its timeline, each read audited as `DisputeRead` through `AuditLog.Record`, the provisioned actor mapping and a script that gets an operations token by client credentials."
+verify = "Integration tests with tokens signed by a test key cover credential pinning on every endpoint, token validation, roles and actor mapping, the read shape with every stored event type, privacy, and the `DisputeRead` audit entries; the architecture and platform-script tests pass."
+covers = ["R21", "R10", "R41"]
+after = ["3.8", "3.3", "2.8", "2.5", "2.6"]
 hitl = false
 risk = "high"
 owner = "backend"
 lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Contracts/Audit/AuditAction.cs (DisputeRead)", "backend/src/DisputeDesk.Api/Operations/", "backend/src/DisputeDesk.Application/Operations/ReadDispute/", "backend/src/DisputeDesk.Api/Program.cs", "backend/src/DisputeDesk.Api/appsettings.json", "infra/zitadel/provision/provision.sh (Operations:Actors, dispute.read grant)", "infra/nginx/templates/ (Scalar CSP)", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Operations/"]
-supervisor_checks = ["From `/scalar/`, obtain a client-credentials token and read a dispute customer A raised through the customer API."]
+touches = ["backend/Directory.Packages.props, backend/src/DisputeDesk.Api/DisputeDesk.Api.csproj (JwtBearer 10.0.14)", "backend/src/DisputeDesk.Contracts/Audit/AuditAction.cs (DisputeRead)", "backend/src/DisputeDesk.Contracts/Operations/", "backend/src/DisputeDesk.Api/Operations/", "backend/src/DisputeDesk.Api/Bff/ZitadelOptions.cs (ProjectId)", "backend/src/DisputeDesk.Api/Program.cs", "backend/src/DisputeDesk.Application/Abstractions/CurrentOperationsActor.cs", "backend/src/DisputeDesk.Application/Operations/ReadDispute/", "infra/zitadel/provision/provision.sh (Operations:Actors)", "scripts/operations-token.sh (new)", "backend/openapi.json, frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/ (Operations/, Authorization/EndpointAuthorizationTests.cs, Infrastructure/FakeZitadel.cs, Infrastructure/ApiFactory.cs)", "backend/tests/DisputeDesk.ArchitectureTests/ (OwnershipRulesTests.cs, PlatformScriptTests.cs)"]
+supervisor_checks = ["With a token from `scripts/operations-token.sh`, read a dispute customer A raised through the customer API; the read writes one `DisputeRead` `Succeeded` row with the machine user's ID."]
+
+[[entry]]
+id = 5
+type = "story"
+title = "Scalar drives the operations API with a pasted bearer token behind a switch"
+description = "Moves Scalar and the runtime OpenAPI document behind a bounded `Scalar:Enabled` (AD-26), declares one `bearer` security scheme on the operations routes only, and has the gateway forward `/scalar`, `/scalar/` and `/openapi/v1.json` to the Api with their own CSP: one fixed script hash for the page at `/scalar/`, and `style-src 'self' 'unsafe-inline'` for Scalar's runtime styles. Scalar holds no credential and leaks no configuration: a person pastes a token from `scripts/operations-token.sh`."
+verify = "Integration tests cover the switch and its bounds, Scalar's served configuration, the page and the runtime document holding no configured value, the security scheme in the runtime and committed documents, and the served inline script's hash against the nginx template; the smoke check covers the gateway routes, the Scalar headers and a 429 on `/scalar/`; `openapi.json` changes only by the security scheme and requirements, and `frontend/src/api/generated/` matches it."
+covers = ["R39", "R21"]
+after = [1]
+hitl = false
+risk = "high"
+owner = "backend"
+lane = "M2"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Api/Program.cs", "backend/src/DisputeDesk.Api/ApiReference/ (new: ApiReferenceOptions, the Scalar setup, the two transformers)", "backend/src/DisputeDesk.Api/appsettings.json (Scalar:Enabled false)", "backend/src/DisputeDesk.Api/Properties/launchSettings.json (Scalar__Enabled true)", "docker-compose.yml (Scalar__Enabled true)", "infra/nginx/templates/ (nginx.conf.template: the /scalar, /scalar/ and /openapi/v1.json locations; new scalar-headers.conf.template)", "infra/smoke.sh (Scalar routes, headers, 429 on /scalar/)", "backend/openapi.json, frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/ (ApiReferenceTests.cs, OpenApiDocumentTests.cs, Authorization/EndpointAuthorizationTests.cs, a repo-root lookup for the hash test)"]
+supervisor_checks = ["On the running stack, paste a token from `scripts/operations-token.sh` into `/scalar/` and read a dispute customer A raised: 200; record every CSP violation in the console, the only one expected being the refused `'unsafe-eval'` from the bundled zod capability probe.", "After pasting the token and sending that request, `localStorage` for the app origin holds no value containing the token.", "In a throwaway copy, change one Scalar option that alters the inline script: the hash test fails.", "In a throwaway copy, set `Scalar:Enabled` false in Compose: `/scalar/` through the gateway gets 401 anonymously."]
 
 [[entry]]
 id = 2
@@ -24,7 +41,7 @@ title = "Operations actions start review, escalate and resolve under the allowed
 description = "Adds `StartReview`, `Escalate` and `Resolve` to the aggregate with every FR-24 cell, the three action endpoints that load a dispute by replay (AD-13), the version-clash reload (AD-15), audit of refused and forbidden actions, and the status-changed events."
 verify = "Domain unit tests cover every FR-24 cell; integration tests cover check order, the version-clash reload, refusal audit and events."
 covers = ["R20", "R21", "R23", "R10", "R29", "R36"]
-after = [1, "3.4"]
+after = [1, 5, "3.4"]
 hitl = false
 risk = "high"
 owner = "backend"
