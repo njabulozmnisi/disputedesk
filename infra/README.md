@@ -19,6 +19,9 @@ stack, whichever worktree started it. Run it only under the `stack` lock.
 | Aspire dashboard (anonymous, loopback only) | <http://localhost:18888> |
 | Postgres / Redpanda / OTLP for apps run on the host | `127.0.0.1:5433` / `localhost:19092` / `127.0.0.1:4317` (gRPC), `:4318` (HTTP) |
 
+Every host port except the gateway's 8080 can be moved when another process holds it, for example
+`DISPUTEDESK_OTLP_HTTP_PORT=14318 docker compose up --wait`; the header of `docker-compose.yml` lists the variables.
+
 | Folder | Purpose |
 |---|---|
 | `db/` | Postgres init: `disputedesk` (app, owns its database), `zitadel` (non-superuser, own database), `qa_readonly` (SELECT on the app schema through default privileges, read-only sessions). |

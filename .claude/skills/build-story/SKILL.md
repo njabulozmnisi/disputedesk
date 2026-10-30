@@ -22,7 +22,7 @@ The input is a story file, `docs/tickets/epic-<epic>-<slug>/tickets/story-<epic>
 6. **Developer smoke check, before reporting `built`.**
    - Backend: start the API, its Postgres and the shared dev Zitadel; sign in a seeded user with `scripts/dev-login.sh`; call the endpoints with the committed `backend/http/*.http` requests; confirm the rows landed. No browser, no shared lock except during sign-in.
    - Frontend: run the UI against the real API and do one headless Playwright happy path with a screenshot, under `scripts/test-lock.sh run stack <story> -- ...`.
-   - **Any container the builder starts directly** (a throwaway Postgres, a dashboard, the Compose stack) runs under `scripts/test-lock.sh run stack <story> -- ...`, because the stack binds fixed ports (8080, 8025, 18888, 4317, 4318, 5433, 19092) and other lanes share the Docker daemon. Testcontainers in tests use the `testcontainers` lock instead.
+   - **Any container the builder starts directly** (a throwaway Postgres, a dashboard, the Compose stack) runs under `scripts/test-lock.sh run stack <story> -- ...`, because the stack binds host ports (8080, 8025, 18888, 4317, 4318, 5433, 19092) and other lanes share the Docker daemon. Every port but the gateway's 8080 can be moved with the variables in the `docker-compose.yml` header when another process holds it; never with a throwaway override file. Testcontainers in tests use the `testcontainers` lock instead.
 7. **Stop rules.** After two failed attempts at the same problem, return `blocked`. Never weaken, skip or delete a test to make it pass. Never commit, push, or mark the story done.
 
 ## Report
