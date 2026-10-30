@@ -11,6 +11,9 @@ public sealed class LinkingChallenge
     /// <summary>How long an OTP can be used, from the instant its send was claimed (FR-5).</summary>
     public static readonly TimeSpan OtpLifetime = TimeSpan.FromMinutes(5);
 
+    /// <summary>How many verification attempts a challenge takes; three wrong codes lock it (FR-7).</summary>
+    public const int MaxAttempts = 3;
+
     public required Guid Id { get; init; }
 
     /// <summary>The login's <c>sub</c> claim.</summary>
@@ -22,7 +25,7 @@ public sealed class LinkingChallenge
     /// <summary>HMAC-SHA256 of the challenge ID and the OTP under <c>Linking:OtpHmacKey</c>; null until an OTP is sent.</summary>
     public byte[]? OtpHmac { get; set; }
 
-    /// <summary>Verification attempts so far; story 6.2 counts them.</summary>
+    /// <summary>Verification attempts so far, at most <see cref="MaxAttempts"/>.</summary>
     public int Attempts { get; set; }
 
     public DateTimeOffset? ExpiresAtUtc { get; set; }
@@ -37,7 +40,7 @@ public sealed class LinkingChallenge
     /// <summary>When a later start by the same login replaced this challenge.</summary>
     public DateTimeOffset? SupersededAtUtc { get; set; }
 
-    /// <summary>When a correct OTP used this challenge; story 6.2 sets it.</summary>
+    /// <summary>When a correct OTP used this challenge to link the login.</summary>
     public DateTimeOffset? ConsumedAtUtc { get; set; }
 
     public required DateTimeOffset CreatedAtUtc { get; init; }

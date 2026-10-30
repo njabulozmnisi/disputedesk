@@ -43,6 +43,10 @@ public sealed record Error(ErrorKind Kind, string Code, string Message)
     public static Error BusinessRule(string code, string message, string extension, Enum value) =>
         new(ErrorKind.BusinessRule, code, message) { Extensions = new Dictionary<string, object?> { [extension] = value } };
 
+    /// <summary>A broken rule whose problem carries <paramref name="extensions"/>, such as the <c>attemptsRemaining</c> of a wrong OTP.</summary>
+    public static Error BusinessRule(string code, string message, IReadOnlyDictionary<string, object?> extensions) =>
+        new(ErrorKind.BusinessRule, code, message) { Extensions = extensions };
+
     public static Error Unavailable(string code, string message) => new(ErrorKind.Unavailable, code, message);
 
     public static Error RateLimited(string code, string message) => new(ErrorKind.RateLimited, code, message);

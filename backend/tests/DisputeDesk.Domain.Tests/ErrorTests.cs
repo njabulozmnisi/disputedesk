@@ -63,6 +63,16 @@ public class ErrorTests
     }
 
     [Fact]
+    public void BusinessRule_WithExtensions_CarriesThemAsABrokenRule()
+    {
+        var error = Error.BusinessRule("otp-incorrect", "The code is incorrect.", new Dictionary<string, object?> { ["attemptsRemaining"] = 2 });
+
+        Assert.Equal(ErrorKind.BusinessRule, error.Kind);
+        Assert.Equal(2, error.Extensions["attemptsRemaining"]);
+        Assert.Empty(error.FieldErrors);
+    }
+
+    [Fact]
     public void NotFound_Created_HasNoFieldErrorsOrExtensions()
     {
         var error = Error.NotFound("not-found", "Not found.");

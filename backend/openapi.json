@@ -1093,6 +1093,88 @@
           }
         }
       }
+    },
+    "/api/v1/linking/verify": {
+      "post": {
+        "tags": [
+          "Linking"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyOtpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1859,6 +1941,20 @@
           "pending"
         ],
         "description": "Whether a transaction has settled or is still pending."
+      },
+      "VerifyOtpRequest": {
+        "required": [
+          "code"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "pattern": "^[0-9]{6}$",
+            "type": "string",
+            "description": "The OTP from the SMS: exactly six ASCII digits, leading zeros included."
+          }
+        },
+        "description": "The body of `POST /api/v1/linking/verify` (FR-5). Built-in minimal API validation checks its format; the code is\nnot trimmed, and any other property is ignored. No field names a challenge or a customer: verification acts only on\nthe login's current challenge. A message never repeats the value (AD-3)."
       },
       "WithdrawDisputeRequest": {
         "type": "object",
