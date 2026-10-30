@@ -6,7 +6,7 @@
 set -euo pipefail
 
 Z="${ZITADEL_URL:?}"; FIXTURES="${FIXTURES_FILE:?}"
-CURL_OPTS=(${CURL_CONNECT_TO:+--connect-to "$CURL_CONNECT_TO"})
+CURL_OPTS=(--max-time 30 ${CURL_CONNECT_TO:+--connect-to "$CURL_CONNECT_TO"})   # every call times out
 CLIENTS=$(cat "${OUT_DIR:?}/zitadel-clients.json")
 PROJECT_ID=$(jq -r .Zitadel.ProjectId <<< "$CLIENTS")
 BFF_CLIENT_ID=$(jq -r .Zitadel.Bff.ClientId <<< "$CLIENTS")

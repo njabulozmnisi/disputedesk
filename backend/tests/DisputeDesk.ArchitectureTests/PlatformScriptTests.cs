@@ -70,6 +70,17 @@ public partial class PlatformScriptTests
         Assert.Contains("BFF_DEVELOPMENT_MODE must be true or false", errors, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("infra/zitadel/provision/provision.sh")]
+    [InlineData("infra/zitadel/provision/verify.sh")]
+    public void ProvisioningScript_CurlOptions_SetAMaxTime(string script)
+    {
+        // Every Zitadel call in the script goes through curl "${CURL_OPTS[@]}", so this one option times them all out.
+        string text = File.ReadAllText(Path.Combine(SourceRoots.Repo, script));
+
+        Assert.Contains("CURL_OPTS=(--max-time ", text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Compose_ZitadelExternalSecure_ComesFromConfiguration()
     {

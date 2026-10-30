@@ -22,7 +22,8 @@ OPS_USERNAME=operations-tools
 
 # curl pins *.localhost to 127.0.0.1 (RFC 6761) and ignores the Docker alias, so connect straight to
 # Zitadel while the Host header stays auth.localhost:8080 (Zitadel resolves the instance from it).
-CURL_OPTS=(${CURL_CONNECT_TO:+--connect-to "$CURL_CONNECT_TO"})
+# --max-time bounds every call, so a hung Zitadel fails the one-shot instead of blocking `docker compose up`.
+CURL_OPTS=(--max-time 30 ${CURL_CONNECT_TO:+--connect-to "$CURL_CONNECT_TO"})
 log(){ printf '[provision] %s\n' "$*" >&2; }
 
 # It is written straight into the app's JSON, so anything but a JSON boolean is refused up front.
