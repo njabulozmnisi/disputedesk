@@ -214,6 +214,7 @@ services:
     image: disputedesk-core-banking:local
     build: { context: ./backend, target: core-banking }
     restart: unless-stopped                        # runs as the image's non-root `app` user
+    init: true   # as PID 1, dotnet never gets the SIGABRT of its own crash (pid_namespaces(7)) and spins instead of exiting
     environment:
       FixturesPath: /fixtures/local.json
     volumes:
@@ -230,6 +231,7 @@ services:
     image: disputedesk-api-local:local
     build: { context: ./backend, target: api-local }   # the api image plus a wget probe for the healthcheck
     restart: unless-stopped
+    init: true   # as PID 1, dotnet never gets the SIGABRT of its own crash (pid_namespaces(7)) and spins instead of exiting
     environment:
       <<: *app-config
       ASPNETCORE_ENVIRONMENT: Development
@@ -273,6 +275,7 @@ services:
     image: disputedesk-worker:local
     build: { context: ./backend, target: worker-local }   # the worker image plus busybox for the heartbeat check
     restart: unless-stopped
+    init: true   # as PID 1, dotnet never gets the SIGABRT of its own crash (pid_namespaces(7)) and spins instead of exiting
     environment:
       <<: *app-config
       DOTNET_ENVIRONMENT: Development

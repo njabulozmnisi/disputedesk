@@ -122,17 +122,15 @@ public class LinkingOtpSendTests(PostgresFixture postgres)
     [InlineData("")]
     [InlineData("not base64 at all!")]
     [InlineData("BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBw==")] // 31 bytes: one short of RFC 2104's minimum for SHA-256
-    public void ApiStart_InvalidOtpHmacKey_StopsTheApiWithAnErrorNamingTheKeyButNotItsValue(string? key)
+    public async Task ApiStart_InvalidOtpHmacKey_StopsTheApiWithAnErrorNamingTheKeyButNotItsValue(string? key)
     {
-        using var factory = new ApiFactory(connectionString: null, settings: new Dictionary<string, string?> { ["Linking:OtpHmacKey"] = key });
+        (int exitCode, string output) = await ApiProcess.RunUntilExitAsync(new Dictionary<string, string?> { ["Linking:OtpHmacKey"] = key }, TestContext.Current.CancellationToken);
 
-        Exception refused = Assert.ThrowsAny<Exception>(() => factory.Services);
-
-        string error = refused.ToString();
-        Assert.Contains("Linking:OtpHmacKey must be base64 for at least 32 bytes.", error, StringComparison.Ordinal);
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("Linking:OtpHmacKey must be base64 for at least 32 bytes.", output, StringComparison.Ordinal);
         if (!string.IsNullOrEmpty(key))
         {
-            Assert.DoesNotContain(key, error, StringComparison.Ordinal);
+            Assert.DoesNotContain(key, output, StringComparison.Ordinal);
         }
     }
 

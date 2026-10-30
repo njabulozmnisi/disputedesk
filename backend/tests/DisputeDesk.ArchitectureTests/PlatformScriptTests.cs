@@ -242,6 +242,17 @@ public partial class PlatformScriptTests
         Assert.Contains("      ForwardedHeaders__AllowedHosts: localhost\n", Compose, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("core-banking")]
+    [InlineData("api")]
+    [InlineData("worker")]
+    public void Compose_DotNetService_RunsUnderAnInitProcess(string service)
+    {
+        // A .NET crash (a failed start included) ends in abort(). As a container's PID 1, dotnet never receives that
+        // SIGABRT (pid_namespaces(7)) and spins instead of exiting, so a restart policy never sees the crash.
+        Assert.Matches(new Regex(@"^    init: true\b", RegexOptions.Multiline, TimeSpan.FromSeconds(1)), ComposeService(service));
+    }
+
     [Fact]
     public void GatewayTemplate_IdentityOriginAccessLog_RecordsThePathWithoutTheQuery()
     {
@@ -360,6 +371,11 @@ public partial class PlatformScriptTests
 
     [GeneratedRegex(@"Bearer [A-Za-z0-9_\-\.]{20,}")]
     private static partial Regex LiteralBearerToken();
+
+    /// <summary>The lines of one service in docker-compose.yml, its name line excluded, up to the blank line after it.</summary>
+    private static string ComposeService(string name) =>
+        new Regex(@"\n  " + Regex.Escape(name) + @":[^\n]*\n(?<body>(?:    [^\n]*\n)+)", RegexOptions.None, TimeSpan.FromSeconds(1))
+            .Match(Compose).Groups["body"].Value;
 
     /// <summary>The top-level networks.default.ipam.config subnet in docker-compose.yml.</summary>
     [GeneratedRegex(@"\nnetworks:\n  default:\n    ipam:\n      config:\n        - subnet: (?<subnet>\S+)\n")]

@@ -62,12 +62,12 @@ public class OperationsRolesTests(PostgresFixture postgres, TransactionsStub stu
     [InlineData("")]
     public async Task Startup_ActorMappedToAnythingButOperations_Fails(string actorType)
     {
-        await using var factory = new ApiFactory(
-            postgres.ConnectionString, settings: new Dictionary<string, string?> { [$"Operations:Actors:{FakeZitadel.OperationsSub}"] = actorType });
+        (int exitCode, string output) = await ApiProcess.RunUntilExitAsync(
+            new Dictionary<string, string?> { [$"Operations:Actors:{FakeZitadel.OperationsSub}"] = actorType },
+            TestContext.Current.CancellationToken);
 
-        OptionsValidationException refused = Assert.Throws<OptionsValidationException>(() => factory.Services);
-
-        Assert.Contains("Operations:Actors", refused.Message, StringComparison.Ordinal);
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("OptionsValidationException: Every Operations:Actors value must be", output, StringComparison.Ordinal);
     }
 
     [Fact]

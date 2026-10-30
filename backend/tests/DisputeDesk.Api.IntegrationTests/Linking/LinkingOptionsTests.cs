@@ -17,13 +17,12 @@ public class LinkingOptionsTests(PostgresFixture postgres)
     [InlineData("Linking:Budget", "00:00:00.999", "Linking:Budget must be from 1 to 30 seconds.")]
     [InlineData("Linking:Budget", "00:00:30.0010000", "Linking:Budget must be from 1 to 30 seconds.")]
     [InlineData("Linking:Budget", "00:00:31", "Linking:Budget must be from 1 to 30 seconds.")]
-    public void ApiStart_OutOfBounds_StopsTheApiWithAnErrorNamingTheKey(string key, string value, string expected)
+    public async Task ApiStart_OutOfBounds_StopsTheApiWithAnErrorNamingTheKey(string key, string value, string expected)
     {
-        using var factory = new ApiFactory(connectionString: null, settings: new Dictionary<string, string?> { [key] = value });
+        (int exitCode, string output) = await ApiProcess.RunUntilExitAsync(new Dictionary<string, string?> { [key] = value }, TestContext.Current.CancellationToken);
 
-        Exception refused = Assert.ThrowsAny<Exception>(() => factory.Services);
-
-        Assert.Contains(expected, refused.ToString(), StringComparison.Ordinal);
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains(expected, output, StringComparison.Ordinal);
     }
 
     [Theory]

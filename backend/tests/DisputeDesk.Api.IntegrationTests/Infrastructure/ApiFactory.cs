@@ -27,7 +27,8 @@ public sealed class ApiFactory(
     /// <summary>The OTP HMAC key every test Api uses: 32 bytes of 0x01, base64.</summary>
     public const string TestOtpHmacKey = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
 
-    private static readonly Dictionary<string, string?> DefaultSettings = new()
+    /// <summary>The settings every test Api starts with; <see cref="ApiProcess"/> starts the Api process with them too.</summary>
+    internal static readonly IReadOnlyDictionary<string, string?> DefaultSettings = new Dictionary<string, string?>
     {
         ["Zitadel:Issuer"] = FakeZitadel.Issuer,
         ["Zitadel:Bff:ClientId"] = FakeZitadel.ClientId,
