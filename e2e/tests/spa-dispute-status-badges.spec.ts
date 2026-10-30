@@ -249,7 +249,7 @@ test.describe('every status, an unknown one and a half-set pair (response edited
     await page.close();
   });
 
-  test('following the badge loads the SPA not-found screen until story 3.7 adds the route, and shows no other dispute data', async () => {
+  test('following the badge loads the SPA not-found screen until story 3.12 adds the detail, and shows no other dispute data', async () => {
     const page = await customerA.newPage();
     await openEdited(page);
     await page.locator('li').first().getByRole('link').click();

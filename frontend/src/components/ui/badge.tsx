@@ -13,6 +13,8 @@ const badgeVariants = cva(
         info: 'bg-status-info-bg text-status-info-fg',
         priority: 'bg-status-priority-bg text-status-priority-fg',
         neutral: 'bg-status-neutral-bg text-status-neutral-fg',
+        success: 'bg-status-success-bg text-status-success-fg',
+        danger: 'bg-status-danger-bg text-status-danger-fg',
       },
     },
   },

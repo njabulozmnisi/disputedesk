@@ -5,7 +5,12 @@ import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { http, HttpResponse } from 'msw';
 import { StrictMode } from 'react';
 
-import type { DisputeResponse, SessionState, TransactionResponse } from '@/api/generated/model';
+import type {
+  DisputeResponse,
+  DisputeSummaryResponse,
+  SessionState,
+  TransactionResponse,
+} from '@/api/generated/model';
 import { problemType, type ProblemSlug } from '@/api/problems';
 import { createQueryClient } from '@/api/queryClient';
 import { createAppRouter } from '@/app/router';
@@ -60,6 +65,11 @@ export function serveTransactions(items: TransactionResponse[] = []) {
   server.use(
     http.get('*/api/v1/transactions', () => HttpResponse.json({ items, nextCursor: null })),
   );
+}
+
+/** The disputes endpoint answers with one page of `items` and no next page. */
+export function serveDisputes(items: DisputeSummaryResponse[] = []) {
+  server.use(http.get('*/api/v1/disputes', () => HttpResponse.json({ items, nextCursor: null })));
 }
 
 /** A problem response (RFC 9457) as the API writes it: the full `type` URI, a status and a `traceId`. */
@@ -127,6 +137,23 @@ export function makeDispute(overrides: Partial<DisputeResponse> = {}): DisputeRe
     disputedAmount: row.amount,
     createdAt: '2026-10-30T08:00:00Z',
     timeline: [],
+    ...overrides,
+  };
+}
+
+/** One row of the disputes list: a submitted dispute with sensible defaults. */
+export function makeSummary(
+  overrides: Partial<DisputeSummaryResponse> = {},
+): DisputeSummaryResponse {
+  const dispute = makeDispute();
+  return {
+    disputeId: dispute.disputeId,
+    customerStatus: 'submitted',
+    outcome: null,
+    reason: 'unrecognised',
+    transaction: dispute.transaction,
+    disputedAmount: dispute.disputedAmount,
+    createdAt: dispute.createdAt,
     ...overrides,
   };
 }

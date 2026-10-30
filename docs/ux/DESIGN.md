@@ -298,7 +298,7 @@ One family, **Nunito Sans** (SIL Open Font License 1.1), self-hosted as WOFF2 in
 | Caption | `{typography.caption}` | 13 / 400 | Dates, masked card and account numbers, helper text |
 | Amount | `{typography.amount}` | 16 / 700, tabular | Amounts in rows |
 | Amount hero | `{typography.amount-hero}` | 32 / 800, tabular, navy | The disputed amount on review and detail |
-| Mono | `{typography.mono}` | 14 | Error reference (`traceId`), dispute reference |
+| Mono | `{typography.mono}` | 14 | Error reference (`traceId`) |
 
 Amounts always use tabular numerals and right alignment in lists so columns of rands line up. Running text stops at 68ch so no line passes 80 characters. No all-caps labels, no eyebrow labels above headings, no middle-dot meta strings (row meta reads "Unrecognised, raised 26 Oct 2026"), and no arrows appended to or prefixed on link and button text ("Back to disputes", not "← Disputes"). The middle dot survives only inside the outcome badges ("Resolved · Upheld"), which are copy-deck text, and in `document.title`.
 
@@ -335,7 +335,7 @@ shadcn components used as-is with the tokens above: `Button`, `Card`, `Input`, `
 - **Form surface.** The raise form is one flat surface: the transaction being disputed as a row at the top (merchant, date and card ending, amount right), a hairline, then the reasons, fields and actions. Linking forms and the review read-back use the same surface.
 - **Reason group.** A `RadioGroup` drawn as one bordered group (`{colors.input}` edge, `{rounded.md}`) of six rows with hairlines between them: reason name (body, 700) and one-line explanation (caption). Selected: `{colors.primary-subtle}` fill and a 2px inset `{colors.primary}` ring.
 - **Amount summary.** On review and detail: the disputed amount in `{typography.amount-hero}`, with the transaction amount and, for wrong amount, the expected amount below.
-- **Dispute summary card.** The one elevated card on a detail screen: merchant as the h1, status badge, "Disputed amount" with the amount in `{typography.amount-hero}`, then a hairline and the reason, date, card and reference, then Withdraw where allowed.
+- **Dispute summary card.** The one elevated card on a detail screen: merchant as the h1, status badge, "Disputed amount" with the amount in `{typography.amount-hero}`, then a hairline and the reason (for Wrong amount, the transaction and expected amounts), date and card, then Withdraw where allowed. No dispute reference is shown: the reference a customer quotes is the problem notice's `traceId`.
 - **Timeline.** A vertical 2px rail in `{colors.border}` joining one dot per entry. Earlier entries: a 12px outlined dot and the line in 600 weight. The current (latest) entry: a 16px cobalt dot with a 4px `{colors.primary-subtle}` halo and the line in navy 800. Under each line: the actor ("You" or "The bank", 700, foreground), then the SAST time (caption, muted), with no separator character; then any customer-visible note in a muted quote block. The line text is the copy-deck sentence ("The bank prioritised the review of your dispute."), not the badge text.
 - **Empty state.** A flat surface (`{rounded.lg}`): an h2 saying what isn't here, one sentence on why or what fills it, and the next action where there is one ("Go to transactions").
 - **Problem notice.** `Alert` in danger tone: plain sentence, what to do next, and "Reference" with the `traceId` in mono plus a pill Copy button.

@@ -9,6 +9,7 @@ import {
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { SignedOutPage } from '@/pages/SignedOutPage';
 import { StartPage } from '@/pages/StartPage';
+import { DisputesScreen } from '@/features/disputes/history/DisputesScreen';
 import { RaiseDraftProvider } from '@/features/disputes/raise/RaiseDraft';
 import { RaiseLayout } from '@/features/disputes/raise/RaiseLayout';
 import { RaiseScreen } from '@/features/disputes/raise/RaiseScreen';
@@ -19,7 +20,7 @@ import { RootLayout } from './RootLayout';
 import { SessionGate } from './SessionGate';
 
 // Routes are defined with TanStack Router (AD-31). `/`, `/signed-out` and the not-found route are public. A screen
-// whose story has not landed (linking, disputes) has no route yet, so its path renders the not-found screen.
+// whose story has not landed (linking, the dispute detail) has no screen yet, so its path renders the not-found screen.
 // The raise draft lives above every route, so Change keeps its values and Back after a submit finds it submitted.
 const rootRoute = createRootRoute({
   component: () => (
@@ -49,6 +50,24 @@ const transactionsRoute = createRoute({
       <TransactionsScreen />
     </SessionGate>
   ),
+});
+
+const disputesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/disputes',
+  component: () => (
+    <SessionGate allow="linked">
+      <DisputesScreen />
+    </SessionGate>
+  ),
+});
+
+// shortcut: the detail screen is story 3.12; until then a dispute's path shows the not-found screen. The route exists
+// so the list's rows are typed `Link`s to it.
+const disputeDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/disputes/$disputeId',
+  component: NotFoundPage,
 });
 
 // 4a and 4b share one parent: it finds the cached row and sends anything else to the list (story 3.6).
@@ -101,6 +120,8 @@ const signedOutRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   startRoute,
   transactionsRoute,
+  disputesRoute,
+  disputeDetailRoute,
   raiseRoute.addChildren([raiseFormRoute, raiseReviewRoute]),
   signedOutRoute,
 ]);
