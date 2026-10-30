@@ -274,6 +274,10 @@ describe('field errors', () => {
     expect(
       await screen.findAllByText('Your note must be 1,000 characters or fewer.'),
     ).not.toHaveLength(0);
+    // React commits the summary's focus after React Hook Form's deferred refocus, so the summary
+    // alone passes without shouldFocusError: false; the field must never be refocused at all.
+    const noteFocused = vi.fn();
+    screen.getByLabelText('Note (optional)').addEventListener('focus', noteFocused);
 
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
@@ -281,6 +285,7 @@ describe('field errors', () => {
     await waitFor(() => {
       expect(summary).toHaveFocus();
     });
+    expect(noteFocused).not.toHaveBeenCalled();
   });
 
   it('sets aria-invalid and an aria-describedby naming the error on the amount and the note too', async () => {

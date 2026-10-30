@@ -162,7 +162,7 @@ public class SignOutTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task Login_AlreadySignedIn_RecordsSignOutForTheEndedSessionBeforeTheNewSignIn()
+    public async Task Login_AlreadySignedIn_RecordsSignOutForTheEndedSession()
     {
         // A second sign-in ends the first session (AD-7), so it is audited as that session's sign-out.
         var clock = new TestClock();
