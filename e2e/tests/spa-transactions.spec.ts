@@ -20,6 +20,8 @@ type ApiRow = {
   direction: 'debit' | 'credit';
   disputable: boolean;
   notDisputableReason: string | null;
+  disputeId?: string | null;
+  customerStatus?: string | null;
 };
 type ApiPage = { items: ApiRow[]; nextCursor: string | null };
 
@@ -211,16 +213,25 @@ test.describe('linked customer A', () => {
     expect(headings[0]).toBe(expectedDay(body.items[0].transactionDate));
     expect(new Set(headings.map((heading) => heading)).size).toBe(headings.length);
 
-    // Hints and the Dispute control, row by row.
+    // Row rule (stories 3.6, 3.10): a "Dispute this transaction" link exactly when disputable; a "Dispute status: ..."
+    // link exactly when disputeId is set, to /disputes/<encoded id>; no hint on alreadyDisputed rows (hint phrases only).
+    const hintPhrases = /Pending\. |Money in\. |Transfer between|Not a card payment|Older than 90 days|Not disputable|Contact the bank/;
     for (const [index, row] of body.items.entries()) {
       const li = rows.nth(index);
-      const hasDisputeLink = (await li.getByRole('link').count()) > 0;
-      expect(hasDisputeLink, `${row.transactionId} dispute control`).toBe(row.disputable);
+      await expect(li.getByRole('link', { name: 'Dispute this transaction' }), `${row.transactionId} dispute control`).toHaveCount(row.disputable ? 1 : 0);
+      const statusLinks = li.getByRole('link', { name: /^Dispute status: / });
+      await expect(statusLinks, `${row.transactionId} status badge`).toHaveCount(row.disputeId ? 1 : 0);
+      if (row.disputeId) {
+        await expect(statusLinks).toHaveAttribute('href', `/disputes/${encodeURIComponent(row.disputeId)}`);
+        await expect(li.getByRole('link')).toHaveCount(1);
+        expect(row.disputable, `${row.transactionId} disputed row is not disputable`).toBe(false);
+      }
       if (row.notDisputableReason === 'alreadyDisputed') {
         const text = (await li.innerText()).replace(/\s+/g, ' ');
-        expect(text, `${row.transactionId} alreadyDisputed shows no hint`).not.toMatch(/Pending|Money in|Transfer between|Not a card|Older than|dispute/i);
+        expect(text, `${row.transactionId} alreadyDisputed shows no hint`).not.toMatch(hintPhrases);
       }
     }
+    expect(await pageText(page)).not.toMatch(/escalated/i);
     const allText = await pageText(page);
     expect(allText).toContain('Pending. You can dispute it once it has settled.');
     expect(allText).toContain('Money in. Not disputable.');

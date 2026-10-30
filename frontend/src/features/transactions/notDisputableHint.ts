@@ -23,7 +23,7 @@ export function notDisputableHint(row: TransactionResponse): string | undefined 
     case 'outsideWindow':
       return 'Older than 90 days. Contact the bank about this transaction.';
     case 'alreadyDisputed':
-      // shortcut: no hint for already-disputed rows, story 3.10 shows the dispute's status badge
+      // No hint: the row shows the dispute's status badge instead.
       return undefined;
     default: {
       // A value this SPA build does not know yet (a newer API) shows no hint instead of breaking the row.

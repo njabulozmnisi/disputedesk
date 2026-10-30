@@ -3,6 +3,9 @@ import type { Ref } from 'react';
 
 import type { TransactionResponse } from '@/api/generated/model';
 
+import { describeCustomerStatus } from '@/features/disputes/customerStatus';
+import { DisputeStatusBadge } from '@/features/disputes/DisputeStatusBadge';
+
 import { describeAmount, showAmount } from './format';
 import { notDisputableHint } from './notDisputableHint';
 
@@ -27,8 +30,9 @@ export function MaskedNumber({ row }: { row: TransactionResponse }) {
 }
 
 /**
- * One transaction. The row is not a link as a whole: its only action is the trailing Dispute control, shown for
- * a disputable row. A row that is not disputable says why in text (EXPERIENCE.md, Component Patterns).
+ * One transaction. The row is not a link as a whole: its only trailing control is the Dispute link on a disputable
+ * row, or the dispute's status badge on a disputed one. Any other row says why it is not disputable in text
+ * (EXPERIENCE.md, Component Patterns).
  */
 export function TransactionRow({
   row,
@@ -38,6 +42,10 @@ export function TransactionRow({
   rowRef: Ref<HTMLLIElement>;
 }) {
   const hint = notDisputableHint(row);
+  // A missing or empty disputeId means no dispute; an unknown status shows no badge (defence in depth).
+  const statusDescription = row.customerStatus
+    ? describeCustomerStatus(row.customerStatus)
+    : undefined;
 
   return (
     <li
@@ -67,6 +75,16 @@ export function TransactionRow({
         >
           Dispute <span className="sr-only">this transaction</span>
         </Link>
+      ) : null}
+      {row.disputeId && statusDescription ? (
+        // shortcut: a plain link (a full page load) until story 3.7 adds the dispute route
+        // On a phone the badge has its own right-aligned line under the row text; from 768px it is the action column.
+        <a
+          href={`/disputes/${encodeURIComponent(row.disputeId)}`}
+          className="col-span-2 row-start-3 group justify-self-end rounded-full py-2 md:col-span-1 md:col-start-2 md:row-start-2"
+        >
+          <DisputeStatusBadge statusDescription={statusDescription} />
+        </a>
       ) : null}
     </li>
   );
