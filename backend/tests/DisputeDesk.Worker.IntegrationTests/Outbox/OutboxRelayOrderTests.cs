@@ -1,4 +1,3 @@
-using System.Text.Json;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.Extensions.Time.Testing;
 
@@ -24,7 +23,7 @@ public class OutboxRelayOrderTests(OutboxFixture outbox)
         }
 
         // One key, one partition: the offsets are the order the broker appended them.
-        int[] versions = [.. outbox.RecordsFor(first.DisputeId).OrderBy(record => record.Offset.Value).Select(DisputeVersion)];
+        int[] versions = [.. outbox.RecordsFor(first.DisputeId).OrderBy(record => record.Offset.Value).Select(OutboxFixture.DisputeVersion)];
         Assert.Equal([1, 2, 3], versions);
         Assert.Single(outbox.RecordsFor(other.DisputeId));
     }
@@ -59,11 +58,5 @@ public class OutboxRelayOrderTests(OutboxFixture outbox)
         Assert.Equal(OutboxStatus.Pending, (await outbox.RowAsync(held.Id)).Status);
         Assert.Empty(outbox.RecordsFor(head.DisputeId));
         Assert.Single(outbox.RecordsFor(other.DisputeId));
-    }
-
-    private static int DisputeVersion(Confluent.Kafka.ConsumeResult<string, string> record)
-    {
-        using var payload = JsonDocument.Parse(record.Message.Value);
-        return payload.RootElement.GetProperty("data").GetProperty("disputeVersion").GetInt32();
     }
 }

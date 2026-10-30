@@ -26,7 +26,9 @@ public class OutboxRelayHeartbeatTests(OutboxFixture outbox)
     [InlineData(RelayState.BackingOff)]
     public async Task Relay_EachTenSecondsOfItsClock_TouchesTheHeartbeatFile(RelayState state)
     {
-        FakeTimeProvider clock = OutboxFixture.NewClock();
+        RelayClock clock = OutboxFixture.NewClock();
+        // An earlier run of this theory leaves the file dated ahead of real time.
+        File.Delete(OutboxRelay.HeartbeatPath);
         await using var lockHolder = new NpgsqlConnection(outbox.LockHolderConnectionString);
         if (state == RelayState.NotLeader)
         {
@@ -41,8 +43,8 @@ public class OutboxRelayHeartbeatTests(OutboxFixture outbox)
 
         for (int step = 0; step < 4; step++)
         {
-            clock.Advance(TimeSpan.FromSeconds(10));
-            await OutboxFixture.WaitUntilAsync(() => HeartbeatAt() == clock.GetUtcNow().UtcDateTime);
+            // Moves the clock only while the relay waits, and returns once it waits again: each wait follows a touch.
+            await clock.StepAsync(TimeSpan.FromSeconds(10));
             Assert.Equal(clock.GetUtcNow().UtcDateTime, HeartbeatAt());
         }
     }
@@ -53,10 +55,12 @@ public class OutboxRelayHeartbeatTests(OutboxFixture outbox)
         // The test clock follows real time here, because librdkafka times the send out on its own, real, clock.
         FakeTimeProvider clock = OutboxFixture.NewClock();
         DateTime start = clock.GetUtcNow().UtcDateTime;
+        // The theory above leaves the file dated ahead of real time, which would pass the first wait below at once.
+        File.Delete(OutboxRelay.HeartbeatPath);
         // At least one due row; rows other tests left Pending may be sent first, and any one send will do.
         await outbox.RaiseAsync(clock.GetUtcNow());
         using var stopTicking = new CancellationTokenSource();
-        Task ticking = TickAsync(clock, stopTicking.Token);
+        Task ticking = OutboxFixture.FollowRealTimeAsync(clock, stopTicking.Token);
 
         // The batch's query waits 4 s on a table lock (under its 5 s command timeout) before it reaches the send, and
         // nothing listens on the broker address, so the send then waits out its whole 10-second delivery timeout.
@@ -93,23 +97,6 @@ public class OutboxRelayHeartbeatTests(OutboxFixture outbox)
         await ticking;
         // One send's 10-second delivery timeout, plus up to a second for librdkafka's once-a-second timeout scan.
         Assert.InRange(oldest, TimeSpan.Zero, TimeSpan.FromSeconds(11));
-    }
-
-    /// <summary>Moves the test clock on with real time, 100 ms at a time, until stopped.</summary>
-    private static async Task TickAsync(FakeTimeProvider clock, CancellationToken stop)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
-        try
-        {
-            while (await timer.WaitForNextTickAsync(stop))
-            {
-                clock.Advance(TimeSpan.FromMilliseconds(100));
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Stopped.
-        }
     }
 
     private static DateTime? HeartbeatAt() =>

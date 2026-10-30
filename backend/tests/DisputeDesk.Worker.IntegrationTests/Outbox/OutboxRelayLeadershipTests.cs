@@ -47,7 +47,7 @@ public class OutboxRelayLeadershipTests(OutboxFixture outbox)
         await using RelayHost host = await outbox.StartRelayAsync(clock);
         await OutboxFixture.WaitUntilAsync(() => LeaderCount(host) == 1);
 
-        await TerminateLockConnectionAsync();
+        await outbox.TerminateLockConnectionAsync();
         OutboxMessage row = await outbox.RaiseAsync(clock.GetUtcNow());
         await outbox.WaitUntilSentAsync([row.Id], clock);
 
@@ -85,15 +85,4 @@ public class OutboxRelayLeadershipTests(OutboxFixture outbox)
     }
 
     private static int LeaderCount(RelayHost host) => host.LogLines.Count(line => line.StartsWith(LeaderLine, StringComparison.Ordinal));
-
-    /// <summary>Ends the session that holds the relay's advisory lock, as a dropped connection would (PostgreSQL, pg_terminate_backend).</summary>
-    private async Task TerminateLockConnectionAsync()
-    {
-        await using var admin = new NpgsqlConnection(outbox.ConnectionString);
-        await admin.OpenAsync(TestContext.Current.CancellationToken);
-        await using var terminate = new NpgsqlCommand(
-            "SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND objid::bigint = @key", admin);
-        terminate.Parameters.Add(new NpgsqlParameter<long>("key", OutboxRelay.LockKey));
-        Assert.True(await terminate.ExecuteScalarAsync(TestContext.Current.CancellationToken) is true);
-    }
 }
