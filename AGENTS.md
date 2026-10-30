@@ -114,7 +114,7 @@ Merge only when every stage passes and CI is green.
 - No machine sits idle while a ready story exists. Memory gate (`sysctl -n kern.memorystatus_vm_pressure_level`): at `1` (normal) dispatch freely within the lane limits; at `2` a machine with no builder lane running may start one (one lane, the suite run once); at `4` (critical) wait for a lane to finish. Read-only stages (reviewer, security, challenger, verifier) cost little locally and may run beside a builder.
 - Stop the Compose stack (`docker compose stop`) whenever no one holds the `stack` lock.
 - The story (a vertical slice) is the parallel unit. Start sequentially (platform baseline, then the tracer bullet), run the middle in parallel, finish with a sequential refactor sweep.
-- Collision check before dispatching two stories together: no shared files, never two migrations at once.
+- Collision check before dispatching two stories together: no shared section of a file (a shared file is allowed when the edits are in different sections; the story that merges second rebases and regenerates `openapi.json` and `frontend/src/api/generated/`), never two migrations at once.
 - Frontend work starts once the API contract (`openapi.json`) is merged.
 - The supervisor reads reviewer and security findings directly and writes them to `docs/verification/<story>-review.md` and `<story>-security.md`.
 - Story files given to the verifier hold only criteria it can check read-only. The supervisor reproduces the builder's deliberate breaks and any Docker checks in a throwaway copy, and records the result in `<story>-review.md`.
