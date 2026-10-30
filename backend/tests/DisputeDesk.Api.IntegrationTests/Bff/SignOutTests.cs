@@ -79,6 +79,35 @@ public class SignOutTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task Logout_WhileAnotherRequestIsInFlight_ThatRequestDoesNotSetTheSessionCookieAgain()
+    {
+        // The SPA's GET /api/v1/bff/session can still be running when the logout form posts. It authenticated before the
+        // logout deleted the row; its response, sent after the logout's, must not hand the browser the session cookie back.
+        var hold = new HoldInterceptor("SELECT EXISTS");
+        await using var factory = new ApiFactory(
+            postgres.ConnectionString,
+            configureServices: services => services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(hold)));
+        var cookies = new CookieContainer();
+        using HttpClient browser = factory.CreateBrowser(cookies);
+        await browser.SignInAsync(factory.Zitadel, $"in-flight-{Guid.NewGuid():N}");
+        string token = await browser.AntiforgeryTokenAsync();
+
+        Task<HttpResponseMessage> inFlight = browser.GetPathAsync("/api/v1/bff/session");
+        await hold.Reached.WaitAsync(TestContext.Current.CancellationToken);
+        HttpResponseMessage logout = await browser.LogoutAsync(token);
+        hold.Release();
+        HttpResponseMessage session = await inFlight;
+
+        Assert.Equal(HttpStatusCode.Redirect, logout.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, session.StatusCode);
+        // "unlinked", not "anonymous": the held request was the authenticated session read.
+        using JsonDocument body = await session.ReadJsonAsync();
+        Assert.Equal("unlinked", body.RootElement.GetProperty("state").GetString());
+        Assert.False(session.Headers.Contains("Set-Cookie"));
+        Assert.DoesNotContain(cookies.GetAllCookies(), cookie => cookie.Name == ApiFactory.SessionCookieName);
+    }
+
+    [Fact]
     public async Task Logout_Anonymous_SkipsAntiforgeryAuditsNothingAndRedirectsToEndSessionWithAStateAndNoHint()
     {
         await using var factory = new ApiFactory(await postgres.CreateMigratedDatabaseAsync());

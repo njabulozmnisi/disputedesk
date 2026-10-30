@@ -45,7 +45,10 @@ public sealed class SessionTicketStore(IServiceScopeFactory scopes, IDataProtect
         return key;
     }
 
-    /// <summary>Returns the session's ticket, or null when there is none. An expired session is deleted.</summary>
+    /// <summary>
+    /// Returns the session's ticket, or null when there is none. An expired session is deleted; a live one has its idle
+    /// limit moved forward, since the cookie handler calls this on every request that carries the session cookie.
+    /// </summary>
     public async Task<AuthenticationTicket?> RetrieveAsync(string key)
     {
         byte[] keyHash = Hash(key);
@@ -66,10 +69,17 @@ public sealed class SessionTicketStore(IServiceScopeFactory scopes, IDataProtect
             return null;
         }
 
+        // The absolute limit never moves. Only a row still live is slid, so one that ended since the read stays ended.
+        await db.Set<Session>()
+            .Where(row => row.KeyHash == keyHash && row.ExpiresAtUtc > now && row.AbsoluteExpiresAtUtc > now)
+            .ExecuteUpdateAsync(update => update.SetProperty(row => row.ExpiresAtUtc, now + IdleTimeout));
         return TicketSerializer.Default.Deserialize(_protector.Unprotect(session.Ticket));
     }
 
-    /// <summary>Moves the idle limit forward. The absolute limit never moves.</summary>
+    /// <summary>
+    /// Replaces the ticket of a session that signs in again, and moves the idle limit forward. The absolute limit never
+    /// moves. The handler calls this only on sign-in, since the cookie is never renewed.
+    /// </summary>
     public async Task RenewAsync(string key, AuthenticationTicket ticket)
     {
         DateTimeOffset now = time.GetUtcNow();

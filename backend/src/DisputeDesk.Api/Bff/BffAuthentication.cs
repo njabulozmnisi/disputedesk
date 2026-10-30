@@ -75,15 +75,12 @@ public static partial class BffAuthentication
         cookie.Cookie.SameSite = SameSiteMode.Strict;
         cookie.Cookie.SecurePolicy = bff.Value.Cookie.SecurePolicy;
         cookie.SessionStore = store;
-        cookie.ExpireTimeSpan = SessionTicketStore.IdleTimeout;
-        // Renewed on every authenticated request below, not by the built-in half-window rule.
+        // The cookie is written only at sign-in and cleared at sign-out, never renewed: a renewing response still in flight
+        // during a logout would hand the browser the ended session's cookie again. The session store slides the idle limit
+        // on every authenticated request instead; the ticket itself lives at most the absolute limit.
+        cookie.ExpireTimeSpan = SessionTicketStore.AbsoluteTimeout;
         cookie.SlidingExpiration = false;
 
-        cookie.Events.OnValidatePrincipal = context =>
-        {
-            context.ShouldRenew = true;
-            return Task.CompletedTask;
-        };
         // The Api never redirects to a sign-in page: a missing session is 401 and a refused one 403, and
         // UseStatusCodePages writes the unauthorized or forbidden problem body.
         cookie.Events.OnRedirectToLogin = context =>
