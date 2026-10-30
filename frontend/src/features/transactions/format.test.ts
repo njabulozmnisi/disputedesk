@@ -1,4 +1,10 @@
-import { formatDayWithYear, formatDay, formatFullDay, formatMoney } from './format';
+import {
+  formatDay,
+  formatDayWithYear,
+  formatFullDay,
+  formatMoney,
+  formatTimelineTime,
+} from './format';
 
 describe('formatMoney', () => {
   it.each([
@@ -54,5 +60,19 @@ describe('formatDayWithYear', () => {
 
   it('names the day in South African time', () => {
     expect(formatDayWithYear('2026-12-31T22:00:00Z')).toBe('1 Jan 2027');
+  });
+});
+
+describe('formatTimelineTime', () => {
+  it('reads like "26 Oct 2026, 14:32 SAST" in South African time', () => {
+    expect(formatTimelineTime('2026-10-26T12:32:00Z')).toBe('26 Oct 2026, 14:32 SAST');
+  });
+
+  it('writes September as "Sep", never "Sept"', () => {
+    expect(formatTimelineTime('2026-09-04T07:05:00Z')).toBe('4 Sep 2026, 09:05 SAST');
+  });
+
+  it('uses a 24-hour clock, so midnight is 00:00', () => {
+    expect(formatTimelineTime('2026-10-26T22:00:00Z')).toBe('27 Oct 2026, 00:00 SAST');
   });
 });

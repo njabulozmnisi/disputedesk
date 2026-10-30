@@ -10,7 +10,11 @@ import { describeAmount, showAmount } from './format';
 import { notDisputableHint } from './notDisputableHint';
 
 /** "Card 492345•• •••• 3456" for a card, "Account •••• 4821" otherwise. Screen readers get the short form. */
-export function MaskedNumber({ row }: { row: TransactionResponse }) {
+export function MaskedNumber({
+  row,
+}: {
+  row: Pick<TransactionResponse, 'maskedCard' | 'accountLast4'>;
+}) {
   if (row.maskedCard) {
     const firstSix = row.maskedCard.slice(0, 6);
     const lastFour = row.maskedCard.slice(-4);
@@ -77,14 +81,14 @@ export function TransactionRow({
         </Link>
       ) : null}
       {row.disputeId && statusDescription ? (
-        // shortcut: a plain link (a full page load) until story 3.7 adds the dispute route
         // On a phone the badge has its own right-aligned line under the row text; from 768px it is the action column.
-        <a
-          href={`/disputes/${encodeURIComponent(row.disputeId)}`}
+        <Link
+          to="/disputes/$disputeId"
+          params={{ disputeId: row.disputeId }}
           className="col-span-2 row-start-3 group justify-self-end rounded-full py-2 md:col-span-1 md:col-start-2 md:row-start-2"
         >
           <DisputeStatusBadge statusDescription={statusDescription} />
-        </a>
+        </Link>
       ) : null}
     </li>
   );

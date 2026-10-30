@@ -15,6 +15,8 @@ const buttonVariants = cva(
           'bg-primary text-primary-foreground hover:bg-primary-hover hover:text-primary-foreground active:bg-primary-pressed',
         secondary:
           'border-primary bg-card text-primary hover:border-primary-hover hover:bg-primary-subtle hover:text-primary-hover active:border-primary-pressed active:text-primary-pressed',
+        destructive:
+          'bg-destructive text-destructive-foreground hover:bg-destructive/90 hover:text-destructive-foreground',
       },
       size: {
         default: 'min-h-12 px-6 text-body',

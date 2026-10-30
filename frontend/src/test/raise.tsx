@@ -6,10 +6,12 @@ import type { TransactionResponse } from '@/api/generated/model';
 
 import { server } from './server';
 import {
+  disputeGuid,
   makeDispute,
   makeRow,
   renderApp,
   serveAntiforgeryToken,
+  serveDispute,
   serveTransactions,
   signInAs,
 } from './support';
@@ -17,7 +19,10 @@ import {
 export type RaiseRequest = { headers: Headers; body: Record<string, unknown> };
 
 export const created = () =>
-  HttpResponse.json(makeDispute(), { status: 201, headers: { Location: '/api/v1/disputes/D-1' } });
+  HttpResponse.json(makeDispute(), {
+    status: 201,
+    headers: { Location: `/api/v1/disputes/${disputeGuid}` },
+  });
 
 /** Answers `POST /api/v1/disputes` with `respond(attempt)` (1 for the first request) and records every request. */
 export function recordRaiseRequests(respond: (attempt: number) => Response = created) {
@@ -42,6 +47,7 @@ export async function openRaiseScreen(
   signInAs('linked');
   serveAntiforgeryToken();
   serveTransactions(rows);
+  serveDispute();
   const app = renderApp({ path: '/transactions', fakeTimers, strictMode });
   await app.user.click(await screen.findByRole('link', { name: 'Dispute this transaction' }));
   await screen.findByRole('heading', { level: 1, name: 'Dispute this transaction' });

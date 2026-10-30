@@ -92,8 +92,9 @@ export function SubmitFailure({ error }: { error: ApiError | TypeError }) {
           <div className="flex flex-wrap gap-3">
             {failure.disputeId ? (
               <Button asChild>
-                {/* shortcut: a plain link (a full page load) until story 3.7 adds the dispute route */}
-                <a href={`/disputes/${encodeURIComponent(failure.disputeId)}`}>View dispute</a>
+                <Link to="/disputes/$disputeId" params={{ disputeId: failure.disputeId }}>
+                  View dispute
+                </Link>
               </Button>
             ) : null}
             {backToTransactions}

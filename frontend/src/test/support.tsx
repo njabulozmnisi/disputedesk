@@ -115,11 +115,14 @@ export function makeRow(overrides: Partial<TransactionResponse> = {}): Transacti
   };
 }
 
+/** The ID of `makeDispute()`: a canonical GUID, as the detail route accepts only that. */
+export const disputeGuid = '11111111-1111-4111-8111-111111111111';
+
 /** The 201 body of a raised dispute, for the row's transaction. */
 export function makeDispute(overrides: Partial<DisputeResponse> = {}): DisputeResponse {
   const row = makeRow();
   return {
-    disputeId: 'D-1',
+    disputeId: disputeGuid,
     customerStatus: 'submitted',
     outcome: null,
     reason: 'unrecognised',
@@ -136,9 +139,39 @@ export function makeDispute(overrides: Partial<DisputeResponse> = {}): DisputeRe
     expectedAmount: null,
     disputedAmount: row.amount,
     createdAt: '2026-10-30T08:00:00Z',
-    timeline: [],
+    timeline: [
+      {
+        action: 'raise',
+        customerStatus: 'submitted',
+        actor: 'you',
+        occurredAt: '2026-10-30T08:00:00Z',
+        note: null,
+      },
+    ],
     ...overrides,
   };
+}
+
+/** The detail endpoint answers with `dispute` for its ID. */
+export function serveDispute(dispute: DisputeResponse = makeDispute()) {
+  server.use(http.get(`*/api/v1/disputes/${dispute.disputeId}`, () => HttpResponse.json(dispute)));
+}
+
+export type WithdrawRequest = { url: string; headers: Headers; body: unknown };
+
+/** Answers `POST .../withdraw` with `respond(attempt)` (1 for the first request) and records every request. */
+export function recordWithdrawRequests(
+  respond: (attempt: number) => Response | Promise<Response>,
+  disputeId = disputeGuid,
+) {
+  const requests: WithdrawRequest[] = [];
+  server.use(
+    http.post(`*/api/v1/disputes/${disputeId}/withdraw`, async ({ request }) => {
+      requests.push({ url: request.url, headers: request.headers, body: await request.json() });
+      return respond(requests.length);
+    }),
+  );
+  return requests;
 }
 
 /** One row of the disputes list: a submitted dispute with sensible defaults. */

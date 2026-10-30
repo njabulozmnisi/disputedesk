@@ -107,9 +107,28 @@ function AlertDialogAction({
   );
 }
 
+// Radix focuses the Cancel button when the dialog opens: the least destructive action (WAI-ARIA APG, alert dialog).
+function AlertDialogCancel({
+  className,
+  variant = 'secondary',
+  ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Cancel> &
+  Pick<React.ComponentProps<typeof Button>, 'variant'>) {
+  return (
+    <Button variant={variant} asChild>
+      <AlertDialogPrimitive.Cancel
+        data-slot="alert-dialog-cancel"
+        className={cn(className)}
+        {...props}
+      />
+    </Button>
+  );
+}
+
 export {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
