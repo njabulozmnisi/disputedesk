@@ -236,6 +236,8 @@ services:
       Seed__Enabled: "true"                        # links customers A and B to their fixture logins (AD-30)
       Seed__FixturesPath: /fixtures/local.json
       Scalar__Enabled: "true"                      # Scalar at /scalar/ and the runtime document (AD-26)
+      # The OTP HMAC key (AD-26): base64 of the text "dev-only-linking-otp-hmac-key-not-a-secret", 42 bytes.
+      Linking__OtpHmacKey: ${LINKING_OTP_HMAC_KEY:-ZGV2LW9ubHktbGlua2luZy1vdHAtaG1hYy1rZXktbm90LWEtc2VjcmV0}
     volumes:
       - zitadel-clients:/run/zitadel:ro            # zitadel-clients.json (the Zitadel:* keys, client IDs and secrets)
       - ./fixtures/local.json:/fixtures/local.json:ro   # the seed source, the same file the stub reads
@@ -250,6 +252,8 @@ services:
       redpanda-topics: { condition: service_completed_successfully }
       provision: { condition: service_completed_successfully }
       core-banking: { condition: service_healthy }
+    # Longer than the host's 30-second ShutdownTimeout, so an in-flight request or linking job can finish (AD-25).
+    stop_grace_period: 35s
     mem_limit: 512m
 
   worker:

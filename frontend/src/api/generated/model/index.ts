@@ -28,6 +28,7 @@ export * from './raiseDisputeRequest';
 export * from './reason';
 export * from './sessionResponse';
 export * from './sessionState';
+export * from './startLinkingRequest';
 export * from './storedEventType';
 export * from './timelineActor';
 export * from './timelineEntryResponse';

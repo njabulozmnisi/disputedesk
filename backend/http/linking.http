@@ -1,0 +1,52 @@
+# Starting linking on the local stack (docker compose up --wait), through the gateway.
+# Sign in first, headless, as an unlinked login: scripts/dev-login.sh customer-c
+# then copy the disputedesk-session value from the cookie jar it prints into @session below.
+# Run "Antiforgery token" first: it sets the disputedesk-antiforgery cookie, so copy that value into @antiforgery.
+# Every well-formed start answers 202 with an empty body, whatever the details; the job then checks them off the
+# request path, and only a match with no linked login whose SIM-swap check passes gets an OTP, in Mailpit
+# (http://localhost:8025). LinkingChallenges stores only the OTP's HMAC; AuditLogEntries records each stop.
+# With curl, keep both cookies in the jar:
+#   token=$(curl -s -b <jar> -c <jar> http://localhost:8080/api/v1/bff/antiforgery | jq -r .requestToken)
+#   curl -i -b <jar> -H "X-XSRF-TOKEN: $token" -H 'Content-Type: application/json' \
+#     -d '{"idNumber":"8804125123080","accountNumber":"1000000041"}' http://localhost:8080/api/v1/linking/start
+
+@app = http://localhost:8080
+@session = paste-the-disputedesk-session-cookie-value
+@antiforgery = paste-the-disputedesk-antiforgery-cookie-value
+
+### Antiforgery token: the X-XSRF-TOKEN value for unsafe requests
+# @name token
+GET {{app}}/api/v1/bff/antiforgery
+Cookie: disputedesk-session={{session}}
+
+### Customer D's details (not linked, passes every check): 202, and the OTP lands in Mailpit for +27820000004
+POST {{app}}/api/v1/linking/start
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Content-Type: application/json
+
+{"idNumber": "8804125123080", "accountNumber": "1000000041"}
+
+### Details that match no customer: the same 202; the job audits LinkingNoMatch and sends nothing
+POST {{app}}/api/v1/linking/start
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Content-Type: application/json
+
+{"idNumber": "8804125123080", "accountNumber": "1000000049"}
+
+### Customer C's details (recent SIM swap): the same 202; the job audits LinkingSimSwapFailed and sends nothing
+POST {{app}}/api/v1/linking/start
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Content-Type: application/json
+
+{"idNumber": "9202295801081", "accountNumber": "1000000031"}
+
+### An ID number with a wrong check digit: 400 validation naming idNumber, without the value
+POST {{app}}/api/v1/linking/start
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Content-Type: application/json
+
+{"idNumber": "8804125123081", "accountNumber": "1000000041"}

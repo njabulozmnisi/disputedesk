@@ -54,9 +54,10 @@ public class EndpointAuthorizationTests(PostgresFixture postgres)
             .Select(Name)];
         Assert.True(withNeither.Length == 0, "Endpoints with neither AllowAnonymous nor a policy:\n" + string.Join('\n', withNeither));
 
-        // The antiforgery endpoint takes the default policy (no name); the customer routes name Linked.
+        // The antiforgery endpoint takes the default policy (no name); the customer routes name Linked, the linking routes Unlinked.
         Assert.Equal([null], AuthorizeData(endpoints, "/api/v1/bff/antiforgery").Select(data => data.Policy));
         Assert.Contains("Linked", AuthorizeData(endpoints, "/api/v1/transactions").Select(data => data.Policy));
+        Assert.Contains("Unlinked", AuthorizeData(endpoints, "/api/v1/linking/start").Select(data => data.Policy));
     }
 
     [Theory]

@@ -5,12 +5,14 @@ using DisputeDesk.Api.Bff;
 using DisputeDesk.Api.Disputes;
 using DisputeDesk.Api.Errors;
 using DisputeDesk.Api.Health;
+using DisputeDesk.Api.Linking;
 using DisputeDesk.Api.Operations;
 using DisputeDesk.Api.Security;
 using DisputeDesk.Api.Transactions;
 using DisputeDesk.Contracts.Json;
 using DisputeDesk.Infrastructure;
 using DisputeDesk.Infrastructure.CoreBanking;
+using DisputeDesk.Infrastructure.Linking;
 using DisputeDesk.Infrastructure.Observability;
 using DisputeDesk.Infrastructure.Seeding;
 using DisputeDesk.Infrastructure.Sms;
@@ -38,6 +40,7 @@ builder.AddDisputeDeskTelemetry("disputedesk-api", typeof(Program).Assembly)
 builder.Services.AddInfrastructure();
 builder.Services.AddCoreBanking();
 builder.Services.AddSmsSender();
+builder.Services.AddLinking();
 builder.Services.AddSeeder();
 builder.Services.ConfigureHttpJsonOptions(options => DisputeDeskJson.Apply(options.SerializerOptions));
 builder.Services.AddValidation();
@@ -55,6 +58,8 @@ builder.Services.AddTransactions();
 builder.Services.AddDisputes();
 builder.Services.AddOperationsAuthentication();
 builder.Services.AddOperations();
+builder.Services.AddLinkingRoutes();
+builder.Services.AddLinkingStart();
 
 WebApplication app = builder.Build();
 
@@ -72,5 +77,6 @@ RouteGroupBuilder apiV1 = app.MapApiV1();
 apiV1.MapBff();
 apiV1.MapCustomerRoutes().MapTransactions().MapDisputes();
 apiV1.MapOperations();
+apiV1.MapLinkingRoutes().MapLinkingStart();
 
 await app.RunAsync();
