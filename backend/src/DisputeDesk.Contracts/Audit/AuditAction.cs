@@ -8,6 +8,7 @@ public enum AuditAction
     Escalate,
     Resolve,
     Withdraw,
+    DisputeRead,
     SignIn,
     SignOut,
     LinkingStart,

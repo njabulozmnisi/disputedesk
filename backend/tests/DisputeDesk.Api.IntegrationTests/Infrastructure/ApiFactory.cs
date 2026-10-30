@@ -11,7 +11,8 @@ namespace DisputeDesk.Api.IntegrationTests.Infrastructure;
 /// <summary>
 /// The real Api pipeline against a given database (none when null), in the given environment, with optional
 /// extra configuration settings (as environment variables would supply them). Zitadel is always the
-/// <see cref="FakeZitadel"/>; the local http cookie settings apply unless <paramref name="settings"/> overrides them.
+/// <see cref="FakeZitadel"/>, whose operations machine user is mapped to the operations actor; the local http cookie
+/// settings apply unless <paramref name="settings"/> overrides them.
 /// </summary>
 public sealed class ApiFactory(
     string? connectionString,
@@ -28,6 +29,8 @@ public sealed class ApiFactory(
         ["Zitadel:Issuer"] = FakeZitadel.Issuer,
         ["Zitadel:Bff:ClientId"] = FakeZitadel.ClientId,
         ["Zitadel:Bff:ClientSecret"] = FakeZitadel.ClientSecret,
+        ["Zitadel:ProjectId"] = FakeZitadel.ProjectId,
+        [$"Operations:Actors:{FakeZitadel.OperationsSub}"] = "operations",
         ["Bff:SessionCookie:Name"] = SessionCookieName,
         ["Bff:AntiforgeryCookie:Name"] = AntiforgeryCookieName,
         ["Bff:Cookie:SecurePolicy"] = "SameAsRequest",
@@ -36,6 +39,9 @@ public sealed class ApiFactory(
         ["Sms:Host"] = "127.0.0.1",
         ["Sms:Port"] = "1",
     };
+
+    /// <summary>Turns Scalar and the runtime OpenAPI document on; <c>appsettings.json</c> leaves them off (AD-26).</summary>
+    public static IReadOnlyDictionary<string, string?> ApiReferenceOn { get; } = new Dictionary<string, string?> { ["Scalar:Enabled"] = "true" };
 
     public FakeZitadel Zitadel { get; } = new();
 

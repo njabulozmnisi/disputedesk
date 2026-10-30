@@ -1,0 +1,26 @@
+# Operations tools on the local stack (docker compose up --wait), through the gateway. Operations routes take only a
+# bearer token, never the session cookie (AD-8).
+# Get a token from the client-credentials grant (RFC 6749 section 4.4) as the operations machine user:
+#   scripts/operations-token.sh
+# and paste it into @token below. With curl:
+#   curl -H "Authorization: Bearer $(scripts/operations-token.sh)" http://localhost:8080/api/v1/operations/disputes/<disputeId>
+# Raise a dispute first as a customer (disputes.http) and copy its disputeId into @disputeId.
+
+@app = http://localhost:8080
+@token = paste-the-operations-access-token
+@disputeId = paste-a-dispute-id
+
+### Read one dispute: 200 with the internal status, the stored snapshot and every stored event; audited as DisputeRead Succeeded
+GET {{app}}/api/v1/operations/disputes/{{disputeId}}
+Authorization: Bearer {{token}}
+
+### An unknown dispute: 404 not-found; audited as DisputeRead Rejected
+GET {{app}}/api/v1/operations/disputes/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+### Not a GUID: 400 validation naming disputeId; not audited
+GET {{app}}/api/v1/operations/disputes/not-a-guid
+Authorization: Bearer {{token}}
+
+### No token: 401 unauthorized with WWW-Authenticate: Bearer
+GET {{app}}/api/v1/operations/disputes/{{disputeId}}

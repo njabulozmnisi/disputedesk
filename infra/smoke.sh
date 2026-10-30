@@ -75,21 +75,57 @@ cache_control=$(curl -fsSI "$GW/api/health/live" | grep -i '^cache-control:' | t
 grep -qi 'no-store' <<< "$cache_control" || fail "/api/health/live: cache-control without no-store: $cache_control"
 ok "/api/health/live $cache_control"
 
-section "gateway: the coarse limit's 429"
-# Rapid requests exceed 10 r/s with burst 20. The path ends in .json, so the 429 proves its Content-Type does not
-# come from the extension.
-limited=""
-for _ in $(seq 40); do
-  response=$(curl -sS -D - -o /dev/null "$GW/api/limit-probe.json" | tr -d '\r')
-  if head -1 <<< "$response" | grep -q ' 429'; then limited=$response; break; fi
+section "gateway: Scalar and the runtime document (AD-26)"
+header_value(){ grep -i "^$1:" | cut -d' ' -f2-; }   # header name, response headers on stdin (CR stripped)
+spa_headers=$(curl -fsSI "$GW/" | tr -d '\r')
+scalar_hash=$(grep -o "'sha256-[^']*'" infra/nginx/templates/scalar-headers.conf.template)
+scalar_csp="default-src 'self'; script-src 'self' $scalar_hash; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+redirect=$(curl -sS -D - -o /dev/null "$GW/scalar" | tr -d '\r')
+head -1 <<< "$redirect" | grep -q ' 302' || fail "/scalar is not a 302: $redirect"
+[ "$(header_value location <<< "$redirect")" = scalar/ ] || fail "/scalar does not redirect to scalar/: $redirect"
+ok "GET $GW/scalar -> 302 scalar/"
+for path in /scalar/ /scalar/scalar.js /scalar/scalar.aspnetcore.js /scalar/favicon.svg /openapi/v1.json; do
+  curl -fsS -o /dev/null "$GW$path" || fail "GET $path"
+  ok "GET $GW$path -> 200"
 done
-[ -n "$limited" ] || fail "40 rapid requests to /api/ got no 429"
-grep -qi '^content-type: application/problem+json$' <<< "$limited" || fail "429 content type: $limited"
-grep -qi '^retry-after: 1$' <<< "$limited" || fail "429 has no Retry-After: 1: $limited"
+# The document's server URL comes from the gateway's Host, so Scalar's requests stay same-origin (connect-src 'self').
+[ "$(curl -fsS "$GW/openapi/v1.json" | jq -r '.servers[0].url')" = "$GW/" ] || fail "/openapi/v1.json server URL is not $GW/"
+ok "/openapi/v1.json servers[0].url = $GW/"
+# Only v1.json reaches the api; any other /openapi/ path is the SPA's index.html.
+[ "$(curl -fsS "$GW/openapi/v2.json")" = "$(curl -fsS "$GW/")" ] || fail "/openapi/v2.json is not the SPA"
+ok "GET $GW/openapi/v2.json -> the SPA"
+# GET, not HEAD: the api maps the page as GET only and answers HEAD with 405.
+headers=$(curl -fsS -D - -o /dev/null "$GW/scalar/" | tr -d '\r')
 for h in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
-  [ "$(grep -ic "^$h:" <<< "$limited")" = 1 ] || fail "429: header $h is not sent exactly once"
+  [ "$(grep -ic "^$h:" <<< "$headers")" = 1 ] || fail "/scalar/: header $h is not sent exactly once"
+  if [ "$h" = content-security-policy ]; then expected=$scalar_csp; else expected=$(header_value "$h" <<< "$spa_headers") || fail "/ has no $h"; fi
+  [ "$(header_value "$h" <<< "$headers")" = "$expected" ] || fail "/scalar/: $h is not: $expected"
+  ok "/scalar/ $(grep -i "^$h:" <<< "$headers")"
 done
-ok "429 with application/problem+json, Retry-After: 1 and each security header once"
+! grep -qi '^strict-transport-security:' <<< "$headers" || fail "/scalar/: HSTS sent over plain HTTP"
+ok "/scalar/ no strict-transport-security"
+
+section "gateway: the coarse limit's 429"
+# Rapid requests exceed 10 r/s with burst 20. The 429 is @rate_limited's on every location, with the SPA's CSP.
+expect_429(){ # path
+  local limited="" response
+  for _ in $(seq 40); do
+    response=$(curl -sS -D - -o /dev/null "$GW$1" | tr -d '\r')
+    if head -1 <<< "$response" | grep -q ' 429'; then limited=$response; break; fi
+  done
+  [ -n "$limited" ] || fail "40 rapid requests to $1 got no 429"
+  grep -qi '^content-type: application/problem+json$' <<< "$limited" || fail "$1 429 content type: $limited"
+  grep -qi '^retry-after: 1$' <<< "$limited" || fail "$1 429 has no Retry-After: 1: $limited"
+  for h in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
+    [ "$(grep -ic "^$h:" <<< "$limited")" = 1 ] || fail "$1 429: header $h is not sent exactly once"
+  done
+  [ "$(header_value content-security-policy <<< "$limited")" = "$(header_value content-security-policy <<< "$spa_headers")" ] \
+    || fail "$1 429 does not carry the SPA's CSP: $limited"
+  ok "$1 429 with application/problem+json, Retry-After: 1, the SPA's CSP and each security header once"
+}
+# The path ends in .json, so the 429 proves its Content-Type does not come from the extension.
+expect_429 /api/limit-probe.json
+expect_429 /scalar/
 
 section "Zitadel discovery and Login v2 at auth.localhost"
 discovery=$(curl -fsS "$AUTH/.well-known/openid-configuration")

@@ -1,5 +1,5 @@
 # DisputeDesk gateway: the single entry point of the platform.
-#   app origin       the SPA; /api/ -> api; /otlp/v1/* -> the OTLP/HTTP receiver
+#   app origin       the SPA; /api/, /scalar/ and /openapi/v1.json -> api; /otlp/v1/* -> the OTLP/HTTP receiver
 #   identity origin  Zitadel API, console and Login v2 (/ui/v2/login)
 #
 # A template: at start, the image's entrypoint renders /etc/nginx/templates/*.template with envsubst into /etc/nginx,
@@ -33,7 +33,7 @@ http {
   upstream zitadel_api   { server zitadel:8080;       keepalive 16; }
   upstream zitadel_login { server zitadel-login:3000; keepalive 16; }
 
-  # The coarse per-client limit on /api/ and /otlp/ (AD-23): 10 requests per second, with bursts of up to 20 served
+  # The coarse per-client limit on /api/, /otlp/ and the Scalar locations (AD-23): 10 requests per second, with bursts of up to 20 served
   # at once (nodelay) instead of queued. A rejected request gets 429 (RFC 6585).
   limit_req_zone $binary_remote_addr zone=coarse:10m rate=10r/s;
   limit_req_status 429;
@@ -77,6 +77,46 @@ http {
 
     # Everything else under /api/ keeps its path: the api serves /api/v1/... itself.
     location /api/ {
+      limit_req zone=coarse burst=20 nodelay;
+      proxy_pass http://api;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-For $remote_addr;
+    }
+
+    # Scalar and the runtime OpenAPI document, served by the api when Scalar:Enabled is true and its 401 otherwise
+    # (AD-26). The path stays unchanged, because the page's inline script embeds it and its CSP hash holds for exactly
+    # /scalar/. These locations send the Scalar CSP (scalar-headers.conf); a 429 is still @rate_limited's.
+    # /scalar gets the api's 302 to scalar/. Only v1.json reaches the api; any other /openapi/ path is the SPA's.
+    location = /scalar {
+      include /etc/nginx/scalar-headers.conf;
+      limit_req zone=coarse burst=20 nodelay;
+      proxy_pass http://api;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-For $remote_addr;
+    }
+
+    location /scalar/ {
+      include /etc/nginx/scalar-headers.conf;
+      limit_req zone=coarse burst=20 nodelay;
+      proxy_pass http://api;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-For $remote_addr;
+    }
+
+    location = /openapi/v1.json {
+      include /etc/nginx/scalar-headers.conf;
       limit_req zone=coarse burst=20 nodelay;
       proxy_pass http://api;
       proxy_http_version 1.1;

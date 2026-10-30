@@ -1,9 +1,11 @@
 using DisputeDesk.Api;
+using DisputeDesk.Api.ApiReference;
 using DisputeDesk.Api.Authorization;
 using DisputeDesk.Api.Bff;
 using DisputeDesk.Api.Disputes;
 using DisputeDesk.Api.Errors;
 using DisputeDesk.Api.Health;
+using DisputeDesk.Api.Operations;
 using DisputeDesk.Api.Security;
 using DisputeDesk.Api.Transactions;
 using DisputeDesk.Contracts.Json;
@@ -14,7 +16,6 @@ using DisputeDesk.Infrastructure.Seeding;
 using DisputeDesk.Infrastructure.Sms;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
-using Scalar.AspNetCore;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -45,13 +46,15 @@ builder.Services.AddValidation();
 builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = false);
 builder.Services.AddDisputeDeskProblemDetails();
 builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
-builder.Services.AddOpenApi(options => options.AddSchemaTransformer<EnumSchemaTransformer>());
+builder.Services.AddApiReference();
 builder.Services.AddDisputeDeskHealthChecks();
 builder.Services.AddBff();
 builder.Services.AddRequestTimeouts();
 builder.Services.AddCustomerRoutes();
 builder.Services.AddTransactions();
 builder.Services.AddDisputes();
+builder.Services.AddOperationsAuthentication();
+builder.Services.AddOperations();
 
 WebApplication app = builder.Build();
 
@@ -63,16 +66,11 @@ app.UseAuthorization();
 // After routing (implicit here), so it reads each endpoint's timeout; a timeout the endpoint does not answer is a 504.
 app.UseRequestTimeouts();
 
-if (app.Environment.IsDevelopment())
-{
-    // The API reference is public in Development, the only place it is mapped (AD-10's fallback policy covers the rest).
-    app.MapOpenApi().AllowAnonymous();
-    app.MapScalarApiReference().AllowAnonymous();
-}
-
+app.MapApiReference();
 app.MapDisputeDeskHealthChecks();
 RouteGroupBuilder apiV1 = app.MapApiV1();
 apiV1.MapBff();
 apiV1.MapCustomerRoutes().MapTransactions().MapDisputes();
+apiV1.MapOperations();
 
 await app.RunAsync();

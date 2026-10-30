@@ -17,6 +17,10 @@ public sealed class ZitadelOptions
     /// <summary>Only the local http stack turns this off (docker-compose.yml).</summary>
     public bool RequireHttpsMetadata { get; set; } = true;
 
+    /// <summary>The DisputeDesk project's ID: the audience of operations access tokens and part of their roles claim (AD-8, AD-9).</summary>
+    [Required]
+    public string ProjectId { get; set; } = "";
+
     [Required]
     [ValidateObjectMembers]
     public ZitadelClientOptions Bff { get; set; } = new();

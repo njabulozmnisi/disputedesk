@@ -159,12 +159,16 @@ jq -c '.logins[]' "$FIXTURES" | while read -r login; do
 done
 
 # --------------------------------------------------------------------- client settings for the Api
-# The Zitadel:* keys of AD-26, plus the operations tools' client credentials (infra/smoke.sh uses them).
+# The Zitadel:* and Operations:* keys of AD-26, plus the operations tools' client credentials (infra/smoke.sh and
+# scripts/operations-token.sh use them; the Api loads the whole file but binds no option to them, so they reach no
+# Api code). Operations:Actors maps the machine user's ID, which
+# is its tokens' sub, to the operations actor (AD-9).
 # Kept when the file already describes this instance in this shape; otherwise both secrets are (re)generated.
 if [ -s "$OUT_FILE" ] \
   && [ "$(jq -r '.Zitadel.Issuer' "$OUT_FILE")" = "$Z" ] \
   && [ "$(jq -r '.Zitadel.ProjectId' "$OUT_FILE")" = "$PROJECT_ID" ] \
-  && [ "$(jq -r '.Zitadel.Bff.ClientId' "$OUT_FILE")" = "$BFF_CLIENT_ID" ]; then
+  && [ "$(jq -r '.Zitadel.Bff.ClientId' "$OUT_FILE")" = "$BFF_CLIENT_ID" ] \
+  && [ "$(jq -r --arg ops "$OPS_ID" '.Operations.Actors[$ops]' "$OUT_FILE")" = operations ]; then
   log "$OUT_FILE is current; secrets not rotated"
 else
   if [ -z "$BFF_SECRET" ]; then
@@ -175,11 +179,12 @@ else
   # The secrets reach jq over stdin (printf is a shell builtin), never as arguments.
   { printf '%s' "$BFF_SECRET" | jq -Rs .; printf '%s' "$OPS_SECRET" | jq -Rs .; } \
     | jq -s --arg issuer "$Z" --arg project "$PROJECT_ID" \
-        --arg bffId "$BFF_CLIENT_ID" --arg opsId "$OPS_USERNAME" '{
+        --arg bffId "$BFF_CLIENT_ID" --arg opsId "$OPS_USERNAME" --arg opsUserId "$OPS_ID" '{
       Zitadel: {
         Issuer: $issuer, MetadataAddress: "\($issuer)/.well-known/openid-configuration", ProjectId: $project,
         Bff: { ClientId: $bffId, ClientSecret: .[0] },
-        OperationsTools: { ClientId: $opsId, ClientSecret: .[1] } } }' > "$OUT_FILE.tmp"
+        OperationsTools: { ClientId: $opsId, ClientSecret: .[1] } },
+      Operations: { Actors: { ($opsUserId): "operations" } } }' > "$OUT_FILE.tmp"
   chown "$OUT_UID:$OUT_UID" "$OUT_FILE.tmp"
   chmod 0400 "$OUT_FILE.tmp"
   mv "$OUT_FILE.tmp" "$OUT_FILE"

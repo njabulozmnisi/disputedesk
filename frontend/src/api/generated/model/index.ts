@@ -5,11 +5,13 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from './actorType';
 export * from './antiforgeryResponse';
 export * from './customerStatus';
 export * from './disputeAction';
 export * from './disputePageResponse';
 export * from './disputeResponse';
+export * from './disputeStatus';
 export * from './disputeSummaryResponse';
 export * from './getApiV1BffLoginParams';
 export * from './getApiV1DisputesParams';
@@ -18,12 +20,15 @@ export * from './httpValidationProblemDetails';
 export * from './httpValidationProblemDetailsErrors';
 export * from './money';
 export * from './notDisputableReason';
+export * from './operationsDisputeResponse';
+export * from './operationsTimelineEntryResponse';
 export * from './outcome';
 export * from './problemDetails';
 export * from './raiseDisputeRequest';
 export * from './reason';
 export * from './sessionResponse';
 export * from './sessionState';
+export * from './storedEventType';
 export * from './timelineActor';
 export * from './timelineEntryResponse';
 export * from './transactionDirection';

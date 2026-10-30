@@ -36,6 +36,7 @@ import type {
   GetApiV1DisputesParams,
   GetApiV1TransactionsParams,
   HttpValidationProblemDetails,
+  OperationsDisputeResponse,
   ProblemDetails,
   RaiseDisputeRequest,
   SessionResponse,
@@ -1027,3 +1028,92 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiV1DisputesDisputeIdWithdrawMutationOptions(options), queryClient);
     }
+
+export const getGetApiV1OperationsDisputesDisputeIdUrl = (disputeId: string,) => {
+
+
+
+
+  return `/api/v1/operations/disputes/${disputeId}`
+}
+
+export const getApiV1OperationsDisputesDisputeId = async (disputeId: string, options?: Parameters<typeof customFetch>[1]): Promise<OperationsDisputeResponse> => {
+
+  return customFetch<OperationsDisputeResponse>(getGetApiV1OperationsDisputesDisputeIdUrl(disputeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1OperationsDisputesDisputeIdQueryKey = (disputeId: string,) => {
+    return [
+    `/api/v1/operations/disputes/${disputeId}`
+    ] as const;
+    }
+
+
+export const getGetApiV1OperationsDisputesDisputeIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(disputeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiV1OperationsDisputesDisputeIdQueryKey(disputeId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>> = ({ signal }) => getApiV1OperationsDisputesDisputeId(disputeId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: disputeId !== null && disputeId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiV1OperationsDisputesDisputeIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>>
+export type GetApiV1OperationsDisputesDisputeIdQueryError = ErrorType<HttpValidationProblemDetails | ProblemDetails>
+
+
+export function useGetApiV1OperationsDisputesDisputeId<TData = Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ disputeId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1OperationsDisputesDisputeId<TData = Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ disputeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1OperationsDisputesDisputeId<TData = Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ disputeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiV1OperationsDisputesDisputeId<TData = Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ disputeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1OperationsDisputesDisputeId>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiV1OperationsDisputesDisputeIdQueryOptions(disputeId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}

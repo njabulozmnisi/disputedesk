@@ -1,9 +1,13 @@
 using System.Diagnostics;
+using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
 
 namespace DisputeDesk.ArchitectureTests;
 
-/// <summary>AC11 and AC12: what the Zitadel provisioner creates and the headless sign-in script, read from the files.</summary>
+/// <summary>
+/// AC11 and AC12: what the Zitadel provisioner creates and the headless sign-in script, read from the files. 5.1 AC7: the
+/// operations actor mapping it writes, and the operations token script.
+/// </summary>
 public partial class PlatformScriptTests
 {
     private static readonly string ProvisionScript = File.ReadAllText(Path.Combine(SourceRoots.Repo, "infra/zitadel/provision/provision.sh"));
@@ -28,6 +32,73 @@ public partial class PlatformScriptTests
     public void ProvisionScript_ClientsFile_HoldsTheAd26ZitadelKeys(string key)
     {
         Assert.Contains(key, ProvisionScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProvisionScript_ClientsFile_MapsTheMachineUserIdToTheOperationsActor()
+    {
+        // 5.1 AC7, AD-26: Operations:Actors:<the machine user's ID, its tokens' sub> = operations.
+        Assert.Contains("--arg opsUserId \"$OPS_ID\"", ProvisionScript, StringComparison.Ordinal);
+        Assert.Contains("Operations: { Actors: { ($opsUserId): \"operations\" } }", ProvisionScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProvisionScript_CurrentCheck_AlsoRequiresTheActorMapping()
+    {
+        // Otherwise a clients file written before 5.1 counts as current and never gains the mapping.
+        string currentCheck = CurrentCheck().Match(ProvisionScript).Value;
+
+        Assert.Contains("is current; secrets not rotated", currentCheck, StringComparison.Ordinal);
+        Assert.Contains("[ \"$(jq -r --arg ops \"$OPS_ID\" '.Operations.Actors[$ops]' \"$OUT_FILE\")\" = operations ]", currentCheck, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OperationsTokenScript_Source_RunsTheClientCredentialsGrantWithTheSecretOnStdinOnly()
+    {
+        string script = File.ReadAllText(Path.Combine(SourceRoots.Repo, "scripts/operations-token.sh"));
+
+        // RFC 6749 §4.4 with the AD-9 scope, against the local auth origin unless told otherwise.
+        Assert.Contains("AUTH=\"${AUTH_ORIGIN:-http://auth.localhost:8080}\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"$AUTH/oauth/v2/token\"", script, StringComparison.Ordinal);
+        Assert.Contains("--data-urlencode grant_type=client_credentials", script, StringComparison.Ordinal);
+        Assert.Contains("scope=openid urn:zitadel:iam:org:project:id:$project:aud urn:zitadel:iam:org:projects:roles", script, StringComparison.Ordinal);
+        // The credentials come from the zitadel-clients volume, through the provisioner image, and reach curl as a config
+        // on stdin (-K -): never an argument, which any local user could read from the process list.
+        Assert.Contains("--entrypoint cat provision /out/zitadel-clients.json", script, StringComparison.Ordinal);
+        Assert.Contains("curl -fsS --max-time 30 -K -", script, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"\s(-u|--user)\s", script);
+        Assert.DoesNotContain("client_secret=", script, StringComparison.Ordinal);
+        Assert.DoesNotMatch(LiteralBearerToken(), script);
+        // Only the access token reaches stdout.
+        Assert.Contains("jq -er .access_token", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [UnsupportedOSPlatform("windows")] // the stub docker needs its execute bit
+    public async Task OperationsTokenScript_ClientsFileUnreadable_PrintsOneShortMessageAndFails()
+    {
+        // A stub docker on PATH stands in for a stack that is down: it writes its own error (with a would-be secret) and
+        // fails. The script prints only its own message, nothing from docker, and nothing on stdout.
+        string bin = Directory.CreateTempSubdirectory("operations-token-").FullName;
+        string docker = Path.Combine(bin, "docker");
+        await File.WriteAllTextAsync(docker, "#!/usr/bin/env bash\necho 'stub-secret-from-docker' >&2\nexit 1\n", TestContext.Current.CancellationToken);
+        File.SetUnixFileMode(docker, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var start = new ProcessStartInfo("bash", [Path.Combine(SourceRoots.Repo, "scripts/operations-token.sh")])
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            Environment = { ["PATH"] = $"{bin}{Path.PathSeparator}{Environment.GetEnvironmentVariable("PATH")}" },
+        };
+
+        using Process process = Process.Start(start) ?? throw new InvalidOperationException("bash did not start.");
+        Task<string> output = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+        string errors = await process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+        Directory.Delete(bin, recursive: true);
+
+        Assert.NotEqual(0, process.ExitCode);
+        Assert.Equal("could not read the clients file from the provision volume; is the stack up?\n", errors);
+        Assert.Empty(await output);
     }
 
     [Fact]
@@ -112,6 +183,10 @@ public partial class PlatformScriptTests
         Assert.DoesNotContain("playwright", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("fixtures/local.json", script, StringComparison.Ordinal);
     }
+
+    // From the "is the file current" test up to the log line it ends with.
+    [GeneratedRegex(@"if \[ -s ""\$OUT_FILE"" \][^;]*;[^\n]*then\s*\n\s*log ""\$OUT_FILE is current; secrets not rotated""")]
+    private static partial Regex CurrentCheck();
 
     [GeneratedRegex(@"ROLES='(?<roles>[^']*)'")]
     private static partial Regex RolesBlock();

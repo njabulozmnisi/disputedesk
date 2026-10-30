@@ -1,5 +1,5 @@
 # DisputeDesk local platform. `docker compose up --wait` brings everything up configured, zero clicks.
-#   http://localhost:8080                 gateway: app origin (the SPA, /api/ -> api, /otlp/v1/* -> Aspire)
+#   http://localhost:8080                 gateway: app origin (the SPA, /api/ and /scalar/ -> api, /otlp/v1/* -> Aspire)
 #   http://auth.localhost:8080            gateway: Zitadel API, console and Login v2
 #   http://localhost:8025                 Mailpit (verification and reset emails)
 #   http://localhost:18888                Aspire dashboard (traces, metrics, logs)
@@ -235,6 +235,7 @@ services:
       Sms__UseTls: "false"                         # Mailpit accepts plain SMTP only
       Seed__Enabled: "true"                        # links customers A and B to their fixture logins (AD-30)
       Seed__FixturesPath: /fixtures/local.json
+      Scalar__Enabled: "true"                      # Scalar at /scalar/ and the runtime document (AD-26)
     volumes:
       - zitadel-clients:/run/zitadel:ro            # zitadel-clients.json (the Zitadel:* keys, client IDs and secrets)
       - ./fixtures/local.json:/fixtures/local.json:ro   # the seed source, the same file the stub reads
