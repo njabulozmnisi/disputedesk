@@ -110,11 +110,15 @@ test.describe('anonymous', () => {
     await page.goto(`${spa}/transactions`);
     await expect(page).toHaveURL(`${spa}/`);
 
-    for (const path of ['/link', '/disputes', '/nope', '/signed-out', '/signed-out?reason=other']) {
+    for (const path of ['/link', '/nope', '/signed-out', '/signed-out?reason=other']) {
       await page.goto(`${spa}${path}`);
       await expect(page.getByRole('heading', { name: "We can't find that dispute" }), path).toBeVisible();
       expect(new URL(page.url()).pathname, path).toBe(path.split('?')[0]);
     }
+
+    // /disputes is a linked-customer screen since story 3.7: anonymous goes to the start page, as for /transactions.
+    await page.goto(`${spa}/disputes`);
+    await expect(page).toHaveURL(`${spa}/`);
 
     await page.goto(`${spa}/signed-out?reason=expired`);
     await expect(page.getByRole('heading', { name: "You've been signed out" })).toBeVisible();
@@ -284,11 +288,10 @@ test.describe('linked customer A', () => {
     await page.setViewportSize({ width: 320, height: 800 });
     await expectNoHorizontalScroll(page);
     await page.evaluate(() => window.scrollTo(0, 0));
-    // A page load puts focus on the heading, so the first Tab would start below the header; start at the logo.
-    await page.getByRole('link', { name: 'DisputeDesk' }).focus();
-    const visited: string[] = ['DisputeDesk'];
+    // The first screen of a page load leaves focus alone (story 3.7), so the first Tab reaches the skip link, then the logo.
+    const visited: string[] = [];
     const problems: string[] = [];
-    for (let step = 0; step < 40; step += 1) {
+    for (let step = 0; step < 60; step += 1) {
       await page.keyboard.press('Tab');
       const state = await page.evaluate(() => {
         const element = document.activeElement as HTMLElement;
@@ -310,7 +313,12 @@ test.describe('linked customer A', () => {
     }
     expect(problems).toEqual([]);
     // Every control was reached, including the ones at the foot of the page next to the tab bar.
-    expect(visited).toEqual(expect.arrayContaining(['DisputeDesk', 'Sign out', 'Dispute this transaction', 'Load more', '☰ Transactions', '⚑ Disputes']));
+    expect(visited.slice(0, 2)).toEqual(['Skip to main content', 'DisputeDesk']);
+    // 'Dispute this transaction' is on the page only while customer A has a disputable row among the first 20; the suite's
+    // earlier specs raise disputes on A's 20 disputable transactions, so a full run can leave none.
+    const disputeLinkExpected = (await page.getByRole('link', { name: 'Dispute this transaction' }).count()) > 0;
+    expect(visited).toEqual(expect.arrayContaining(['Skip to main content', 'DisputeDesk', 'Sign out', 'Load more', '☰ Transactions', '⚑ Disputes']));
+    if (disputeLinkExpected) expect(visited).toContain('Dispute this transaction');
   });
 
   test('sign-out: top-level form POST with a fresh token, Zitadel end-session, back to / anonymous, session gone', async ({ browser }) => {

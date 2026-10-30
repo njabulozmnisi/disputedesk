@@ -234,7 +234,7 @@ test('criteria 1, 4, 5, 7: raise Unrecognised with a note: one key, antiforgery,
   });
   oldKey = attempts[0].key!;
 
-  // 201: replace-navigates to /disputes/<id> (not-found until 3.7), announces, and Back never shows 4a or 4b again.
+  // 201: replace-navigates to /disputes/<id> (not-found until 3.12 adds the detail), announces, and Back never shows 4a or 4b again.
   await expect(page).toHaveURL(`${origin}/disputes/${dispute.disputeId}`);
   await expect(page.getByRole('heading', { name: "We can't find that dispute" })).toBeVisible();
   await expect(page.locator('[aria-live="polite"]')).toHaveText('Dispute submitted');

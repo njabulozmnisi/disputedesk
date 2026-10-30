@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 
 import { useGetApiV1TransactionsInfinite } from '@/api/generated/disputedesk';
@@ -104,9 +105,7 @@ export function TransactionsScreen() {
           <h2 className="text-subheading font-strong">No transactions in the last 90 days.</h2>
           <p className="max-w-[68ch] text-muted-foreground">
             Card and account transactions appear here once they reach your account. Disputes you
-            raised earlier are still in{' '}
-            {/* shortcut: a plain link (a full page load) until the disputes story adds its route */}
-            <a href="/disputes">Disputes</a>.
+            raised earlier are still in <Link to="/disputes">Disputes</Link>.
           </p>
         </div>
       ) : null}

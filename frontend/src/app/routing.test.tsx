@@ -1,17 +1,24 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
 import type { SessionState } from '@/api/generated/model';
 import { server } from '@/test/server';
-import { failWith, renderApp, serveTransactions, signInAs } from '@/test/support';
+import { failWith, renderApp, serveDisputes, serveTransactions, signInAs } from '@/test/support';
 
 const startHeading = 'Something wrong with a card transaction?';
 const notFoundHeading = "We can't find that dispute";
 
 beforeEach(() => {
   serveTransactions();
+  serveDisputes();
 });
+
+/** Clicks a link and says whether the router took it over: a click it handles is `preventDefault`ed, so the browser
+ * makes no document request. */
+function clickIsHandledByRouter(link: HTMLElement): boolean {
+  return !fireEvent.click(link);
+}
 
 // Criterion 2: routing by authorisation state.
 describe('routing by authorisation state', () => {
@@ -244,9 +251,74 @@ describe('public routes render for any state', () => {
   });
 });
 
+// Story 3.7: the Disputes screen, for a linked customer only.
+describe('the disputes route', () => {
+  it('shows the disputes screen to a linked visitor', async () => {
+    signInAs('linked');
+    renderApp({ path: '/disputes' });
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Disputes' })).toBeInTheDocument();
+  });
+
+  it('sends an anonymous visitor of /disputes to the start page', async () => {
+    signInAs('anonymous');
+    const { router } = renderApp({ path: '/disputes' });
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: startHeading }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/');
+  });
+
+  it('sends an unlinked visitor of /disputes to /link', async () => {
+    signInAs('unlinked');
+    const { router } = renderApp({ path: '/disputes' });
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/link');
+    });
+  });
+
+  it('marks Disputes, and not Transactions, as the current page on /disputes', async () => {
+    signInAs('linked');
+    renderApp({ path: '/disputes' });
+
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: 'Disputes' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(nav).getByRole('link', { name: 'Transactions' })).not.toHaveAttribute(
+      'aria-current',
+    );
+    const tabs = screen.getByRole('navigation', { name: 'Main (phone)' });
+    expect(within(tabs).getByRole('link', { name: /Disputes/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  it.each(['Main', 'Main (phone)'])(
+    'takes the %s navigation to Disputes without a document load',
+    async (name) => {
+      signInAs('linked');
+      const { router } = renderApp({ path: '/transactions' });
+
+      const link = within(await screen.findByRole('navigation', { name })).getByRole('link', {
+        name: /Disputes/,
+      });
+
+      expect(clickIsHandledByRouter(link)).toBe(true);
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe('/disputes');
+      });
+    },
+  );
+});
+
 // Criterion 10: screens whose story has not landed render not-found until it adds its route.
 describe('screens not built yet', () => {
-  it.each(['/link', '/link/otp', '/disputes', '/disputes/abc'])(
+  it.each(['/link', '/link/otp', '/disputes/abc'])(
     'shows not-found at %s for a linked customer',
     async (path) => {
       signInAs('linked');
@@ -258,14 +330,17 @@ describe('screens not built yet', () => {
     },
   );
 
-  it('offers a way on from not-found', async () => {
+  it('offers a way on from not-found, without a document load', async () => {
     signInAs('linked');
-    renderApp({ path: '/no/such/page' });
+    const { router } = renderApp({ path: '/no/such/page' });
 
-    expect(await screen.findByRole('link', { name: 'Go to your disputes' })).toHaveAttribute(
-      'href',
-      '/disputes',
-    );
+    const link = await screen.findByRole('link', { name: 'Go to your disputes' });
+    expect(link).toHaveAttribute('href', '/disputes');
+
+    expect(clickIsHandledByRouter(link)).toBe(true);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/disputes');
+    });
   });
 });
 
@@ -360,10 +435,98 @@ describe('the shell', () => {
 
   it('sets the document title and moves focus to the h1 when the route changes', async () => {
     signInAs('linked');
-    renderApp({ path: '/transactions' });
-
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Transactions' });
+    const { user } = renderApp({ path: '/transactions' });
+    await screen.findByRole('heading', { level: 1, name: 'Transactions' });
     expect(document.title).toBe('Transactions · DisputeDesk');
-    expect(heading).toHaveFocus();
+
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Main' })).getByText('Disputes'),
+    );
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Disputes' });
+    expect(document.title).toBe('Disputes · DisputeDesk');
+    await waitFor(() => {
+      expect(heading).toHaveFocus();
+    });
+  });
+});
+
+// Story 3.7 criterion 6: the skip link.
+describe('the skip link', () => {
+  it('is the first thing Tab reaches on the first load, before the header', async () => {
+    signInAs('linked');
+    const { user } = renderApp({ path: '/transactions' });
+    await screen.findByRole('heading', { level: 1, name: 'Transactions' });
+
+    await user.tab();
+
+    const skipLink = screen.getByRole('link', { name: 'Skip to main content' });
+    expect(skipLink).toHaveFocus();
+    expect(screen.getByRole('banner').compareDocumentPosition(skipLink)).toBe(
+      Node.DOCUMENT_POSITION_PRECEDING,
+    );
+  });
+
+  it('is the first thing Tab reaches on the first load even when effects run twice (StrictMode)', async () => {
+    signInAs('linked');
+    const { user } = renderApp({ path: '/transactions', strictMode: true });
+    await screen.findByRole('heading', { level: 1, name: 'Transactions' });
+
+    await user.tab();
+
+    expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveFocus();
+  });
+
+  it('is hidden until it has focus', async () => {
+    signInAs('linked');
+    renderApp({ path: '/transactions' });
+    await screen.findByRole('heading', { level: 1, name: 'Transactions' });
+
+    const skipLink = screen.getByRole('link', { name: 'Skip to main content' });
+    expect(skipLink).toHaveClass('sr-only', 'focus:not-sr-only');
+  });
+
+  it.each(['Enter', 'click'])(
+    'moves focus to main by script on %s, with no hash navigation',
+    async (how) => {
+      signInAs('linked');
+      const { user, router } = renderApp({ path: '/transactions' });
+      await screen.findByRole('heading', { level: 1, name: 'Transactions' });
+      await user.tab();
+
+      if (how === 'Enter') await user.keyboard('{Enter}');
+      else await user.click(screen.getByRole('link', { name: 'Skip to main content' }));
+
+      expect(screen.getByRole('main')).toHaveFocus();
+      expect(screen.getByRole('main')).toHaveAttribute('id', 'main');
+      expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+      expect(router.state.location.hash).toBe('');
+      expect(router.state.location.pathname).toBe('/transactions');
+    },
+  );
+
+  it('is on every screen, public ones too', async () => {
+    signInAs('anonymous');
+    renderApp({ path: '/' });
+    await screen.findByRole('heading', { level: 1, name: startHeading });
+
+    expect(screen.getByRole('link', { name: 'Skip to main content' })).toBeInTheDocument();
+  });
+
+  it('leaves focus on the h1, already past the header, after a route change', async () => {
+    signInAs('linked');
+    const { user } = renderApp({ path: '/transactions' });
+    await screen.findByRole('heading', { level: 1, name: 'Transactions' });
+
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Main' })).getByText('Disputes'),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Disputes' })).toHaveFocus();
+    });
+    await user.tab();
+    expect(screen.getByRole('link', { name: 'Skip to main content' })).not.toHaveFocus();
+    expect(screen.getByRole('main').contains(document.activeElement)).toBe(true);
   });
 });

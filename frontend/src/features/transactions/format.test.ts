@@ -1,4 +1,4 @@
-import { formatDay, formatFullDay, formatMoney } from './format';
+import { formatDayWithYear, formatDay, formatFullDay, formatMoney } from './format';
 
 describe('formatMoney', () => {
   it.each([
@@ -44,5 +44,15 @@ describe('formatFullDay', () => {
 
   it('names the day in South African time', () => {
     expect(formatFullDay('2026-12-31T22:00:00Z')).toBe('Fri 1 Jan 2027');
+  });
+});
+
+describe('formatDayWithYear', () => {
+  it('shows the day without the weekday, as the Disputes list does: "26 Oct 2026"', () => {
+    expect(formatDayWithYear('2026-10-26T09:14:00Z')).toBe('26 Oct 2026');
+  });
+
+  it('names the day in South African time', () => {
+    expect(formatDayWithYear('2026-12-31T22:00:00Z')).toBe('1 Jan 2027');
   });
 });

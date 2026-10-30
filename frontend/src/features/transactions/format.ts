@@ -26,6 +26,20 @@ export function formatFullDay(isoDateTime: string): string {
   return `${formatDay(isoDateTime)} ${yearFormat.format(new Date(isoDateTime))}`;
 }
 
+const dateFormat = new Intl.DateTimeFormat('en-US', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'Africa/Johannesburg',
+});
+
+/** "26 Oct 2026": the day a dispute was raised, in South African time. */
+export function formatDayWithYear(isoDateTime: string): string {
+  const parts = dateFormat.formatToParts(new Date(isoDateTime));
+  const part = (type: string) => parts.find((candidate) => candidate.type === type)?.value ?? '';
+  return `${part('day')} ${part('month')} ${part('year')}`;
+}
+
 function isDecimalString(value: string): value is `${number}` {
   return /^\d+\.\d{2}$/.test(value);
 }

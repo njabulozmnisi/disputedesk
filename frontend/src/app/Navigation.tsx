@@ -3,9 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { cn } from '@/lib/utils';
 
 // Two destinations only (EXPERIENCE.md, Information Architecture). From 768px they sit in the header; below that they
-// float at the foot of the screen.
-//
-// shortcut: Disputes is a plain link (a full page load) until the disputes story adds its route; then it becomes a Link
+// float at the foot of the screen. `Link` sets `aria-current="page"` on the active one.
 const linkBase =
   'items-center rounded-full font-strong text-muted-foreground no-underline aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground';
 
@@ -18,9 +16,9 @@ export function TopNav() {
       <Link to="/transactions" className={topLinkClass}>
         Transactions
       </Link>
-      <a href="/disputes" className={topLinkClass}>
+      <Link to="/disputes" className={topLinkClass}>
         Disputes
-      </a>
+      </Link>
     </nav>
   );
 }
@@ -35,10 +33,10 @@ export function TabBar() {
         <span aria-hidden="true">☰</span>
         Transactions
       </Link>
-      <a href="/disputes" className={tabLinkClass}>
+      <Link to="/disputes" className={tabLinkClass}>
         <span aria-hidden="true">⚑</span>
         Disputes
-      </a>
+      </Link>
     </nav>
   );
 }

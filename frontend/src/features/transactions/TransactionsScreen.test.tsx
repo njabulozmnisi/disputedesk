@@ -1,13 +1,21 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
 import type { TransactionResponse } from '@/api/generated/model';
 import { server } from '@/test/server';
-import { failWith, makeRow, renderApp, serveTransactions, signInAs } from '@/test/support';
+import {
+  failWith,
+  makeRow,
+  renderApp,
+  serveDisputes,
+  serveTransactions,
+  signInAs,
+} from '@/test/support';
 
 beforeEach(() => {
   signInAs('linked');
+  serveDisputes();
 });
 
 /** Serves two pages by cursor and records the `cursor` query parameter of each request. */
@@ -542,7 +550,7 @@ describe('loading, empty and error states', () => {
 
   it('shows the empty state, with Disputes as a link and no button', async () => {
     serveTransactions([]);
-    renderApp({ path: '/transactions' });
+    const { router } = renderApp({ path: '/transactions' });
 
     expect(
       await screen.findByRole('heading', {
@@ -555,25 +563,33 @@ describe('loading, empty and error states', () => {
         /Card and account transactions appear here once they reach your account\. Disputes you raised earlier are still in/,
       ),
     ).toBeInTheDocument();
-    expect(
-      within(screen.getByRole('main')).getByRole('link', { name: 'Disputes' }),
-    ).toHaveAttribute('href', '/disputes');
+    const link = within(screen.getByRole('main')).getByRole('link', { name: 'Disputes' });
+    expect(link).toHaveAttribute('href', '/disputes');
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+
+    // The router takes the click over (`preventDefault`), so the browser makes no document request.
+    expect(fireEvent.click(link)).toBe(false);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/disputes');
+    });
   });
 
   it('shows the core-banking notice with the reference, Try again and View disputes for a 503', async () => {
     failWith('/api/v1/transactions', 'core-banking-unavailable', 503);
-    renderApp({ path: '/transactions' });
+    const { router } = renderApp({ path: '/transactions' });
 
     const notice = await screen.findByRole('alert');
     expect(notice).toHaveTextContent("We can't load your transactions right now.");
     expect(notice).toHaveTextContent('Your disputes are still available.');
     expect(notice).toHaveTextContent('trace-1');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'View disputes' })).toHaveAttribute(
-      'href',
-      '/disputes',
-    );
+    const link = screen.getByRole('link', { name: 'View disputes' });
+    expect(link).toHaveAttribute('href', '/disputes');
+
+    expect(fireEvent.click(link)).toBe(false);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/disputes');
+    });
   });
 
   it('shows the generic notice, without View disputes, for any other failure', async () => {
@@ -647,16 +663,16 @@ describe('keyboard', () => {
     );
     const { user } = renderApp({ path: '/transactions' });
     await screen.findByText('One');
-    screen.getByRole('heading', { level: 1 }).blur();
 
     const order: string[] = [];
-    for (let index = 0; index < 9; index += 1) {
+    for (let index = 0; index < 10; index += 1) {
       await user.tab();
       const focused = document.activeElement;
       order.push(`${focused?.tagName.toLowerCase() ?? '?'}:${focused?.textContent.trim() ?? ''}`);
     }
 
     expect(order).toEqual([
+      'a:Skip to main content',
       'a:DisputeDesk',
       'a:Transactions',
       'a:Disputes',

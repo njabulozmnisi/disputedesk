@@ -1,3 +1,5 @@
+import { Link } from '@tanstack/react-router';
+
 import { isProblem, traceIdOf } from '@/api/problems';
 import { ProblemNotice } from '@/components/ProblemNotice';
 import { Button } from '@/components/ui/button';
@@ -36,8 +38,7 @@ export function TransactionsError({
         </Button>
         {bankUnavailable ? (
           <Button asChild variant="secondary">
-            {/* shortcut: a plain link (a full page load) until the disputes story adds its route */}
-            <a href="/disputes">View disputes</a>
+            <Link to="/disputes">View disputes</Link>
           </Button>
         ) : null}
       </div>
