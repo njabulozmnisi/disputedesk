@@ -21,7 +21,7 @@ Adds the first journey: a thin Playwright test of UJ-1 that signs up a new login
 Verify: on a fresh stack (`docker compose down -v`, then `docker compose up --build --wait`, behind `scripts/test-lock.sh`), `npm run journeys` in `e2e/` passes UJ-1, twice, each run on its own fresh stack; `docs/verification/7.1-qa.md` holds the axe results, the manual keyboard pass and the ZAP baseline output with each alert triaged.
 
 Inputs:
-- The new login: email `uj1-<epoch milliseconds>@example.test` (unique per run, at most 254 characters, RFC 5321 section 4.5.3.1.3), a password that meets the provisioned Zitadel password policy, and the email verification code read from Mailpit's API.
+- The new login: email `uj1-<label>-<epoch milliseconds>@disputedesk.test` from the shared registration helper given the prefix `uj1` (unique per run, at most 254 characters, RFC 5321 section 4.5.3.1.3), the helper's dev-only password `Dev-Only-Qa62-Pass1!` (it meets the provisioned Zitadel password policy), and the 6-character email verification code read from Mailpit's API.
 - Linking details: customer D's ID number and first account number read from `fixtures/local.json` (13 and 6 to 16 ASCII digits, story 6.4's bounds); the 6-digit OTP read from Mailpit's API. None of them is printed in test output or in `7.1-qa.md`.
 - The raise: transaction `TXN-D-0030` (R849.00, ZX Digital Services, settled card debit, 3 days ago), reason `unrecognised`, note "I don't recognise this merchant." (32 characters; FR-12's limit is 1,000).
 - Edge case row: `TXN-D-0031` (pending card debit).
@@ -38,7 +38,7 @@ Inputs:
    **When** the test signs up on the hosted login page, verifies the email with the code from Mailpit, enters D's details on `/link`, sees "If these details match our records, we've sent a code to the cellphone number we hold for you.", enters the OTP from Mailpit on `/link/otp`, lands on `/transactions`, opens `TXN-D-0030`, chooses Dispute, picks "unrecognised", adds the note and submits
    **Then** the `TXN-D-0030` row shows the badge "Submitted"; `/disputes` lists the dispute; its detail timeline has exactly one entry: Submitted, a time ending " SAST", actor "You"
    **And** the `TXN-D-0031` row (pending) shows as not disputable and has no Dispute control (UJ-1 edge case)
-   **And** the registration helper the test uses is moved from `linking-verify.spec.ts` into `support.ts` unchanged, so both specs share it
+   **And** `registerLogin` moves from `linking-verify.spec.ts` into `support.ts` with the helpers it needs (`mailpitSearch`, `messageText`, `pause`, the Mailpit URL and origin constants) and the SMS reader `smsTo`, taking the run's start instant as an argument; `registerLogin` gains one argument, the address prefix, and `linking-verify.spec.ts` passes `qa62`, so its addresses and assertions stay as they are; `nextOtpForD` stays in `linking-verify.spec.ts`, because it records codes in that spec's own set, and UJ-1 reads its one OTP with `smsTo`
 
 3. **The raise traced to the database** (R35, R23; NFR-TEST-5, FR-13, FR-14, NFR-DATA-2, NFR-SEC-10)
    **Given** the raise POST captured with `page.waitForResponse` (Playwright, *Network*)
@@ -56,11 +56,11 @@ Inputs:
 5. **Sign-in, sign-out and session end** (R35; FR-2, FR-3, NFR-SEC-10)
    **Given** the new login's subject, read from `CustomerLinks` where `CustomerId` is D's customer ID
    **When** the test signs out through the SPA's sign-out form
-   **Then** `AuditLogEntries` holds a `SignIn` and a `SignOut` entry with that subject as `ActorId`, both later than the run's start instant; the session cookie captured before sign-out, replayed on `GET /api/v1/transactions` in a fresh request context, gets 401 `unauthorized`; and `/api/v1/bff/login` in the same browser context shows the hosted login's username page, so the identity provider session ended too (OpenID Connect RP-Initiated Logout 1.0)
+   **Then** `AuditLogEntries` holds a `SignIn` and a `SignOut` entry with that subject as `ActorId`, both later than the run's start instant; the session cookie captured before sign-out, replayed on `GET /api/v1/transactions` in a fresh request context, gets 401 `unauthorized`; and `/api/v1/bff/login` in the same browser context shows the hosted login's account picker or username page, after which the password page (`/ui/v2/login/password`) is required and no navigation to `/api/signin-oidc` happens, as `bff-sign-in-and-out.spec.ts` checks, so the identity provider session ended too (OpenID Connect RP-Initiated Logout 1.0)
 
 6. **Accessibility: axe on every SPA screen state, at two widths** (R40; NFR-CODE-6)
    **Given** the SPA screen states UJ-1 visits: the linking details screen, the same screen with its error summary after submitting empty fields, the OTP screen, transactions, each raise screen to the review and its submitted state, the dispute history, the dispute detail and the signed-out page
-   **When** `@axe-core/playwright` runs on each at 1280px and 320px wide with the tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` and `wcag22aa` (the existing `axeTags`; axe-core, *API*, `runOnly` tags)
+   **When** `@axe-core/playwright` runs on each at 1280px and 320px wide with the tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` and `wcag22aa` (axe-core, *API*, `runOnly` tags), through the journeys' shared `e2e/tests/journeys/screens.ts` (`axeTags`, `expectAccessibleAtBothWidths`); the regression specs keep their private copies
    **Then** no violation is reported, and at 320px `document.documentElement.scrollWidth` is at most the viewport width, so content reflows with no horizontal scroll (WCAG 2.2 SC 1.4.10)
    **And** the hosted sign-up and email verification pages are scanned too, and their violations are recorded in `7.1-qa.md` without failing the test, because they are the identity provider's pages that DisputeDesk only themes (AD-6, story 2.6)
 
@@ -72,7 +72,7 @@ Inputs:
 8. **ZAP baseline on the gateway, every alert triaged** (R33; NFR-SEC-8)
    **Given** the running stack
    **When** `zap-baseline.py -t http://host.docker.internal:8080 -m 2` runs from `ghcr.io/zaproxy/zaproxy:stable` with the digest recorded (ZAP, *Baseline Scan*)
-   **Then** `7.1-qa.md` lists each alert with its rule ID, risk and either a triage reason (the known Non-Storable Content 10049 and Cross-Origin-Embedder-Policy 90004 from stories 2.2 to 2.5, with their reasons) or a finding; a High or Critical alert with no triage fails the story
+   **Then** `7.1-qa.md` lists each alert with its rule ID, risk and either a triage reason or a finding; the known alerts are triaged by rule ID with their earlier reasons: 10049 Storable and Cacheable Content, 10109 Modern Web Application (a WARN in every baseline since story 2.5) and 90004 Cross-Origin-Embedder-Policy; a High or Critical alert with no triage fails the story
    **And** the record states the scan's scope: an unauthenticated passive scan of what the spider reaches, so the signed-in screens are covered by the journeys and per-story QA, not by ZAP
 
 ## Boundaries
@@ -102,7 +102,8 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
   - `e2e/playwright.config.ts` (the `journeys` and `regression` projects)
   - `e2e/package.json` (the `journeys` and `test` scripts)
   - `e2e/tests/journeys/uj-1.spec.ts` (new)
-  - `e2e/tests/support.ts` (the registration helper, moved), `e2e/tests/linking-verify.spec.ts` (imports it)
+  - `e2e/tests/support.ts` (`registerLogin` with its prefix argument, `mailpitSearch`, `messageText`, `pause`, `smsTo`, moved), `e2e/tests/linking-verify.spec.ts` (imports them, passes `qa62`)
+  - `e2e/tests/journeys/screens.ts` (the journeys' axe helpers; added by whichever of 7.1 and 7.2 lands first, reused by the other)
   - `docs/verification/7.1-qa.md`
 
 ## References
@@ -111,7 +112,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - prd — docs/prd/prd.md, UJ-1, FR-29, NFR-CODE-6, NFR-SEC-8, NFR-TEST-5
 - architecture — docs/architecture/architecture.md, AD-6, AD-17, AD-19, AD-30
 - experience — docs/ux/EXPERIENCE.md, Copy deck, Accessibility Floor
-- verification — docs/verification/7.1-challenge.md, docs/verification/e2e-data-budget.md
+- verification — docs/verification/7.1-challenge.md, docs/verification/7.1-prebuild-review.md, docs/verification/e2e-data-budget.md
 
 ## Notes
 
@@ -123,3 +124,6 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Waits on 3.12 for the dispute detail and its timeline (UJ-1's climax).
 - Risk high: the main demo path; beyond the criteria, the run is repeated twice, each on a fresh stack, to prove the D reset.
 - Not a prerequisite of this story: the regression project's fixture additions `TXN-A-0031` to `TXN-A-0048` (`e2e-data-budget.md`) are backend work for the regression suite; UJ-1 uses only customer D's rows.
+- Decision: 2026-10-30 (Sofia, pre-build review 1) — after sign-out the hosted login may show an account picker, because Zitadel remembers the username; the check is that the password is asked again, as `bff-sign-in-and-out.spec.ts` already does.
+- Decision: 2026-10-30 (Sofia, pre-build review 2) — `registerLogin` takes an address prefix rather than moving unchanged, so UJ-1's addresses read `uj1-…` and `linking-verify.spec.ts` keeps `qa62-…`; the password stays the helper's dev-only one.
+- Decision: 2026-10-30 (Sofia, pre-build review 4) — the journeys share `e2e/tests/journeys/screens.ts` for the axe helpers; the five regression specs keep their private copies (Boundaries: no change to an existing spec); folding them into one is refactor-sweep work.

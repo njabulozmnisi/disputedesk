@@ -18,11 +18,12 @@ Writes three short documents, docs only: the README (how to run, build and test 
 
 ## Requirements
 
-Verify: the docs agent runs every command in the three documents, in order, on a fresh clone of the commit under review with Docker running and port 8080 free, and records each command with its exit status (and, for the runbook, the observed responses and rows) in `docs/verification/7.7-run.md`; every relative link in the three documents resolves to a file in the repo (a link check over the Markdown, for example `npx markdown-link-check@<pinned> --offline`, or a plain `grep` plus `test -e` loop); the README's sections appear in the order of criterion 1.
+Verify: the docs agent runs every command in the three documents, in order, on a fresh clone of the commit under review with Docker running and port 8080 free, and records each command with its exit status (and, for the runbook, the observed responses and rows) in `docs/verification/7.7-run.md`; every relative link in the three documents resolves to a file in the repo (a link check over the Markdown, for example `npx markdown-link-check@<pinned> --offline`, or a plain `grep` plus `test -e` loop); the README's sections appear in the order of criterion 1; `scripts/secret-scan.sh` passes on the worktree, untracked files included, and `7.7-run.md` contains no `eyJ` (a JWT prefix).
 
 Inputs: none at runtime (docs only). Bounds that apply to the text:
 - "Short": `docs/runbook.md` and `docs/onboarding.md` each at most 150 lines; the README at most 300 lines (NFR-DOC-1; the epic's Gate 2 decision).
-- Commands are copied exactly as run; none takes a secret on its command line (the token comes from `scripts/operations-token.sh` inside a command substitution).
+- Commands are copied exactly as run; none takes a secret typed on its command line (the token comes from `scripts/operations-token.sh` inside a command substitution; the README says this still puts the token in curl's argv, visible in `ps`, which is acceptable on a single-user dev machine).
+- `7.7-run.md` holds no bearer token, client secret, PAT, OTP or password: status codes, problem types, row values and offsets only.
 
 1. **README: run, build and test** (R39; NFR-DOC-1, FR-29)
    **Given** `README.md`
@@ -31,6 +32,7 @@ Inputs: none at runtime (docs only). Bounds that apply to the text:
    **And** then the app and identity origins (`http://localhost:8080`, `http://auth.localhost:8080`), Mailpit and the Aspire Dashboard, linked to `infra/README.md` for the rest
    **And** then the build and test commands exactly as CI runs them: in `backend/` `dotnet build DisputeDesk.slnx` and `dotnet test --solution DisputeDesk.slnx`; in `frontend/` `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`; in `e2e/` `npm ci`, `npx playwright install chromium`, `npm run journeys` and `npm test` (the two Playwright projects of story 7.1), each against a fresh stack
    **And** then the seed identities from `fixtures/local.json` (FR-29): the demo logins of customers A and B (username and the dev-only fixture password), customer C's login, customer C's and D's synthetic ID and account numbers and what each shows (C fails the SIM-swap check; D has no fixture login, so a new sign-up links to D), the SLA demo dispute on `TXN-A-0011` that the sweep escalates a few minutes after start-up, and a note that the seed's dates are relative to start-up and a reset needs `docker compose down -v` (architecture, Deferred: seeded snapshots after a day boundary)
+   **And** a note that the same fixture logins and published passwords are live on the AWS demo, which holds only synthetic data (decided 2026-10-30), linking `infra/terraform/README.md`
 
 2. **README: operations through Scalar** (R39; NFR-DOC-4, FR-21 to FR-24, FR-30)
    **Given** the README's Operations section
@@ -52,9 +54,10 @@ Inputs: none at runtime (docs only). Bounds that apply to the text:
    **Then** the steps are, in this order:
    1. find the row and its blocked successors with the read-only role: `SELECT "Id", "DisputeId", "DisputeVersion", "Attempts", "LastError" FROM "OutboxMessages" WHERE "Status" = 'Failed';` and the same dispute's later rows by `"DisputeVersion"`, through `qa_readonly`;
    2. fix the cause from `LastError` outside the row (for example raise the topic's `max.message.bytes` with `rpk` for `MsgSizeTooLarge`); `Payload`, `Id` and every other column stay as they are, because the payload is the stored event's CloudEvent byte for byte (AD-14, AD-17); a row whose payload itself is the cause is not released (Boundaries);
-   3. as the `disputedesk` role, in one PostgreSQL transaction: `BEGIN;` `UPDATE "OutboxMessages" SET "Status" = 'Pending', "Attempts" = 0, "NextAttemptAtUtc" = now() WHERE "Id" = '<event ID>' AND "Status" = 'Failed';` then `COMMIT;` only if psql printed `UPDATE 1`, otherwise `ROLLBACK;` (PostgreSQL, *Transactions* and *UPDATE*);
+   3. as the `disputedesk` role, in an interactive session with no password on the command line (`docker compose exec postgres psql -U disputedesk -d disputedesk`), after `\set ON_ERROR_STOP on` and `\set event_id '<event ID>'`, in one PostgreSQL transaction: `BEGIN;` `UPDATE "OutboxMessages" SET "Status" = 'Pending', "Attempts" = 0, "NextAttemptAtUtc" = now() WHERE "Id" = :'event_id'::uuid AND "Status" = 'Failed';` then `COMMIT;` only if psql printed `UPDATE 1`, otherwise `ROLLBACK;`; psql quotes the variable and the cast rejects a malformed ID (PostgreSQL, *Transactions*, *UPDATE* and *psql* variable interpolation; OWASP *Query Parameterization Cheat Sheet*);
    4. verify: within a minute the row is `Sent`, and on `disputedesk.disputes` its record (key = the dispute ID, CloudEvent `id` = the event ID) has a lower offset than the record of the dispute's next version (`rpk topic consume` filtered by key), which proves the relay kept per-dispute order (AD-17)
-   **And** the procedure says it is AD-22's one operator exception to "updated only by the relay", that it never sets a row to `Sent` and never deletes a row, and that the Worker needs no restart
+   **And** the procedure says it is AD-22's one operator exception to "updated only by the relay", that it never sets a row to `Sent` and never deletes a row, and that the Worker needs no restart; that it runs as the owner role `disputedesk` and writes no audit record, accepted for the local stack, with a dedicated operator role and an audited release in `docs/production-path.md` (decided 2026-10-30)
+   **And** the runbook states at its top that its procedures are for the local stack only, and links `infra/terraform/README.md` for the AWS environment, where RDS is private
    **And** the docs agent runs it once on a fresh stack: it makes one row fail by lowering the topic's `max.message.bytes` below a raise's payload size, raises one dispute and withdraws it (so the dispute has a blocked successor), waits for `Failed`, then follows the four steps and records the rows and offsets in `7.7-run.md`
 
 5. **Runbook: core banking down, and the reset** (R28, R39; NFR-RES-1, FR-9, AD-21, AD-25)
@@ -86,7 +89,7 @@ Inputs: none at runtime (docs only). Bounds that apply to the text:
 - Owner: docs (docs agent, not a builder).
 - Flags: none.
 - Lane: docs.
-- Mechanisms and sources: Docker Compose `up --wait` and `down --volumes` (<https://docs.docker.com/reference/cli/docker/compose/up/>, <https://docs.docker.com/reference/cli/docker/compose/down/>); PostgreSQL transactions and `UPDATE` (<https://www.postgresql.org/docs/current/tutorial-transactions.html>, <https://www.postgresql.org/docs/current/sql-update.html>); Redpanda `rpk topic alter-config` and `rpk topic consume` (<https://docs.redpanda.com/current/reference/rpk/rpk-topic/>); OAuth 2.0 client credentials through the existing `scripts/operations-token.sh` (RFC 6749 §4.4); Scalar as served by story 5.5.
+- Mechanisms and sources: psql variables and `ON_ERROR_STOP` (<https://www.postgresql.org/docs/current/app-psql.html>); OWASP Query Parameterization Cheat Sheet (<https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html>); Docker Compose `up --wait` and `down --volumes` (<https://docs.docker.com/reference/cli/docker/compose/up/>, <https://docs.docker.com/reference/cli/docker/compose/down/>); PostgreSQL transactions and `UPDATE` (<https://www.postgresql.org/docs/current/tutorial-transactions.html>, <https://www.postgresql.org/docs/current/sql-update.html>); Redpanda `rpk topic alter-config` and `rpk topic consume` (<https://docs.redpanda.com/current/reference/rpk/rpk-topic/>); OAuth 2.0 client credentials through the existing `scripts/operations-token.sh` (RFC 6749 §4.4); Scalar as served by story 5.5.
 - Packages: none (a link checker, if used, runs through `npx` pinned to an exact version and is not added to any `package.json`).
 - Touches: `README.md`; `docs/runbook.md` (new); `docs/onboarding.md` (new); `docs/verification/7.7-run.md` (new).
 
@@ -97,7 +100,7 @@ Inputs: none at runtime (docs only). Bounds that apply to the text:
 - prd — docs/prd/prd.md, NFR-DOC-1, NFR-DOC-4, NFR-DOC-5, NFR-RES-4, FR-8, FR-29
 - research — docs/research/dispute-lifecycle/dispute-lifecycle.md
 - infra — infra/README.md
-- verification — docs/verification/7.7-challenge.md
+- verification — docs/verification/7.7-challenge.md, docs/verification/7.7-prebuild-security.md
 
 ## Notes
 
@@ -108,3 +111,7 @@ Inputs: none at runtime (docs only). Bounds that apply to the text:
 - Decision: 2026-10-30 (human, 7.7 challenge) — a `Failed` outbox row is released by one documented operator procedure: a targeted `UPDATE` in a PostgreSQL transaction that sets that row back to `Pending` (attempts reset) after the cause is fixed, verified by its event reaching the topic before its successor. AD-22 is amended with this one operator exception. The runbook gives the exact steps; no new code (criterion 4).
 - Decision: 2026-10-30 (Sofia, refine) — the release also sets `NextAttemptAtUtc` to `now()` so the row is due at once, and leaves `LastError` as the record of the last refusal; the relay overwrites it if the row is refused again.
 - Decision: 2026-10-30 (Sofia, refine) — waits on 5.3 as well: the README describes the SLA demo dispute the sweep escalates. 6.3 also edits `README.md` (the rate-limit line); 7.7 builds after it (through 3, 2, 1 and 6.4) and keeps that line.
+- Input (from 6.3, 2026-10-30): the README states that the linking rate limits are held in memory on the single Api instance, so they reset on restart and do not add up across instances (story 6.3 Boundaries; the production path has the shared-store upgrade).
+- Decision: 2026-10-30 (human, pre-build security S7.7-2) — accepted and documented: the runbook's outbox release runs as the owner role `disputedesk` with no audit record, for the local stack; the production path gets a dedicated operator role with column-level grants (`GRANT UPDATE ("Status", "Attempts", "NextAttemptAtUtc")`) and an audited release (story 7.6). Criterion 4.
+- Decision: 2026-10-30 (human, pre-build security S7.4-11) — the fixture logins are live on the AWS demo; the README says so beside the seed identities (criterion 1).
+- Decision: 2026-10-30 (Sofia, pre-build security S7.7-1) — the release runs in an interactive psql session with the event ID as a psql variable cast to `uuid`, so no password sits on a command line and a malformed ID is rejected.

@@ -17,7 +17,7 @@ owner = "qa"
 lane = "QA"
 high_stakes = false
 migration = false
-touches = ["e2e/playwright.config.ts (journeys and regression projects)", "e2e/package.json (journeys and test scripts)", "e2e/tests/journeys/uj-1.spec.ts (new)", "e2e/tests/support.ts (registration helper moved)", "e2e/tests/linking-verify.spec.ts (imports it)", "docs/verification/7.1-qa.md"]
+touches = ["e2e/playwright.config.ts (journeys and regression projects)", "e2e/package.json (journeys and test scripts)", "e2e/tests/journeys/uj-1.spec.ts (new)", "e2e/tests/support.ts (registration helper moved)", "e2e/tests/linking-verify.spec.ts (imports it)", "docs/verification/7.1-qa.md", "e2e/tests/journeys/screens.ts (journeys' axe helpers; whichever of 7.1 and 7.2 lands first adds it)"]
 supervisor_checks = ["Throwaway copy: rerun `npm run journeys` without `docker compose down -v`; UJ-1 fails at linking.", "Throwaway copy: stop the worker before the raise; criterion 3's Sent poll fails at 30 s.", "Re-run the ZAP command from 7.1-qa.md; the same alerts."]
 
 [[entry]]
@@ -42,7 +42,7 @@ supervisor_checks = ["Throwaway copy: run `npm run journeys` twice on one stack;
 id = 3
 type = "story"
 title = "CI runs the journeys with ZAP and publishes images to GHCR"
-description = "Adds the `e2e` job (fresh Compose stack, the journeys project with axe, the ZAP baseline gated on `.zap/rules.tsv`) on pull requests and main, the main-only `publish` job that pushes the five images to GHCR tagged sha-<12> with digests recorded (this story owns publishing; 7.5 only consumes), and Trivy scans of core-banking and provision (AD-32)."
+description = "Adds the `e2e` job (fresh Compose stack, the journeys project with axe, the ZAP baseline gated on `.zap/rules.tsv`) on pull requests and main, the main-only `publish` job that pushes the five images to GHCR tagged sha-<12> with digests recorded (this story owns publishing; 7.5 only consumes), each image Trivy-scanned before its push and labelled with its source and revision, and Trivy scans of core-banking and provision (AD-32)."
 verify = "`actionlint` passes; the PR run's `e2e` job is green with five journeys passed and ZAP exit 0; after merge the `publish` summary lists five digests and GHCR shows five packages tagged sha-<12>."
 covers = ["R33", "R35"]
 after = [2]
@@ -54,7 +54,7 @@ lane = "A"
 high_stakes = false
 migration = false
 touches = [".github/workflows/ci.yml (e2e, publish)", ".github/workflows/security.yml (Trivy: core-banking, provision)", ".zap/rules.tsv (new)", "e2e/playwright.config.ts (forbidOnly)"]
-supervisor_checks = ["Throwaway branch: delete the 10049 line from .zap/rules.tsv; the e2e job fails at ZAP with exit 2.", "Throwaway branch: add test.only to a journey; the e2e job fails.", "Check the first green PR run, then the publish summary and the GHCR package list after merge: five packages tagged sha-<12>, no latest."]
+supervisor_checks = ["Throwaway branch: delete the 10049 line from .zap/rules.tsv; the e2e job fails at ZAP with exit 2.", "Throwaway branch: add test.only to a journey; the e2e job fails.", "Check the first green PR run, then the publish summary and the GHCR package list after merge: five packages tagged sha-<12>, no latest.", "Throwaway branch: make one image's Trivy scan in publish fail; the job stops before any docker push."]
 
 [[entry]]
 id = 6
@@ -79,7 +79,7 @@ id = 7
 type = "story"
 title = "README, runbook and onboarding"
 description = "Writes the README (run, build and test as CI does, seed identities, the operations routes through Scalar, the NFR-DOC-5 simplifications, the ten-area map), `docs/runbook.md` (release a Failed outbox row under AD-22's operator exception, core banking down, the destructive local reset) and `docs/onboarding.md`; docs only, no new code."
-verify = "Every command in the three documents runs on a fresh clone and is recorded in `docs/verification/7.7-run.md`, the runbook's release procedure included; every relative link resolves."
+verify = "Every command in the three documents runs on a fresh clone and is recorded in `docs/verification/7.7-run.md`, the runbook's release procedure included; every relative link resolves; scripts/secret-scan.sh passes and the run record holds no secret."
 covers = ["R39", "R28"]
 after = ["5.1", "5.5", "5.3", 3]
 hitl = false
@@ -114,7 +114,7 @@ supervisor_checks = ["Throwaway copy: compare against 'false' instead of 'off'; 
 id = 4
 type = "story"
 title = "AWS Compose override and OpenTelemetry collector"
-description = "Adds docker-compose.aws.yml with every AWS input required and no local default, the AWS gateway template (CloudFront real IP, origin-verify header on both hosts, Mailpit behind its own basic auth, no /otlp/ route), the OpenTelemetry Collector config for X-Ray and CloudWatch, static cache headers, and SSM Data Protection key storage by configuration, all checked without an AWS account."
+description = "Adds docker-compose.aws.yml with every AWS input required and no local default, the AWS gateway template (CloudFront real IP, origin-verify header on the app, identity and Mailpit hosts, Mailpit on its own origin behind basic auth with 404 on the app host, no console, no /otlp/ route), pinned api and collector addresses for the metadata block, the OpenTelemetry Collector config for X-Ray and CloudWatch, static cache headers, and SSM Data Protection key storage by configuration, all checked without an AWS account."
 verify = "infra/aws/check-compose.sh, infra/aws/gateway.test.sh, otelcol-contrib validate on infra/otel-collector/config.yaml and the Api key-storage integration test pass locally and in CI; actionlint passes; the local stack is unchanged apart from cache headers."
 covers = ["R32", "R36", "R38"]
 after = [3, "5.1", 11]
@@ -126,13 +126,13 @@ lane = "B"
 high_stakes = true
 migration = false
 touches = ["docker-compose.aws.yml", "infra/aws/ (compose.test.env, check-compose.sh, gateway.test.sh, test-realip.conf)", "infra/nginx/templates-aws/", "infra/nginx/templates/nginx.conf.template (cache headers)", "infra/nginx/Dockerfile (AWS template dir, ARG BROWSER_TELEMETRY)", "infra/otel-collector/config.yaml", ".github/workflows/ci.yml (platform checks; publish: gateway BROWSER_TELEMETRY=off)", "backend/src/DisputeDesk.Api/Bff/BffAuthentication.cs and its options (key storage by configuration)", "backend/Directory.Packages.props", "backend/src/DisputeDesk.Api/DisputeDesk.Api.csproj", "backend/tests/DisputeDesk.Api.IntegrationTests/ (key storage)", "backend/tests/DisputeDesk.ArchitectureTests/PlatformScriptTests.cs (cache headers)"]
-supervisor_checks = ["Throwaway copy: change one input to ${APP_HOST:-localhost}; criterion 1 fails.", "Throwaway copy: drop !override on the api depends_on; criterion 2 fails.", "Throwaway copy: remove the origin-verify check from the identity server block; criterion 3 fails.", "Throwaway copy: put the local /otlp/ proxy into the AWS template; criterion 6 fails.", "Run the local stack with Redpanda at --memory=512M through the full e2e suite; record docker stats peaks in docs/verification/7.4-review.md."]
+supervisor_checks = ["Throwaway copy: change one input to ${APP_HOST:-localhost}; criterion 1 fails.", "Throwaway copy: drop !override on the api depends_on; criterion 2 fails.", "Throwaway copy: remove the origin-verify check from the identity server block; criterion 3 fails.", "Throwaway copy: put the local /otlp/ proxy into the AWS template; criterion 6 fails.", "Run the local stack with Redpanda at --memory=512M through the full e2e suite; record docker stats peaks in docs/verification/7.4-review.md.", "Throwaway copy: put a /mailpit/ location back on the app host; criterion 4 fails.", "Throwaway copy: remove proxy_set_header X-Origin-Verify \"\" from one location; criterion 3 fails."]
 
 [[entry]]
 id = 5
 type = "story"
 title = "Terraform dev environment and OIDC deploy"
-description = "Adds the Terraform bootstrap root, the AD-28 modules and envs/dev, the manual OIDC deploy.yml that waits for SSM Run Command's result, and the instance deploy script; closes on fmt, validate and mocked-provider plans with the apply, deploy, check and destroy procedure written. No AWS command is run; it consumes the images 7.3 publishes."
+description = "Adds the Terraform bootstrap root, the AD-28 modules and envs/dev, three CloudFront distributions (app, auth, mail) with the HTTP origin marked as a shortcut, the manual OIDC deploy.yml that runs a pattern-checked SSM document and waits for Run Command's result, and the instance deploy script; closes on fmt, validate and mocked-provider plans with the apply, deploy, check and destroy procedure written. No AWS command is run; it consumes the images 7.3 publishes."
 verify = "terraform fmt -check, validate and terraform test (command = plan, mock_provider) pass locally and in the CI terraform job; actionlint and infra/aws/deploy.test.sh pass; no step reaches AWS."
 covers = ["R38", "R32", "R36"]
 after = [4]
@@ -143,8 +143,8 @@ owner = "backend"
 lane = "B"
 high_stakes = false
 migration = false
-touches = ["infra/terraform/bootstrap/", "infra/terraform/modules/ (network, compute, database, edge, deploy-role, observability, budget)", "infra/terraform/envs/dev/ (with .terraform.lock.hcl)", "infra/terraform/envs/dev/tests/ (mock_provider)", "infra/terraform/README.md", "infra/aws/deploy.sh", "infra/aws/deploy.test.sh", ".github/workflows/deploy.yml", ".github/workflows/ci.yml (terraform job; deploy.test.sh in platform)"]
-supervisor_checks = ["Throwaway copy: make the trust policy :sub StringLike repo:<repo>:*; criterion 5 fails.", "Throwaway copy: add ingress on port 22; criterion 2 fails.", "Throwaway copy: set publicly_accessible = true; criterion 3 fails.", "Throwaway copy: write .env in place; criterion 6 fails."]
+touches = ["infra/terraform/bootstrap/", "infra/terraform/modules/ (network, compute, database, edge, deploy-role, observability, budget)", "infra/terraform/envs/dev/ (with .terraform.lock.hcl)", "infra/terraform/envs/dev/tests/ (mock_provider)", "infra/terraform/README.md", "infra/aws/deploy.sh", "infra/aws/deploy.test.sh", ".github/workflows/deploy.yml", ".github/workflows/ci.yml (terraform job; deploy.test.sh in platform)", ".gitignore (*.tfvars)"]
+supervisor_checks = ["Throwaway copy: make the trust policy :sub StringLike repo:<repo>:*; criterion 5 fails.", "Throwaway copy: add ingress on port 22; criterion 2 fails.", "Throwaway copy: set publicly_accessible = true; criterion 3 fails.", "Throwaway copy: write .env in place; criterion 6 fails.", "Throwaway copy: put AWS-RunShellScript back in ssm:SendCommand; criterion 5 fails.", "Throwaway copy: remove the DOCKER-USER rule from deploy.sh; criterion 6 fails."]
 
 [[entry]]
 id = 10
