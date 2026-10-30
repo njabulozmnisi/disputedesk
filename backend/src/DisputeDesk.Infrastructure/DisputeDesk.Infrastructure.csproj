@@ -3,6 +3,7 @@
     <ProjectReference Include="..\DisputeDesk.Application\DisputeDesk.Application.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Confluent.Kafka" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
@@ -15,5 +16,7 @@
   <ItemGroup>
     <!-- The publish mapping tests call the internal CommitRows directly (InternalsVisibleToAttribute). -->
     <InternalsVisibleTo Include="DisputeDesk.Api.IntegrationTests" />
+    <!-- The relay tests call the internal OutboxRelay.CreateProducerConfig and OutboxRelay.Backoff directly. -->
+    <InternalsVisibleTo Include="DisputeDesk.Worker.IntegrationTests" />
   </ItemGroup>
 </Project>
