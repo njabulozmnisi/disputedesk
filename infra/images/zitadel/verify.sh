@@ -69,4 +69,13 @@ smtp=$(api POST /admin/v1/email/_search '{}')
 check "smtp: Mailpit active" '[.result[] | select(.state == "EMAIL_PROVIDER_ACTIVE") | {host: .smtp.host, state}]
   | select(length == 1 and .[0].host == "mailpit:1025")' "$smtp"
 
+# The active policy (not the preview) has the generator's nine fields for the mounted theme file, and the files.
+active=$(api GET /admin/v1/policies/label)
+label=$(jq -c --argjson wanted "$(bash /label-policy.sh /brand/tokens.css)" '{wanted: $wanted, active: .policy}' <<< "$active")
+check "label policy: active, from tokens.css" 'def fields: {primaryColor, backgroundColor, warnColor, fontColor,
+    primaryColorDark, backgroundColorDark, warnColorDark, fontColorDark, themeMode} | map_values(. // "" | ascii_downcase);
+  select((.active | fields) == (.wanted | fields)
+    and ([.active.fontUrl, .active.logoUrl, .active.logoUrlDark] | all(. // "" | length > 0)))
+  | .active | {primaryColor, primaryColorDark, themeMode, font: (.fontUrl | length > 0), logos: ((.logoUrl + .logoUrlDark) | length > 0)}' "$label"
+
 exit "$FAILED"
