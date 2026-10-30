@@ -37,6 +37,7 @@ builder.AddDisputeDeskTelemetry("disputedesk-api", typeof(Program).Assembly)
     .WithTracing(tracing => tracing.AddAspNetCoreInstrumentation())
     .WithMetrics(metrics => metrics.AddAspNetCoreInstrumentation());
 
+builder.Services.AddForwardedHeadersTrust();
 builder.Services.AddInfrastructure();
 builder.Services.AddCoreBanking();
 builder.Services.AddSmsSender();
@@ -63,6 +64,8 @@ builder.Services.AddLinkingStart();
 
 WebApplication app = builder.Build();
 
+// First, so everything after it sees the client address, scheme and host the gateway forwarded (AD-23).
+app.UseForwardedHeaders();
 app.UseSecurityHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
