@@ -89,6 +89,8 @@ Every PRD §6.2 bullet, every "Operations features" sub-bullet, every row of the
 | Input (7.5 pre-build security S7.5-7): deploy role subject | P55 | The OIDC trust pins the branch, not the workflow |
 | Input (7.5 pre-build security S7.5-9): instance role | P56 | Broad AWS managed policies on a dedicated demo account |
 | Decision 2026-10-30 (human, 7.4 build): published api and worker images | P57 | They carry a busybox probe for the Compose health checks |
+| Input (7.4 security F1): collector image CVE | P58 | Not reachable in this configuration; no fixed release yet |
+| Input (7.4 security re-run I1): layer-2 spoofing on the Compose network | P59 | Only the per-IP linking limit is at stake; the per-login limit holds |
 | Input (7.4 pre-build security S7.4-1, human decision): three distributions | P47 | Mailpit has its own distribution; all three disable caching |
 | Decision 2026-10-27 (standards audit): migrations; deferred operations stories | P28 | No operations story is deferred: 5.3 and 5.4 are in v1's scope (initiative scope decision 2026-10-27) |
 | Decision 2026-10-27 (2.7 security review): problem `type` URLs | P39 | Accepted risk under the GitHub namespace |
@@ -337,3 +339,11 @@ The OIDC trust pins the repository's main branch, not the workflow (AD-28; story
 ### P57. Probes in the published images
 
 The published api and worker images are the `api-local` and `worker-local` targets: the chiseled .NET images plus a static busybox (named `wget` in the api, full busybox in the worker), because AWS runs Compose on one instance and Compose health checks run inside the container (human decision 2026-10-30, story 7.4 build; AD-22, AD-25). Production runs the shell-free `api` and `worker` targets under an orchestrator whose probes call `/health/live` and `/health/ready` over the network (Kubernetes liveness and readiness probes, or an ECS target group's health check). *Why it waits:* v1 has no orchestrator or load balancer to probe, and the health checks keep AD-22's "the Worker never runs on an old schema" and AD-25's restarts.
+
+### P58. Third-party image scanning
+
+The pinned collector image (`otel/opentelemetry-collector-contrib:0.164.0`) carries HIGH CVE-2026-116587 in go-jose v4.1.5, and CI's Trivy scans only the images the repo builds (story 7.4 security F1). Production scans every pinned third-party image on a schedule and upgrades when a fix ships. *Why it waits:* the vulnerable code (JWK parsing) is not reachable, because the collector has no JWT or OIDC extension and listens only on the private network, and no release with go-jose 4.1.6 or later exists yet.
+
+### P59. Container network capabilities
+
+In AWS the api trusts forwarded headers only from the gateway's pinned address, but containers keep Docker's default `NET_RAW` capability, so a compromised container on the Compose network could try ARP spoofing of that address (story 7.4 security re-run I1). Production drops `NET_RAW` on the internet-facing services (`cap_drop`), or runs each service in its own network namespace under an orchestrator. *Why it waits:* the only gain would be getting past the per-IP linking limit, and the per-login limit and the OTP lockout still hold.

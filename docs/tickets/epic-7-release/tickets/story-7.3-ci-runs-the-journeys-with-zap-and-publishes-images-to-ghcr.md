@@ -58,7 +58,7 @@ Inputs:
    - `ghcr.io/njabulozmnisi/disputedesk-api` from `backend`, target `api-local` (the api image plus the `wget` probe its Compose health check calls; human decision 2026-10-30, P57);
    - `ghcr.io/njabulozmnisi/disputedesk-worker` from `backend`, target `worker-local` (the worker image plus the busybox its Compose health check calls; human decision 2026-10-30, P57);
    - `ghcr.io/njabulozmnisi/disputedesk-core-banking` from `backend`, target `core-banking`;
-   - `ghcr.io/njabulozmnisi/disputedesk-gateway` from the repository root with `-f infra/nginx/Dockerfile` (the SPA built in);
+   - `ghcr.io/njabulozmnisi/disputedesk-gateway` from the repository root with `-f infra/nginx/Dockerfile` (the SPA built in; story 7.4, which follows, adds `--build-arg BROWSER_TELEMETRY=off` to this build, its criterion 6);
    - `ghcr.io/njabulozmnisi/disputedesk-provision` from `infra/zitadel/provision`
    **And** each is built with `--label org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY` and `--label org.opencontainers.image.revision=$GITHUB_SHA` (OCI image-spec, *Pre-defined annotation keys*; GitHub, *Connecting a repository to a package*)
    **And** before its `docker push`, each built image passes `trivy image --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1`, with Trivy installed at the same version and SHA-256 pin as `security.yml`, so a failing scan pushes nothing and the scanned bytes are the pushed bytes (ASVS 5.0 V15.2)
