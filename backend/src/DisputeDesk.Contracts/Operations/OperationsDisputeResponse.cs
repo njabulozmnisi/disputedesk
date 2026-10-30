@@ -17,4 +17,12 @@ public sealed record OperationsDisputeResponse(
     Money? ExpectedAmount,
     Money DisputedAmount,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<OperationsTimelineEntryResponse> Timeline);
+    IReadOnlyList<OperationsTimelineEntryResponse> Timeline)
+{
+    /// <summary>
+    /// Only the type name: a record's generated <c>ToString</c> prints every property, and this one holds the transaction
+    /// snapshot and the timeline's resolve note, free text that may hold personal data (OWASP Logging Cheat Sheet: data to
+    /// exclude). Sealed, so nothing overrides it again.
+    /// </summary>
+    public sealed override string ToString() => nameof(OperationsDisputeResponse);
+}

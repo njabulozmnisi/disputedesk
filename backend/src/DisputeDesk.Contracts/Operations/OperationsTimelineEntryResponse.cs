@@ -14,4 +14,11 @@ public sealed record OperationsTimelineEntryResponse(
     DateTimeOffset OccurredAt,
     DisputeStatus? FromStatus,
     DisputeStatus? ToStatus,
-    string? Note);
+    string? Note)
+{
+    /// <summary>
+    /// Only the type name: a record's generated <c>ToString</c> prints every property, and the resolve note is free text
+    /// that may hold personal data (OWASP Logging Cheat Sheet: data to exclude). Sealed, so nothing overrides it again.
+    /// </summary>
+    public sealed override string ToString() => nameof(OperationsTimelineEntryResponse);
+}

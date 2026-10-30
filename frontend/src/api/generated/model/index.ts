@@ -26,6 +26,7 @@ export * from './outcome';
 export * from './problemDetails';
 export * from './raiseDisputeRequest';
 export * from './reason';
+export * from './resolveDisputeRequest';
 export * from './sessionResponse';
 export * from './sessionState';
 export * from './startLinkingRequest';

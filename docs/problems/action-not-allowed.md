@@ -5,7 +5,7 @@
 
 ## When it happens
 
-The action is not allowed from the dispute's current status, for example withdrawing a resolved dispute, or another change happened first. `customerStatus` (customer endpoints) or `status` (operations endpoints) gives the current status.
+The action is not allowed from the dispute's current status, for example withdrawing a resolved dispute, or another change happened first. `customerStatus` (customer endpoints) or `disputeStatus` (operations endpoints, the internal status in camelCase; `status` is avoided because RFC 9457 §3.1 keeps that member for the HTTP status code) gives the current status.
 
 ## What a client should do
 

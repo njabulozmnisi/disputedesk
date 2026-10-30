@@ -23,4 +23,13 @@ public class RequestBodyPrivacyTests
 
         Assert.Equal(nameof(WithdrawDisputeRequest), request.ToString());
     }
+
+    [Fact]
+    public void ResolveDisputeRequest_ToString_PrintsOnlyTheTypeNameAndIsSealed()
+    {
+        var request = new Contracts.Operations.ResolveDisputeRequest(Outcome.Upheld, "note-marker");
+
+        Assert.Equal(nameof(Contracts.Operations.ResolveDisputeRequest), request.ToString());
+        Assert.True(typeof(Contracts.Operations.ResolveDisputeRequest).GetMethod(nameof(ToString), Type.EmptyTypes)?.IsFinal);
+    }
 }

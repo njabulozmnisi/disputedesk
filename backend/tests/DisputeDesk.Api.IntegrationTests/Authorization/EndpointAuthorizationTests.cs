@@ -110,6 +110,9 @@ public class EndpointAuthorizationTests(PostgresFixture postgres)
 
         var operations = schemesByEndpoint.Where(entry => entry.Name.StartsWith(OperationsPrefix, StringComparison.Ordinal)).ToList();
         Assert.Contains(operations, entry => entry.Name == "/api/v1/operations/disputes/{disputeId}");
+        Assert.Contains(operations, entry => entry.Name == "/api/v1/operations/disputes/{disputeId}/start-review");
+        Assert.Contains(operations, entry => entry.Name == "/api/v1/operations/disputes/{disputeId}/escalate");
+        Assert.Contains(operations, entry => entry.Name == "/api/v1/operations/disputes/{disputeId}/resolve");
         Assert.All(operations, entry => Assert.Equal([JwtBearerDefaults.AuthenticationScheme], entry.Schemes));
         Assert.All(
             schemesByEndpoint.Except(operations),

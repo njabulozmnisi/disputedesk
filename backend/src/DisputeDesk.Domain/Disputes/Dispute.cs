@@ -15,6 +15,9 @@ public sealed class Dispute
     /// <summary>The longest withdraw note, in UTF-16 code units after trimming (FR-18).</summary>
     public const int WithdrawNoteMaxLength = 500;
 
+    /// <summary>The longest resolve note, in UTF-16 code units after trimming (FR-23); the note is required.</summary>
+    public const int ResolveNoteMaxLength = 500;
+
     /// <summary>An unresolved dispute is escalated this long after it was raised (FR-26).</summary>
     public static readonly TimeSpan Sla = TimeSpan.FromHours(240);
 
@@ -186,14 +189,63 @@ public sealed class Dispute
             return DisputeErrors.ActionNotAllowed;
         }
 
-        Append(new DisputeWithdrawn(Status, DisputeStatus.Withdrawn, trimmedNote)
+        Append(Stamped(new DisputeWithdrawn(Status, DisputeStatus.Withdrawn, trimmedNote), actor, now));
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Operations start reviewing a submitted dispute (FR-21). Appends one <see cref="ReviewStarted"/> at the next
+    /// version; in any other status the allowed-actions table refuses it (409).
+    /// </summary>
+    public Result StartReview(Actor actor, DateTimeOffset now)
+    {
+        if (!IsAllowed(Status, DisputeAction.StartReview))
         {
-            DisputeId = Id,
-            Version = Version + 1,
-            OccurredAtUtc = now,
-            ActorType = actor.Type,
-            ActorId = actor.Id,
-        });
+            return DisputeErrors.ActionNotAllowed;
+        }
+
+        Append(Stamped(new ReviewStarted(Status, DisputeStatus.UnderReview), actor, now));
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Operations escalate a submitted or under-review dispute (FR-22). Appends one <see cref="DisputeEscalated"/> at the
+    /// next version; in any other status the allowed-actions table refuses it (409).
+    /// </summary>
+    public Result Escalate(Actor actor, DateTimeOffset now)
+    {
+        if (!IsAllowed(Status, DisputeAction.Escalate))
+        {
+            return DisputeErrors.ActionNotAllowed;
+        }
+
+        Append(Stamped(new DisputeEscalated(Status, DisputeStatus.Escalated), actor, now));
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Operations resolve an under-review or escalated dispute with an outcome and a note meant for the customer (FR-23).
+    /// The checks run in the AD-8 order: the note's own rule (400), then the allowed-actions table (409). A resolve
+    /// appends one <see cref="DisputeResolved"/> at the next version.
+    /// </summary>
+    /// <param name="outcome">Upheld or rejected.</param>
+    /// <param name="note">Required: 1 to <see cref="ResolveNoteMaxLength"/> UTF-16 code units after trimming; stored trimmed.</param>
+    /// <param name="actor">The operations actor, by their token's <c>sub</c>.</param>
+    /// <param name="now">The use case's one instant (AD-4).</param>
+    public Result Resolve(Outcome outcome, string? note, Actor actor, DateTimeOffset now)
+    {
+        string trimmedNote = note?.Trim() ?? "";
+        if (trimmedNote.Length == 0 || trimmedNote.Length > ResolveNoteMaxLength)
+        {
+            return DisputeErrors.ResolveNoteInvalid;
+        }
+
+        if (!IsAllowed(Status, DisputeAction.Resolve))
+        {
+            return DisputeErrors.ActionNotAllowed;
+        }
+
+        Append(Stamped(new DisputeResolved(Status, DisputeStatus.Resolved, outcome, trimmedNote), actor, now));
         return Result.Success();
     }
 
@@ -238,6 +290,11 @@ public sealed class Dispute
             }
         }
     }
+
+    /// <summary><paramref name="storedEvent"/> as the next stored event of this dispute, by <paramref name="actor"/> at <paramref name="now"/>.</summary>
+    private TEvent Stamped<TEvent>(TEvent storedEvent, Actor actor, DateTimeOffset now)
+        where TEvent : StoredEvent =>
+        storedEvent with { DisputeId = Id, Version = Version + 1, OccurredAtUtc = now, ActorType = actor.Type, ActorId = actor.Id };
 
     private void Append(StoredEvent storedEvent)
     {

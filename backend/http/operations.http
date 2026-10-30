@@ -24,3 +24,39 @@ Authorization: Bearer {{token}}
 
 ### No token: 401 unauthorized with WWW-Authenticate: Bearer
 GET {{app}}/api/v1/operations/disputes/{{disputeId}}
+
+### Start review a submitted dispute: 200 with the operations view (status underReview); not audited
+POST {{app}}/api/v1/operations/disputes/{{disputeId}}/start-review
+Authorization: Bearer {{token}}
+
+### Escalate a submitted or under-review dispute: 200 (status escalated); not audited
+POST {{app}}/api/v1/operations/disputes/{{disputeId}}/escalate
+Authorization: Bearer {{token}}
+
+### Resolve an under-review or escalated dispute: 200 (status resolved); the trimmed note goes to the customer's timeline
+POST {{app}}/api/v1/operations/disputes/{{disputeId}}/resolve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"outcome": "upheld", "note": "We've reversed this debit."}
+
+### Resolve again: 409 action-not-allowed with disputeStatus resolved; audited as Resolve Rejected
+POST {{app}}/api/v1/operations/disputes/{{disputeId}}/resolve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"outcome": "rejected", "note": "Again."}
+
+### Resolve with no outcome: 400 validation naming outcome, after the lookup and before the status; not audited
+POST {{app}}/api/v1/operations/disputes/{{disputeId}}/resolve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"note": "We've reversed this debit."}
+
+### An outcome that is a number: the framework's 400 validation, before the lookup; not audited
+POST {{app}}/api/v1/operations/disputes/00000000-0000-0000-0000-000000000000/resolve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"outcome": 1, "note": "We've reversed this debit."}
