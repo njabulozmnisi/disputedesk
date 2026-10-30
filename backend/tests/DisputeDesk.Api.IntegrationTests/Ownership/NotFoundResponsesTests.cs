@@ -84,7 +84,7 @@ public class NotFoundResponsesTests(PostgresFixture postgres, TransactionsStub s
         return disputeId;
     }
 
-    private static async Task AssertSameNotFoundAsync(HttpResponseMessage forTheirs, HttpResponseMessage forUnknown, string theirId, string unknownId)
+    internal static async Task AssertSameNotFoundAsync(HttpResponseMessage forTheirs, HttpResponseMessage forUnknown, string theirId, string unknownId)
     {
         Assert.Equal(HttpStatusCode.NotFound, forTheirs.StatusCode);
         Assert.Equal(forTheirs.StatusCode, forUnknown.StatusCode);

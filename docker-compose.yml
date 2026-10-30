@@ -243,7 +243,7 @@ services:
       Sms__Host: mailpit                           # every SMS lands in the Mailpit inbox
       Sms__Port: "1025"
       Sms__UseTls: "false"                         # Mailpit accepts plain SMTP only
-      Seed__Enabled: "true"                        # links customers A and B to their fixture logins (AD-30)
+      Seed__Enabled: "true"                        # links A and B to their fixture logins and seeds their disputes (AD-30)
       Seed__FixturesPath: /fixtures/local.json
       Scalar__Enabled: "true"                      # Scalar at /scalar/ and the runtime document (AD-26)
       # The OTP HMAC key (AD-26): base64 of the text "dev-only-linking-otp-hmac-key-not-a-secret", 42 bytes.
