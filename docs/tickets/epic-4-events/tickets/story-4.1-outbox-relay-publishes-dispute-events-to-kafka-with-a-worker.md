@@ -56,7 +56,7 @@ Verify: Worker integration tests on Testcontainers Postgres and Redpanda pass fo
 6. **Heartbeat** (R27; NFR-RES-1)
    **Given** the Worker
    **When** the relay loops as leader, as non-leader on each lock attempt, while idle and while backing off
-   **Then** `/tmp/heartbeat-relay` is touched at least every 10 seconds: after each send, on each lock attempt, and after each batch; an idle relay waits at most 10 seconds between batches, one send waits at most 10 seconds for its delivery report (`MessageTimeoutMs` 10,000), heads are sent one at a time, and backoff is capped at 10 seconds, so no loop leaves the file older than the 30-second health-check threshold (AD-25)
+   **Then** `/tmp/heartbeat-relay` is touched at least every 10 seconds: before and after each send, on each lock attempt, and after each batch; an idle relay waits at most 10 seconds between batches, one send waits at most 10 seconds for its delivery report (`MessageTimeoutMs` 10,000), heads are sent one at a time, and backoff is capped at 10 seconds, so no loop leaves the file older than the 30-second health-check threshold (AD-25)
    **And** the Compose worker health check fails when the relay file is older than 30 seconds, the worker `depends_on` the api being healthy, and story 5.3 adds the sweep file
 
 7. **No personal data at the Kafka boundary** (R31; NFR-SEC-5)

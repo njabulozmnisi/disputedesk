@@ -6,7 +6,7 @@ import { expectProblemShape, fixtureLogin, queryDatabase } from './support';
 // The SPA has no raise screen until story 3.6, so the raise is sent at network level from browser contexts that
 // signed in through Zitadel (the session cookie and the antiforgery token travel as a browser would send them).
 // Every database fact is read through the read-only qa_readonly role. There is no outbox relay before story 4.1, so
-// the events hop is the outbox row; nothing is on the Kafka topic yet.
+// the events hop is the outbox row; since story 4.1 the relay publishes it (outbox-relay.spec.ts reads the topic).
 // The data is not reset between runs, so each run raises on the newest transactions that are still disputable.
 
 type Row = { transactionId: string; accountRef: string; description: string; disputable: boolean };
@@ -114,7 +114,7 @@ test.describe.serial('raise as customer A', () => {
 
     const outbox = rows<any>(`select "Id", "EventType", "DisputeId", "DisputeVersion", "Status", "CreatedAtUtc", "TraceParent", "Payload" from "OutboxMessages" where "Id" = '${stored[0].Id}'`);
     expect(outbox).toHaveLength(1);
-    expect(outbox[0]).toMatchObject({ EventType: 'disputedesk.dispute.raised.v1', DisputeId: id, DisputeVersion: 1, Status: 'Pending' });
+    expect(outbox[0]).toMatchObject({ EventType: 'disputedesk.dispute.raised.v1', DisputeId: id, DisputeVersion: 1, Status: expect.stringMatching(/^(Pending|Sent)$/) });
     expect(rows<any>(`select 1 from "OutboxMessages" where "DisputeId" = '${id}'`)).toHaveLength(1);
 
     // One instant on all three rows, and the CloudEvent time is that instant.
@@ -335,13 +335,6 @@ test.describe('the data model and the logs', () => {
       const logs = execFileSync('docker', ['logs', container], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
       expect(logs.match(/CUS-\d+|ACC-[A-Z]-\d+/g) ?? [], `${container} log`).toEqual([]);
     }
-  });
-
-  test('no event is on the dispute topic yet: the relay arrives in story 4.1', async () => {
-    const description = execFileSync('docker', ['exec', 'disputedesk-redpanda-1', 'rpk', 'topic', 'describe', 'disputedesk.disputes', '-p'], { encoding: 'utf8' });
-    const watermarks = description.trim().split('\n').slice(1).map((line) => Number(line.trim().split(/\s+/).pop()));
-    expect(watermarks).toHaveLength(3);
-    expect(watermarks.every((watermark) => watermark === 0)).toBe(true);
   });
 });
 

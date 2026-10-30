@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
-# Build context: backend/. Targets: `api` (default, last stage), `worker`, `api-local` (Compose only) and `core-banking`.
+# Build context: backend/. Targets: `api` (default, last stage), `worker`, `api-local` and `worker-local` (Compose only) and
+# `core-banking`.
 #   docker build -t disputedesk-api backend
 #   docker build -t disputedesk-worker --target worker backend
 # Images are pinned by tag and by multi-arch index digest. The SDK tag matches global.json.
@@ -51,6 +52,11 @@ ENTRYPOINT ["dotnet", "DisputeDesk.Api.dll"]
 FROM ${PROBE_IMAGE} AS probe
 FROM api AS api-local
 COPY --from=probe /bin/busybox /usr/local/bin/wget
+
+# Local Compose only: the worker image plus busybox, so Compose can check the age of the relay's heartbeat file
+# (AD-25). It keeps the worker's non-root user.
+FROM worker AS worker-local
+COPY --from=probe /bin/busybox /usr/local/bin/busybox
 
 # The core-banking stub (AD-21): its own restore and publish, since it references no DisputeDesk project. It reads
 # fixtures/local.json, which Compose mounts at runtime. It only exists for local and demo stacks, so the image

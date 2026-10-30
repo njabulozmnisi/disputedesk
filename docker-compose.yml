@@ -246,15 +246,27 @@ services:
 
   worker:
     image: disputedesk-worker:local
-    build: { context: ./backend, target: worker }
+    build: { context: ./backend, target: worker-local }   # the worker image plus busybox for the heartbeat check
     restart: unless-stopped
     environment:
       <<: *app-config
       DOTNET_ENVIRONMENT: Development
       OTEL_SERVICE_NAME: disputedesk-worker
+      Kafka__BootstrapServers: redpanda:9092
+    # AD-25: the relay touches its file every loop (at least every 10 s); older than 30 s means a hung relay.
+    # The relay writes it under the system temporary directory, so the worker must not set TMPDIR.
+    # Story 5.3 adds the sweep's file.
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/busybox", "sh", "-c",
+             "test $$(( $$(/usr/local/bin/busybox date +%s) - $$(/usr/local/bin/busybox stat -c %Y /tmp/heartbeat-relay) )) -le 30"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       postgres: { condition: service_healthy }
       redpanda-topics: { condition: service_completed_successfully }
+      api: { condition: service_healthy }   # the Api applies the migrations; the Worker never runs on an old schema (AD-22)
     mem_limit: 384m
 
   aspire-dashboard:

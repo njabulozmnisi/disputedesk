@@ -15,6 +15,9 @@ public static class Telemetry
     /// <summary>The name of DisputeDesk's own Meter (AD-20), whose business metrics both hosts export.</summary>
     public const string MeterName = "DisputeDesk";
 
+    /// <summary>The name of DisputeDesk's own ActivitySource (AD-20), on which the outbox relay starts its producer spans.</summary>
+    public const string ActivitySourceName = "DisputeDesk";
+
     /// <summary>
     /// Registers the three signals with HttpClient and Npgsql instrumentation. Export is configured only by the
     /// standard OTEL_* variables: OTLP is switched on when OTEL_EXPORTER_OTLP_ENDPOINT is set, and with it unset
@@ -37,6 +40,7 @@ public static class Telemetry
                 .AddService(serviceName, serviceVersion: hostAssembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion)
                 .AddEnvironmentVariableDetector())
             .WithTracing(tracing => tracing
+                .AddSource(ActivitySourceName)
                 .AddHttpClientInstrumentation()
                 .AddNpgsql())
             .WithMetrics(metrics => metrics
