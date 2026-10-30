@@ -1,4 +1,6 @@
 import { context, propagation, trace } from '@opentelemetry/api';
+import { act } from '@testing-library/react';
+import type { Mock } from 'vitest';
 
 import { server } from '@/test/server';
 import { signInAs } from '@/test/support';
@@ -10,6 +12,20 @@ vi.mock('@/telemetry/startTracing', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/telemetry/startTracing')>();
   return { startTracing: vi.fn(original.startTracing) };
 });
+
+// A spy over the real `createRoot`: `main.tsx` does not expose its React root, and each test must unmount it.
+vi.mock('react-dom/client', async (importOriginal) => {
+  const original = await importOriginal<typeof import('react-dom/client')>();
+  return { ...original, createRoot: vi.fn(original.createRoot) };
+});
+
+/** The two spies of the latest `startApp`. `afterEach` uses them to stop what that app started. */
+let startedApp:
+  | {
+      startTracing: Mock<typeof import('@/telemetry/startTracing').startTracing>;
+      createRoot: Mock<typeof import('react-dom/client').createRoot>;
+    }
+  | undefined;
 
 /**
  * Runs `main.tsx` afresh with `VITE_BROWSER_TELEMETRY` set to `value` (unset when undefined). The tracing that the shared
@@ -23,11 +39,32 @@ async function startApp(value: string | undefined) {
   vi.resetModules();
   document.body.innerHTML = '<div id="root"></div>';
   const { startTracing } = await import('@/telemetry/startTracing');
+  const { createRoot } = await import('react-dom/client');
   await import('@/main');
-  return vi.mocked(startTracing);
+  startedApp = { startTracing: vi.mocked(startTracing), createRoot: vi.mocked(createRoot) };
+  return startedApp.startTracing;
 }
 
-afterEach(() => {
+// The app's React root and tracer provider outlive the test unless the test stops them. Their timers (React's scheduler,
+// the span processor's export timer) then fire after the jsdom environment is gone ("window is not defined"), and the
+// app's requests reach MSW after `server.resetHandlers()`. This hook runs before the afterEach in setup.ts.
+afterEach(async () => {
+  for (const result of startedApp?.createRoot.mock.results ?? []) {
+    if (result.type !== 'return') continue;
+    const root = result.value;
+    act(() => {
+      root.unmount();
+    });
+  }
+  const shutdowns: Promise<void>[] = [];
+  for (const result of startedApp?.startTracing.mock.results ?? []) {
+    if (result.type === 'return') shutdowns.push(result.value.shutdown());
+  }
+  await Promise.all(shutdowns);
+  startedApp = undefined;
+  trace.disable();
+  context.disable();
+  propagation.disable();
   vi.unstubAllEnvs();
   document.body.innerHTML = '';
 });

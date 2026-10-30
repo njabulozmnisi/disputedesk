@@ -20,6 +20,7 @@ import {
   problemResponse,
   renderApp,
   serveAntiforgeryToken,
+  serveDispute,
   serveTransactions,
   signInAs,
 } from '@/test/support';
@@ -318,14 +319,14 @@ describe('the exported spans', () => {
     'error.type',
   ];
 
-  /** The seeded values flow through the API calls the app makes; the cursor and the GUID path are fetched directly. */
+  /**
+   * The seeded values flow through the API calls the app makes; the cursor and the GUID path are fetched directly.
+   * The dispute is served before the raise, because the app opens its detail screen as soon as the raise ends.
+   */
   async function fetchCursorAndDispute() {
     server.use(
       http.get('*/api/v1/transactions', () =>
         HttpResponse.json({ items: [seedRow()], nextCursor: null }),
-      ),
-      http.get(`*/api/v1/disputes/${guid}`, () =>
-        HttpResponse.json(makeDispute({ disputeId: guid })),
       ),
     );
     await getApiV1Transactions({ cursor: 'cursor-seed-8L1N' });
@@ -393,6 +394,7 @@ describe('the exported spans', () => {
     signInAs('linked');
     serveAntiforgeryToken();
     serveTransactions([seedRow()]);
+    serveDispute(makeDispute({ disputeId: guid }));
     const app = renderApp({ path: '/transactions', strictMode: true });
     await app.user.click(await screen.findByRole('link', { name: 'Dispute this transaction' }));
     await fillAndSubmit(app.user);
@@ -414,6 +416,7 @@ describe('the exported spans', () => {
     signInAs('linked');
     serveAntiforgeryToken();
     serveTransactions([seedRow()]);
+    serveDispute(makeDispute({ disputeId: guid }));
     const app = renderApp({ path: '/transactions', strictMode: true });
     await app.user.click(await screen.findByRole('link', { name: 'Dispute this transaction' }));
     await fillAndSubmit(app.user);
