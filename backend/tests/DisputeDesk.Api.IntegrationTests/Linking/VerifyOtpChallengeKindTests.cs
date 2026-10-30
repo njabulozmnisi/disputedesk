@@ -9,7 +9,8 @@ namespace DisputeDesk.Api.IntegrationTests.Linking;
 /// <summary>
 /// 6.2 AC4: a challenge with no OTP to match, whichever stop of the job left it blank or released, answers and counts
 /// attempt by attempt exactly like customer D's challenge given wrong codes; a login with no challenge row gets a first
-/// wrong code's answer every time and is never counted (OWASP Authentication Cheat Sheet, generic responses).
+/// wrong code's answer every time and is never counted (OWASP Authentication Cheat Sheet, generic responses). 6.3 AC4:
+/// so does the blank challenge a full-queue 429 leaves.
 /// </summary>
 public class VerifyOtpChallengeKindTests(PostgresFixture postgres)
 {
@@ -59,6 +60,36 @@ public class VerifyOtpChallengeKindTests(PostgresFixture postgres)
         List<AuditLogEntry> audits = await factory.VerifyAuditsAsync(login);
         Assert.Equal([AuditAction.LinkingOtpIncorrect, AuditAction.LinkingOtpIncorrect, AuditAction.LinkingLocked], audits.Select(entry => entry.Action));
         Assert.All(audits, entry => Assert.Equal((AuditResult.Rejected, before.CustomerId), (entry.Result, entry.CustomerId)));
+    }
+
+    [Fact]
+    public async Task Verify_BlankChallengeAFullQueueLeft_AnswersAndLocksExactlyLikeWrongCodesOnARealOne()
+    {
+        var ports = new LinkingFakes.Ports();
+        await using ApiFactory factory = await LinkingApi.StartApiAsync(
+            postgres, ports, new TestClock(), settings: new Dictionary<string, string?> { ["Linking:QueueCapacity"] = "1" });
+        // The reference answers first, while a worker is free to send customer D's OTP.
+        List<string> expected = await WrongCodeAnswersAsync(factory, ports);
+        LinkingFakes.Hold[] holds = await StartLinkingQueueFullTests.FillTheQueueAsync(factory, ports);
+        string login = LinkingApi.NewLogin("full-queue");
+        using HttpClient browser = await factory.SignInUnlinkedAsync(login);
+        Assert.Equal(System.Net.HttpStatusCode.TooManyRequests, (await browser.StartLinkingAsync(LinkingApi.Body(LinkingFakes.D))).StatusCode);
+        LinkingChallenge before = await factory.CurrentChallengeAsync(login) ?? throw new InvalidOperationException("No current challenge.");
+        Assert.Equal((null, null, null), (before.OtpHmac, before.OtpSentAtUtc, before.CustomerId));
+
+        List<string> actual = [];
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            actual.Add(await (await browser.VerifyCodeAsync("123456")).StatusAndBodyAsync());
+        }
+
+        Assert.Equal(expected, actual);
+        Assert.Equal(3, (await factory.CurrentChallengeAsync(login))?.Attempts);
+        Assert.DoesNotContain(await factory.LinksAsync(), link => link.LoginSub == login);
+        Assert.Equal(
+            [AuditAction.LinkingOtpIncorrect, AuditAction.LinkingOtpIncorrect, AuditAction.LinkingLocked],
+            (await factory.VerifyAuditsAsync(login)).Select(entry => entry.Action));
+        Array.ForEach(holds, hold => hold.Release());
     }
 
     [Fact]

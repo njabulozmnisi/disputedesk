@@ -46,7 +46,8 @@ public static class OtpSends
 
     /// <summary>
     /// Fills the challenge for the matched customer and stamps the send at <paramref name="sentAt"/>, only while it is
-    /// still current and unsent. Returns 1 when this job may send, 0 when a later start superseded it.
+    /// still current, unsent and not locked. Returns 1 when this job may send, 0 when a later start superseded it or three
+    /// wrong codes locked it while the job ran.
     /// </summary>
     public static Task<int> ClaimAsync(
         this DbSet<LinkingChallenge> challenges, Guid challengeId, string customerId, byte[] otpHmac, DateTimeOffset sentAt, CancellationToken cancellationToken) =>
@@ -54,7 +55,8 @@ public static class OtpSends
             .Where(challenge => challenge.Id == challengeId
                 && challenge.SupersededAtUtc == null
                 && challenge.ConsumedAtUtc == null
-                && challenge.OtpSentAtUtc == null)
+                && challenge.OtpSentAtUtc == null
+                && challenge.Attempts < LinkingChallenge.MaxAttempts)
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(challenge => challenge.CustomerId, customerId)

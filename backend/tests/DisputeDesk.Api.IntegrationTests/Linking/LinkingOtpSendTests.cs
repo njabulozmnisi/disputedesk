@@ -45,6 +45,29 @@ public class LinkingOtpSendTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task Job_ChallengeLockedByThreeWrongCodesBeforeTheClaim_ClaimsNothingAndSendsNoSms()
+    {
+        var ports = new LinkingFakes.Ports();
+        LinkingFakes.Hold check = ports.CoreBanking.HoldNext();
+        await using ApiFactory factory = await LinkingApi.StartApiAsync(postgres, ports, new TestClock());
+        string login = LinkingApi.NewLogin("locked-before-claim");
+        using HttpClient browser = await factory.SignInUnlinkedAsync(login);
+        await browser.StartAcceptedAsync(LinkingFakes.D);
+        await check.Reached;
+
+        await (await browser.VerifyCodeAsync("123456")).AssertOtpIncorrectAsync(attemptsRemaining: 2);
+        await (await browser.VerifyCodeAsync("123456")).AssertOtpIncorrectAsync(attemptsRemaining: 1);
+        await (await browser.VerifyCodeAsync("123456")).AssertLockedAsync();
+        check.Release();
+
+        List<AuditLogEntry> entries = await factory.WaitForAuditAsync(login, AuditAction.LinkingOtpSent, AuditResult.Rejected);
+        Assert.Equal(LinkingFakes.D.CustomerId, entries[^1].CustomerId);
+        Assert.Empty(ports.Sms.Received);
+        LinkingChallenge locked = Assert.Single(await factory.ChallengesAsync(login));
+        Assert.Equal((3, null, null, null), (locked.Attempts, locked.CustomerId, locked.OtpHmac, locked.OtpSentAtUtc));
+    }
+
+    [Fact]
     public async Task Job_SendThrows_ReleasesTheClaimAuditsFailedMarksTheSpanAndDoesNotRetry()
     {
         var ports = new LinkingFakes.Ports();

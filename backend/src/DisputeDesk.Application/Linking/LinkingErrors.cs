@@ -18,6 +18,12 @@ public static class LinkingErrors
     public static readonly Error QueueFull = Error.RateLimited("rate-limited", "Too many linking starts are waiting. Try again later.");
 
     /// <summary>
+    /// The login or the client IP reached its linking rate limit (FR-8). One fixed answer for both limits, which names
+    /// neither the partition nor a count; the rate limiter adds <c>Retry-After</c>.
+    /// </summary>
+    public static readonly Error RateLimited = Error.RateLimited("rate-limited", "Too many linking requests. Try again later.");
+
+    /// <summary>
     /// The customer or the login already has a link that another verification committed first (AD-15). The verify handler
     /// answers it as a wrong code, so it never reaches HTTP.
     /// </summary>
