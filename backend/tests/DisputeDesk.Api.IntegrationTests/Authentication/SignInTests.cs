@@ -62,11 +62,13 @@ public class SignInTests(PostgresFixture postgres)
         string setCookie = Assert.Single(callback.Headers.GetValues("Set-Cookie"), value => value.StartsWith(ApiFactory.SessionCookieName + "=", StringComparison.Ordinal));
         Assert.Contains("httponly", setCookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=strict", setCookie, StringComparison.OrdinalIgnoreCase);
-        // No token reaches the browser: not in the redirect, not in any cookie, not in the body.
+        // No token reaches the browser: not in the redirect, not in any cookie, not in the body. The exact tokens the fake
+        // issued, not a JWT-looking substring, which the random Data Protection ciphertext in the cookie can contain.
+        string idToken = factory.Zitadel.LastIdToken ?? throw new InvalidOperationException("No ID token was issued.");
         string everythingSent = string.Join('\n', callback.Headers.SelectMany(header => header.Value))
             + await callback.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.DoesNotContain("opaque-access-token", everythingSent, StringComparison.Ordinal);
-        Assert.DoesNotContain("eyJ", everythingSent, StringComparison.Ordinal); // a JWT's base64url header
+        Assert.DoesNotContain(idToken, everythingSent, StringComparison.Ordinal);
 
         // The row holds the SHA-256 of a random key and the login; the ticket in it is data-protected.
         await using AppDbContext db = postgres.CreateDbContext();

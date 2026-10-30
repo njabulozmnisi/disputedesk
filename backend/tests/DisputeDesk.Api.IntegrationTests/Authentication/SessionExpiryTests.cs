@@ -72,6 +72,39 @@ public class SessionExpiryTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task Request_WhoseRowExpiresBetweenTheReadAndTheSlide_DoesNotRenewTheIdleLimit()
+    {
+        // The store reads the row, then slides its idle limit. A row that ends in between (here set expired by hand)
+        // must stay ended: the slide may only move a limit that is still live.
+        var clock = new TestClock();
+        var holdSessionRead = new HoldInterceptor("FROM \"Sessions\"");
+        await using var factory = new ApiFactory(
+            postgres.ConnectionString,
+            clock: clock,
+            configureServices: services => services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(holdSessionRead)));
+        using HttpClient browser = factory.CreateBrowser(new CookieContainer());
+        string sub = $"expires-mid-read-{Guid.NewGuid():N}";
+        await browser.SignInAsync(factory.Zitadel, sub);
+        DateTimeOffset expired = clock.NowAsStored.AddSeconds(-1);
+
+        Task<HttpResponseMessage> request = browser.GetPathAsync(AuthenticatedPath);
+        await holdSessionRead.Reached.WaitAsync(TestContext.Current.CancellationToken);
+        await using (AppDbContext db = postgres.CreateDbContext())
+        {
+            await db.Set<Session>().Where(row => row.LoginSub == sub)
+                .ExecuteUpdateAsync(update => update.SetProperty(row => row.ExpiresAtUtc, expired), TestContext.Current.CancellationToken);
+        }
+
+        holdSessionRead.Release();
+        await request;
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        Session row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<Session>().AsNoTracking()
+            .SingleAsync(row => row.LoginSub == sub, TestContext.Current.CancellationToken);
+        Assert.Equal(expired, row.ExpiresAtUtc);
+    }
+
+    [Fact]
     public async Task Request_After12HoursOfActivity_Returns401AndDeletesTheRow()
     {
         var clock = new TestClock();
