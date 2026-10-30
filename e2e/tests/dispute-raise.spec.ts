@@ -1,13 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, request as playwrightRequest, test, type Browser, type BrowserContext, type Page, type Route } from '@playwright/test';
-import { fixtureLogin, gatewayContentSecurityPolicy, problemTypeBase, queryDatabase } from './support';
+import { fixtureLogin, gatewayContentSecurityPolicy, ownDisputable, problemTypeBase, queryDatabase } from './support';
 
 // Story 3.6: the raise-a-dispute screens (4a, 4b) with an idempotent submit, through the real gateway, BFF, API,
 // database and Zitadel, signed in as seeded customer A (B owns the 404 case). The database is read through qa_readonly.
 // Refusals come from the real API by forging the one POST in flight (another transaction, another customer's row, a
 // key already used); only the cases the API cannot be made to produce (an in-progress key, a 503, a 500, a 400) are
 // stubbed, and each test says so. There is no outbox relay before story 4.1, so the events hop is the Pending outbox row.
-// The data is not reset between runs: a run raises on whichever transactions are still disputable (about 3 per run).
+// A transaction is disputed once: a run raises on four of customer A's reserved transactions (support.ts), all among the
+// newest 20 rows because the Dispute links are clicked in the SPA.
 
 const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const disputesPath = '/api/v1/disputes';
@@ -104,9 +105,13 @@ async function script(page: Page, steps: Step[]) {
   });
 }
 
+/** Opens the raise screen of the first reserved transaction that is still disputable. A row's link carries no ID, so the row is found by its place on the SPA's first page (20 rows). */
 async function openFirstDispute(page: Page) {
+  const firstPage = (await listRows(customerA)).slice(0, 20);
+  const target = ownDisputable(firstPage, 'dispute-raise', 'a')[0];
+  expect(target, 'a reserved transaction on the first page is disputable (reservedTransactions in support.ts)').toBeTruthy();
   await page.goto('/transactions');
-  const link = page.getByRole('link', { name: 'Dispute this transaction', exact: true }).first();
+  const link = page.locator('li').nth(firstPage.indexOf(target)).getByRole('link', { name: 'Dispute this transaction', exact: true });
   await link.waitFor();
   await link.click();
   await expect(page.getByRole('heading', { name: 'Dispute this transaction' })).toBeVisible();
@@ -167,7 +172,7 @@ test('criteria 1, 4, 5, 7: raise Unrecognised with a note: one key, antiforgery,
   const outboxBefore = count('OutboxMessages');
 
   const rowsBefore = await listRows(customerA);
-  const row = rowsBefore.find((candidate) => candidate.disputable)!;
+  const row = ownDisputable(rowsBefore, 'dispute-raise', 'a')[0];
   const transactionId = await openFirstDispute(page);
   expect(transactionId).toBe(row.transactionId);
   await expect(page.getByText(row.description).first()).toBeVisible();
@@ -234,9 +239,11 @@ test('criteria 1, 4, 5, 7: raise Unrecognised with a note: one key, antiforgery,
   });
   oldKey = attempts[0].key!;
 
-  // 201: replace-navigates to /disputes/<id> (not-found until 3.12 adds the detail), announces, and Back never shows 4a or 4b again.
+  // 201: replace-navigates to /disputes/<id> (story 3.12: the detail with the just-submitted banner), announces, and Back never shows 4a or 4b again.
   await expect(page).toHaveURL(`${origin}/disputes/${dispute.disputeId}`);
-  await expect(page.getByRole('heading', { name: "We can't find that dispute" })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(row.description);
+  await expect(page.getByText('Dispute submitted', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: "We can't find that dispute" })).toHaveCount(0);
   await expect(page.locator('[aria-live="polite"]')).toHaveText('Dispute submitted');
   await page.goBack();
   await expect(page).toHaveURL(`${origin}/transactions`);
@@ -263,7 +270,7 @@ test('criteria 1, 4, 5, 7: raise Unrecognised with a note: one key, antiforgery,
 test('criteria 2, 3: wrong amount: bounds in integer cents, live difference, string on the wire, hidden and cleared on another reason, the note count', async () => {
   const page = await customerA.newPage();
   const attempts = trackAttempts(page);
-  const row = (await listRows(customerA)).find((candidate) => candidate.disputable)!;
+  const row = ownDisputable(await listRows(customerA), 'dispute-raise', 'a')[0];
   const amount = row.amount.amount;
   await openFirstDispute(page);
 
@@ -334,7 +341,7 @@ test('criteria 2, 3: wrong amount: bounds in integer cents, live difference, str
   const second = await customerA.newPage();
   await second.goto('/transactions');
   const stillDisputable = (await listRows(customerA)).some((candidate) => candidate.disputable);
-  expect(stillDisputable, 'a disputable transaction is left for the note test (recreate the volumes if not)').toBe(true);
+  expect(stillDisputable, 'a disputable transaction is left for the note test').toBe(true);
   await second.getByRole('link', { name: 'Dispute this transaction', exact: true }).first().click();
   const note = second.getByLabel('Note (optional)');
   const live = second.locator('[aria-live="polite"]');
@@ -561,7 +568,7 @@ test('criterion 8: real refusals from the API: already-disputed 409, not-disputa
 });
 
 test('criterion 4: a 400 returns to 4a with the values kept, each field its own copy, the summary takes focus (stubbed 400s)', async () => {
-  const row = (await listRows(customerA)).find((candidate) => candidate.disputable)!;
+  const row = ownDisputable(await listRows(customerA), 'dispute-raise', 'a')[0];
   const amount = row.amount.amount;
   const page = await customerA.newPage();
   const attempts = trackAttempts(page);
@@ -584,8 +591,7 @@ test('criterion 4: a 400 returns to 4a with the values kept, each field its own 
     const fresh = page;
     await fresh.unroute(`**${disputesPath}`).catch(() => undefined);
     await script(fresh, [scenario.step]);
-    await fresh.goto('/transactions');
-    await fresh.getByRole('link', { name: 'Dispute this transaction', exact: true }).first().click();
+    await openFirstDispute(fresh);
     await chooseReason(fresh, 'Wrong amount');
     await fresh.getByLabel('Expected amount').fill('0.01');
     await fresh.getByLabel('Note (optional)').fill('keep me');
@@ -733,7 +739,7 @@ test('story 3.11 criteria 1-5: one trace from dispute.raise.submit to the API PO
 
   const document = await page.goto('/transactions');
   expect(document!.headers()['content-security-policy']).toBe(gatewayContentSecurityPolicy);
-  const row = (await listRows(context)).find((candidate) => candidate.disputable)!;
+  const row = ownDisputable(await listRows(context), 'dispute-raise', 'a')[0];
   const attempts = trackAttempts(page);
   const transactionId = await openFirstDispute(page);
   expect(transactionId).toBe(row.transactionId);

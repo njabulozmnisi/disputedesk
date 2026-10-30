@@ -1,10 +1,10 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, queryDatabase } from './support';
+import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase } from './support';
 
 // Stories 5.1 and 5.5 (token side): operations tools read a dispute with a bearer token from scripts/operations-token.sh.
 // Network level with the real Zitadel token; database facts through qa_readonly. A and B raise disputes through the
-// customer API (the data is not reset between runs: each run raises on whichever transaction is still disputable).
+// customer API (a transaction is disputed once: the spec raises on its reserved transactions in support.ts).
 
 const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const unknownId = '01a189e2-0000-7000-8000-000000000000';
@@ -31,11 +31,10 @@ async function signIn(browser: Browser, loginKey: string): Promise<BrowserContex
   return context;
 }
 
-async function raiseOnFirstDisputable(api: APIRequestContext, accountRef: string): Promise<string> {
+async function raiseOnReserved(api: APIRequestContext, accountRef: string, customer: 'a' | 'b'): Promise<string> {
   const list = await api.get('/api/v1/transactions?limit=50');
-  const row = ((await list.json()).items as { transactionId: string; accountRef: string; disputable: boolean }[])
-    .find((item) => item.disputable && item.accountRef === accountRef);
-  expect(row, `a disputable ${accountRef} transaction is left (recreate the volumes if not)`).toBeTruthy();
+  const row = ownDisputable((await list.json()).items as { transactionId: string; disputable: boolean }[], 'operations-read', customer)[0];
+  expect(row, `a reserved ${accountRef} transaction is disputable (reservedTransactions in support.ts)`).toBeTruthy();
   const csrf = (await (await api.get('/api/v1/bff/antiforgery')).json()).requestToken as string;
   const response = await api.post('/api/v1/disputes', {
     headers: { 'X-XSRF-TOKEN': csrf, 'Idempotency-Key': `"qa5x-${Date.now()}-${Math.random().toString(36).slice(2, 8)}"` },
@@ -60,8 +59,8 @@ test.beforeAll(async ({ browser }) => {
   contexts.a = await signIn(browser, 'customer-a');
   contexts.b = await signIn(browser, 'customer-b');
   customerAId = 'CUS-000001';
-  disputeA = await raiseOnFirstDisputable(contexts.a.request, 'ACC-A-1');
-  disputeB = await raiseOnFirstDisputable(contexts.b.request, 'ACC-B-1');
+  disputeA = await raiseOnReserved(contexts.a.request, 'ACC-A-1', 'a');
+  disputeB = await raiseOnReserved(contexts.b.request, 'ACC-B-1', 'b');
 });
 
 test.afterAll(async () => {

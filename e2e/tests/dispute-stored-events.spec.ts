@@ -1,13 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, queryDatabase } from './support';
+import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase } from './support';
 
 // Story 3.8: a raise is one stored event, one Disputes row and one outbox row, written together, with no audit row.
 // The SPA has no raise screen until story 3.6, so the raise is sent at network level from browser contexts that
 // signed in through Zitadel (the session cookie and the antiforgery token travel as a browser would send them).
 // Every database fact is read through the read-only qa_readonly role. There is no outbox relay before story 4.1, so
 // the events hop is the outbox row; since story 4.1 the relay publishes it (outbox-relay.spec.ts reads the topic).
-// The data is not reset between runs, so each run raises on the newest transactions that are still disputable.
+// A transaction is disputed once: the spec raises on its reserved transactions (support.ts).
 
 type Row = { transactionId: string; accountRef: string; description: string; disputable: boolean };
 
@@ -28,10 +28,10 @@ async function signIn(browser: Browser, loginKey: string): Promise<BrowserContex
   return context;
 }
 
-async function disputableRows(api: APIRequestContext): Promise<Row[]> {
+async function disputableRows(api: APIRequestContext, customer: 'a' | 'b'): Promise<Row[]> {
   const response = await api.get('/api/v1/transactions?limit=50');
   expect(response.status()).toBe(200);
-  return ((await response.json()).items as Row[]).filter((row) => row.disputable);
+  return ownDisputable((await response.json()).items as Row[], 'dispute-stored-events', customer);
 }
 
 /** One raise under the given key, with a fresh antiforgery token, as the SPA will send it. */
@@ -62,6 +62,7 @@ const unique = () => `qa38-${Date.now()}-${Math.random().toString(36).slice(2, 8
 
 let aRows: Row[];
 let bRows: Row[];
+let raisedByB: { disputeId: string; transaction: Row } | undefined; // read by the browser test, which needs a row on the SPA's first page
 let raisedByA: { disputeId: string; body: any; key: string; request: object; transaction: Row };
 let totalsBeforeRaise: ReturnType<typeof totals>;
 
@@ -69,10 +70,10 @@ test.beforeAll(async ({ browser }) => {
   contexts.a = await signIn(browser, 'customer-a');
   contexts.b = await signIn(browser, 'customer-b');
   contexts.c = await signIn(browser, 'customer-c');
-  aRows = await disputableRows(contexts.a.request);
-  bRows = await disputableRows(contexts.b.request);
-  expect(aRows.length, 'customer A has two disputable transactions left (recreate the volumes if not)').toBeGreaterThanOrEqual(2);
-  expect(bRows.length, 'customer B has a disputable transaction left').toBeGreaterThanOrEqual(1);
+  aRows = await disputableRows(contexts.a.request, 'a');
+  bRows = await disputableRows(contexts.b.request, 'b');
+  expect(aRows.length, 'two of the spec\'s reserved customer A transactions are disputable (reservedTransactions in support.ts)').toBeGreaterThanOrEqual(2);
+  expect(bRows.length, 'the spec\'s reserved customer B transaction is disputable (reservedTransactions in support.ts)').toBeGreaterThanOrEqual(1);
 });
 
 test.afterAll(async () => {
@@ -266,6 +267,7 @@ test.describe('customer B and the refused requests', () => {
     const response = await raise(contexts.b.request, unique(), { accountRef: transaction.accountRef, transactionId: transaction.transactionId, reason: 'duplicateCharge' });
     expect(response.status()).toBe(201);
     const body = await response.json();
+    raisedByB = { disputeId: body.disputeId, transaction };
     const owners = rows<{ customer: string; events: number }>(
       `select d."CustomerId" as customer, count(s.*)::int as events from "Disputes" d join "StoredEvents" s on s."DisputeId" = d."Id" where d."Id" in ('${body.disputeId}', '${raisedByA?.disputeId ?? body.disputeId}') group by 1 order by 1`);
     expect(owners.every((owner) => owner.events === 1)).toBe(true);
@@ -343,17 +345,17 @@ test.describe('the data model and the logs', () => {
 
 test.describe('browser', () => {
   test('the raised transaction shows as already disputed on the transactions screen, with the dispute’s ID in the page’s own request', async ({ browser }) => {
-    test.skip(!raisedByA, 'needs the raise from the serial block');
-    const context = await signIn(browser, 'customer-a');
+    test.skip(!raisedByB, 'needs the raise from the serial block');
+    const context = await signIn(browser, 'customer-b');
     const page: Page = await context.newPage();
     const consoleErrors: string[] = [];
     page.on('console', (message) => message.type() === 'error' && consoleErrors.push(message.text()));
     const listing = page.waitForResponse((response) => response.url().includes('/api/v1/transactions') && response.status() === 200);
     await page.goto('/transactions');
     const body = await (await listing).json();
-    const row = body.items.find((item: any) => item.transactionId === raisedByA.transaction.transactionId);
-    expect(row).toMatchObject({ disputable: false, notDisputableReason: 'alreadyDisputed', disputeId: raisedByA.disputeId, customerStatus: 'submitted' });
-    await expect(page.locator('li').filter({ hasText: raisedByA.transaction.description }).first()).toBeVisible();
+    const row = body.items.find((item: any) => item.transactionId === raisedByB!.transaction.transactionId);
+    expect(row).toMatchObject({ disputable: false, notDisputableReason: 'alreadyDisputed', disputeId: raisedByB!.disputeId, customerStatus: 'submitted' });
+    await expect(page.locator('li').filter({ hasText: raisedByB!.transaction.description }).first()).toBeVisible();
     // The page offers no way to raise yet (story 3.6): no dispute control is on it.
     await expect(page.getByRole('button', { name: /dispute/i })).toHaveCount(0);
     // Console noise other than the known Radix style notice is a failure.

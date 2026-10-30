@@ -1,15 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, queryDatabase, topicRecords } from './support';
+import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './support';
 
 // Story 5.2: operations start review, escalate and resolve under the FR-24 table, with a bearer token from
 // scripts/operations-token.sh. Network level with the real Zitadel token, the database through qa_readonly, the events
 // from the disputedesk.disputes topic, and the customer's view through the BFF session and the SPA history screen.
 // The 403 cases need tokens with other roles: the spec creates throwaway machine users in Zitadel with the stack's
 // admin PAT (read from the bootstrap volume; it never reaches a command line or the evidence). Those users are not
-// mapped to an operations actor, which is itself one of the 403 cases. Raises are spread over the seeded customers
-// because the data is not reset between runs and a transaction can be disputed once. Customer A's 20 disputable
-// transactions are all needed by the other specs, so this spec raises on customer B only (7 of B's 20).
+// mapped to an operations actor, which is itself one of the 403 cases. A transaction can be disputed once, so the spec raises on
+// its reserved transactions (support.ts): seven of customer B's.
 
 const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const authOrigin = process.env.AUTH_ORIGIN ?? 'http://auth.localhost:8080';
@@ -60,12 +59,12 @@ async function signIn(browser: Browser, loginKey: string): Promise<BrowserContex
   return context;
 }
 
-/** Raises a dispute on the first of the given customers that still has a disputable transaction. */
+/** Raises a dispute on the first of the given customers that still has a disputable reserved transaction. */
 async function raise(...logins: string[]): Promise<{ id: string; login: string }> {
   for (const login of logins) {
     const api = contexts[login].request;
     const list = (await (await api.get('/api/v1/transactions?limit=50')).json()).items as { transactionId: string; accountRef: string; disputable: boolean }[];
-    const row = list.find((item) => item.disputable);
+    const row = ownDisputable(list, 'operations-actions', login)[0];
     if (!row) continue;
     const csrf = (await (await api.get('/api/v1/bff/antiforgery')).json()).requestToken as string;
     const response = await api.post('/api/v1/disputes', {
@@ -76,7 +75,7 @@ async function raise(...logins: string[]): Promise<{ id: string; login: string }
     expect(response.status()).toBe(201);
     return { id: response.headers().location.split('/').pop()!, login };
   }
-  throw new Error(`no disputable transaction left for ${logins.join(', ')} (recreate the volumes)`);
+  throw new Error(`no reserved disputable transaction left for ${logins.join(', ')} (reservedTransactions in support.ts)`);
 }
 
 // The gateway's coarse limiter (infra/nginx: 10 requests a second per client, burst 20) answers 429 to a faster loop, so

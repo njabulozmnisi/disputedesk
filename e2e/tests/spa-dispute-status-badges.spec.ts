@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
-import { fixtureLogin, queryDatabase, topicRecords } from './support';
+import { fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './support';
 
 // Story 3.10: dispute status badges on transaction rows, through the real gateway, BFF, API, database and topic,
 // signed in as seeded customer A. The API can only produce `submitted` today (withdraw and the operations actions are
@@ -16,6 +16,7 @@ const screenshotDir = process.env.QA_SCREENSHOT_DIR;
 
 type ApiRow = {
   transactionId: string;
+  description: string;
   accountRef: string;
   disputable: boolean;
   notDisputableReason: string | null;
@@ -68,7 +69,7 @@ function trackDataRequests(page: Page): string[] {
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-  customerA = await signIn(browser, 'customer-a');
+  customerA = await signIn(browser, 'customer-b');
 });
 test.afterAll(async () => customerA.close().catch(() => undefined));
 
@@ -77,8 +78,8 @@ test('a raised dispute shows a Submitted badge link on its row; stored event, ou
   const consoleErrors = trackConsoleErrors(page);
   const listResponse = await customerA.request.get('/api/v1/transactions?limit=50');
   const before = ((await listResponse.json()) as ApiPage).items;
-  const target = before.find((row) => row.disputable);
-  test.skip(!target, 'no disputable transaction is left for customer A: run `docker compose down -v` and start the stack again');
+  const target = ownDisputable(before, 'spa-dispute-status-badges', 'b')[0];
+  expect(target, 'the spec\'s reserved customer B transaction is disputable (reservedTransactions in support.ts)').toBeTruthy();
 
   // Raise through the API with the BFF's antiforgery token, as the SPA does (RFC 9651 quoted idempotency key).
   const token = (await (await customerA.request.get('/api/v1/bff/antiforgery')).json()).requestToken as string;
@@ -121,6 +122,17 @@ test('a raised dispute shows a Submitted badge link on its row; stored event, ou
   expect(dataRequests.filter((request) => !/ \/api\/v1\/(transactions|bff\/session)$/.test(request))).toEqual([]);
   expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
   expect(await axeViolations(page), 'real list axe').toEqual([]);
+
+  // Story 3.12: the real badge opens the real detail (the transaction's description as the one h1, Submitted, Withdraw offered).
+  const detailResponse = page.waitForResponse((response) => new URL(response.url()).pathname === `/api/v1/disputes/${disputeId}`);
+  await badge.click();
+  expect((await detailResponse).status()).toBe(200);
+  await expect(page).toHaveURL(`${origin}/disputes/${disputeId}`);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(target!.description);
+  await expect(page.getByRole('button', { name: 'Withdraw dispute' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: "We can't find that dispute" })).toHaveCount(0);
+  await page.goBack();
+  await expect(page.locator('li')).toHaveCount(body.items.length);
 
   // Database (read-only role): the dispute, its stored event and its outbox row, one ID.
   const stored = queryDatabase(`select d."Status", e."EventType", o."EventType", o."Id" = e."Id" from "Disputes" d join "StoredEvents" e on e."DisputeId" = d."Id" join "OutboxMessages" o on o."DisputeId" = d."Id" where d."Id" = '${disputeId}'`);
@@ -249,12 +261,12 @@ test.describe('every status, an unknown one and a half-set pair (response edited
     await page.close();
   });
 
-  test('following the badge loads the SPA not-found screen until story 3.12 adds the detail, and shows no other dispute data', async () => {
+  test('following an edited badge opens /disputes/<id>; the API has no dispute under that ID, so it shows the one not-found screen and no other dispute data', async () => {
     const page = await customerA.newPage();
     await openEdited(page);
     await page.locator('li').first().getByRole('link').click();
     await expect(page).toHaveURL(`${origin}/disputes/${disputeIds.submitted}`);
-    await expect(page.getByRole('heading', { name: "We can't find that dispute" })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: "We can't find that dispute" })).toBeVisible();
     expect(await bodyText(page)).not.toMatch(/escalated/i);
     await page.close();
   });

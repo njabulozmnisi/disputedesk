@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, queryDatabase } from './support';
+import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase } from './support';
 
 // Story 3.9: a customer lists their disputes newest first, a page at a time (GET /api/v1/disputes).
 // Network level (the list screen is story 3.7), signed in through the hosted Zitadel login as the seeded customers.
 // A and B are linked, C is not. Database facts come through qa_readonly. Two disputes cannot be given the same
 // CreatedAtUtc through the API (the read-only role cannot write), so the tied-instant case rests on the integration tests.
-// The data is not reset between runs: the spec tops A up to three disputes and B to one, raising only what is missing.
+// The data is not reset between runs: the spec tops A up to three disputes and B to one, raising only what is missing, from its reserved transactions (support.ts).
 
 const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const dashboard = process.env.ASPIRE_ORIGIN ?? 'http://localhost:18888';
@@ -30,11 +30,10 @@ async function signIn(browser: Browser, loginKey: string): Promise<BrowserContex
   return context;
 }
 
-async function raiseOnFirstDisputable(api: APIRequestContext, accountRef: string) {
+async function raiseOnReserved(api: APIRequestContext, accountRef: string, customer: 'a' | 'b') {
   const list = await api.get('/api/v1/transactions?limit=50');
-  const row = ((await list.json()).items as { transactionId: string; accountRef: string; disputable: boolean }[])
-    .find((item) => item.disputable && item.accountRef === accountRef);
-  expect(row, `a disputable ${accountRef} transaction is left (recreate the volumes if not)`).toBeTruthy();
+  const row = ownDisputable((await list.json()).items as { transactionId: string; disputable: boolean }[], 'dispute-list', customer)[0];
+  expect(row, `a reserved ${accountRef} transaction is disputable (reservedTransactions in support.ts)`).toBeTruthy();
   const token = (await (await api.get('/api/v1/bff/antiforgery')).json()).requestToken as string;
   const response = await api.post('/api/v1/disputes', {
     headers: { 'X-XSRF-TOKEN': token, 'Idempotency-Key': `"qa39-${Date.now()}-${Math.random().toString(36).slice(2, 8)}"` },
@@ -77,10 +76,10 @@ test.beforeAll(async ({ browser }) => {
   contexts.b = await signIn(browser, 'customer-b');
   contexts.c = await signIn(browser, 'customer-c');
   for (let have = (await listAll(contexts.a.request, 50)).flatMap((p) => p.items).length; have < 3; have++) {
-    await raiseOnFirstDisputable(contexts.a.request, 'ACC-A-1');
+    await raiseOnReserved(contexts.a.request, 'ACC-A-1', 'a');
   }
   if ((await listAll(contexts.b.request, 50)).flatMap((p) => p.items).length < 1) {
-    await raiseOnFirstDisputable(contexts.b.request, 'ACC-B-1');
+    await raiseOnReserved(contexts.b.request, 'ACC-B-1', 'b');
   }
   aItems = (await listAll(contexts.a.request, 50)).flatMap((p) => p.items);
   bItems = (await listAll(contexts.b.request, 50)).flatMap((p) => p.items);

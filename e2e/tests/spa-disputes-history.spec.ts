@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { fixtureLogin, queryDatabase } from './support';
+import { fixtureLogin, ownDisputable, queryDatabase } from './support';
 
 // Story 3.7: the Disputes history screen (/disputes) and the shell's skip link, through the real gateway, BFF, API and
 // database, signed in as seeded customer A (B for the cross-customer check). The API can only produce `submitted` and
@@ -9,8 +9,8 @@ import { fixtureLogin, queryDatabase } from './support';
 // empty, loading and failing states are shown by editing or stubbing the list response in the browser; the screen is real.
 // Customer A has only 20 disputable transactions, so a second page cannot exist at the default page size of 20: the Load
 // more test adds `limit=2` to the real request in the browser (the real API, cursor and rows), and a separate test
-// proves the SPA itself sends no `limit`. The data is not reset between runs: the spec tops A up to three disputes
-// (one withdrawn) and raises nothing else.
+// proves the SPA itself sends no `limit`. A transaction is disputed once: the spec tops A up to three disputes
+// (one withdrawn) from its reserved transactions (support.ts) and raises nothing else; a full run raises none.
 
 const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const axeTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
@@ -101,10 +101,10 @@ async function listDisputes(api: APIRequestContext): Promise<Item[]> {
   throw new Error('the dispute list did not end');
 }
 
-/** Raises on the first disputable transaction left; returns the new dispute's ID, or undefined when none is left. */
+/** Raises on the first of the spec's reserved transactions that is still disputable; returns the new dispute's ID, or undefined when none is left. */
 async function raiseOne(api: APIRequestContext): Promise<string | undefined> {
   const list = await api.get('/api/v1/transactions?limit=50');
-  const row = ((await list.json()).items as { transactionId: string; accountRef: string; disputable: boolean }[]).find((item) => item.disputable);
+  const row = ownDisputable((await list.json()).items as { transactionId: string; accountRef: string; disputable: boolean }[], 'spa-disputes-history', 'a')[0];
   if (!row) return undefined;
   const created = await api.post('/api/v1/disputes', {
     headers: { 'x-xsrf-token': await csrfToken(api), 'idempotency-key': `"${crypto.randomUUID()}"` },
@@ -235,7 +235,11 @@ test('criterion 1: Open and Closed in API order; rows match the API and the data
   expect(customerIds).toHaveLength(1);
   const stored = queryDatabase(`select "Id", "Status", "Description", "DisputedAmount"::text, to_char("CreatedAtUtc" at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI') from "Disputes" where "CustomerId" = '${customerIds[0]}'`)
     .split('\n').map((line) => line.split('|'));
-  expect(stored.map((row) => row[0]).sort()).toEqual(body.items.map((item) => item.disputeId).sort());
+  const storedIds = stored.map((row) => row[0]).sort();
+  const listedIds = body.items.map((item) => item.disputeId).sort();
+  // The first page holds 20 disputes; with more stored, the page is a subset and the cursor says so.
+  if (body.nextCursor === null) expect(storedIds).toEqual(listedIds);
+  else expect(storedIds).toEqual(expect.arrayContaining(listedIds));
   for (const item of body.items) {
     const row = stored.find((candidate) => candidate[0] === item.disputeId)!;
     expect(row[1]).toBe(item.customerStatus === 'submitted' ? 'Submitted' : item.customerStatus === 'withdrawn' ? 'Withdrawn' : row[1]);

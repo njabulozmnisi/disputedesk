@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
-import { fixtureLogin } from './support';
+import { fixtureLogin, ownDisputable } from './support';
 
 // Story 5.5: Scalar at /scalar/ drives the operations API with a pasted bearer token, behind Scalar:Enabled. In a real
 // browser through the gateway. The page is anonymous; the token comes from scripts/operations-token.sh and is pasted by hand.
@@ -84,8 +84,8 @@ test('Scalar loads, a pasted operations token reads a dispute, the only CSP viol
   await customerPage.getByTestId('password-text-input').press('Enter');
   await customerPage.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   const list = await (await context.request.get('/api/v1/transactions?limit=50')).json();
-  const row = (list.items as { transactionId: string; accountRef: string; disputable: boolean }[]).find((item) => item.disputable && item.accountRef === 'ACC-A-1');
-  expect(row, 'a disputable ACC-A-1 transaction is left').toBeTruthy();
+  const row = ownDisputable(list.items as { transactionId: string; disputable: boolean }[], 'scalar-reference', 'a')[0];
+  expect(row, 'the spec\'s reserved ACC-A-1 transaction is disputable (reservedTransactions in support.ts)').toBeTruthy();
   const csrf = (await (await context.request.get('/api/v1/bff/antiforgery')).json()).requestToken as string;
   const raised = await context.request.post('/api/v1/disputes', {
     headers: { 'X-XSRF-TOKEN': csrf, 'Idempotency-Key': `"qa5x-scalar-${Date.now()}"` },

@@ -1,12 +1,12 @@
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, queryDatabase } from './support';
+import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase } from './support';
 
 // Story 3.4: a customer withdraws an open dispute. The SPA has no withdraw screen yet, so the withdraw is sent at network
 // level from browser contexts that signed in through Zitadel (session cookie and antiforgery token as a browser sends them).
 // Every database fact is read through the read-only qa_readonly role. There is no outbox relay before story 4.1, so the
 // events hop is the outbox row. A Resolved dispute cannot be made on the stack (no resolve action exists yet), so the
-// resolved-409 cell is covered by the integration tests only. The data is not reset between runs: each run raises on the
-// newest transactions that are still disputable (customer A needs 7, customer B 1).
+// resolved-409 cell is covered by the integration tests only. A transaction is disputed once: the spec raises on its
+// reserved transactions (support.ts): eight of customer A's, one of customer B's.
 
 type Row = { transactionId: string; accountRef: string; state: string; disputable: boolean };
 
@@ -95,11 +95,11 @@ test.beforeAll(async ({ browser }) => {
   contexts.b = await signIn(browser, 'customer-b');
   contexts.c = await signIn(browser, 'customer-c');
   const a = await transactions(contexts.a.request);
-  aFree = a.filter((row) => row.disputable);
+  aFree = ownDisputable(a, 'dispute-withdraw', 'a');
   aPending = a.find((row) => row.state === 'pending')!;
-  bFree = (await transactions(contexts.b.request)).filter((row) => row.disputable);
-  expect(aFree.length, 'customer A has 7 disputable transactions left (docker compose down -v to recreate the data)').toBeGreaterThanOrEqual(7);
-  expect(bFree.length, 'customer B has a disputable transaction left').toBeGreaterThanOrEqual(1);
+  bFree = ownDisputable(await transactions(contexts.b.request), 'dispute-withdraw', 'b');
+  expect(aFree.length, 'the spec\'s eight reserved customer A transactions are disputable (reservedTransactions in support.ts)').toBeGreaterThanOrEqual(8);
+  expect(bFree.length, 'the spec\'s reserved customer B transaction is disputable (reservedTransactions in support.ts)').toBeGreaterThanOrEqual(1);
   expect(aPending, 'customer A has a pending transaction').toBeTruthy();
 });
 
