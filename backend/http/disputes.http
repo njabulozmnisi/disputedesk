@@ -94,3 +94,16 @@ Content-Type: application/json
 ### The transactions list now shows the dispute on TXN-A-0029: disputeId, customerStatus submitted, notDisputableReason alreadyDisputed
 GET {{app}}/api/v1/transactions?limit=50
 Cookie: disputedesk-session={{session}}
+
+### History list: the customer's disputes newest first, a page of 1 so nextCursor is set while more follow
+# @name history
+GET {{app}}/api/v1/disputes?limit=1
+Cookie: disputedesk-session={{session}}
+
+### The next page: the previous page's nextCursor back as cursor; nextCursor is null on the last page
+GET {{app}}/api/v1/disputes?limit=1&cursor={{history.response.body.nextCursor}}
+Cookie: disputedesk-session={{session}}
+
+### A cursor no page returned: 400 validation naming cursor, without echoing it
+GET {{app}}/api/v1/disputes?cursor=not-a-cursor
+Cookie: disputedesk-session={{session}}

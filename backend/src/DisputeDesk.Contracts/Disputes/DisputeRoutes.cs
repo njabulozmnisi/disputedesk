@@ -1,11 +1,14 @@
 namespace DisputeDesk.Contracts.Disputes;
 
 /// <summary>
-/// The dispute detail route, in one place for the endpoint that serves it and the raise that names it in its
+/// The dispute routes. The detail is in one place for the endpoint that serves it and the raise that names it in its
 /// <c>Location</c>, so that <c>Location</c> always points to a real GET (AD-5).
 /// </summary>
 public static class DisputeRoutes
 {
+    /// <summary>The history list's route pattern, relative to the <c>/api/v1</c> group it is mapped on.</summary>
+    public const string List = "/disputes";
+
     /// <summary>The detail's route pattern, relative to the <c>/api/v1</c> group it is mapped on.</summary>
     public const string Detail = "/disputes/{disputeId}";
 

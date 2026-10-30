@@ -1,6 +1,8 @@
+using System.ComponentModel.DataAnnotations;
 using DisputeDesk.Api.Disputes.Idempotency;
 using DisputeDesk.Api.Errors;
 using DisputeDesk.Application.Disputes.GetDispute;
+using DisputeDesk.Application.Disputes.ListDisputes;
 using DisputeDesk.Application.Disputes.RaiseDispute;
 using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Domain;
@@ -11,7 +13,10 @@ using Microsoft.OpenApi;
 
 namespace DisputeDesk.Api.Disputes;
 
-/// <summary><c>POST /api/v1/disputes</c> and <c>GET /api/v1/disputes/{disputeId}</c>, on the customer routes.</summary>
+/// <summary>
+/// <c>POST /api/v1/disputes</c>, <c>GET /api/v1/disputes</c> and <c>GET /api/v1/disputes/{disputeId}</c>, on the
+/// customer routes.
+/// </summary>
 public static class DisputeEndpoints
 {
     /// <summary>
@@ -23,6 +28,7 @@ public static class DisputeEndpoints
     public static IServiceCollection AddDisputes(this IServiceCollection services) =>
         services.AddScoped<RaiseDisputeHandler>()
             .AddScoped<GetDisputeHandler>()
+            .AddScoped<ListDisputesHandler>()
             .AddScoped<ClaimedIdempotencyKey>()
             .AddSingleton<RaiseMetrics>()
             .Configure<RequestTimeoutOptions>(options => options.AddPolicy(RaiseTimeoutPolicy, TimeSpan.FromSeconds(30)));
@@ -41,11 +47,36 @@ public static class DisputeEndpoints
             .AddEndpointFilter<IdempotencyFilter>()
             .WithRequestTimeout(RaiseTimeoutPolicy)
             .AddOpenApiOperationTransformer(DocumentIdempotencyKeyAsync);
+        customerRoutes.MapGet(DisputeRoutes.List, ListAsync)
+            .WithTags("Disputes")
+            .ProducesValidationProblem();
         customerRoutes.MapGet(DisputeRoutes.Detail, GetAsync)
             .WithTags("Disputes")
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound);
         return customerRoutes;
+    }
+
+    /// <summary>
+    /// The linked customer's disputes, newest first by when they were raised. <paramref name="limit"/> is 1 to 50 and
+    /// defaults to 20; pass a page's <c>nextCursor</c> back as <paramref name="cursor"/> for the next page. 400
+    /// <c>validation</c> naming the field for a limit out of range or not a whole number, and for a cursor longer than
+    /// 128 characters or not one a page returned. It reads only what the raises stored, so it answers while core
+    /// banking is down.
+    /// </summary>
+    /// <remarks>
+    /// <c>[Range]</c> and <c>[MaxLength]</c> are checked by built-in validation; a limit that is not a whole number
+    /// fails to bind and gets the same 400. The <c>Linked</c> policy runs in the authorization middleware, before
+    /// binding and validation, so the checks run 401, 403, then 400 (AD-8).
+    /// </remarks>
+    private static async Task<Results<Ok<DisputePageResponse>, ProblemHttpResult>> ListAsync(
+        ListDisputesHandler handler,
+        [MaxLength(DisputeCursor.MaxLength)] string? cursor,
+        [Range(1, ListDisputesHandler.MaxPageSize)] int limit = ListDisputesHandler.DefaultPageSize,
+        CancellationToken cancellationToken = default)
+    {
+        Result<DisputePageResponse> result = await handler.HandleAsync(cursor, limit, cancellationToken);
+        return result.IsSuccess ? TypedResults.Ok(result.Value) : result.Error.ToProblem();
     }
 
     /// <summary>

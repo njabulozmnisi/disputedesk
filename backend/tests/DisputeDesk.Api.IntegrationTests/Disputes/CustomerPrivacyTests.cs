@@ -73,6 +73,49 @@ public class CustomerPrivacyTests(PostgresFixture postgres, TransactionsStub stu
             body.RootElement.GetProperty("timeline").EnumerateArray().Select(entry => entry.GetProperty("actor").GetString()));
     }
 
+    [Fact]
+    public async Task ListDisputes_EveryObject_HasExactlyTheAllowedPropertyNames()
+    {
+        // Story 3.9 AC5: the page, each summary, and the snapshot and money objects named as in the detail.
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        using HttpClient browser = await factory.SignInLinkedAsync(LoginSub, TransactionsApi.CustomerA);
+        await RaiseActedOnDisputeAsync(factory, browser);
+
+        using JsonDocument page = await browser.ListDisputesPageAsync();
+
+        Assert.Equal(["items", "nextCursor"], Names(page.RootElement));
+        JsonElement item = Assert.Single(page.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal(["disputeId", "customerStatus", "outcome", "reason", "transaction", "disputedAmount", "createdAt"], Names(item));
+        Assert.Equal(
+            ["transactionId", "accountRef", "accountLast4", "transactionDate", "description", "amount", "maskedCard"],
+            Names(item.GetProperty("transaction")));
+        string[] money = ["amount", "currency"];
+        Assert.Equal(money, Names(item.GetProperty("transaction").GetProperty("amount")));
+        Assert.Equal(money, Names(item.GetProperty("disputedAmount")));
+    }
+
+    [Fact]
+    public async Task ListDisputes_EveryStringValue_HoldsNoActorTypeInternalStatusIdentitySlaOrTraceValue()
+    {
+        // Story 3.9 AC5: the value scan of the detail, over list pages.
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        using HttpClient browser = await factory.SignInLinkedAsync(LoginSub, TransactionsApi.CustomerA);
+        Guid disputeId = await RaiseActedOnDisputeAsync(factory, browser);
+        (string customerId, string slaDueAt, string[] actorIds, string[] traceIds) = await PrivateValuesAsync(factory, disputeId);
+
+        HttpResponseMessage response = await browser.ListDisputesAsync("limit=1");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        string raw = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        using JsonDocument page = await response.ReadJsonAsync();
+        string[] forbiddenValues = ["customer", "operations", "automation", "escalated"];
+        Assert.All([.. StringValues(page.RootElement)], value => Assert.DoesNotContain(value, forbiddenValues));
+        string[] forbiddenParts = [customerId, slaDueAt, .. actorIds, .. traceIds, nameof(SlaWarningRaised), "slaWarning", "CustomerId", "SlaDueAtUtc", "ActorId", "TraceId"];
+        Assert.All(forbiddenParts, part => Assert.DoesNotContain(part, raw, StringComparison.OrdinalIgnoreCase));
+        JsonElement item = Assert.Single(page.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal("underReviewPrioritised", item.GetProperty("customerStatus").GetString());
+    }
+
     /// <summary>
     /// A wrong-amount dispute (so every money object is present) raised by the customer, then started by the seeder,
     /// warned by the SLA sweep and escalated by operations, each with a trace ID of its own.

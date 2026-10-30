@@ -10,7 +10,7 @@ namespace DisputeDesk.Api.IntegrationTests.Ownership;
 /// AC5: every customer route requires the <c>Linked</c> policy, checked against a list this test owns rather than
 /// against the endpoints that already require it, so a new customer route missing from the list, or a listed route
 /// without <c>Linked</c>, fails (Microsoft Learn, Routing in ASP.NET Core: <see cref="EndpointDataSource"/>). Story 3.9
-/// adds <c>GET /api/v1/disputes</c> and story 3.4 the withdraw.
+/// added <c>GET /api/v1/disputes</c>; story 3.4 adds the withdraw.
 /// </summary>
 public class CustomerRoutesTests(PostgresFixture postgres)
 {
@@ -18,6 +18,7 @@ public class CustomerRoutesTests(PostgresFixture postgres)
     [
         "GET /api/v1/transactions",
         "POST /api/v1/disputes",
+        "GET /api/v1/disputes",
         "GET /api/v1/disputes/{disputeId}",
     ];
 

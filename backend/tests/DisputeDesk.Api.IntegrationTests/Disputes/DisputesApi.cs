@@ -1,3 +1,5 @@
+using System.Buffers.Text;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -9,6 +11,7 @@ using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Json;
 using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Domain.Disputes;
+using DisputeDesk.Domain.Transactions;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -121,6 +124,109 @@ public static class DisputesApi
     public static Task<HttpResponseMessage> GetDisputeAsync(this HttpClient browser, string disputeId) =>
         browser.GetPathAsync($"{RaisePath}/{disputeId}");
 
+    /// <summary>GETs the history list with <paramref name="query"/> as given, such as <c>limit=1&amp;cursor=...</c>.</summary>
+    public static Task<HttpResponseMessage> ListDisputesAsync(this HttpClient browser, string query = "") =>
+        browser.GetPathAsync(query.Length == 0 ? RaisePath : $"{RaisePath}?{query}");
+
+    /// <summary>The body of a history list page, which must answer 200.</summary>
+    public static async Task<JsonDocument> ListDisputesPageAsync(this HttpClient browser, string query = "")
+    {
+        HttpResponseMessage response = await browser.ListDisputesAsync(query);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await response.ReadJsonAsync();
+    }
+
+    /// <summary>The <c>disputeId</c> of each item on a history list page, in page order.</summary>
+    public static List<Guid> DisputeIds(JsonDocument page) =>
+        [.. page.RootElement.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("disputeId").GetGuid())];
+
+    /// <summary>
+    /// Every item from the first page on, following each <c>nextCursor</c>; each cursor must decode to exactly the last
+    /// item of its page (ASVS 5.0 V8.2.2), and the last page's must be null.
+    /// </summary>
+    public static async Task<List<JsonElement>> ListEveryDisputeAsync(this HttpClient browser, string limitQuery)
+    {
+        var items = new List<JsonElement>();
+        string? cursor = null;
+        do
+        {
+            string query = cursor is null ? limitQuery : $"{limitQuery}&cursor={Uri.EscapeDataString(cursor)}";
+            using JsonDocument page = await browser.ListDisputesPageAsync(query);
+            List<JsonElement> pageItems = [.. page.RootElement.GetProperty("items").EnumerateArray().Select(item => item.Clone())];
+            items.AddRange(pageItems);
+            cursor = page.RootElement.GetProperty("nextCursor").GetString();
+            if (cursor is not null)
+            {
+                JsonElement last = pageItems[^1];
+                Assert.Equal(
+                    (last.GetProperty("createdAt").GetDateTimeOffset(), last.GetProperty("disputeId").GetGuid()),
+                    ReadListCursor(cursor));
+            }
+        }
+        while (cursor is not null);
+
+        return items;
+    }
+
+    /// <summary>
+    /// A list cursor written by hand in the layout the story fixes, not by the Api's own code: base64url (RFC 4648 §5)
+    /// of the UTF-8 text <c>&lt;instant in "O"&gt;|&lt;ID in "D"&gt;</c>.
+    /// </summary>
+    public static string ListCursor(DateTimeOffset createdAt, Guid disputeId) =>
+        ListCursorOf($"{createdAt.ToString("O", CultureInfo.InvariantCulture)}|{disputeId:D}");
+
+    /// <summary>The base64url of <paramref name="text"/>, for cursors that break the layout.</summary>
+    public static string ListCursorOf(string text) => Base64Url.EncodeToString(Encoding.UTF8.GetBytes(text));
+
+    /// <summary>
+    /// The position a list cursor names, decoded by hand: the instant and the dispute ID between the <c>|</c>.
+    /// </summary>
+    public static (DateTimeOffset CreatedAt, Guid DisputeId) ReadListCursor(string cursor)
+    {
+        string[] parts = Encoding.UTF8.GetString(Base64Url.DecodeFromChars(cursor)).Split('|');
+        Assert.Equal(2, parts.Length);
+        return (DateTimeOffset.ParseExact(parts[0], "O", CultureInfo.InvariantCulture), Guid.ParseExact(parts[1], "D"));
+    }
+
+    /// <summary>
+    /// The newest-first order of the list (AD-5): <c>CreatedAtUtc</c>, then the ID as PostgreSQL orders a <c>uuid</c>,
+    /// which is the ordinal order of its lowercase canonical text, both descending.
+    /// </summary>
+    public static List<SeededDispute> NewestFirst(IEnumerable<SeededDispute> disputes) =>
+        [.. disputes.OrderByDescending(dispute => dispute.CreatedAt).ThenByDescending(dispute => dispute.Id.ToString("D"), StringComparer.Ordinal)];
+
+    /// <summary>
+    /// The Api with core banking unreachable and its clock fixed at today's whole second (the sign-in cookies expire 15
+    /// minutes after it). The history list reads only the database, so it needs no core banking.
+    /// </summary>
+    public static Task<ApiFactory> StartWithoutCoreBankingAsync(PostgresFixture postgres, Action<IServiceCollection>? configureServices = null) =>
+        TransactionsApi.StartAsync(
+            postgres,
+            new Uri("http://127.0.0.1:1"),
+            DateTimeOffset.FromUnixTimeSeconds(TimeProvider.System.GetUtcNow().ToUnixTimeSeconds()),
+            configureServices);
+
+    /// <summary>A whole-second instant that seeded disputes are raised around, so each is stored exactly as given.</summary>
+    public static DateTimeOffset SeedInstant { get; } = new(2026, 10, 1, 10, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// Raises a dispute for <paramref name="customerId"/> at <paramref name="createdAt"/> through the aggregate and the
+    /// one commit path (AD-14), without HTTP, so a test chooses the instant and the customer. The transaction is a
+    /// settled card debit two days before.
+    /// </summary>
+    public static async Task<SeededDispute> SeedDisputeAsync(this ApiFactory factory, string customerId, string transactionId, DateTimeOffset createdAt)
+    {
+        var snapshot = new TransactionSnapshot("ACC-" + customerId, transactionId, "0011", createdAt.AddDays(-2), "Shop", 10m, "ZAR", null,
+            TransactionDirection.Debit, TransactionKind.Card, TransactionState.Settled);
+        Dispute dispute = Dispute.Raise(customerId, snapshot, everDisputed: false, Reason.Unrecognised, note: null, expectedAmount: null,
+            new Actor(ActorType.Customer, "login-" + customerId), createdAt).Value;
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Set<Dispute>().Add(dispute);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return new SeededDispute(dispute.Id, customerId, createdAt);
+    }
+
     /// <summary>
     /// Appends <paramref name="storedEvents"/> to the stream of the dispute <paramref name="disputeId"/>, each with its
     /// own version, instant, actor and trace ID, and moves that dispute's <c>Disputes</c> row to <paramref name="status"/>
@@ -217,6 +323,9 @@ public static class DisputesApi
         return problem.RootElement.GetProperty("type").GetString() ?? "";
     }
 }
+
+/// <summary>A dispute a test seeded: its ID, its customer and the instant it was raised.</summary>
+public sealed record SeededDispute(Guid Id, string CustomerId, DateTimeOffset CreatedAt);
 
 /// <summary>Row counts of <c>Disputes</c>, <c>StoredEvents</c>, dispute <c>AuditLogEntries</c> and <c>OutboxMessages</c>.</summary>
 public sealed record RowCounts(int Disputes, int StoredEvents, int AuditLogEntries, int OutboxMessages)
