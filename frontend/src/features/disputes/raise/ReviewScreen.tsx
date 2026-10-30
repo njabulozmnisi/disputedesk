@@ -1,9 +1,11 @@
+import type { Span } from '@opentelemetry/api';
 import { useQueryClient, type Query } from '@tanstack/react-query';
 import { Link, Navigate, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, type ReactNode } from 'react';
 
 import {
   getGetApiV1TransactionsInfiniteQueryKey,
+  postApiV1Disputes,
   usePostApiV1Disputes,
 } from '@/api/generated/disputedesk';
 import type { TransactionResponse } from '@/api/generated/model';
@@ -13,11 +15,12 @@ import { useAnnounce } from '@/app/LiveRegion';
 import { usePageHeading } from '@/app/usePageHeading';
 import { Page } from '@/components/Page';
 import { Button } from '@/components/ui/button';
+import { endRaiseSubmit, startRaiseSubmit, withRaiseSubmit } from '@/telemetry/raiseSpans';
 import { formatFullDay, formatMoney } from '@/features/transactions/format';
 import { MaskedNumber } from '@/features/transactions/TransactionRow';
 
 import { useRaiseDraft, type Draft, type FieldName, type ServerErrors } from './RaiseDraft';
-import { useRaiseRow } from './RaiseLayout';
+import { useRaiseOpenSpan, useRaiseRow } from './RaiseLayout';
 import { reasonCopy } from './reasons';
 import { disputedAmount, messages, serverAmountMessage } from './raiseSchema';
 import { endsTheDraft, SubmitFailure } from './SubmitFailure';
@@ -77,14 +80,25 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
   const reviewPath = '/transactions/$transactionId/dispute/review';
   // Set synchronously in send(), because isPending only changes on the next render.
   const attemptInFlight = useRef(false);
+  // The `dispute.raise.submit` span of the attempt in flight: started by send(), ended when the mutation settles.
+  const submitSpan = useRef<Span | undefined>(undefined);
+  const openSpan = useRaiseOpenSpan();
 
   const invalidateTransactions = () =>
     queryClient.invalidateQueries({ queryKey: getGetApiV1TransactionsInfiniteQueryKey() });
 
-  // Every attempt for this draft goes through the generated mutation with the draft's request and key, so each one
-  // carries `X-XSRF-TOKEN` from `customFetch`.
+  // Every attempt for this draft goes through the generated `postApiV1Disputes` with the draft's request and key, so
+  // each one carries `X-XSRF-TOKEN` from `customFetch`. `mutationFn` runs again for each resend, so it runs the call
+  // inside the one submit span of the attempt.
   const mutation = usePostApiV1Disputes({
     mutation: {
+      mutationFn: ({ data }) => {
+        const span = submitSpan.current;
+        if (!span) throw new Error('send() starts the submit span');
+        return withRaiseSubmit(span, () =>
+          postApiV1Disputes(data, { headers: { 'Idempotency-Key': draft.key } }),
+        );
+      },
       retry: (failureCount, error) =>
         failureCount < maxResends && isProblem(error, 'idempotency-in-progress'),
       retryDelay: resendDelayMs,
@@ -121,17 +135,18 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
           });
         }
       },
-      onSettled: () => {
+      onSettled: (_dispute, error) => {
+        if (submitSpan.current) endRaiseSubmit(submitSpan.current, error);
         attemptInFlight.current = false;
       },
     },
-    request: { headers: { 'Idempotency-Key': draft.key } },
   });
 
   // `aria-disabled`, not `disabled`, so the button keeps focus while an attempt is pending.
   function send() {
     if (attemptInFlight.current) return;
     attemptInFlight.current = true;
+    submitSpan.current = startRaiseSubmit(openSpan.current);
     mutation.mutate({ data: draft.request });
   }
 

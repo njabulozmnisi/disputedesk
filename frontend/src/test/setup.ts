@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, expect } from 'vitest';
 import * as axeMatchers from 'vitest-axe/matchers';
 
 import { server } from './server';
+import { spanExporter, startTestTracing } from './spans';
 
 // toHaveNoViolations: fails a test on any axe-core rule violation (a role without a name, a bad label, ...).
 expect.extend(axeMatchers);
@@ -28,10 +29,12 @@ window.ResizeObserver = class {
 // Every request a test makes must have a handler: an unexpected call to the API fails the test.
 beforeAll(() => {
   server.listen({ onUnhandledFrame: 'error' });
+  startTestTracing();
 });
 
 afterEach(() => {
   cleanup();
+  spanExporter.reset();
   server.resetHandlers();
   server.events.removeAllListeners();
 });

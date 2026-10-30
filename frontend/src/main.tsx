@@ -5,8 +5,11 @@ import { createRoot } from 'react-dom/client';
 
 import { createQueryClient } from '@/api/queryClient';
 import { createAppRouter } from '@/app/router';
+import { startTracing } from '@/telemetry/startTracing';
 
 import './index.css';
+
+startTracing();
 
 const router = createAppRouter();
 const queryClient = createQueryClient(router);

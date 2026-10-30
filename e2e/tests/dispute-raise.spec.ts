@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, request as playwrightRequest, test, type Browser, type BrowserContext, type Page, type Route } from '@playwright/test';
-import { fixtureLogin, problemTypeBase, queryDatabase } from './support';
+import { fixtureLogin, gatewayContentSecurityPolicy, problemTypeBase, queryDatabase } from './support';
 
 // Story 3.6: the raise-a-dispute screens (4a, 4b) with an idempotent submit, through the real gateway, BFF, API,
 // database and Zitadel, signed in as seeded customer A (B owns the 404 case). The database is read through qa_readonly.
@@ -675,5 +675,218 @@ test('criterion 8: a 401 on 4b goes to the session-ended screen and Sign in agai
   expect(href).not.toContain(transactionId);
   expect(page.url()).not.toContain(transactionId);
   expect(count('Disputes')).toBe(disputesBefore);
+  await context.close();
+});
+
+// Story 3.11: the raise screens emit browser spans that join the API trace. The browser's OTLP/HTTP exports to the
+// gateway's /otlp/ are read from the wire, and the trace is read back from the Aspire Dashboard's telemetry API.
+const dashboardOrigin = process.env.DASHBOARD_ORIGIN ?? 'http://localhost:18888';
+const traceparentPattern = /^00-([0-9a-f]{32})-([0-9a-f]{16})-0[01]$/;
+
+type OtlpValue = { stringValue?: string; intValue?: string | number; boolValue?: boolean };
+type OtlpSpan = {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  links?: { traceId: string; spanId: string; attributes?: unknown[] }[];
+  events?: unknown[];
+  attributes?: { key: string; value: OtlpValue }[];
+};
+type OtlpExport = { resourceSpans: { resource: { attributes?: { key: string }[] }; scopeSpans: { spans: OtlpSpan[] }[] }[] };
+
+const spansOf = (exports: OtlpExport[]) => exports.flatMap((e) => e.resourceSpans.flatMap((r) => r.scopeSpans.flatMap((s) => s.spans)));
+
+test('story 3.11 criteria 1-5: one trace from dispute.raise.submit to the API POST, open span and link, attribute keys, no personal data, same-origin export, no CSP violation', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const context = await signIn(browser, 'customer-a');
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    (window as unknown as { cspViolations: string[] }).cspViolations = [];
+    document.addEventListener('securitypolicyviolation', (event) => {
+      (window as unknown as { cspViolations: string[] }).cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`);
+    });
+  });
+  const consoleErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' && !knownRadixStyleViolation.test(message.text())) consoleErrors.push(message.text());
+  });
+
+  // Every request the page makes: its origin, path, traceparent and baggage headers (set by script, so request.headers()
+  // holds them); every OTLP export and its answer.
+  const requests: { origin: string; path: string; method: string; traceparent?: string; baggage?: string; key?: string }[] = [];
+  const exports: OtlpExport[] = [];
+  const exportStatuses: number[] = [];
+  const exportHeaders: Record<string, string>[] = [];
+  page.on('request', (request) => {
+    const headers = request.headers();
+    const url = new URL(request.url());
+    requests.push({ origin: url.origin, path: url.pathname, method: request.method(), traceparent: headers['traceparent'], baggage: headers['baggage'], key: headers['idempotency-key'] });
+    if (url.pathname === '/otlp/v1/traces' && request.method() === 'POST') {
+      exports.push(request.postDataJSON() as OtlpExport);
+      exportHeaders.push(headers);
+    }
+  });
+  page.on('response', (response) => {
+    if (new URL(response.url()).pathname === '/otlp/v1/traces') exportStatuses.push(response.status());
+  });
+
+  const document = await page.goto('/transactions');
+  expect(document!.headers()['content-security-policy']).toBe(gatewayContentSecurityPolicy);
+  const row = (await listRows(context)).find((candidate) => candidate.disputable)!;
+  const attempts = trackAttempts(page);
+  const transactionId = await openFirstDispute(page);
+  expect(transactionId).toBe(row.transactionId);
+  await chooseReason(page, 'Unrecognised');
+  await page.getByLabel('Note (optional)').fill('qa 3.11 trace note');
+  await continueToReview(page);
+  // Back to 4a and on to 4b again: moving inside the flow records no second open span.
+  await page.getByRole('link', { name: 'Change' }).click();
+  await expect(page.getByRole('heading', { name: 'Dispute this transaction' })).toBeVisible();
+  await continueToReview(page);
+  const created = page.waitForResponse((response) => new URL(response.url()).pathname === disputesPath && response.request().method() === 'POST');
+  await submitButton(page).click();
+  const response = await created;
+  expect(response.status()).toBe(201);
+  const dispute = await response.json();
+  await expect(page).toHaveURL(`${origin}/disputes/${dispute.disputeId}`);
+  const customerId = queryDatabase(`select "CustomerId" from "Disputes" where "Id" = '${dispute.disputeId}'`);
+
+  // The 5 s batch timer exports the spans; wait for the export that holds the submit span.
+  await expect.poll(() => spansOf(exports).some((span) => span.name === 'dispute.raise.submit'), { timeout: 30_000 }).toBe(true);
+
+  // Criterion 7 (CSP) and 5 (same-origin export): no violation, no console error, every export answered 200 at the gateway's /otlp/.
+  expect(await page.evaluate(() => (window as unknown as { cspViolations: string[] }).cspViolations)).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+  expect(exportStatuses.length).toBeGreaterThan(0);
+  expect(exportStatuses.every((status) => status === 200)).toBe(true);
+  expect(exportHeaders.every((headers) => headers['content-type'] === 'application/json')).toBe(true);
+  expect(requests.filter((r) => r.path.startsWith('/otlp/')).every((r) => r.origin === origin && r.path === '/otlp/v1/traces')).toBe(true);
+
+  // Criterion 1: traceparent on same-origin /api calls, never a baggage header anywhere, and none on the OTLP exports.
+  const apiCalls = requests.filter((r) => r.path.startsWith('/api/'));
+  expect(apiCalls.length).toBeGreaterThan(0);
+  expect(apiCalls.every((r) => r.origin === origin && traceparentPattern.test(r.traceparent ?? ''))).toBe(true);
+  expect(requests.every((r) => r.baggage === undefined)).toBe(true);
+  expect(requests.filter((r) => r.path.startsWith('/otlp/')).every((r) => r.traceparent === undefined)).toBe(true);
+
+  const spans = spansOf(exports);
+  const opens = spans.filter((span) => span.name === 'dispute.raise.open');
+  const submits = spans.filter((span) => span.name === 'dispute.raise.submit');
+  // Criterion 3: one open for the flow (4a, 4b, Change and Continue), one submit linked to it, ended with the status and outcome.
+  expect(opens).toHaveLength(1);
+  expect(submits).toHaveLength(1);
+  const [open] = opens;
+  const [submit] = submits;
+  expect(open.attributes ?? []).toEqual([]);
+  expect(submit.links).toHaveLength(1);
+  expect(submit.links![0].spanId).toBe(open.spanId);
+  expect(submit.links![0].traceId).toBe(open.traceId);
+  expect(submit.links![0].attributes ?? []).toEqual([]);
+  expect((submit.attributes ?? []).map((a) => a.key).sort()).toEqual(['dispute.raise.outcome', 'http.response.status_code']);
+  const attribute = (key: string) => submit.attributes!.find((a) => a.key === key)!.value;
+  expect(attribute('dispute.raise.outcome').stringValue).toBe('submitted');
+  expect(Number(attribute('http.response.status_code').intValue)).toBe(201);
+  expect(open.traceId).not.toBe(submit.traceId);
+
+  // Criterion 2: the POST's traceparent is the submit trace, and its parent chain is submit -> fetch span -> POST.
+  const post = requests.find((r) => r.method === 'POST' && r.path === disputesPath)!;
+  expect(attempts).toHaveLength(1);
+  const [, postTraceId, postSpanId] = traceparentPattern.exec(post.traceparent!)!;
+  expect(postTraceId).toBe(submit.traceId);
+  const fetchSpan = spans.find((span) => span.spanId === postSpanId)!;
+  expect(fetchSpan.parentSpanId).toBe(submit.spanId);
+  // The antiforgery fetch before the POST is in the same trace.
+  const antiforgery = requests.filter((r) => r.path === '/api/v1/bff/antiforgery').map((r) => traceparentPattern.exec(r.traceparent!)![1]);
+  expect(antiforgery).toContain(submit.traceId);
+
+  // Criterion 4: no personal data anywhere in what was exported, and the resource names only the service.
+  const wire = JSON.stringify(exports);
+  for (const secret of [row.transactionId, row.accountRef, row.amount.amount, 'qa 3.11 trace note', post.key!, dispute.disputeId, customerId]) {
+    expect(secret.length).toBeGreaterThan(3);
+    expect(wire, 'an exported span holds a value that must not be there').not.toContain(secret);
+  }
+  for (const span of spans) {
+    for (const attributeEntry of span.attributes ?? []) {
+      const value = String(attributeEntry.value.stringValue ?? '');
+      if (attributeEntry.key === 'url.full') expect(value).not.toContain('?');
+    }
+  }
+  const resourceKeys = exports.flatMap((e) => e.resourceSpans.flatMap((r) => (r.resource.attributes ?? []).map((a) => a.key))).sort();
+  expect([...new Set(resourceKeys)]).toEqual(['service.name', 'telemetry.sdk.language', 'telemetry.sdk.name', 'telemetry.sdk.version']);
+
+  // The Aspire Dashboard holds one trace: the browser's submit span, the fetch span and the API's server span for the POST.
+  await expect.poll(async () => {
+    const body = await (await fetch(`${dashboardOrigin}/api/telemetry/traces?traceId=${submit.traceId}`)).json();
+    const inTrace = (body.data.resourceSpans as { scopeSpans: { spans: { traceId: string; name: string; kind: number }[] }[] }[])
+      .flatMap((r) => r.scopeSpans.flatMap((s) => s.spans)).filter((span) => span.traceId === submit.traceId);
+    const names = inTrace.map((span) => span.name);
+    return names.includes('dispute.raise.submit') && inTrace.some((span) => span.kind === 2 && /POST/.test(span.name));
+  }, { timeout: 30_000 }).toBe(true);
+  await context.close();
+});
+
+test('story 3.11 criteria 1, 4: a fetch to another origin carries no traceparent and no baggage; a cursor in a same-origin URL never reaches the export', async ({ browser }) => {
+  const context = await signIn(browser, 'customer-a');
+  const page = await context.newPage();
+  // The gateway's CSP would block the cross-origin fetch before it is sent, so this page is served without it.
+  await page.route(`${origin}/transactions`, async (route) => {
+    const response = await route.fetch();
+    const headers = { ...response.headers() };
+    delete headers['content-security-policy'];
+    await route.fulfill({ response, headers });
+  });
+  let crossOriginHeaders: Record<string, string> | undefined;
+  await page.route('http://other-origin.test/**', async (route) => {
+    crossOriginHeaders = await route.request().allHeaders();
+    await route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }, body: 'ok' });
+  });
+  await page.goto('/transactions');
+  await expect(page.getByRole('heading', { name: 'Transactions' }).first()).toBeVisible();
+  const sameOrigin = page.waitForRequest((request) => new URL(request.url()).pathname === '/api/v1/bff/antiforgery');
+  const exported: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/otlp/v1/traces') exported.push(request.postData() ?? '');
+  });
+  await page.evaluate(async () => {
+    await fetch('http://other-origin.test/ping');
+    await fetch('/api/v1/bff/antiforgery');
+    await fetch('/api/v1/transactions?limit=1&cursor=QA-SECRET-CURSOR');
+  });
+  await expect.poll(() => exported.some((body) => body.includes('/api/v1/transactions')), { timeout: 30_000 }).toBe(true);
+  expect(exported.join('')).not.toContain('QA-SECRET-CURSOR');
+  expect(exported.join('')).not.toContain('cursor');
+  expect((await (await sameOrigin).allHeaders())['traceparent']).toMatch(traceparentPattern);
+  expect(crossOriginHeaders).toBeDefined();
+  expect(crossOriginHeaders!['traceparent']).toBeUndefined();
+  expect(crossOriginHeaders!['baggage']).toBeUndefined();
+  await context.close();
+});
+
+test('story 3.11 criteria 2, 3, 4: a refused raise (404 not-found, forged to another customer\'s transaction) ends the submit span with the status and the problem slug, and holds no id', async ({ browser }) => {
+  const context = await signIn(browser, 'customer-a');
+  const page = await context.newPage();
+  const customerBRow = (await listRows(customerB)).find((row) => row.disputable)!;
+  const exports: OtlpExport[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/otlp/v1/traces') exports.push(request.postDataJSON() as OtlpExport);
+  });
+  await script(page, [{ forge: (body) => ({ ...body, accountRef: customerBRow.accountRef, transactionId: customerBRow.transactionId }) }]);
+  await draftUnrecognised(page, 'qa 3.11 refusal');
+  const refused = page.waitForResponse((response) => new URL(response.url()).pathname === disputesPath && response.request().method() === 'POST');
+  await submitButton(page).click();
+  expect((await refused).status()).toBe(404);
+  await expect.poll(() => spansOf(exports).some((span) => span.name === 'dispute.raise.submit'), { timeout: 30_000 }).toBe(true);
+
+  const spans = spansOf(exports);
+  const open = spans.find((span) => span.name === 'dispute.raise.open')!;
+  const submit = spans.find((span) => span.name === 'dispute.raise.submit')!;
+  expect(submit.links![0].spanId).toBe(open.spanId);
+  const attributes = Object.fromEntries(submit.attributes!.map((a) => [a.key, a.value]));
+  expect(Object.keys(attributes).sort()).toEqual(['dispute.raise.outcome', 'http.response.status_code']);
+  expect(attributes['dispute.raise.outcome'].stringValue).toBe('not-found');
+  expect(Number(attributes['http.response.status_code'].intValue)).toBe(404);
+  const wire = JSON.stringify(exports);
+  for (const secret of [customerBRow.transactionId, customerBRow.accountRef, 'qa 3.11 refusal']) expect(wire).not.toContain(secret);
   await context.close();
 });

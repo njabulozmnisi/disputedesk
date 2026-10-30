@@ -1,3 +1,5 @@
+import { context, type Context } from '@opentelemetry/api';
+
 import type { ProblemDetails } from './generated/model';
 
 /** A problem body (RFC 9457). `traceId` is the extension member every DisputeDesk problem carries (AD-3). */
@@ -41,8 +43,13 @@ async function readProblem(response: Response): Promise<Problem | undefined> {
   return (await response.json()) as Problem;
 }
 
-async function send(url: string, options: RequestInit): Promise<Response> {
-  const response = await fetch(url, { ...options, credentials: 'same-origin' });
+// The tracing context manager follows synchronous code only, so a fetch after an `await` would lose the caller's span.
+// `send` therefore runs each fetch inside the context that `customFetch` read before its first `await` (OpenTelemetry JS,
+// Context: manual context propagation).
+async function send(url: string, options: RequestInit, callerContext: Context): Promise<Response> {
+  const response = await context.with(callerContext, () =>
+    fetch(url, { ...options, credentials: 'same-origin' }),
+  );
   responseListeners.forEach((listener) => {
     listener(response.status);
   });
@@ -52,14 +59,15 @@ async function send(url: string, options: RequestInit): Promise<Response> {
 
 /** The one Orval mutator: same-origin credentials, and the antiforgery token on unsafe methods only. */
 export const customFetch = async <T>(url: string, options: RequestInit): Promise<T> => {
+  const callerContext = context.active();
   const headers = new Headers(options.headers);
   if (!safeMethods.has((options.method ?? 'GET').toUpperCase())) {
-    const tokenResponse = await send(antiforgeryUrl, {});
+    const tokenResponse = await send(antiforgeryUrl, {}, callerContext);
     const { requestToken } = (await tokenResponse.json()) as { requestToken: string };
     headers.set('X-XSRF-TOKEN', requestToken);
   }
 
-  const response = await send(url, { ...options, headers });
+  const response = await send(url, { ...options, headers }, callerContext);
   const hasJsonBody = response.headers.get('content-type')?.includes('json') ?? false;
   return (hasJsonBody ? await response.json() : undefined) as T;
 };

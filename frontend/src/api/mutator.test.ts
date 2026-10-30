@@ -1,3 +1,4 @@
+import { context, trace } from '@opentelemetry/api';
 import { http, HttpResponse } from 'msw';
 
 import { server } from '@/test/server';
@@ -103,5 +104,23 @@ describe('the Orval mutator', () => {
     await getApiV1Transactions().catch(() => undefined);
 
     expect(statuses).toEqual([200, 503]);
+  });
+
+  // Criterion 2: the context crosses the await between the antiforgery fetch and the request.
+  it('makes the antiforgery fetch and the request children of the span active at the call', async () => {
+    const traceparents: Record<string, string | null> = {};
+    serveAntiforgeryToken();
+    server.events.on('request:start', ({ request }) => {
+      traceparents[`${request.method} ${new URL(request.url).pathname}`] =
+        request.headers.get('traceparent');
+    });
+    server.use(http.post('*/api/v1/bff/logout', () => new HttpResponse(null, { status: 200 })));
+    const span = trace.getTracer('test').startSpan('caller');
+
+    await context.with(trace.setSpan(context.active(), span), () => postApiV1BffLogout());
+
+    const traceId = span.spanContext().traceId;
+    expect(traceparents['GET /api/v1/bff/antiforgery']).toContain(`-${traceId}-`);
+    expect(traceparents['POST /api/v1/bff/logout']).toContain(`-${traceId}-`);
   });
 });
