@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { fixtureLogin, queryDatabase, topicRecords } from './support';
+import { fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './support';
 
 // Story 4.1: the Worker's outbox relay publishes a raised dispute's event to disputedesk.disputes.
 // Four hops per raise: the 201 the browser context gets, the Disputes/StoredEvents/OutboxMessages rows (read-only role
 // qa_readonly), the record on the topic (rpk in the redpanda container) and the trace in the Aspire dashboard.
 // The raise is sent at network level from a context signed in through Zitadel (there is no raise screen until story 3.6).
-// The data is not reset between runs: each run raises on the newest transactions that are still disputable.
+// A transaction is disputed once: the spec raises on its reserved transactions (support.ts).
 
 type Row = { transactionId: string; accountRef: string; description: string; disputable: boolean };
 
@@ -58,8 +58,8 @@ const recordsFor = (disputeId: string) => topicRecords().filter((record) => reco
 test.beforeAll(async ({ browser }) => {
   customerA = await signIn(browser, 'customer-a');
   const response = await customerA.request.get('/api/v1/transactions?limit=50');
-  disputable = ((await response.json()).items as Row[]).filter((row) => row.disputable);
-  expect(disputable.length, 'customer A has two disputable transactions left (recreate the volumes if not)').toBeGreaterThanOrEqual(2);
+  disputable = ownDisputable((await response.json()).items as Row[], 'outbox-relay', 'a');
+  expect(disputable.length, 'two of the spec\'s reserved transactions are disputable (reservedTransactions in support.ts)').toBeGreaterThanOrEqual(2);
 });
 
 test.afterAll(async () => {

@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { fixtureLogin, queryDatabase, topicRecords } from './support';
+import { fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './support';
 
 // Story 4.2: the Worker's outbox relay rides out a broker outage and a shutdown.
 // Four hops: the 201 the browser context gets, the OutboxMessages rows (read-only role qa_readonly), the records on the
 // topic (rpk in the redpanda container) and the Worker's log and the Aspire traces (no customer data on either).
-// The data is not reset between runs: each run raises on transactions that are still disputable.
+// A transaction is disputed once: the spec raises on its reserved transactions (support.ts).
 
 type Row = { transactionId: string; accountRef: string; description: string; disputable: boolean };
 type Raised = { disputeId: string; transaction: Row; note: string };
@@ -101,12 +101,12 @@ function markersOf(raised: Raised[]): string[] {
 test.beforeAll(async ({ browser }) => {
   customerA = await signIn(browser, 'customer-a');
   customerB = await signIn(browser, 'customer-b');
-  const take = async (context: BrowserContext) =>
-    ((await (await context.request.get('/api/v1/transactions?limit=50')).json()).items as Row[]).filter((row) => row.disputable);
-  disputableA = await take(customerA);
-  disputableB = await take(customerB);
-  expect(disputableA.length, 'customer A has disputable transactions left (recreate the volumes if not)').toBeGreaterThanOrEqual(4);
-  expect(disputableB.length, 'customer B has disputable transactions left (recreate the volumes if not)').toBeGreaterThanOrEqual(2);
+  const take = async (context: BrowserContext, customer: 'a' | 'b') =>
+    ownDisputable((await (await context.request.get('/api/v1/transactions?limit=50')).json()).items as Row[], 'outbox-relay-failure-paths', customer);
+  disputableA = await take(customerA, 'a');
+  disputableB = await take(customerB, 'b');
+  expect(disputableA.length, 'four of the spec\'s reserved customer A transactions are disputable (reservedTransactions in support.ts)').toBeGreaterThanOrEqual(4);
+  expect(disputableB.length, 'two of the spec\'s reserved customer B transactions are disputable (reservedTransactions in support.ts)').toBeGreaterThanOrEqual(2);
 });
 
 test.afterAll(async () => {

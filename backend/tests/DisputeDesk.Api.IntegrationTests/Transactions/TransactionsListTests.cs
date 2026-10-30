@@ -10,13 +10,13 @@ using DisputeDesk.Contracts.Problems;
 namespace DisputeDesk.Api.IntegrationTests.Transactions;
 
 /// <summary>
-/// AC3 to AC5 for customer A, whose 30 fixture transactions the stub dates from <see cref="TransactionsStub.Now"/>:
+/// AC3 to AC5 for customer A, whose 48 fixture transactions the stub dates from <see cref="TransactionsStub.Now"/>:
 /// keyset paging, the row's fields and wire formats, and disputability on each row.
 /// </summary>
 public sealed partial class TransactionsListTests(PostgresFixture postgres, TransactionsStub stub)
     : IClassFixture<TransactionsStub>, IAsyncLifetime
 {
-    private const int CustomerATransactionCount = 30;
+    private const int CustomerATransactionCount = 48;
 
     private static readonly string[] RowFields =
     [
@@ -47,19 +47,24 @@ public sealed partial class TransactionsListTests(PostgresFixture postgres, Tran
     }
 
     [Fact]
-    public async Task ListTransactions_NoLimitOrCursor_Returns20AndTheNextPageEndsWithANullCursor()
+    public async Task ListTransactions_NoLimitOrCursor_Returns20AndTheLastPageEndsWithANullCursor()
     {
         using JsonDocument first = await GetPageAsync("/api/v1/transactions");
-        string? nextCursor = first.RootElement.GetProperty("nextCursor").GetString();
+        string? secondCursor = first.RootElement.GetProperty("nextCursor").GetString();
         Assert.Equal(20, first.RootElement.GetProperty("items").GetArrayLength());
-        Assert.NotNull(nextCursor);
+        Assert.NotNull(secondCursor);
 
-        using JsonDocument second = await GetPageAsync($"/api/v1/transactions?cursor={Uri.EscapeDataString(nextCursor)}");
+        using JsonDocument second = await GetPageAsync($"/api/v1/transactions?cursor={Uri.EscapeDataString(secondCursor)}");
+        string? thirdCursor = second.RootElement.GetProperty("nextCursor").GetString();
+        Assert.Equal(20, second.RootElement.GetProperty("items").GetArrayLength());
+        Assert.NotNull(thirdCursor);
 
-        Assert.Equal(CustomerATransactionCount - 20, second.RootElement.GetProperty("items").GetArrayLength());
-        Assert.Equal(JsonValueKind.Null, second.RootElement.GetProperty("nextCursor").ValueKind);
+        using JsonDocument third = await GetPageAsync($"/api/v1/transactions?cursor={Uri.EscapeDataString(thirdCursor)}");
+
+        Assert.Equal(CustomerATransactionCount - 40, third.RootElement.GetProperty("items").GetArrayLength());
+        Assert.Equal(JsonValueKind.Null, third.RootElement.GetProperty("nextCursor").ValueKind);
         using JsonDocument everything = await GetPageAsync("/api/v1/transactions?limit=50");
-        Assert.Equal(TransactionIds(everything), [.. TransactionIds(first), .. TransactionIds(second)]);
+        Assert.Equal(TransactionIds(everything), [.. TransactionIds(first), .. TransactionIds(second), .. TransactionIds(third)]);
     }
 
     [Fact]

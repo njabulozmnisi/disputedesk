@@ -32,9 +32,9 @@ public sealed partial class WireFormatTests(PostgresFixture postgres, Transactio
                 .SelectMany(item => new[] { Text(item, "createdAt"), Text(item.GetProperty("transaction"), "transactionDate") }),
         ];
 
-        // Customer A's 30 fixture transactions; the raise and the detail each with createdAt, transactionDate and one
+        // Customer A's 48 fixture transactions; the raise and the detail each with createdAt, transactionDate and one
         // timeline entry; the one list item with createdAt and transactionDate.
-        Assert.Equal(30 + 3 + 3 + 2, timestamps.Count);
+        Assert.Equal(48 + 3 + 3 + 2, timestamps.Count);
         Assert.All(timestamps, timestamp =>
         {
             Assert.Matches(Rfc3339Utc(), timestamp);

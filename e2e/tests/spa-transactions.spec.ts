@@ -263,12 +263,18 @@ test.describe('linked customer A', () => {
     await page.getByRole('button', { name: 'Load more' }).click();
     const response = await nextPage;
     const body: ApiPage = await response.json();
-    expect(body.nextCursor).toBeNull();
     await expect(page.locator('li')).toHaveCount(20 + body.items.length);
     const focusedText = await page.evaluate(() => (document.activeElement as HTMLElement).innerText.replace(/\s+/g, ' '));
     expect(await page.evaluate(() => [document.activeElement?.tagName, document.activeElement?.getAttribute('tabindex')])).toEqual(['LI', '-1']);
     expect(focusedText).toContain(expectedAmount(body.items[0]));
     await expect(page.locator('[aria-live="polite"]')).toHaveText(`${body.items.length} more transactions loaded`);
+    // The fixture's size is not pinned: keep loading until the last page.
+    let last = body;
+    while (last.nextCursor) {
+      const more = page.waitForResponse((answer) => answer.url().includes('/api/v1/transactions?cursor='));
+      await page.getByRole('button', { name: 'Load more' }).click();
+      last = await (await more).json();
+    }
     await expect(page.getByRole('button', { name: 'Load more' })).toHaveCount(0);
     await expect(page.getByText('Older than 90 days. Contact the bank about this transaction.')).toBeVisible();
   });
@@ -451,8 +457,9 @@ test.describe('inactivity warning (Playwright clock)', () => {
 
     // Load more is an API response, so it restarts the timer too.
     await page.clock.runFor('12:00');
+    const secondPage = page.waitForResponse((answer) => answer.url().includes('/api/v1/transactions?cursor='));
     await page.getByRole('button', { name: 'Load more' }).click();
-    await expect(page.locator('li')).toHaveCount(30);
+    await expect(page.locator('li')).toHaveCount(20 + ((await (await secondPage).json()) as ApiPage).items.length);
     await page.clock.runFor('12:00');
     await expect(dialog).toHaveCount(0);
     await page.clock.runFor('01:10');
