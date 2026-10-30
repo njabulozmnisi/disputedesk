@@ -74,6 +74,13 @@ export function TransactionsScreen() {
     announce(`${String(added)} more ${added === 1 ? 'transaction' : 'transactions'} loaded`);
   }, [rows.length, announce]);
 
+  // The Try again button unmounts on success, so focus goes to the heading (WCAG 2.2 SC 2.4.3).
+  function retry() {
+    void query.refetch().then((result) => {
+      if (result.isSuccess) headingRef.current?.focus();
+    });
+  }
+
   function loadMore() {
     rowCountBeforeLoadMore.current = rows.length;
     void query.fetchNextPage();
@@ -97,7 +104,7 @@ export function TransactionsScreen() {
       {query.isPending ? <LoadingList /> : null}
 
       {query.isError && !query.data ? (
-        <TransactionsError error={query.error} onRetry={() => void query.refetch()} />
+        <TransactionsError error={query.error} onRetry={retry} />
       ) : null}
 
       {query.data && rows.length === 0 ? (

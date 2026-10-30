@@ -188,12 +188,11 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
             </p>
           </div>
 
+          <MaskedNumber row={row} />
+
           <dl className="rounded-md border border-border bg-card px-4">
             <Row label="Transaction">{row.description}</Row>
             <Row label="Date">{formatFullDay(row.transactionDate)}</Row>
-            <Row label={row.maskedCard ? 'Card' : 'Account'}>
-              <MaskedNumber row={row} />
-            </Row>
             <Row label="Reason">
               {draft.request.reason ? reasonCopy[draft.request.reason].label : null}
             </Row>

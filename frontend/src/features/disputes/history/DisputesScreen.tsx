@@ -87,6 +87,13 @@ export function DisputesScreen() {
     if (result.isError) idsBeforeLoadMore.current = undefined;
   }
 
+  // The Try again button unmounts on success, so focus goes to the heading (WCAG 2.2 SC 2.4.3).
+  function retry() {
+    void query.refetch().then((result) => {
+      if (result.isSuccess) headingRef.current?.focus();
+    });
+  }
+
   function renderSection(heading: string, rows: ListedDispute[]) {
     if (rows.length === 0) return null;
     return (
@@ -132,7 +139,7 @@ export function DisputesScreen() {
         <div className="grid gap-6">
           <ProblemNotice message={errorMessage} traceId={traceIdOf(query.error)} />
           <div>
-            <Button type="button" onClick={() => void query.refetch()}>
+            <Button type="button" onClick={retry}>
               Try again
             </Button>
           </div>

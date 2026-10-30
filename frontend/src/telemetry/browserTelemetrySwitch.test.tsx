@@ -19,8 +19,7 @@ async function startApp(value: string | undefined) {
   trace.disable();
   context.disable();
   propagation.disable();
-  if (value === undefined) vi.unstubAllEnvs();
-  else vi.stubEnv('VITE_BROWSER_TELEMETRY', value);
+  vi.stubEnv('VITE_BROWSER_TELEMETRY', value);
   vi.resetModules();
   document.body.innerHTML = '<div id="root"></div>';
   const { startTracing } = await import('@/telemetry/startTracing');

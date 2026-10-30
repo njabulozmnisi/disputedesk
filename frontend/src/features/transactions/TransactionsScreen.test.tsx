@@ -634,6 +634,39 @@ describe('loading, empty and error states', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('moves focus to the heading after a successful Try again, and leaves it on Try again when it fails again', async () => {
+    let fail = true;
+    server.use(
+      http.get('*/api/v1/transactions', () =>
+        fail
+          ? HttpResponse.json(
+              { title: 'x' },
+              { status: 500, headers: { 'content-type': 'application/problem+json' } },
+            )
+          : HttpResponse.json({
+              items: [makeRow({ description: 'Back again' })],
+              nextCursor: null,
+            }),
+      ),
+    );
+    const { user } = renderApp({ path: '/transactions' });
+    const tryAgain = await screen.findByRole('button', { name: 'Try again' });
+
+    await user.click(tryAgain);
+    await waitFor(() => {
+      expect(tryAgain).not.toHaveAttribute('disabled');
+    });
+    expect(tryAgain).toHaveFocus();
+
+    fail = false;
+    await user.click(tryAgain);
+
+    await screen.findByText('Back again');
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Transactions' })).toHaveFocus();
+    });
+  });
+
   it('copies the reference and confirms with Copied', async () => {
     failWith('/api/v1/transactions', 'core-banking-unavailable', 503);
     const { user } = renderApp({ path: '/transactions' });

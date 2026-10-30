@@ -188,26 +188,13 @@ export function DisputeDetailScreen() {
   // The query's error is checked before its data, so a failed refetch never leaves a stale detail on screen: the loaded
   // card and the withdraw dialog it owns give way to the failure and Try again (criterion 2).
   const dispute = isNotFound || query.isError ? undefined : query.data;
-  const failure = isNotFound || !query.isError ? undefined : query.error;
-  const isMessage = isNotFound || failure !== undefined;
+  const isMessage = isNotFound || query.isError;
   const isLoading = !isMessage && !dispute;
 
   let title = 'Dispute';
   if (isNotFound) title = notFoundTitle;
   else if (dispute) title = dispute.transaction.description;
   const headingRef = usePageHeading(title);
-
-  const failureCard = failure ? (
-    <FailureCard
-      error={failure}
-      onRetry={() => {
-        // The Try again button unmounts on success, so focus goes to the heading (WCAG 2.2 SC 2.4.3).
-        void query.refetch().then((result) => {
-          if (result.isSuccess) headingRef.current?.focus();
-        });
-      }}
-    />
-  ) : null;
 
   let card = <LoadingCard />;
   let timeline = <LoadingTimeline />;
@@ -232,8 +219,19 @@ export function DisputeDetailScreen() {
         ) : null}
       </>
     );
-  } else if (failureCard) {
-    card = failureCard;
+  } else if (query.isError) {
+    card = (
+      <FailureCard
+        error={query.error}
+        onRetry={() => {
+          // The Try again button unmounts unless the retry fails again, so focus goes to the heading (WCAG 2.2 SC 2.4.3).
+          void query.refetch().then((result) => {
+            const gone = result.error instanceof ApiError && result.error.status === 404;
+            if (result.isSuccess || gone) headingRef.current?.focus();
+          });
+        }}
+      />
+    );
   }
 
   return (
