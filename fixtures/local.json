@@ -209,6 +209,73 @@
     {"transactionId": "TXN-D-0030", "accountRef": "ACC-D-1", "daysAgo": 3, "time": "12:18:00", "description": "ZX Digital Services", "amount": "849.00", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "settled", "maskedCard": "476173******5530"},
     {"transactionId": "TXN-D-0031", "accountRef": "ACC-D-1", "daysAgo": 1, "time": "12:31:00", "description": "Checkers Sixty60", "amount": "319.73", "currency": "ZAR", "direction": "debit", "kind": "card", "state": "pending", "maskedCard": "476173******5530"}
   ],
+  "disputes": [
+    {
+      "customer": "A", "accountRef": "ACC-A-1", "transactionId": "TXN-A-0026", "reason": "cancelledSubscription",
+      "note": "I cancelled this subscription last month.",
+      "actions": [
+        {"action": "raise", "daysAgo": 1, "time": "09:15:00"}
+      ]
+    },
+    {
+      "customer": "A", "accountRef": "ACC-A-1", "transactionId": "TXN-A-0022", "reason": "unrecognised",
+      "note": "I do not recognise this charge.",
+      "actions": [
+        {"action": "raise", "daysAgo": 2, "time": "08:30:00"},
+        {"action": "startReview", "daysAgo": 1, "time": "10:00:00"}
+      ]
+    },
+    {
+      "customer": "A", "accountRef": "ACC-A-1", "transactionId": "TXN-A-0019", "reason": "refundNotProcessed",
+      "note": "The store promised a refund that never came.",
+      "actions": [
+        {"action": "raise", "daysAgo": 25, "time": "09:00:00"},
+        {"action": "startReview", "daysAgo": 24, "time": "10:30:00"},
+        {"action": "escalate", "daysAgo": 15, "time": "14:00:00"}
+      ]
+    },
+    {
+      "customer": "A", "accountRef": "ACC-A-1", "transactionId": "TXN-A-0018", "reason": "unrecognised",
+      "actions": [
+        {"action": "raise", "daysAgo": 36, "time": "08:00:00"},
+        {"action": "withdraw", "daysAgo": 35, "time": "12:00:00", "note": "Found the slip, it was my purchase."}
+      ]
+    },
+    {
+      "customer": "A", "accountRef": "ACC-A-1", "transactionId": "TXN-A-0015", "reason": "wrongAmount", "expectedAmount": "210.75",
+      "note": "The till charged more than the shelf price.",
+      "actions": [
+        {"action": "raise", "daysAgo": 50, "time": "10:00:00"},
+        {"action": "startReview", "daysAgo": 49, "time": "09:00:00"},
+        {"action": "resolve", "daysAgo": 45, "time": "15:00:00", "outcome": "upheld", "note": "The merchant confirmed the overcharge. The difference is refunded."}
+      ]
+    },
+    {
+      "customer": "A", "accountRef": "ACC-A-1", "transactionId": "TXN-A-0014", "reason": "duplicateCharge",
+      "note": "I was charged twice for one shop.",
+      "actions": [
+        {"action": "raise", "daysAgo": 56, "time": "11:00:00"},
+        {"action": "startReview", "daysAgo": 55, "time": "09:30:00"},
+        {"action": "escalate", "daysAgo": 52, "time": "16:00:00"},
+        {"action": "resolve", "daysAgo": 48, "time": "10:00:00", "outcome": "rejected", "note": "The merchant showed two separate purchases."}
+      ]
+    },
+    {
+      "customer": "A", "accountRef": "ACC-A-1", "transactionId": "TXN-A-0011", "reason": "notReceived", "slaDemo": true,
+      "note": "The order never arrived.",
+      "actions": [
+        {"action": "raise"},
+        {"action": "startReview", "hoursAfterRaise": 1}
+      ]
+    },
+    {
+      "customer": "B", "accountRef": "ACC-B-1", "transactionId": "TXN-B-0025", "reason": "cancelledSubscription",
+      "note": "I cancelled this subscription.",
+      "actions": [
+        {"action": "raise", "daysAgo": 1, "time": "11:00:00"}
+      ]
+    }
+  ],
   "logins": [
     {
       "key": "customer-a",

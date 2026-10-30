@@ -1,5 +1,6 @@
 using DisputeDesk.Api.IntegrationTests.CoreBanking;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
+using DisputeDesk.Api.IntegrationTests.Seeding;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -10,7 +11,8 @@ namespace DisputeDesk.Api.IntegrationTests.Transactions;
 
 /// <summary>
 /// AC7: with <c>Seed:Enabled</c>, customers A and B are linked to their fixture logins exactly once; C and D are not.
-/// EF Core seeds after every migrate, so "the seeder runs twice" is a second migrate.
+/// Story 5.4 extends each case to the seeded disputes: every fixture dispute once, with one stored event and one outbox
+/// row per action, and no audit entry. EF Core seeds after every migrate, so "the seeder runs twice" is a second migrate.
 /// </summary>
 public class SeededLinksTests(PostgresFixture postgres)
 {
@@ -29,6 +31,7 @@ public class SeededLinksTests(PostgresFixture postgres)
         await MigrateAsync(factory);
 
         Assert.Equal(SeededLinks, await LinksAsync(emptyDatabase));
+        Assert.Equal(SeededApi.FullSeed, await SeededApi.CountAsync(emptyDatabase));
     }
 
     [Fact]
@@ -44,6 +47,7 @@ public class SeededLinksTests(PostgresFixture postgres)
         await HealthTests.WaitUntilReadyAsync(secondClient);
 
         Assert.Equal(SeededLinks, await LinksAsync(emptyDatabase));
+        Assert.Equal(SeededApi.FullSeed, await SeededApi.CountAsync(emptyDatabase));
     }
 
     [Fact]
@@ -59,6 +63,7 @@ public class SeededLinksTests(PostgresFixture postgres)
         MigrateSynchronously(new DbContextOptionsBuilder<AppDbContext>(registered).UseNpgsql(emptyDatabase).Options);
 
         Assert.Equal(SeededLinks, await LinksAsync(emptyDatabase));
+        Assert.Equal(SeededApi.FullSeed, await SeededApi.CountAsync(emptyDatabase));
     }
 
     // Deliberately synchronous: the path the tools take. A plain method, so nothing nudges it towards MigrateAsync.
@@ -77,6 +82,7 @@ public class SeededLinksTests(PostgresFixture postgres)
         await MigrateAsync(factory);
 
         Assert.Empty(await LinksAsync(database));
+        Assert.Equal(new SeededCounts(0, 0, 0, 0), await SeededApi.CountAsync(database));
     }
 
     [Fact]
@@ -94,6 +100,23 @@ public class SeededLinksTests(PostgresFixture postgres)
         await db.GetService<IMigrator>().MigrateAsync("20261026115752_AddSessionsAndDataProtectionKeys", TestContext.Current.CancellationToken);
 
         Assert.DoesNotContain("20261027103742_AddCustomerLinks", await db.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Seeder_DowngradeBelowTheDisputesMigration_DoesNotFailAndKeepsTheLinks()
+    {
+        // Story 5.4: with Disputes gone the seeder still seeds the links, and skips the disputes without an error.
+        string database = await postgres.CreateMigratedDatabaseAsync();
+        await using ApiFactory factory = SeedingApi(database);
+        using HttpClient client = factory.CreateClient();
+        await HealthTests.WaitUntilReadyAsync(client);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.GetService<IMigrator>().MigrateAsync("20261027103742_AddCustomerLinks", TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain("20261028084134_AddDisputes", await db.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(SeededLinks, await LinksAsync(database));
     }
 
     private static ApiFactory SeedingApi(string connectionString) => new(connectionString, settings: new Dictionary<string, string?>

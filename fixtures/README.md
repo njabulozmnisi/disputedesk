@@ -9,8 +9,8 @@ reads `customers` and `transactions`.
 
 | Customer | Accounts | Login | Role in the demo |
 | --- | --- | --- | --- |
-| A, `CUS-000001` | `ACC-A-1`, `ACC-A-2` | `customer-a` | Linked. Later stories give A a dispute in every status. |
-| B, `CUS-000002` | `ACC-B-1` | `customer-b` | Linked. Owns the dispute A gets 404 for. |
+| A, `CUS-000001` | `ACC-A-1`, `ACC-A-2` | `customer-a` | Linked. Has a seeded dispute in every status and outcome, plus the SLA demo dispute. |
+| B, `CUS-000002` | `ACC-B-1` | `customer-b` | Linked. Owns one seeded dispute, the one A gets 404 for. |
 | C, `CUS-000003` | `ACC-C-1` | `customer-c` | Not linked. `recentSimSwap: true`, so the SIM-swap check fails and linking is refused. |
 | D, `CUS-000004` | `ACC-D-1`, `ACC-D-2` | none | Not linked and passes every check. A new login links to D in the linking demo. |
 
@@ -26,6 +26,33 @@ reads `customers` and `transactions`.
   the current South African day (UTC+02:00), at `time` South African time. The stub resolves them once, when it
   starts; the seeder uses the same anchor (architecture AD-30). After a day boundary, restart the stack to move the
   dates on.
+
+## Seeded disputes
+
+`disputes` lists the disputes the seeder writes on a fresh stack: A has one Submitted, two Under review (one is the SLA
+demo dispute), one Escalated, one Withdrawn, one Resolved Upheld and one Resolved Rejected, all on `ACC-A-1`; B has one
+Submitted. The seeder raises each through the `Dispute` aggregate and takes it through its actions, so each action has
+one stored event and one outbox row like any other dispute (architecture AD-30), and a restart adds nothing.
+
+- **Each entry** names the `customer` by key (a linked customer), the `accountRef` and `transactionId` of one of that
+  customer's transactions (one dispute per transaction), the `reason`, an optional `note` (at most 1000 characters)
+  and, only for `wrongAmount`, an `expectedAmount` as a decimal string.
+- **`actions`** start with `raise`, then any of `startReview`, `escalate`, `resolve` (with `outcome` and a `note` of 1
+  to 500 characters) and `withdraw` (an optional `note` of at most 500), in an order the dispute allows. No other
+  action carries an `outcome` or a `note`. Each has `daysAgo` + `time`, counted like a transaction's date, or, only on
+  the SLA demo dispute's later actions, `hoursAfterRaise` alone. Instants must be strictly increasing, after the
+  transaction and not after the seeding instant.
+- **The SLA demo dispute** (`slaDemo: true`, on exactly one entry) has a raise with no instant: the seeder raises it
+  240 hours before the seeding instant plus 5 minutes, so it falls due 5 minutes after the stack starts.
+- **Open disputes** other than the SLA demo dispute are raised at most 2 days before the anchor, so the first SLA sweep
+  leaves them alone.
+- **A bad entry stops the seed** with an error naming its position (`disputes[3]`), before any dispute is written
+  unless the dispute itself refuses an action; the Api retries and stays not ready. A field the seeder would not use
+  is a bad entry too.
+- **Notes are synthetic:** no ID number, phone or account number, no name and no run of 6 or more digits (a fixture
+  test checks this). Seeded transactions are never ones a test or E2E spec names.
+- **Finding B's dispute ID.** It is a new UUIDv7 on each fresh stack. Sign in as `customer-b` and read the `disputeId`
+  of the one item in B's history list (`GET /api/v1/disputes`).
 
 ## Synthetic, but handle it as if it were real
 
