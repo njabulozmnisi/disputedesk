@@ -9,10 +9,13 @@ namespace DisputeDesk.Api.IntegrationTests.Infrastructure;
 /// the socket (Microsoft Learn: "Use IStartupFilter to configure middleware at the start of the pipeline"). A filter
 /// registered later runs after the earlier one, so a test can register its own address over <see cref="ApiFactory"/>'s.
 /// </summary>
-public sealed class ClientAddressStartupFilter(IPAddress address) : IStartupFilter
+public sealed class ClientAddressStartupFilter(IPAddress? address) : IStartupFilter
 {
-    /// <summary>The address of the next request; a test can change it between requests to start from another client.</summary>
-    public IPAddress Address { get; set; } = address;
+    /// <summary>
+    /// The address of the next request; a test can change it between requests to start from another client, or set it
+    /// to null for a connection with no IP address (for example a Unix socket).
+    /// </summary>
+    public IPAddress? Address { get; set; } = address;
 
     public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
     {

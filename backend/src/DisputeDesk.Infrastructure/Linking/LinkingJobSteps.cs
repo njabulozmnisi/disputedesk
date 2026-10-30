@@ -152,7 +152,7 @@ public sealed partial class LinkingJobSteps(
         await transaction.CommitAsync(CancellationToken.None);
         if (claimed != 1)
         {
-            // A later start superseded the challenge before the claim: nothing is sent.
+            // A later start superseded the challenge, or three wrong codes locked it, before the claim: nothing is sent.
             await RecordAsync(db, job, span, now, AuditAction.LinkingOtpSent, AuditResult.Rejected, match.CustomerId);
             return null;
         }

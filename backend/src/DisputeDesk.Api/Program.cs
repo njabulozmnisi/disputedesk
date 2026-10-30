@@ -6,6 +6,7 @@ using DisputeDesk.Api.Disputes;
 using DisputeDesk.Api.Errors;
 using DisputeDesk.Api.Health;
 using DisputeDesk.Api.Linking;
+using DisputeDesk.Api.Linking.RateLimiting;
 using DisputeDesk.Api.Operations;
 using DisputeDesk.Api.Security;
 using DisputeDesk.Api.Transactions;
@@ -61,6 +62,7 @@ builder.Services.AddOperationsAuthentication();
 builder.Services.AddOperations();
 builder.Services.AddLinkingRoutes();
 builder.Services.AddLinkingStart();
+builder.Services.AddLinkingRateLimits();
 
 WebApplication app = builder.Build();
 
@@ -71,6 +73,8 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseAuthentication();
 app.UseAuthorization();
+// After authorization, so a 401 or 403 takes no permit and the login limit reads the signed-in sub (FR-8).
+app.UseRateLimiter();
 // After routing (implicit here), so it reads each endpoint's timeout; a timeout the endpoint does not answer is a 504.
 app.UseRequestTimeouts();
 

@@ -21,7 +21,7 @@ public class StartLinkingQueueFullTests(PostgresFixture postgres)
     private static readonly IPAddress StoredClientIp = IPAddress.Parse("203.0.113.7");
 
     // Each test Api has its own database, so the same filler logins serve every test.
-    private static readonly string[] FillerLogins = ["filler-0", "filler-1", "filler-2", "filler-3", "filler-4"];
+    internal static readonly string[] FillerLogins = ["filler-0", "filler-1", "filler-2", "filler-3", "filler-4"];
 
     [Fact]
     public async Task Start_QueueFull_MatchAndNoMatchBothGetTheSame429WithoutRetryAfterAndAreAuditedNotQueued()
@@ -106,7 +106,7 @@ public class StartLinkingQueueFullTests(PostgresFixture postgres)
     /// Four filler starts take the four workers, held at core banking, and a fifth waits in the queue of one, so the
     /// queue is full. Returns the holds, for the test to release.
     /// </summary>
-    private static async Task<LinkingFakes.Hold[]> FillTheQueueAsync(ApiFactory factory, LinkingFakes.Ports ports)
+    internal static async Task<LinkingFakes.Hold[]> FillTheQueueAsync(ApiFactory factory, LinkingFakes.Ports ports)
     {
         LinkingFakes.Hold[] holds = [.. Enumerable.Range(0, 4).Select(_ => ports.CoreBanking.HoldNext())];
         foreach (string login in FillerLogins.Take(4))

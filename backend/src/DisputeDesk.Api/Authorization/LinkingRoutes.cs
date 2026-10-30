@@ -1,4 +1,5 @@
 using DisputeDesk.Api.Bff;
+using DisputeDesk.Api.Linking.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 
@@ -26,11 +27,13 @@ public static class LinkingRoutes
 
     /// <summary>
     /// The <c>/api/v1/linking</c> group. Every unsafe request on it needs the antiforgery token (AD-7). Request bodies
-    /// are never logged here (AD-12); no request logging is registered at all.
+    /// are never logged here (AD-12); no request logging is registered at all. Its metadata puts every route on it under
+    /// the linking rate limits (FR-8).
     /// </summary>
     public static RouteGroupBuilder MapLinkingRoutes(this RouteGroupBuilder apiV1) =>
         apiV1.MapGroup("/linking")
             .WithTags("Linking")
+            .WithMetadata(LinkingRateLimitMetadata.Instance)
             .RequireAuthorization(UnlinkedPolicy)
             .AddEndpointFilter<AntiforgeryFilter>()
             .ProducesProblem(StatusCodes.Status401Unauthorized)

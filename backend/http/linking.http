@@ -68,3 +68,14 @@ X-XSRF-TOKEN: {{token.response.body.requestToken}}
 Content-Type: application/json
 
 {"code": "12345"}
+
+### Rate limits: starts and verifies together allow 5 requests per login and 20 per client IP in a 15-minute sliding
+### window, and a 400 counts too. Send this a sixth time within 15 minutes of the login's first linking request:
+### 429 rate-limited with Retry-After: 900, one body for either limit; the first rejection per login or IP in a window
+### is audited as LinkingRateLimited.
+POST {{app}}/api/v1/linking/verify
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Content-Type: application/json
+
+{"code": "12345"}

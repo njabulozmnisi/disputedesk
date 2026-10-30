@@ -43,6 +43,9 @@ public sealed class ApiFactory(
         ["Sms:Host"] = "127.0.0.1",
         ["Sms:Port"] = "1",
         ["Linking:OtpHmacKey"] = TestOtpHmacKey,
+        // High enough that no other suite is limited; the rate-limit tests set the production counts.
+        ["Linking:RateLimits:PermitsPerLogin"] = "1000",
+        ["Linking:RateLimits:PermitsPerIp"] = "1000",
         // The Compose values. ClientAddress is outside the network, so its forwarded headers are ignored.
         ["ForwardedHeaders:TrustedNetwork"] = TrustedNetwork,
         ["ForwardedHeaders:AllowedHosts"] = "localhost",
