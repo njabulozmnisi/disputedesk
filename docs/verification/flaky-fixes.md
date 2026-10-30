@@ -41,4 +41,8 @@ Items 1 (renamed to `Login_AlreadySignedIn_RecordsSignOutForTheEndedSession`: on
 - Try again focus (WCAG 2.2 SC 2.4.3): DisputeDetailScreen focuses the h1 when a retry succeeds or returns 404 and leaves focus on Try again when it fails again; DisputesScreen and TransactionsScreen focus the h1 on success (Load more's Try again unchanged). DisputeDetailScreen is back to `else if (query.isError)` with no hoisted failure card.
 - ReviewScreen shows MaskedNumber on its own line, so "Card" appears once.
 - browserTelemetrySwitch.test.tsx stubs the unset case with `vi.stubEnv(name, undefined)`.
-- browserTelemetrySwitch.test.tsx (6.4 fix round, 2026-10-30): one full Vitest run printed two 'Unhandled Errors: window is not defined' from this file (all tests passed; not seen in two later runs). Likely a timer or dynamic import resolving after the jsdom environment is torn down; find what outlives the test. Test-only.
+
+## Done 2026-10-30 (tf-3, CI red on 4784808)
+
+- browserTelemetrySwitch.test.tsx "window is not defined": each test ran `main.tsx`, whose React root and tracer provider were never stopped, so React's scheduler fired after jsdom teardown (reproduced under CPU stress, 1 in 8; 0 in 54 after). `afterEach` now unmounts every root (`createRoot` spied as a pass-through) and shuts down every provider. Remaining limit: the fetch instrumentation `startTracing` registers stays patched after shutdown, recording nothing once the globals are disabled.
+- raiseTelemetry.test.tsx unhandled `GET /api/v1/disputes/<id>`: the app opens the detail screen as soon as the raise ends (twice under StrictMode) before the test registered that handler; the dispute is now served before the raise.
