@@ -266,8 +266,11 @@ public partial class PlatformScriptTests
     /// <summary>Runs curl with the script's retry options against the preview path and returns the final HTTP status.</summary>
     private static async Task<string> CurlWithRetryOptionsAsync(Uri zitadel)
     {
+        // The body goes to a temporary file, as in the script's call(). Not /dev/null: before a retry curl truncates the
+        // output file, and curl 8.5.0 (ubuntu-24.04) fails that on /dev/null with exit 23 and prints no status.
+        string body = Path.GetTempFileName();
         var start = new ProcessStartInfo("curl") { RedirectStandardOutput = true };
-        foreach (string argument in RetryOptions().Concat(["-sS", "-o", "/dev/null", "-w", "%{http_code}", $"{zitadel}admin/v1/policies/label/_preview"]))
+        foreach (string argument in RetryOptions().Concat(["-sS", "-o", body, "-w", "%{http_code}", $"{zitadel}admin/v1/policies/label/_preview"]))
         {
             start.ArgumentList.Add(argument);
         }
@@ -275,6 +278,7 @@ public partial class PlatformScriptTests
         using Process process = Process.Start(start) ?? throw new InvalidOperationException("curl did not start.");
         string status = await process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
         await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+        File.Delete(body);
         return status;
     }
 
