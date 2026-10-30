@@ -1,6 +1,6 @@
 # Customers raise, follow and withdraw disputes: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
 
-next_id = 12
+next_id = 13
 
 [[entry]]
 id = 1
@@ -143,32 +143,54 @@ references = ["design — docs/ux/mockups/transactions-after.html", "design — 
 id = 11
 type = "story"
 title = "Raise screens emit browser spans that join the API trace"
-description = "Adds the SPA's OpenTelemetry web SDK: fetch instrumentation puts `traceparent` on same-origin `/api` fetches, and the raise flow emits `dispute.raise.open` and `dispute.raise.submit` (linked) for SM-1 and SM-2, exported over OTLP/HTTP to `/otlp/`, with no personal data in any span (AD-20). Builds on story 6's routes and submit."
-verify = "Vitest tests with an in-memory span exporter and MSW pass; typecheck and lint pass."
+description = "Adds the SPA's OpenTelemetry tracing: fetch instrumentation puts `traceparent` on same-origin `/api` fetches, `customFetch` carries the active context across its `await` with `context.with`, and the raise flow emits `dispute.raise.open` (from the raise guard) and `dispute.raise.submit` (linked) for SM-1 and SM-2, exported as OTLP/HTTP JSON to `/otlp/`, with an attribute allow-list and no personal data in any span (AD-20). Builds on story 6's routes and submit."
+verify = "Vitest tests with an in-memory span exporter and MSW pass; typecheck and lint pass; the Playwright raise spec shows no CSP violation under the gateway's policy."
 covers = ["R36"]
 after = [6]
 hitl = false
 risk = "medium"
+refine = true
 owner = "frontend"
 lane = "B"
 high_stakes = false
 migration = false
-touches = ["frontend/src/telemetry/ (new)", "frontend/src/main.tsx", "frontend/src/app/router.tsx (raise flow onEnter)", "frontend/src/features/disputes/raise/ (submit span)", "vite.config.ts (/otlp proxy)", "frontend/package.json and package-lock.json (OpenTelemetry web packages, each verified and pinned per AGENTS.md)"]
-supervisor_checks = ["The Aspire Dashboard shows one trace from `dispute.raise.submit` to the Api raise span.", "In a throwaway copy, add a span attribute holding the `transactionId`: criterion 4's test fails."]
+touches = ["frontend/src/telemetry/ (new)", "frontend/src/main.tsx", "frontend/src/api/mutator.ts and mutator.test.ts", "frontend/src/features/disputes/raise/RaiseLayout.tsx, ReviewScreen.tsx, ReviewScreen.test.tsx", "frontend/src/test/support.tsx, setup.ts", "frontend/vite.config.ts (/otlp proxy)", "frontend/package.json and package-lock.json (OpenTelemetry packages pinned exactly per the 2026-10-30 decision)", "e2e/tests/dispute-raise.spec.ts (QA stage)"]
+supervisor_checks = ["The Aspire Dashboard shows one trace from `dispute.raise.submit` to the Api raise span.", "In a throwaway copy, add a span attribute holding the `transactionId`: criterion 5's test fails.", "In a throwaway copy, drop the `context.with` around the request fetch in `customFetch`: criteria 2 and 3 fail.", "In a throwaway copy, record the open span in the raise route's `onEnter`: criterion 4's deep-link case fails."]
 
 [[entry]]
 id = 7
 type = "story"
-title = "Disputes history, dispute detail and withdraw screens"
-description = "Adds the Disputes screen grouped open and closed, the dispute detail with timeline, Withdraw where allowed, and the guidance after a Rejected outcome."
-verify = "Vitest component tests pass, with API responses mocked from `openapi.json` shapes."
-covers = ["R16", "R18", "R19", "R40"]
-after = [4, 6, 9, 11]
+title = "Disputes history screen and the shell's skip link"
+description = "Adds screen 5, Disputes: the customer's disputes grouped Open and Closed, newest first, Load more by 20 with focus on the first new row by ID; the shared outcome badges (Resolved · Upheld, Resolved · Rejected); loading, empty and error states; typed links to `/disputes` in place of the plain anchors; and the shell's first-in-document skip link (WCAG G1)."
+verify = "Vitest component tests pass, with API responses mocked by MSW from `openapi.json` shapes, axe checks included; typecheck and lint pass."
+covers = ["R16", "R18", "R40"]
+after = [9, 10, 11]
 hitl = false
-risk = "medium"
+risk = "low"
+refine = true
 owner = "frontend"
 lane = "B"
 high_stakes = false
 migration = false
-touches = ["frontend/src/features/disputes/history/, detail/, withdraw/", "frontend/src/app/ (routes)", "frontend/src/features/transactions/TransactionRow.tsx and frontend/src/features/disputes/raise/SubmitFailure.tsx (plain /disputes anchors to typed Links)", "reuses frontend/src/features/disputes/customerStatus.ts and DisputeStatusBadge.tsx (story 10)"]
-references = ["design — docs/ux/mockups/disputes.html", "design — docs/ux/mockups/dispute-under-review.html", "design — docs/ux/mockups/dispute-withdrawn.html", "design — docs/ux/mockups/dispute-loading.html", "design — docs/ux/mockups/not-found.html", "experience — docs/ux/EXPERIENCE.md, Copy deck"]
+touches = ["frontend/src/features/disputes/history/ (new)", "frontend/src/features/disputes/customerStatus.ts, DisputeStatusBadge.tsx, frontend/src/components/ui/badge.tsx (outcome badges)", "frontend/src/app/router.tsx, RootLayout.tsx, Navigation.tsx, routing.test.tsx", "frontend/src/features/transactions/TransactionsScreen.tsx, TransactionsError.tsx, TransactionsScreen.test.tsx, format.ts", "frontend/src/pages/NotFoundPage.tsx", "frontend/src/test/support.tsx", "docs/ux/EXPERIENCE.md (skip link)", "e2e/tests/spa-transactions.spec.ts (QA stage)"]
+supervisor_checks = ["In a throwaway copy, focus the first new row by index in the Open section: criterion 3's two-section test fails.", "In a throwaway copy, move the skip link after the header: criterion 6's first-Tab test fails."]
+references = ["design — docs/ux/mockups/disputes.html", "design — docs/ux/mockups/dispute-loading.html", "design — docs/ux/DESIGN.md, status tone table", "experience — docs/ux/EXPERIENCE.md, Copy deck"]
+
+[[entry]]
+id = 12
+type = "story"
+title = "Dispute detail, timeline and withdraw screen"
+description = "Adds screen 6, the dispute detail: a GUID-only route that throws notFound() before any request, the summary (with the wrong-amount rows, no dispute reference) with loading, error and just-submitted states, the timeline oldest first with SAST times, Rejected guidance, Withdraw while open in a screen-owned AlertDialog with the 500-unit note, a 200 written into the cache, 409s split by customerStatus, outcomes announced through the live region, typed links for the last `/disputes/<id>` anchors, and `returnUrl` `/disputes` after a 401 with a case-insensitive path compare (AD-31)."
+verify = "Vitest component tests pass, with API responses mocked by MSW from `openapi.json` shapes, axe checks included; typecheck and lint pass."
+covers = ["R16", "R17", "R18", "R19", "R40"]
+after = [4, 7]
+hitl = false
+risk = "medium"
+refine = true
+owner = "frontend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["frontend/src/features/disputes/detail/, withdraw/ (new)", "frontend/src/app/router.tsx, routing.test.tsx", "frontend/src/api/queryClient.ts, queryClient.test.tsx (case-insensitive returnUrlAfterSignIn), problems.ts, problems.test.ts", "frontend/src/features/disputes/raise/SubmitFailure.tsx, ReviewScreen.tsx, ReviewScreen.test.tsx", "frontend/src/features/transactions/TransactionRow.tsx (MaskedNumber prop narrowed), TransactionsScreen.test.tsx, format.ts, format.test.ts", "frontend/src/test/support.tsx, raise.tsx", "e2e/tests/dispute-raise.spec.ts, spa-dispute-status-badges.spec.ts, dispute-detail.spec.ts comment (QA stage)"]
+supervisor_checks = ["In a throwaway copy, drop the GUID check from `params.parse`: criterion 1's no-request test fails.", "In a throwaway copy, show Withdraw for `resolved`: criterion 4's test fails.", "In a throwaway copy, return `location.href` from `returnUrlAfterSignIn` for `/disputes/<id>`: criterion 7's test fails.", "In a throwaway copy, render the dialog inside the Withdraw button's open-status condition: criterion 6's `resolved` notice test fails."]
+references = ["design — docs/ux/DESIGN.md, Dispute summary card", "design — docs/ux/mockups/dispute-submitted.html, dispute-under-review.html, dispute-prioritised.html, dispute-upheld.html, dispute-rejected.html, dispute-withdrawn.html, dispute-withdraw.html, dispute-loading.html, not-found.html", "experience — docs/ux/EXPERIENCE.md, Copy deck, Component Patterns, State Patterns", "verification — docs/verification/3.12-challenge.md, docs/verification/3.12-prebuild-review.md"]

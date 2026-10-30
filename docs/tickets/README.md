@@ -1,6 +1,6 @@
 # Build order
 
-Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, 3.9 right after 3.3, 3.10 and 3.11 right after 3.6, 5.5 right after 5.1, and 7.10 before 7.1).
+Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, 3.9 right after 3.3, 3.10 and 3.11 right after 3.6, 5.5 right after 5.1, 6.6 before 6.3, and 7.10 before 7.1).
 
 Status: done (merged on main), in progress, or planned. The supervisor updates it when a story merges.
 
@@ -68,7 +68,7 @@ Needs: epic 2 (the gateway templates and provisioning from stories 2.5 and 2.6);
 | 5.4 | [Seeded disputes for customers A and B in every status](epic-5-operations/tickets/story-5.4-seeded-disputes-for-customers-a-and-b-in-every-status.md) | backend | planned |
 | 5.3 | [SLA sweep escalates overdue disputes](epic-5-operations/tickets/story-5.3-sla-sweep-escalates-overdue-disputes.md) | backend | planned |
 
-Build-order constraint: 5.3 builds after 5.2 and 5.4, and its migration never builds beside 6.1's (both change `AppDbContextModelSnapshot`), so 5.3 starts once 6.1 has merged.
+Build-order constraint: 5.3 builds after 5.2 and 5.4, and its migration never builds beside 6.1's (both change `AppDbContextModelSnapshot`), so 5.3 starts once 6.1 has merged. From then it may build beside 6.5, 6.2, 6.6 and 6.3, none of which adds a migration.
 
 ## Epic 6: [Logins link to customers without revealing a match](epic-6-linking/epic-6-linking.md)
 
@@ -79,10 +79,11 @@ Needs: epic 2 (`CustomerLinks`, the core-banking port and `AuditLog.Record`); ep
 | 6.1 | [Unlinked login starts linking with a uniform response and an OTP sent after the SIM-swap check](epic-6-linking/tickets/story-6.1-unlinked-login-starts-linking-with-a-uniform-response-and-an.md) | backend | planned |
 | 6.5 | [Linking start holds the send cap and a full queue](epic-6-linking/tickets/story-6.5-linking-start-holds-the-send-cap-and-a-full-queue.md) | backend | planned |
 | 6.2 | [OTP verification links the login, with lockout and race safety](epic-6-linking/tickets/story-6.2-otp-verification-links-the-login-with-lockout-and-race-safet.md) | backend | planned |
-| 6.3 | [Linking rate limits and trusted forwarded headers](epic-6-linking/tickets/story-6.3-linking-rate-limits-and-trusted-forwarded-headers.md) | backend | planned |
+| 6.6 | [Trusted forwarded headers and an identity log without id_token_hint](epic-6-linking/tickets/story-6.6-trusted-forwarded-headers-and-an-identity-log-without-id-tok.md) | backend | planned |
+| 6.3 | [Linking rate limits per login and per IP](epic-6-linking/tickets/story-6.3-linking-rate-limits-per-login-and-per-ip.md) | backend | planned |
 | 6.4 | [Linking screens for details, OTP, lockout and rate limits](epic-6-linking/tickets/story-6.4-linking-screens-for-details-otp-lockout-and-rate-limits.md) | frontend | planned |
 
-Build-order constraint: 6.5 starts after 6.1 merges, then 6.5, 6.2 and 6.3 build one at a time in that order, because all four change the linking job, handler and endpoint files.
+Build-order constraint: once 6.1 merges, 6.5, 6.2 and 6.6 build in parallel (5.3 may run beside them); 6.3 starts once both 6.5 and 6.2 have merged (it needs 6.5's `ErrorKind.RateLimited` and 6.2's verify route); 6.4 follows 6.3. 6.5 and 6.2 share `LinkingEndpoints.cs`, `Infrastructure/Linking/` and the generated contract files in different sections, so the later of the two rebases and regenerates `openapi.json` and `frontend/src/api/generated/`.
 
 ## Epic 7: [Journeys proven on the stack, deployed and documented](epic-7-release/epic-7-release.md)
 
