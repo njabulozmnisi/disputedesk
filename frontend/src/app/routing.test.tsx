@@ -1,5 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { axe } from 'vitest-axe';
 
 import type { SessionState } from '@/api/generated/model';
 import { server } from '@/test/server';
@@ -22,6 +23,14 @@ describe('routing by authorisation state', () => {
       await screen.findByRole('heading', { level: 1, name: startHeading }),
     ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/');
+  });
+
+  it('has no accessibility violations on the start page', async () => {
+    signInAs('anonymous');
+    renderApp({ path: '/' });
+    await screen.findByRole('heading', { level: 1, name: startHeading });
+
+    expect(await axe(document.body)).toHaveNoViolations();
   });
 
   it('sends a linked visitor of / to /transactions', async () => {
@@ -103,6 +112,22 @@ describe('public routes render for any state', () => {
       expect(router.state.location.pathname).toBe('/signed-out');
     },
   );
+
+  it('has no accessibility violations on the session-ended screen', async () => {
+    signInAs('anonymous');
+    renderApp({ path: '/signed-out?reason=expired' });
+    await screen.findByRole('heading', { level: 1, name: "You've been signed out" });
+
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
+  it('has no accessibility violations on the not-found screen', async () => {
+    signInAs('linked');
+    renderApp({ path: '/no/such/page' });
+    await screen.findByRole('heading', { level: 1, name: notFoundHeading });
+
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
 
   it.each(states)('shows not-found for an unknown path when %s', async (state) => {
     signInAs(state);

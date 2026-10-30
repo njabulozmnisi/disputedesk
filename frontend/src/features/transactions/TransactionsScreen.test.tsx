@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { axe } from 'vitest-axe';
 
 import type { TransactionResponse } from '@/api/generated/model';
 import { server } from '@/test/server';
@@ -70,6 +71,22 @@ describe('transaction rows', () => {
     const exactly = { normalizer: (text: string) => text };
     expect(within(row).getByText('+R18\u202F450.00', exactly)).toBeInTheDocument();
     expect(within(row).getByText('R18\u202F450.00 in', exactly)).toBeInTheDocument();
+  });
+
+  it('has no accessibility violations with disputable and not disputable rows', async () => {
+    serveTransactions([
+      makeRow({ description: 'Can dispute' }),
+      makeRow({
+        transactionId: 'TXN-NO',
+        description: 'Cannot dispute',
+        disputable: false,
+        notDisputableReason: 'outsideWindow',
+      }),
+    ]);
+    renderApp({ path: '/transactions' });
+    await screen.findByText('Can dispute');
+
+    expect(await axe(document.body)).toHaveNoViolations();
   });
 
   it('groups rows made on the same day under one heading, newest first', async () => {
@@ -373,6 +390,30 @@ describe('loading, empty and error states', () => {
     release();
     expect(await screen.findByText('Arrived')).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Loading transactions' })).not.toBeInTheDocument();
+  });
+
+  it('has no accessibility violations while loading', async () => {
+    server.use(http.get('*/api/v1/transactions', () => new Promise(() => undefined)));
+    renderApp({ path: '/transactions' });
+    await screen.findByRole('list', { name: 'Loading transactions' });
+
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
+  it('has no accessibility violations in the empty state', async () => {
+    serveTransactions([]);
+    renderApp({ path: '/transactions' });
+    await screen.findByRole('heading', { level: 2, name: 'No transactions in the last 90 days.' });
+
+    expect(await axe(document.body)).toHaveNoViolations();
+  });
+
+  it('has no accessibility violations in the error state', async () => {
+    failWith('/api/v1/transactions', 'core-banking-unavailable', 503);
+    renderApp({ path: '/transactions' });
+    await screen.findByRole('alert');
+
+    expect(await axe(document.body)).toHaveNoViolations();
   });
 
   it('shows the empty state, with Disputes as a link and no button', async () => {
