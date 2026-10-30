@@ -49,8 +49,8 @@ Verify: Integration tests prove that every claim counts toward the cap, the cap'
 
 5. **`LinkingOptions` are bounded at start-up** (R4; FR-4, AD-26)
    **Given** `Linking:QueueCapacity` and `Linking:Budget`
-   **When** the Api starts with a capacity of 0, -1 or 1001, or a budget of 0, a negative value, 999 milliseconds or more than 60 seconds
-   **Then** it stops with an error naming the key, and starts with a capacity from 1 to 1000 and a budget from 1 to 60 seconds inclusive; a budget under one second is refused like 0 (Microsoft Learn, *Options pattern*, Options validation with `ValidateOnStart`)
+   **When** the Api starts with a capacity of 0, -1 or 1001, or a budget of 0, a negative value, 999 milliseconds or more than 30 seconds
+   **Then** it stops with an error naming the key, and starts with a capacity from 1 to 1000 and a budget from 1 to 30 seconds inclusive (never longer than Npgsql's default 30-second command timeout, which would otherwise end the customer-lock wait first); a budget under one second is refused like 0 (Microsoft Learn, *Options pattern*, Options validation with `ValidateOnStart`)
 
 ## Boundaries
 
@@ -113,3 +113,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Assumption: 2026-10-30 (Sofia) — a failed `LinkingRateLimited` save still answers the 429 and logs an error, as 6.1 criterion 7 treats a failed job audit save. Confirm at the human review of the diff.
 - Assumption: 2026-10-30 (Sofia) — the bounds of `QueueCapacity` (1 to 1000) and `Budget` (1 to 60 seconds) are wide enough for tests and production defaults of 100 and 10 seconds.
 - Resolution: 2026-10-30 (Sofia, after the 6.5 verify) — criterion 5 now says plainly that the budget is 1 to 60 seconds inclusive and that sub-second values (999 milliseconds named in the When list) are refused at start-up; the bound itself is unchanged (Assumption above), and no PRD requirement or architecture decision changed (docs/verification/6.5-verify.md, Supervisor disposition).
+- Resolution: 2026-10-30 (human decision after the 6.5 QA, O1) — the budget bound is 1 to 30 seconds, not 60: a longer budget did not bound the lock wait because Npgsql's 30-second command timeout fired first (`docs/verification/6.5-qa.md`).

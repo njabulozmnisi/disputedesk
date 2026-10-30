@@ -18,6 +18,12 @@ public static class LinkingRegistration
         services.AddOptions<LinkingOptions>()
             .BindConfiguration(LinkingOptions.SectionName)
             .Validate(options => LinkingOptions.IsValidKey(options.OtpHmacKey), "Linking:OtpHmacKey must be base64 for at least 32 bytes.")
+            .Validate(
+                options => options.QueueCapacity is >= LinkingOptions.MinimumQueueCapacity and <= LinkingOptions.MaximumQueueCapacity,
+                $"Linking:QueueCapacity must be from {LinkingOptions.MinimumQueueCapacity} to {LinkingOptions.MaximumQueueCapacity}.")
+            .Validate(
+                options => options.Budget >= LinkingOptions.MinimumBudget && options.Budget <= LinkingOptions.MaximumBudget,
+                $"Linking:Budget must be from {LinkingOptions.MinimumBudget.TotalSeconds} to {LinkingOptions.MaximumBudget.TotalSeconds} seconds.")
             .ValidateOnStart();
 
         // A full channel makes TryWrite return false rather than wait (System.Threading.Channels, bounded channels).

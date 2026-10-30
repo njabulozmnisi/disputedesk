@@ -8,14 +8,13 @@ using DisputeDesk.Application.Linking;
 using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using OpenTelemetry.Logs;
 
 namespace DisputeDesk.Api.IntegrationTests.Linking;
 
 /// <summary>
 /// 6.1 AC1: every well-formed start by an unlinked login gets the same 202 and does the same writes, whatever the
-/// details; the request calls no port; parallel starts leave one current challenge; a full queue still answers 202.
+/// details; the request calls no port; parallel starts leave one current challenge. A full queue is 6.5's
+/// <see cref="StartLinkingQueueFullTests"/>.
 /// </summary>
 public class StartLinkingUniformTests(PostgresFixture postgres)
 {
@@ -110,36 +109,6 @@ public class StartLinkingUniformTests(PostgresFixture postgres)
         Assert.Equal(1, ports.CoreBanking.Calls);
         List<AuditLogEntry> entries = await factory.LinkingAuditsAsync(login);
         Assert.Equal([(AuditAction.LinkingStart, AuditResult.Succeeded), (AuditAction.LinkingNoMatch, AuditResult.Rejected)], entries.Select(entry => (entry.Action, entry.Result)));
-    }
-
-    [Fact]
-    public async Task Start_QueueFull_Still202AndLogsOneWarningWithOnlyTheChallengeId()
-    {
-        // Four jobs run at once and the queue holds one more, so the sixth start finds it full.
-        var ports = new LinkingFakes.Ports();
-        var telemetry = new TelemetryCapture();
-        await using ApiFactory factory = await LinkingApi.StartApiAsync(
-            postgres, ports, new TestClock(), telemetry.AddTo, new Dictionary<string, string?> { ["Linking:QueueCapacity"] = "1" });
-        LinkingFakes.Hold[] holds = [.. Enumerable.Range(0, 4).Select(_ => ports.CoreBanking.HoldNext())];
-        string login = LinkingApi.NewLogin("queue-full");
-        HttpClient browser = await factory.SignInUnlinkedAsync(login);
-        for (int start = 0; start < 4; start++)
-        {
-            await browser.StartAcceptedAsync(LinkingFakes.D);
-        }
-
-        await Task.WhenAll(holds.Select(hold => hold.Reached));
-        await browser.StartAcceptedAsync(LinkingFakes.D);
-
-        HttpResponseMessage sixth = await browser.StartLinkingAsync(LinkingApi.Body(LinkingFakes.D));
-
-        Assert.Equal(HttpStatusCode.Accepted, sixth.StatusCode);
-        // The sixth start superseded the fifth, so its challenge is the current one.
-        Guid unqueued = Assert.Single(await factory.ChallengesAsync(login), challenge => challenge.SupersededAtUtc is null).Id;
-        LogRecord warning = Assert.Single(telemetry.Logs, log => log.LogLevel == LogLevel.Warning && log.CategoryName == "DisputeDesk.Application.Linking.StartLinking.StartLinkingHandler");
-        KeyValuePair<string, object?> value = Assert.Single(warning.Attributes ?? [], attribute => attribute.Key != "{OriginalFormat}");
-        Assert.Equal(("ChallengeId", unqueued), (value.Key, (Guid?)value.Value));
-        Array.ForEach(holds, hold => hold.Release());
     }
 
     [Fact]

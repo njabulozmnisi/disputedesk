@@ -12,7 +12,8 @@ namespace DisputeDesk.Api.IntegrationTests.Linking;
 
 /// <summary>
 /// 6.1 AC5: one conditional update claims the send, the OTP goes to the cellphone on record and only its HMAC is stored;
-/// a failed or cancelled send releases the claim, is audited as failed and is not retried; the key is checked at start-up.
+/// a failed or cancelled send releases the claim (keeping its instant, 6.5), is audited as failed and is not retried; the
+/// key is checked at start-up.
 /// </summary>
 public class LinkingOtpSendTests(PostgresFixture postgres)
 {
@@ -50,7 +51,8 @@ public class LinkingOtpSendTests(PostgresFixture postgres)
         // As an SMTP refusal can: the message names the recipient.
         ports.Sms.Failure = new InvalidOperationException($"5.1.1 <{LinkingFakes.D.Cellphone}@sms.disputedesk.test>: Recipient address rejected");
         var telemetry = new TelemetryCapture();
-        await using ApiFactory factory = await LinkingApi.StartApiAsync(postgres, ports, new TestClock(), telemetry.AddTo);
+        var clock = new TestClock();
+        await using ApiFactory factory = await LinkingApi.StartApiAsync(postgres, ports, clock, telemetry.AddTo);
         string login = LinkingApi.NewLogin("send-fails");
         using HttpClient browser = await factory.SignInUnlinkedAsync(login);
         var requestTrace = ActivityTraceId.CreateRandom();
@@ -60,8 +62,9 @@ public class LinkingOtpSendTests(PostgresFixture postgres)
         Assert.Equal(System.Net.HttpStatusCode.Accepted, response.StatusCode);
         List<AuditLogEntry> entries = await factory.WaitForAuditAsync(login, AuditAction.LinkingOtpSent, AuditResult.Failed);
         Assert.Equal(LinkingFakes.D.CustomerId, entries[^1].CustomerId);
+        // 6.5: the release clears the OTP and its lifetime but keeps the claim's instant, which still counts toward the cap.
         LinkingChallenge challenge = Assert.Single(await factory.ChallengesAsync(login));
-        Assert.Equal((null, null, null), (challenge.OtpHmac, challenge.OtpSentAtUtc, challenge.ExpiresAtUtc));
+        Assert.Equal((null, null, clock.NowAsStored), (challenge.OtpHmac, challenge.ExpiresAtUtc, challenge.OtpSentAtUtc));
         Assert.Single(ports.Sms.Received);
         Activity span = await telemetry.WaitForSpanAsync(span => span.Links.Any(link => link.Context.TraceId == requestTrace));
         Assert.Equal(ActivityStatusCode.Error, span.Status);
@@ -79,7 +82,8 @@ public class LinkingOtpSendTests(PostgresFixture postgres)
         LinkingFakes.Hold send = ports.Sms.HoldNext();
         string database = await postgres.CreateMigratedDatabaseAsync();
         string login = LinkingApi.NewLogin("send-cancelled");
-        var factory = new ApiFactory(database, configureServices: ports.AddTo, clock: new TestClock());
+        var clock = new TestClock();
+        var factory = new ApiFactory(database, configureServices: ports.AddTo, clock: clock);
         await using (factory)
         {
             using HttpClient browser = await factory.SignInUnlinkedAsync(login);
@@ -89,7 +93,7 @@ public class LinkingOtpSendTests(PostgresFixture postgres)
 
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(database).Options);
         LinkingChallenge challenge = await db.Set<LinkingChallenge>().SingleAsync(row => row.LoginSub == login, TestContext.Current.CancellationToken);
-        Assert.Equal((null, null, null), (challenge.OtpHmac, challenge.OtpSentAtUtc, challenge.ExpiresAtUtc));
+        Assert.Equal((null, null, clock.NowAsStored), (challenge.OtpHmac, challenge.ExpiresAtUtc, challenge.OtpSentAtUtc));
         AuditLogEntry last = await db.Set<AuditLogEntry>().Where(entry => entry.ActorId == login && entry.Action == AuditAction.LinkingOtpSent).SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal(AuditResult.Failed, last.Result);
     }
@@ -100,13 +104,13 @@ public class LinkingOtpSendTests(PostgresFixture postgres)
         var ports = new LinkingFakes.Ports();
         LinkingFakes.Hold send = ports.Sms.HoldNext();
         await using ApiFactory factory = await LinkingApi.StartApiAsync(
-            postgres, ports, new TestClock(), settings: new Dictionary<string, string?> { ["Linking:Budget"] = "00:00:00.500" });
+            postgres, ports, new TestClock(), settings: new Dictionary<string, string?> { ["Linking:Budget"] = "00:00:01" });
         string login = LinkingApi.NewLogin("slow-send");
         using HttpClient browser = await factory.SignInUnlinkedAsync(login);
 
         await browser.StartAcceptedAsync(LinkingFakes.D);
         await send.Reached;
-        await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+        await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         send.Release();
 
         await factory.WaitForAuditAsync(login, AuditAction.LinkingOtpSent, AuditResult.Succeeded);

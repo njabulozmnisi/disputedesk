@@ -27,7 +27,11 @@ public sealed class LinkingChallenge
 
     public DateTimeOffset? ExpiresAtUtc { get; set; }
 
-    /// <summary>When the OTP send was claimed; cleared again when the send failed.</summary>
+    /// <summary>
+    /// The instant the job that claimed the OTP send started: the job reads the clock once (AD-4), and claims at most one
+    /// <c>Linking:Budget</c> later, so the hourly send cap's window can be short by up to one budget. Kept when the send
+    /// fails, so every claim counts toward the cap, delivered or not (AD-12).
+    /// </summary>
     public DateTimeOffset? OtpSentAtUtc { get; set; }
 
     /// <summary>When a later start by the same login replaced this challenge.</summary>

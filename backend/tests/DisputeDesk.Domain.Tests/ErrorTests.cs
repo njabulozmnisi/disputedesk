@@ -16,12 +16,13 @@ public class ErrorTests
         { Error.Conflict("some-slug", "A message."), ErrorKind.Conflict },
         { Error.BusinessRule("some-slug", "A message."), ErrorKind.BusinessRule },
         { Error.Unavailable("some-slug", "A message."), ErrorKind.Unavailable },
+        { Error.RateLimited("some-slug", "A message."), ErrorKind.RateLimited },
     };
 
     [Fact]
     public void ErrorKind_Members_AreExactlyTheAd3Set()
     {
-        string[] expected = ["ActionNotAllowed", "BusinessRule", "Conflict", "Forbidden", "NotFound", "Unavailable", "Validation"];
+        string[] expected = ["ActionNotAllowed", "BusinessRule", "Conflict", "Forbidden", "NotFound", "RateLimited", "Unavailable", "Validation"];
 
         Assert.Equal(expected, Enum.GetNames<ErrorKind>().Order(StringComparer.Ordinal));
     }

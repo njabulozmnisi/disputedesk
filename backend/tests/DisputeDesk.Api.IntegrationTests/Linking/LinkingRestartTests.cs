@@ -14,7 +14,9 @@ public class LinkingRestartTests(PostgresFixture postgres)
     public async Task Restart_WhileTheEarlierJobIsBeforeItsClaim_EarlierJobClaimsNothingAndSendsNothing()
     {
         var ports = new LinkingFakes.Ports();
-        LinkingFakes.Hold firstCheck = ports.SimSwap.HoldNext();
+        // Held at the match, before the customer's lock (6.5): a job held inside the lock would make the second job for
+        // the same customer wait for it.
+        LinkingFakes.Hold firstCheck = ports.CoreBanking.HoldNext();
         await using ApiFactory factory = await LinkingApi.StartApiAsync(postgres, ports, new TestClock());
         string login = LinkingApi.NewLogin("restart-before-claim");
         using HttpClient browser = await factory.SignInUnlinkedAsync(login);

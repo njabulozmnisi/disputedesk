@@ -66,10 +66,14 @@ public static class LinkingFakes
         }
     }
 
-    /// <summary>Hands out a <see cref="Hold"/> for the next call only.</summary>
+    /// <summary>Hands out a <see cref="Hold"/> for the next call only, and can make the next call throw.</summary>
     public abstract class Holdable
     {
         private readonly ConcurrentQueue<Hold> _holds = new();
+        private Exception? _throwNext;
+
+        /// <summary>Makes the next call only throw <paramref name="exception"/>, as an unexpected bug would, before it answers.</summary>
+        public void ThrowOnNextCall(Exception exception) => Volatile.Write(ref _throwNext, exception);
 
         /// <summary>Holds the next call that has no hold yet; calls after it pass.</summary>
         public Hold HoldNext()
@@ -79,11 +83,17 @@ public static class LinkingFakes
             return hold;
         }
 
+        /// <summary>Waits while this call is held, then throws the exception set by <see cref="ThrowOnNextCall"/>, if any.</summary>
         protected async Task WaitIfHeldAsync(CancellationToken cancellationToken)
         {
             if (_holds.TryDequeue(out Hold? hold))
             {
                 await hold.WaitAsync(cancellationToken);
+            }
+
+            if (Interlocked.Exchange(ref _throwNext, null) is { } exception)
+            {
+                throw exception;
             }
         }
     }
