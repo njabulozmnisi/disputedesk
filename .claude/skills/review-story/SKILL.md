@@ -38,6 +38,9 @@ On a re-review, review only the delta since the approved version and say for eac
 - An invariant a design decision relies on (for example "every `Disputes` write commits with a stored event") must be enforced in code and proved by a test, not assumed (3.8).
 - An absence assertion checks the field that could echo the input, or the body with its random fields (`traceId`, ciphertext, IDs) removed; never a short literal against the whole body, which a random value matches by chance (`eyJ` in the session fix, `abc` in 3.9).
 - Every ARIA role that requires an accessible name (radiogroup, group, dialog, region) is asserted by name with `getByRole(role, { name })`; a `<legend>` names its `<fieldset>`, not a radiogroup inside it (3.6). The component tests' axe check does not cover this: axe-core has no name rule for `radiogroup`.
+- For every bound a criterion names (a range, a casing, an order, a count), a test sits on each side of the bound; values only inside the range prove nothing.
+- A parallel or race test asserts what the design guarantees (at most N, exactly one winner), never an exact count that depends on timing.
+- For a focus or timing fix, every path through the changed code is checked (success, each error status, a direct load, a route change), not only the path the fix list named.
 
 Rank findings by severity with file and line.
 
