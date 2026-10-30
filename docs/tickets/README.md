@@ -44,7 +44,8 @@ Needs: epic 2 (CurrentCustomer, the Linked policy, the transactions handler and 
 | 3.6 | [Raise-a-dispute screens with idempotent submit](epic-3-disputes/tickets/story-3.6-raise-a-dispute-screens-with-idempotent-submit.md) | frontend | planned |
 | 3.10 | [Dispute status badges on transaction rows](epic-3-disputes/tickets/story-3.10-dispute-status-badges-on-transaction-rows.md) | frontend | planned |
 | 3.11 | [Raise screens emit browser spans that join the API trace](epic-3-disputes/tickets/story-3.11-raise-screens-emit-browser-spans-that-join-the-api-trace.md) | frontend | planned |
-| 3.7 | [Disputes history, dispute detail and withdraw screens](epic-3-disputes/tickets/story-3.7-disputes-history-dispute-detail-and-withdraw-screens.md) | frontend | planned |
+| 3.7 | [Disputes history screen and the shell's skip link](epic-3-disputes/tickets/story-3.7-disputes-history-screen-and-the-shells-skip-link.md) | frontend | planned |
+| 3.12 | [Dispute detail, timeline and withdraw screen](epic-3-disputes/tickets/story-3.12-dispute-detail-timeline-and-withdraw-screen.md) | frontend | planned |
 
 ## Epic 4: [Dispute events reach Kafka in per-dispute order](epic-4-events/epic-4-events.md)
 
@@ -67,6 +68,8 @@ Needs: epic 2 (the gateway templates and provisioning from stories 2.5 and 2.6);
 | 5.4 | [Seeded disputes for customers A and B in every status](epic-5-operations/tickets/story-5.4-seeded-disputes-for-customers-a-and-b-in-every-status.md) | backend | planned |
 | 5.3 | [SLA sweep escalates overdue disputes](epic-5-operations/tickets/story-5.3-sla-sweep-escalates-overdue-disputes.md) | backend | planned |
 
+Build-order constraint: 5.3 builds after 5.2 and 5.4, and its migration never builds beside 6.1's (both change `AppDbContextModelSnapshot`), so 5.3 starts once 6.1 has merged.
+
 ## Epic 6: [Logins link to customers without revealing a match](epic-6-linking/epic-6-linking.md)
 
 Needs: epic 2 (`CustomerLinks`, the core-banking port and `AuditLog.Record`); epic 3 (`AuditLogEntries`); epic 4 (story 4.1's `Telemetry.ActivitySourceName`, for the linking job's span).
@@ -78,6 +81,8 @@ Needs: epic 2 (`CustomerLinks`, the core-banking port and `AuditLog.Record`); ep
 | 6.2 | [OTP verification links the login, with lockout and race safety](epic-6-linking/tickets/story-6.2-otp-verification-links-the-login-with-lockout-and-race-safet.md) | backend | planned |
 | 6.3 | [Linking rate limits and trusted forwarded headers](epic-6-linking/tickets/story-6.3-linking-rate-limits-and-trusted-forwarded-headers.md) | backend | planned |
 | 6.4 | [Linking screens for details, OTP, lockout and rate limits](epic-6-linking/tickets/story-6.4-linking-screens-for-details-otp-lockout-and-rate-limits.md) | frontend | planned |
+
+Build-order constraint: 6.5 starts after 6.1 merges, then 6.5, 6.2 and 6.3 build one at a time in that order, because all four change the linking job, handler and endpoint files.
 
 ## Epic 7: [Journeys proven on the stack, deployed and documented](epic-7-release/epic-7-release.md)
 

@@ -193,10 +193,10 @@ An authenticated, unlinked login can submit an ID number and an account number. 
 - The response is identical in status and body in all three cases (OWASP Authentication Cheat Sheet, generic responses): the details match a customer, they match nothing, or they match a customer who already has a linked login.
 - Sending the OTP happens off the request path, so response time does not depend on whether the details matched. A test asserts that no SMS call is made inside the request.
 - Every well-formed start writes a challenge, so the writes, timing and response are the same whether or not the details match (OWASP Forgot Password Cheat Sheet). Only when the details match a customer with no linked login does the challenge record the customer ID resolved at this step and an OTP get queued.
-- The OTP send is claimed, then sent, then released on failure: one conditional update stamps the send only if the challenge is still current and unsent; if SMTP then fails, a second update clears the stamp, so a failed send counts nothing toward the hourly cap and starts no lifetime. An OTP sent for a challenge a newer start has replaced can never verify.
+- The OTP send is claimed, then sent, then released on failure: one conditional update stamps the send only if the challenge is still current and unsent; if SMTP then fails, a second update clears the OTP and its expiry, so a failed send starts no lifetime and can never verify. Every claimed send counts toward the hourly cap, delivered or not, so the cap of 3 holds even when delivery is uncertain. Settled on 2026-10-30 (story 6.5). An OTP sent for a challenge a newer start has replaced can never verify.
 - Before any OTP is sent, the SIM-swap check (`ISimSwapCheck`) runs for the cellphone on the bank's record. If it fails, errors or times out, no OTP is sent and no challenge can succeed: this fails closed. The response is unchanged (same status and body), so nothing reveals the result, and the failure is audited. Seeded customer C fails this check.
 - The OTP goes to the cellphone number on the bank's record, through `ISmsSender` (which writes to Mailpit). A number the person types is never used.
-- At most 3 OTPs are sent to one customer in any hour, across all logins and IP addresses. Requests beyond that get the same response, send nothing, and are audited [ASSUMPTION].
+- At most 3 OTPs are sent to one customer in any hour, across all logins and IP addresses; a send that failed still counts. Requests beyond that get the same response, send nothing, and are audited [ASSUMPTION].
 - The ID number is never persisted (database, outbox, events, idempotency store) and never logged, traced or put in metrics. Request-body capture is turned off on linking routes.
 - A malformed ID number (not 13 digits, or a failed checksum) or a malformed account number returns 400. The response names the field but never echoes its value, and does not reveal whether anything matched [ASSUMPTION].
 - Starting linking again invalidates the login's earlier challenge.
@@ -218,14 +218,14 @@ An unlinked login can enter an OTP. If the code is correct, the login becomes a 
 **Consequences (testable):**
 
 - Once linked, the login can reach the customer endpoints at once, with no new sign-in.
-- When the login has no active challenge (because the details didn't match, the customer was already linked, or the challenge was invalidated), verification responds exactly like a wrong code. The attempt counts towards FR-7 and FR-8.
-- The attempt counter and the used flag change in one atomic conditional update before the code is compared. In a test, parallel verifications never yield more than 3 attempts or more than one success.
+- When the login has no active challenge (because the details didn't match, the customer was already linked, or the challenge was invalidated), verification responds exactly like a wrong code. When a challenge exists but holds no OTP (no match, already linked, SIM swap failed, or a failed send), the attempt counts towards FR-7 and FR-8. When the login has no challenge at all, the answer is the same as a first wrong code and the attempt counts towards FR-8 only, since it holds no OTP and can never succeed. Settled on 2026-10-30 (story 6.2).
+- The attempt counter changes in one atomic conditional update before the code is compared; a correct code then consumes the challenge and inserts the link in one transaction, with a conditional consume; the session keeps its key, and the next request sees the linked customer. In a test, parallel verifications never yield more than 3 attempts or more than one success. Settled on 2026-10-30 (story 6.2).
 - A login whose SIM-swap check failed received no OTP; any code it enters responds exactly like a wrong code (FR-7 applies). The copy after the attempts run out is "We can't link you online. Please contact the bank."
 - The link table has unique constraints on customer ID and on login. If two logins race to link one customer, the loser gets the same generic failure.
 
 #### FR-7: Lockout after three failures
 
-After 3 wrong codes the challenge is locked. Realises UJ-5c.
+After 3 wrong codes the challenge is locked; a correct code on the third attempt still links. Realises UJ-5c.
 
 **Consequences (testable):**
 
@@ -240,8 +240,9 @@ Linking attempts, start and verify combined, are limited to 5 per login and 20 p
 
 - A login's 6th attempt within 15 minutes returns 429 (RFC 6585) with `Retry-After` (RFC 9110).
 - An IP address's 21st attempt within 15 minutes returns 429, whichever logins are used.
-- Requests rejected with 429 do not count as attempts.
-- The client IP is read from forwarded headers only when they come from the known proxies (nginx, and CloudFront in AWS). Otherwise the connection address is used. A test shows that a spoofed `X-Forwarded-For` from an unknown source is ignored.
+- "In any 15 minutes" follows the built-in sliding-window limiter: the window is split into segments, and permits come back one segment at a time. Settled on 2026-10-30 (story 6.3).
+- Requests rejected with 429 do not count against the limiter that rejected them. The IP limit runs first, so a request the login limit rejects has already used one of the IP's 20. Settled on 2026-10-30 (story 6.3).
+- The client IP is read from forwarded headers only when they come from the known proxies (nginx, and CloudFront in AWS); locally that is the Compose network's configured range. Otherwise the connection address is used. A test shows that a spoofed `X-Forwarded-For` from an unknown source is ignored.
 - Limits are held in memory on the single Api instance. This is stated in the README, and shared limits for scale-out are a production-path note.
 
 #### FR-9: Authorisation states
@@ -478,7 +479,7 @@ The Worker escalates every dispute that is still Submitted or Under review once 
 - The sweep runs at least once a minute [ASSUMPTION]. It claims due disputes in bounded batches with `FOR UPDATE SKIP LOCKED`, so a second Worker cannot double-escalate. After downtime it catches up.
 - Disputes that are already Escalated, Resolved or Withdrawn are left alone. A dispute escalated by hand before the SLA is not escalated again.
 - If the sweep loses a version race, it reloads the dispute's stored events. If the dispute is still Submitted or Under review and past the SLA, it escalates. Otherwise it skips. The timeline never shows a duplicate entry.
-- Before the SLA is due, the sweep records one `SlaWarningRaised` stored event per dispute, never more than once; how long before the SLA is due is settled in story 5.3. It is visible to operations (FR-30), left out of the customer timeline (FR-17), and never published: it has no outbox row. Settled on 2026-10-29 (ad-009).
+- Before the SLA is due, the sweep records one `SlaWarningRaised` stored event per dispute, never more than once, once the SLA is due within 48 hours (settled on 2026-10-30, story 5.3). It is visible to operations (FR-30), left out of the customer timeline (FR-17), and never published: it has no outbox row. Settled on 2026-10-29 (ad-009).
 - SLA time comes from `TimeProvider`, so tests can move the clock.
 
 ### 4.9 Dispute events
@@ -518,7 +519,7 @@ Every successful action, including withdrawal and SLA escalation, publishes `dis
 - Customer C is not linked and fails the SIM-swap check.
 - Customer D is not linked and passes every check. D is the customer who completes linking in UJ-1 and its E2E test [ASSUMPTION: added so that linking can be demonstrated]. Each E2E (QA) run starts on a fresh stack (`docker compose down -v`, then `docker compose up --wait`), which resets D's link; no test-only database role is used. Settled on 2026-10-26.
 - The README lists the demo logins for A and B and the synthetic ID and account numbers for C and D.
-- The seeder builds each seeded dispute only by calling the same domain actions as FR-13, FR-18 and FR-21 to FR-24, with back-dated instants; it never sets a status directly. Each seeded dispute goes through the full commit path (NFR-DATA-2), stored events and outbox rows included, so its dispute events are published once per fresh database. Settled on 2026-10-29 (ad-009, AD-30).
+- The seeder builds each seeded dispute only by calling the same domain actions as FR-13, FR-18 and FR-21 to FR-24, with back-dated instants; it never sets a status directly. Each seeded dispute goes through the full commit path (NFR-DATA-2), stored events and outbox rows included: one stored event and one outbox row per seeded action, and no new rows on a restart. Its dispute events are published at least once, like any other, and consumers deduplicate by CloudEvent `id` (FR-28). Settled on 2026-10-29 (ad-009, AD-30); the at-least-once wording settled on 2026-10-30 (story 5.4).
 - Relay tests do not depend on an empty outbox.
 - A fresh `docker compose up` produces all of this with no manual steps.
 

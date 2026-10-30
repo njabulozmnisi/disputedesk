@@ -22,8 +22,8 @@ supervisor_checks = ["Start linking with customer D's details through the gatewa
 id = 5
 type = "story"
 title = "Linking start holds the send cap and a full queue"
-description = "Adds the three-per-hour send cap to 6.1's job, counted and claimed in one transaction under `pg_advisory_xact_lock` on the customer, and the audited 429 when the bounded channel is full (AD-12)."
-verify = "Integration tests prove the cap at its edges, across logins and IPs and under parallel starts, that a released send does not count, and the audited 429 on a full queue."
+description = "Adds the three-per-hour send cap to 6.1's job, counted, SIM-swap checked and claimed in one EF Core transaction under the two-key `pg_advisory_xact_lock` on the customer; every claim counts, delivered or not (the release keeps `OtpSentAtUtc`); an unexpected job exception audited; and the audited 429 on a full channel through a new `ErrorKind.RateLimited` (AD-3, AD-12)."
+verify = "Integration tests prove every claim counting toward the cap, the one-hour edge, the cap across logins and IPs and under parallel starts, an audited stop on an unexpected job exception, the audited 429 on a full queue with no `Retry-After`, and the `LinkingOptions` bounds."
 covers = ["R4", "R6", "R10", "R36"]
 after = [1]
 hitl = false
@@ -33,40 +33,44 @@ owner = "backend"
 lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Infrastructure/Linking/ (cap)", "backend/src/DisputeDesk.Application/Linking/StartLinking/ (full-queue result)", "backend/src/DisputeDesk.Api/Linking/ (full-channel 429)", "backend/openapi.json", "frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/"]
-supervisor_checks = ["Throwaway copy: take the cap count outside the advisory-lock transaction; criterion 2 fails."]
+touches = ["backend/src/DisputeDesk.Domain/ErrorKind.cs (RateLimited)", "backend/src/DisputeDesk.Api/Errors/ErrorResults.cs", "backend/src/DisputeDesk.Infrastructure/Linking/ (locked transaction, cap, OtpSends release, LinkingOptions bounds)", "backend/src/DisputeDesk.Application/Linking/LinkingChallenge.cs (doc), Linking/StartLinking/ (full-queue result)", "backend/src/DisputeDesk.Api/Linking/ (full-channel 429)", "docs/problems/rate-limited.md", "backend/openapi.json", "frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/ (incl. LinkingOtpSendTests.cs)", "backend/tests/DisputeDesk.ArchitectureTests/ProblemCatalogueTests.cs"]
+supervisor_checks = ["Throwaway copy: take the cap count outside the advisory-lock transaction; criterion 2 fails.", "Throwaway copy: make the release clear OtpSentAtUtc again; criterion 1 fails."]
 
 [[entry]]
 id = 2
 type = "story"
 title = "OTP verification links the login, with lockout and race safety"
-description = "Adds `POST /api/v1/linking/verify` with the atomic attempt counter, constant-time comparison, link insert and session re-issue (AD-12, AD-7)."
-verify = "Integration tests cover correct, wrong, expired, locked, parallel and racing verifications."
-covers = ["R5", "R7", "R10", "R36"]
+description = "Adds `POST /api/v1/linking/verify`: one atomic conditional attempt update, a constant-time HMAC comparison on every attempt, consume and link in one EF Core transaction, keeping the session key (AD-12, AD-7). A correct third code links; lockout after three wrong codes; a login with no challenge row answers like a wrong code without counting."
+verify = "Integration tests cover a correct code with the link and the session kept unchanged, the attempt sequence and lockout, every kind of challenge and a login with none, the input bounds, parallel verifications, two logins racing, and the audit entries, metrics and privacy."
+covers = ["R5", "R7", "R10", "R31", "R36"]
 after = [5]
 hitl = false
 risk = "high"
+refine = true
 owner = "backend"
 lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Application/Linking/VerifyOtp/", "backend/src/DisputeDesk.Infrastructure/Linking/ (attempt update)", "backend/src/DisputeDesk.Api/Linking/", "backend/openapi.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/"]
+touches = ["backend/src/DisputeDesk.Contracts/Linking/ (verify request)", "backend/src/DisputeDesk.Application/Linking/VerifyOtp/", "backend/src/DisputeDesk.Application/Linking/LinkingErrors.cs", "backend/src/DisputeDesk.Infrastructure/Linking/ (attempt statement, consume, link insert)", "backend/src/DisputeDesk.Infrastructure/Persistence/ (UniqueViolations.cs, CustomerLinkConfiguration.cs)", "backend/src/DisputeDesk.Api/Linking/", "backend/src/DisputeDesk.Api/Program.cs", "backend/openapi.json", "frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/", "backend/tests/DisputeDesk.Api.IntegrationTests/Authorization/EndpointAuthorizationTests.cs"]
+supervisor_checks = ["Link customer D through the gateway with the OTP from Mailpit: Transactions loads without a new sign-in and the session cookie value is unchanged.", "Throwaway copy: remove the UQ_CustomerLinks_* entries from UniqueViolations; criterion 7 gets a 500.", "Throwaway copy: drop Attempts < 3 from the attempt statement; criteria 3 and 6 fail."]
 
 [[entry]]
 id = 3
 type = "story"
 title = "Linking rate limits and trusted forwarded headers"
-description = "Adds the built-in sliding-window limiters, chained as Microsoft Learn documents for limiters partitioned on different keys (confirm the chaining form against the installed .NET), on linking routes and restricts forwarded headers to the gateway (AD-12, AD-23)."
-verify = "Integration tests prove the limits, `Retry-After`, uncounted rejections, audit of the first rejection and spoofed headers being ignored."
-covers = ["R8", "R10"]
+description = "Adds the built-in sliding-window limiters, per client IP then per login, chained with `PartitionedRateLimiter.CreateChained` on the linking routes, with one audit entry per partition per window; trusts forwarded headers only from the configured Compose network range through `ForwardedHeadersOptions.KnownIPNetworks`, with the subnet pinned in Compose; and keeps `id_token_hint` out of the identity origin's access log (AD-12, AD-23)."
+verify = "Integration tests prove both limits with their segment semantics and the chained edge, the 429 body and `Retry-After`, first-rejection audit and counted later rejections, forwarded headers trusted only from the configured range, and the options' bounds; architecture tests prove the pinned subnet matches the configured range and the identity origin's log format."
+covers = ["R8", "R10", "R31"]
 after = [2]
 hitl = false
 risk = "high"
+refine = true
 owner = "backend"
 lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Api/Linking/RateLimiting/", "backend/src/DisputeDesk.Api/Program.cs (ForwardedHeaders)", "backend/src/DisputeDesk.Api/appsettings.json", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/RateLimits/"]
+touches = ["backend/src/DisputeDesk.Api/Linking/RateLimiting/", "backend/src/DisputeDesk.Api/Linking/LinkingEndpoints.cs", "backend/src/DisputeDesk.Api/Program.cs (ForwardedHeaders, UseRateLimiter)", "backend/src/DisputeDesk.Api/appsettings.json", "docker-compose.yml (pinned subnet, api keys)", "infra/nginx/templates/nginx.conf.template (identity origin log_format)", "README.md", "backend/openapi.json", "frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/RateLimits/", "backend/tests/DisputeDesk.Api.IntegrationTests/Infrastructure/ApiFactory.cs", "backend/tests/DisputeDesk.ArchitectureTests/PlatformScriptTests.cs"]
+supervisor_checks = ["Send a start through the gateway with X-Forwarded-For: 203.0.113.9; the audited ClientIp is the host's client address.", "Sign in and out as customer A; the gateway's end-session log line holds no id_token_hint value.", "Throwaway copy: chain the login limiter before the IP limiter; criterion 1's chained-edge test fails."]
 
 [[entry]]
 id = 4
