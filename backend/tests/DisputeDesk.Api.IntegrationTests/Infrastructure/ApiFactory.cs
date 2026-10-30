@@ -24,6 +24,9 @@ public sealed class ApiFactory(
     public const string SessionCookieName = "disputedesk-session";
     public const string AntiforgeryCookieName = "disputedesk-antiforgery";
 
+    /// <summary>The OTP HMAC key every test Api uses: 32 bytes of 0x01, base64.</summary>
+    public const string TestOtpHmacKey = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
+
     private static readonly Dictionary<string, string?> DefaultSettings = new()
     {
         ["Zitadel:Issuer"] = FakeZitadel.Issuer,
@@ -38,10 +41,17 @@ public sealed class ApiFactory(
         ["CoreBanking:BaseUrl"] = "http://127.0.0.1:1",
         ["Sms:Host"] = "127.0.0.1",
         ["Sms:Port"] = "1",
+        ["Linking:OtpHmacKey"] = TestOtpHmacKey,
     };
 
     /// <summary>Turns Scalar and the runtime OpenAPI document on; <c>appsettings.json</c> leaves them off (AD-26).</summary>
     public static IReadOnlyDictionary<string, string?> ApiReferenceOn { get; } = new Dictionary<string, string?> { ["Scalar:Enabled"] = "true" };
+
+    /// <summary>
+    /// The client address of every request: the test server leaves <c>Connection.RemoteIpAddress</c> null, so a startup
+    /// filter sets it, IPv4-mapped as a dual-stack Kestrel socket reports it (TEST-NET-3, RFC 5737).
+    /// </summary>
+    public static readonly IPAddress ClientAddress = IPAddress.Parse("::ffff:203.0.113.7");
 
     public FakeZitadel Zitadel { get; } = new();
 
@@ -76,6 +86,7 @@ public sealed class ApiFactory(
         builder.ConfigureTestServices(services =>
         {
             Zitadel.AddTo(services);
+            services.AddTransient<IStartupFilter>(_ => new ClientAddressStartupFilter(ClientAddress));
             if (clock is not null)
             {
                 services.AddSingleton(clock);

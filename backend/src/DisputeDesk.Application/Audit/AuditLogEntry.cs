@@ -1,3 +1,4 @@
+using System.Net;
 using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Domain.Disputes;
 
@@ -29,4 +30,7 @@ public sealed class AuditLogEntry
 
     /// <summary>The W3C trace ID of the request or batch that wrote the entry.</summary>
     public string? TraceId { get; init; }
+
+    /// <summary>The client's address on a linking entry (FR-10), stored as <c>inet</c>; null on every other entry.</summary>
+    public IPAddress? ClientIp { get; init; }
 }

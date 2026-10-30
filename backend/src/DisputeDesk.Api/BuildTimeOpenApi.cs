@@ -20,5 +20,7 @@ public static class BuildTimeOpenApi
         ["CoreBanking:BaseUrl"] = "https://core-banking.invalid",
         ["Sms:Host"] = "sms.invalid",
         ["Sms:Port"] = "25",
+        // 32 zero bytes: a stand-in of the right shape that is never used.
+        ["Linking:OtpHmacKey"] = Convert.ToBase64String(new byte[32]),
     };
 }

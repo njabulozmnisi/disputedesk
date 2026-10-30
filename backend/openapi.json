@@ -716,6 +716,68 @@
           }
         ]
       }
+    },
+    "/api/v1/linking/start": {
+      "post": {
+        "tags": [
+          "Linking"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartLinkingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1214,6 +1276,26 @@
         ],
         "description": "Where the caller stands (AD-10): not signed in, signed in but not yet a linked customer, or linked."
       },
+      "StartLinkingRequest": {
+        "required": [
+          "idNumber",
+          "accountNumber"
+        ],
+        "type": "object",
+        "properties": {
+          "idNumber": {
+            "pattern": "^[0-9]{13}$",
+            "type": "string",
+            "description": "The South African ID number: exactly 13 ASCII digits, the last being the Luhn check digit of the first 12."
+          },
+          "accountNumber": {
+            "pattern": "^[0-9]{6,16}$",
+            "type": "string",
+            "description": "One of the customer's bank account numbers: 6 to 16 ASCII digits."
+          }
+        },
+        "description": "The body of `POST /api/v1/linking/start` (FR-4). Built-in minimal API validation checks its format; neither\nvalue is trimmed or normalised, and any other property, such as a cellphone number, is ignored. A message never\nrepeats the value (AD-3)."
+      },
       "StoredEventType": {
         "enum": [
           "disputeRaised",
@@ -1469,6 +1551,9 @@
     },
     {
       "name": "Operations"
+    },
+    {
+      "name": "Linking"
     }
   ]
 }

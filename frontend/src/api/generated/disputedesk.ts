@@ -40,6 +40,7 @@ import type {
   ProblemDetails,
   RaiseDisputeRequest,
   SessionResponse,
+  StartLinkingRequest,
   TransactionPageResponse,
   WithdrawDisputeRequest
 } from './model';
@@ -1117,3 +1118,91 @@ export function useGetApiV1OperationsDisputesDisputeId<TData = Awaited<ReturnTyp
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
+
+
+export const getPostApiV1LinkingStartUrl = () => {
+
+
+
+
+  return `/api/v1/linking/start`
+}
+
+export const postApiV1LinkingStart = async (startLinkingRequest: StartLinkingRequest, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getPostApiV1LinkingStartUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(startLinkingRequest)
+  }
+);}
+
+
+
+
+
+export const getPostApiV1LinkingStartMutationKey = () => ['postApiV1LinkingStart'] as const;
+
+export const getPostApiV1LinkingStartMutationOptions = <TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1LinkingStart>>, TError,PostApiV1LinkingStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1LinkingStart>>, TError,PostApiV1LinkingStartMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1LinkingStartMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1LinkingStart>>, PostApiV1LinkingStartMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiV1LinkingStart(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiV1LinkingStartMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1LinkingStart>>>
+    export type PostApiV1LinkingStartMutationBody = StartLinkingRequest
+    export type PostApiV1LinkingStartMutationError = ErrorType<HttpValidationProblemDetails | ProblemDetails>
+    export type PostApiV1LinkingStartMutationVariables = {data: StartLinkingRequest}
+
+    export const usePostApiV1LinkingStart = <TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1LinkingStart>>, TError,PostApiV1LinkingStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiV1LinkingStart>>,
+        TError,
+        PostApiV1LinkingStartMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiV1LinkingStartMutationOptions(options), queryClient);
+    }

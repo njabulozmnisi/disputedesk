@@ -1,3 +1,4 @@
+using DisputeDesk.Application.Linking;
 using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ internal static class UniqueViolations
     {
         [DisputeConfiguration.OneDisputePerTransaction] = DisputeErrors.AlreadyDisputed,
         [StoredEventConfiguration.OneEventPerVersion] = DisputeErrors.VersionClash,
+        [LinkingChallengeConfiguration.OneCurrentChallengePerLogin] = LinkingErrors.ChallengeClash,
     };
 
     /// <summary>The error for a commit that failed on one of the mapped unique indexes, otherwise null.</summary>
