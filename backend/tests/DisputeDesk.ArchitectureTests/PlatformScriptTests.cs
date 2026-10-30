@@ -230,6 +230,48 @@ public partial class PlatformScriptTests
     }
 
     [Fact]
+    public void Compose_PinnedDefaultNetworkSubnet_IsTheApisTrustedNetwork()
+    {
+        // 6.6 AC1 (AD-23): a mismatch fails silently, every client becoming the gateway's address, so the two must agree.
+        // Both read DISPUTEDESK_SUBNET with the same default, so a second stack that moves its subnet moves both.
+        string subnet = DefaultNetworkSubnet().Match(Compose).Groups["subnet"].Value;
+        string trusted = ApiTrustedNetwork().Match(Compose).Groups["network"].Value;
+
+        Assert.Equal("${DISPUTEDESK_SUBNET:-10.201.89.0/24}", subnet);
+        Assert.Equal(subnet, trusted);
+        Assert.Contains("      ForwardedHeaders__AllowedHosts: localhost\n", Compose, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GatewayTemplate_IdentityOriginAccessLog_RecordsThePathWithoutTheQuery()
+    {
+        // 6.6 AC2 (AD-20, ASVS 5.0 V14.2.1): the end-session GET carries the ID token as id_token_hint in its query.
+        string template = File.ReadAllText(Path.Combine(SourceRoots.Repo, "infra/nginx/templates/nginx.conf.template"));
+        int start = template.IndexOf("server_name ${GATEWAY_AUTH_SERVER_NAME};", StringComparison.Ordinal);
+        // The identity server block, up to its closing brace (two-space indent), its locations included.
+        string identityServer = template[start..template.IndexOf("\n  }\n", start, StringComparison.Ordinal)];
+
+        // Every access_log in the block, at server or location level, so a location cannot log with another format.
+        string[] formats = [.. AccessLog().Matches(identityServer).Select(match => match.Groups["format"].Value)];
+        string definition = LogFormat("identity").Match(template).Groups["definition"].Value;
+
+        Assert.NotEmpty(formats);
+        Assert.All(formats, format => Assert.Equal("identity", format));
+        Assert.Contains("$uri", definition, StringComparison.Ordinal);
+        Assert.DoesNotMatch(QueryVariables(), definition);
+    }
+
+    [Fact]
+    public void ApiProgram_ForwardedHeaders_RunFirstInThePipeline()
+    {
+        // 6.6 AC1: before anything reads the client address, the scheme or the host.
+        string program = File.ReadAllText(Path.Combine(SourceRoots.Src, "DisputeDesk.Api/Program.cs"));
+        string pipeline = program[program.IndexOf("builder.Build();", StringComparison.Ordinal)..];
+
+        Assert.Equal("app.UseForwardedHeaders();", FirstMiddleware().Match(pipeline).Value);
+    }
+
+    [Fact]
     public async Task DevLoginScript_Help_DescribesAHeadlessSignInThatWritesACookieJar()
     {
         var start = new ProcessStartInfo("bash", [DevLoginPath, "--help"]) { RedirectStandardOutput = true };
@@ -318,4 +360,26 @@ public partial class PlatformScriptTests
 
     [GeneratedRegex(@"Bearer [A-Za-z0-9_\-\.]{20,}")]
     private static partial Regex LiteralBearerToken();
+
+    /// <summary>The top-level networks.default.ipam.config subnet in docker-compose.yml.</summary>
+    [GeneratedRegex(@"\nnetworks:\n  default:\n    ipam:\n      config:\n        - subnet: (?<subnet>\S+)\n")]
+    private static partial Regex DefaultNetworkSubnet();
+
+    [GeneratedRegex(@"\n      ForwardedHeaders__TrustedNetwork: (?<network>\S+)\n")]
+    private static partial Regex ApiTrustedNetwork();
+
+    /// <summary>An access_log directive anywhere on a line; the format is empty when none is named (nginx's combined).</summary>
+    [GeneratedRegex(@"\baccess_log\s+(?<path>[^\s;]+)\s*(?<format>[^\s;]*)[^;]*;")]
+    private static partial Regex AccessLog();
+
+    /// <summary>The definition of a log_format: its quoted strings, up to the semicolon.</summary>
+    private static Regex LogFormat(string name) => new(@"\n  log_format\s+" + Regex.Escape(name) + @"\s+(?<definition>[^;]+);", RegexOptions.None, TimeSpan.FromSeconds(1));
+
+    /// <summary>nginx variables that hold the query string, or the Referer, which can hold a URL with the query.</summary>
+    [GeneratedRegex(@"\$(request|request_uri|args|query_string|arg_\w+|http_referer)\b")]
+    private static partial Regex QueryVariables();
+
+    /// <summary>The first app.Use... call.</summary>
+    [GeneratedRegex(@"app\.Use\w+\([^)]*\);")]
+    private static partial Regex FirstMiddleware();
 }

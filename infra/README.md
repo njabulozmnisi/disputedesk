@@ -22,6 +22,11 @@ stack, whichever worktree started it. Run it only under the `stack` lock.
 Every host port except the gateway's 8080 can be moved when another process holds it, for example
 `DISPUTEDESK_OTLP_HTTP_PORT=14318 docker compose up --wait`; the header of `docker-compose.yml` lists the variables.
 
+The default network's subnet is pinned, because the api trusts forwarded headers only from it (AD-23):
+`DISPUTEDESK_SUBNET`, default `10.201.89.0/24`, sets both the network and the api's `ForwardedHeaders__TrustedNetwork`.
+A second stack beside this one (another worktree or a throwaway copy) sets another value, for example
+`DISPUTEDESK_SUBNET=10.201.90.0/24`, since two networks on one Docker daemon cannot share a subnet. It also sets its own `COMPOSE_PROJECT_NAME` (the file names the project `disputedesk`, so without it the second stack replaces the first one's containers); the gateway's fixed 8080 still means only one stack runs at a time.
+
 | Folder | Purpose |
 |---|---|
 | `db/` | Postgres init: `disputedesk` (app, owns its database), `zitadel` (non-superuser, own database), `qa_readonly` (SELECT on the app schema through default privileges, read-only sessions). |

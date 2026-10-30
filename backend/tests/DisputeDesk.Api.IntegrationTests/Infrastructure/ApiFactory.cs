@@ -42,7 +42,13 @@ public sealed class ApiFactory(
         ["Sms:Host"] = "127.0.0.1",
         ["Sms:Port"] = "1",
         ["Linking:OtpHmacKey"] = TestOtpHmacKey,
+        // The Compose values. ClientAddress is outside the network, so its forwarded headers are ignored.
+        ["ForwardedHeaders:TrustedNetwork"] = TrustedNetwork,
+        ["ForwardedHeaders:AllowedHosts"] = "localhost",
     };
+
+    /// <summary>The network every test Api trusts to forward headers: Compose's pinned default network (AD-23).</summary>
+    public const string TrustedNetwork = "10.201.89.0/24";
 
     /// <summary>Turns Scalar and the runtime OpenAPI document on; <c>appsettings.json</c> leaves them off (AD-26).</summary>
     public static IReadOnlyDictionary<string, string?> ApiReferenceOn { get; } = new Dictionary<string, string?> { ["Scalar:Enabled"] = "true" };

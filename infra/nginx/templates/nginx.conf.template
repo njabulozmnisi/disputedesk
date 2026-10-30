@@ -22,6 +22,12 @@ http {
   server_tokens off;
   access_log    /var/log/nginx/access.log;
 
+  # The identity origin's format: the combined format with the path ($uri) in place of the request line, and no
+  # Referer. The end-session GET carries the ID token as id_token_hint in its query, and a page on that origin sends
+  # its own URL as the Referer, so neither the query nor the Referer is logged there (AD-20, ASVS 5.0 V14.2.1).
+  log_format    identity '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" '
+                         '$status $body_bytes_sent "$http_user_agent"';
+
   # The image runs as a non-root user, which can write only under /tmp (the image's own defaults).
   client_body_temp_path /tmp/client_temp;
   proxy_temp_path       /tmp/proxy_temp;
@@ -158,6 +164,7 @@ http {
   server {
     listen 8080;
     server_name ${GATEWAY_AUTH_SERVER_NAME};
+    access_log /var/log/nginx/access.log identity;
 
     location /ui/v2/login {
       proxy_pass http://zitadel_login;

@@ -8,6 +8,9 @@
 # Host ports that clash with a process already listening can be moved, from the shell or an untracked .env:
 #   POSTGRES_HOST_PORT (5433), DISPUTEDESK_REDPANDA_PORT (19092), DISPUTEDESK_MAILPIT_PORT (8025),
 #   DISPUTEDESK_DASHBOARD_PORT (18888), DISPUTEDESK_OTLP_GRPC_PORT (4317), DISPUTEDESK_OTLP_HTTP_PORT (4318).
+# The default network's subnet moves the same way when a second stack runs beside this one (another worktree or
+# a throwaway copy): DISPUTEDESK_SUBNET (10.201.89.0/24), for example 10.201.90.0/24. The api trusts forwarded
+# headers from that same subnet.
 # The gateway's 8080 stays fixed (see the gateway service). infra/smoke.sh reads the same variables, from the
 # shell only, so export them there rather than in .env when running it.
 #
@@ -245,6 +248,9 @@ services:
       Scalar__Enabled: "true"                      # Scalar at /scalar/ and the runtime document (AD-26)
       # The OTP HMAC key (AD-26): base64 of the text "dev-only-linking-otp-hmac-key-not-a-secret", 42 bytes.
       Linking__OtpHmacKey: ${LINKING_OTP_HMAC_KEY:-ZGV2LW9ubHktbGlua2luZy1vdHAtaG1hYy1rZXktbm90LWEtc2VjcmV0}
+      # AD-23: only the default network (pinned below) may forward headers, and only for the public app host.
+      ForwardedHeaders__TrustedNetwork: ${DISPUTEDESK_SUBNET:-10.201.89.0/24}
+      ForwardedHeaders__AllowedHosts: localhost
     volumes:
       - zitadel-clients:/run/zitadel:ro            # zitadel-clients.json (the Zitadel:* keys, client IDs and secrets)
       - ./fixtures/local.json:/fixtures/local.json:ro   # the seed source, the same file the stub reads
@@ -340,6 +346,14 @@ services:
       zitadel-login: { condition: service_healthy }
       aspire-dashboard: { condition: service_started }
     mem_limit: 64m
+
+# AD-23: the Api trusts forwarded headers from this subnet (ForwardedHeaders__TrustedNetwork above), so it is pinned
+# rather than picked by Docker. It sits outside Docker's default address pools; DISPUTEDESK_SUBNET moves it (header).
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${DISPUTEDESK_SUBNET:-10.201.89.0/24}
 
 volumes:
   pgdata:

@@ -12,7 +12,7 @@ public static class BuildTimeOpenApi
     public static bool IsRunning { get; } = Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
 
     /// <summary>
-    /// Stand-ins for the settings Infrastructure validates at start-up, which that run does not have. Nothing is
+    /// Stand-ins for the settings validated at start-up, which that run does not have. Nothing is
     /// called during the run, so the values are never used.
     /// </summary>
     public static IReadOnlyDictionary<string, string?> StandInSettings { get; } = new Dictionary<string, string?>
@@ -22,5 +22,7 @@ public static class BuildTimeOpenApi
         ["Sms:Port"] = "25",
         // 32 zero bytes: a stand-in of the right shape that is never used.
         ["Linking:OtpHmacKey"] = Convert.ToBase64String(new byte[32]),
+        ["ForwardedHeaders:TrustedNetwork"] = "192.0.2.0/24",
+        ["ForwardedHeaders:AllowedHosts"] = "app.invalid",
     };
 }
