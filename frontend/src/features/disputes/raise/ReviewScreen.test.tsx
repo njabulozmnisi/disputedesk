@@ -54,6 +54,7 @@ describe('the review screen', () => {
     expect(within(summary).getByText('ZXP*GLOBALSVCS 0800')).toBeInTheDocument();
     expect(within(summary).getByText('Mon 26 Oct 2026')).toBeInTheDocument();
     expect(within(summary).getByText('Card 492345•• •••• 3456')).toBeInTheDocument();
+    expect(within(summary).getAllByText(/Card/)).toHaveLength(1);
     expect(within(summary).getByText('Wrong amount')).toBeInTheDocument();
     expect(within(summary).getByText('never bought this')).toBeInTheDocument();
 

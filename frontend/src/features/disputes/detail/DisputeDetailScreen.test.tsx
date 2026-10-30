@@ -235,6 +235,41 @@ describe('loading, failing and loaded', () => {
     });
   });
 
+  it('moves focus to the heading when Try again is answered 404, as the button unmounts', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`*/api/v1/disputes/${disputeGuid}`, () => {
+        calls += 1;
+        return calls === 1 ? problemResponse('internal', 500) : problemResponse('not-found', 404);
+      }),
+    );
+    const { user } = renderApp({ path: `/disputes/${disputeGuid}` });
+    await screen.findByText('Something went wrong on our side. Try again.');
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await screen.findByRole('heading', { level: 1, name: notFoundHeading });
+    await waitFor(() => {
+      expect(h1()).toHaveFocus();
+    });
+  });
+
+  it('leaves focus on Try again when it fails again', async () => {
+    server.use(
+      http.get(`*/api/v1/disputes/${disputeGuid}`, () => problemResponse('internal', 500)),
+    );
+    const { user } = renderApp({ path: `/disputes/${disputeGuid}` });
+    const tryAgain = await screen.findByRole('button', { name: 'Try again' });
+
+    await user.click(tryAgain);
+
+    await waitFor(() => {
+      expect(tryAgain).not.toHaveAttribute('disabled');
+    });
+    expect(tryAgain).toHaveFocus();
+    expect(h1()).not.toHaveFocus();
+  });
+
   it('checks the error before the data: a failed refetch leaves no stale detail', async () => {
     serveDetailSequence(
       makeDispute(),

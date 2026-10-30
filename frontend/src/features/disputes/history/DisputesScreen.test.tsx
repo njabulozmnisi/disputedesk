@@ -412,6 +412,33 @@ describe('states', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('moves focus to the heading after a successful Try again, and leaves it on Try again when it fails again', async () => {
+    let fail = true;
+    server.use(
+      http.get('*/api/v1/disputes', () =>
+        fail
+          ? problemResponse('internal', 500)
+          : HttpResponse.json({ items: [summary('o1', 'submitted')], nextCursor: null }),
+      ),
+    );
+    const { user } = renderApp({ path: '/disputes' });
+    const tryAgain = await screen.findByRole('button', { name: 'Try again' });
+
+    await user.click(tryAgain);
+    await waitFor(() => {
+      expect(tryAgain).not.toHaveAttribute('disabled');
+    });
+    expect(tryAgain).toHaveFocus();
+
+    fail = false;
+    await user.click(tryAgain);
+
+    await screen.findByText('Shop o1');
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Disputes' })).toHaveFocus();
+    });
+  });
+
   it('shows the notice after a network error', async () => {
     server.use(http.get('*/api/v1/disputes', () => HttpResponse.error()));
     renderApp({ path: '/disputes' });
