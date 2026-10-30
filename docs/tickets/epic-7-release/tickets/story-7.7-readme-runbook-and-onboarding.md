@@ -4,7 +4,7 @@ type: story
 title: "README, runbook and onboarding"
 parent: epic-7-release
 covers: [R39, R28]
-after: [5.1, 3]
+after: [5.1, 5.5, 3]
 hitl: false
 risk: low
 ---

@@ -24,7 +24,7 @@ Verify: Integration tests (Testcontainers PostgreSQL) for the list, paging bound
    **When** they call `GET /api/v1/disputes`
    **Then** the body is `{ "items": [...], "nextCursor": ... }` (AD-5) and each item is a `DisputeSummaryResponse`: `disputeId`, `customerStatus`, `outcome` (`upheld` or `rejected` when resolved, else null), `reason`, `transaction` (the stored snapshot, `TransactionSnapshotResponse`), `disputedAmount` and `createdAt`
    **And** rows come newest first by `CreatedAtUtc` then `Id`, both descending in SQL, read from the `Disputes` read model through the ownership filter (EF Core, *Global query filters*; AD-11) with keyset paging (EF Core, *Pagination*: keyset pagination)
-   **And** the keyset predicate is the Npgsql row-value comparison `EF.Functions.LessThan((d.CreatedAtUtc, d.Id), (cursorAt, cursorId))` (Npgsql EF Core provider, *Row value comparisons*; present in the installed 10.0.3), translated to SQL, not evaluated in memory; the builder shows the generated SQL in the report. `Guid.CompareTo` is not used, because .NET's `Guid` order differs from PostgreSQL's `uuid` order; tests compare `Id` order as the lowercase canonical strings, which is PostgreSQL's order
+   **And** the keyset predicate is EF Core's documented keyset form `d.CreatedAtUtc < at || (d.CreatedAtUtc == at && d.Id.CompareTo(id) < 0)`, which Npgsql translates to SQL (`"CreatedAtUtc" < @at OR ("CreatedAtUtc" = @at AND "Id" < @id)`), so the `uuid` order is PostgreSQL's, never .NET's in memory (EF Core, *Pagination*, keyset; Application references no database provider, `LayerTests`); the builder shows the generated SQL with `ToQueryString()`
    **And** the query takes `limit + 1` rows: `nextCursor` is set only when the extra row exists, and the extra row is not returned, so a full last page has `nextCursor` null
    **And** no index is added; a `// shortcut:` comment names `IX_Disputes_CustomerId_CreatedAtUtc_Id` and its trigger: add it when the list query's plan (`EXPLAIN`) shows a sequential scan on `Disputes`
 
@@ -113,7 +113,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - parent — docs/tickets/epic-3-disputes/epic-3-disputes.md
 - architecture — docs/architecture/architecture.md, AD-3, AD-5, AD-8, AD-10, AD-11, AD-13, AD-14a, AD-20, AD-21
 - standard — <https://learn.microsoft.com/en-us/ef/core/querying/pagination>, keyset pagination
-- standard — <https://www.npgsql.org/efcore/mapping/translations.html>, Row value comparisons (`EF.Functions.LessThan` on value tuples)
+- standard — <https://learn.microsoft.com/ef/core/querying/pagination>, Keyset pagination
 - standard — <https://learn.microsoft.com/en-us/ef/core/querying/filters>, global query filters
 - standard — <https://learn.microsoft.com/aspnet/core/fundamentals/minimal-apis?view=aspnetcore-10.0#validation>, validation in minimal APIs
 - standard — <https://learn.microsoft.com/aspnet/core/security/authorization/policies>, policy-based authorization
@@ -132,5 +132,5 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Decision: 2026-10-29 (Sofia, pre-build review) — split from 3.3 to keep each story within about 8 criteria (AGENTS.md, Definition of ready); its criteria are 3.3's challenged criteria 1, 2, 7, 9, 10 (list part) and 11 plus the pre-build review's points.
 - Decision: 2026-10-29 (human, 3.3 challenge) — enum values are read by the framework default, case-insensitive (criterion 7).
 - Decision: 2026-10-30 (3.9 challenge `[decision]` point, settled by story 3.3) — the raise stores the snapshot date at whole microseconds, so the 201, the detail and the list show one string (criterion 6).
-- Decision: 2026-10-30 (Sofia, 3.9 pre-build review) — the keyset mechanism is the Npgsql row-value comparison with `limit + 1`; the cursor layout is `<"O" instant>|<"D" ID>`, base64url.
+- Decision: 2026-10-30 (Sofia, 3.9 pre-build review) — the keyset mechanism is EF Core's keyset predicate with `Guid.CompareTo` (translated to SQL; the Npgsql row-value function is not available to Application, `LayerTests`; supervisor, 2026-10-30, after the builder's block) with `limit + 1`; the cursor layout is `<"O" instant>|<"D" ID>`, base64url.
 - Overlap (2026-10-30): with 6.1, `backend/openapi.json` and `frontend/src/api/generated/` (both add operations; whichever merges second regenerates both). No other shared file with 6.1, 4.1 or 4.2. No migration.

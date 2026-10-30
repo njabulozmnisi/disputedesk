@@ -424,7 +424,7 @@ An actor with the role `dispute.resolve` can move a dispute from Under review or
 
 #### FR-24: Allowed actions
 
-Only the actions in this table are allowed. Any other action on a dispute returns 409, with the dispute's current status in the ProblemDetails. Realises UJ-3 and UJ-5b.
+Only the actions in this table are allowed. Any other action on a dispute returns 409, with the dispute's status as last read in the ProblemDetails (after a version clash, the status from one reload of the dispute; AD-15). Realises UJ-3 and UJ-5b.
 
 | From \ Action | start review | escalate | resolve | withdraw (owning customer) |
 |---|---|---|---|---|

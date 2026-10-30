@@ -1,6 +1,6 @@
 # Build order
 
-Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, 3.9 right after 3.3, 3.10 and 3.11 right after 3.6, and 7.10 before 7.1).
+Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, 3.9 right after 3.3, 3.10 and 3.11 right after 3.6, 5.5 right after 5.1, and 7.10 before 7.1).
 
 Status: done (merged on main), in progress, or planned. The supervisor updates it when a story merges.
 
@@ -52,7 +52,7 @@ Needs: epic 3 (outbox rows written by the one commit path (AD-14), with outbox I
 
 | Story | Title | Owner | Status |
 |---|---|---|---|
-| 4.1 | [Outbox relay publishes dispute events to Kafka with a Worker heartbeat](epic-4-events/tickets/story-4.1-outbox-relay-publishes-dispute-events-to-kafka-with-a-worker.md) | backend | planned |
+| 4.1 | [Outbox relay publishes dispute events to Kafka with a Worker heartbeat](epic-4-events/tickets/story-4.1-outbox-relay-publishes-dispute-events-to-kafka-with-a-worker.md) | backend | done |
 | 4.2 | [Relay rides out broker outages, failed records, leader handover and shutdown](epic-4-events/tickets/story-4.2-relay-rides-out-broker-outages-failed-records-leader-handove.md) | backend | planned |
 
 ## Epic 5: [Operations tools and the SLA sweep act on disputes](epic-5-operations/epic-5-operations.md)
@@ -62,6 +62,7 @@ Needs: epic 2 (the gateway templates and provisioning from stories 2.5 and 2.6);
 | Story | Title | Owner | Status |
 |---|---|---|---|
 | 5.1 | [Operations tools authenticate with bearer tokens and read a dispute](epic-5-operations/tickets/story-5.1-operations-tools-authenticate-with-bearer-tokens-and-read-a.md) | backend | planned |
+| 5.5 | [Scalar drives the operations API with a pasted bearer token behind a switch](epic-5-operations/tickets/story-5.5-scalar-drives-the-operations-api-with-a-pasted-bearer-token.md) | backend | planned |
 | 5.2 | [Operations actions start review, escalate and resolve under the allowed-actions table](epic-5-operations/tickets/story-5.2-operations-actions-start-review-escalate-and-resolve-under-t.md) | backend | planned |
 | 5.4 | [Seeded disputes for customers A and B in every status](epic-5-operations/tickets/story-5.4-seeded-disputes-for-customers-a-and-b-in-every-status.md) | backend | planned |
 | 5.3 | [SLA sweep escalates overdue disputes](epic-5-operations/tickets/story-5.3-sla-sweep-escalates-overdue-disputes.md) | backend | planned |

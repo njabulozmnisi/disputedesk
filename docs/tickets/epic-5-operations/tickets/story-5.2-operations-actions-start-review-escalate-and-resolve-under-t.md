@@ -4,7 +4,7 @@ type: story
 title: "Operations actions start review, escalate and resolve under the allowed-actions table"
 parent: epic-5-operations
 covers: [R20, R21, R23, R10, R29, R36]
-after: [1, 3.4]
+after: [1, 5, 3.4]
 hitl: false
 risk: high
 ---
@@ -76,3 +76,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 ## Notes
 
 - Risk high: an action outside FR-24; beyond the criteria, the reviewer reads the table test against the PRD table cell by cell.
+- Input (from 5.1 pre-build review, 2026-10-30): the result handler of criterion 5 records `Denied` on every operations route, the read route of story 5.1 included; 5.1 audits the read's success and 404 and writes no `Denied` row. The UJ-3 supervisor check pastes a token from `scripts/operations-token.sh` into Scalar (story 5.5).

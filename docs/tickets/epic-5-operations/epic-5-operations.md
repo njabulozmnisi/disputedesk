@@ -67,3 +67,4 @@ R41 (parent R41): Every sign-in and every sign-out writes an audit entry, with t
 - Waits on 2 because: 4 changes seeded statuses only through `StartReview`, `Escalate` and `Resolve` (AD-13).
 - Waits on: epic 2 (the gateway templates and provisioning from stories 2.5 and 2.6, and `AuditLog.Record` from 2.8), epic 3 (the Dispute aggregate, loading by replay and the one commit path), epic 4 (the Worker heartbeat health check).
 - Decision: 2026-10-26 — Gate 2: code in every builder-owned story of this epic is stupid simple and logical, per AGENTS.md (smallest change that meets the criteria; every abstraction earns its place).
+- Decision: 2026-10-30 (Sofia, 5.1 pre-build review) — story 5.1 split: Scalar behind its switch, the security schemes and the gateway CSP are story 5.5, built right after 5.1 and before 5.2, whose supervisor check uses Scalar.
