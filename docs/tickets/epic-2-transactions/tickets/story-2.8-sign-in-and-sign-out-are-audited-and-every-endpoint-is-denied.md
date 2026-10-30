@@ -90,7 +90,7 @@ Request inputs: none new. `GET /api/v1/bff/login` keeps `returnUrl` (at most 2,0
 - No migration, no new audit column, no new endpoint, no response shape change; `openapi.json` does not change.
 - Linking, dispute refusals and operations reads are audited by their own stories (6.1 to 6.3, 3.4, 5.1, 5.2); each uses `AuditLog.Record`. The source-rules test that only `AuditLog.Record` creates an audit entry is in story 3.4, the first story built after both 2.8 and 3.8.
 - The core-banking whole-call deadline is 2.1's `TotalRequestTimeout` (AD-21).
-- `AllowedHosts` is story 6.3's.
+- `AllowedHosts` is story 6.6's (split from 6.3, 2026-10-30).
 - Failed sign-in callbacks are logged (criterion 4) but not audited; only a completed code flow writes `SignIn`.
 - Nothing is atomic across the database and Zitadel: a `SignIn` entry can stand if the session write after it fails, a sign-out whose audit save fails completes without its `SignOut` entry (logged as an error), and the Zitadel session can outlive a local sign-out whose discovery fails (criteria 3 and 6).
 - `DisputesApi.cs` and its helper signatures are not touched; 3.8 keeps them stable for `RaiseDisputeAuthorizationTests.cs`.

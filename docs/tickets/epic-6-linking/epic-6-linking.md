@@ -36,7 +36,7 @@ R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard acce
 ## Done when
 
 - A new login links to customer D with the OTP from Mailpit and lands on Transactions.
-- Customer C's codes fail and end in the locked message; the send cap and full-queue 429 (story 6.5), the lockout (6.2) and the rate limits (6.3) hold under tests. Without 6.5 one customer's phone can receive unlimited OTPs, so the epic is not done before 6.5 and 6.3 merge.
+- Customer C's codes fail and end in the locked message; the send cap and full-queue 429 (story 6.5), the lockout (6.2), the rate limits (6.3) and forwarded headers trusted only from the gateway's network (6.6) hold under tests. Without 6.5 one customer's phone can receive unlimited OTPs, so the epic is not done before 6.5, 6.3 and 6.6 merge.
 - Responses are identical for match, no match and already-linked; integrated verification passed.
 
 ## Boundaries
@@ -68,3 +68,4 @@ R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard acce
 - Decision: 2026-10-30 (human, 6.2, 6.3 and 6.5 challenges) — every claim counts toward the send cap; the full-queue 429 is `ErrorKind.RateLimited`; FR-7 governs the third attempt and a login with no challenge row is not counted; link in one transaction and keep the session key; forwarded headers trusted from the configured Compose range through `KnownIPNetworks`; sliding windows with segment semantics and chained limiters as documented. FR-4, FR-6, FR-7, FR-8, AD-3, AD-12, AD-23 and AD-26 are amended; R7 and R8 above read with those amendments (stories 6.5, 6.2, 6.3, Notes).
 - Decision: 2026-10-30 (Sofia, refine) — 6.5 starts after 6.1 merges; 6.5, 6.2 and 6.3 then build one at a time, because they change the same linking files.
 - Assumption: 2026-10-30 (Sofia, 6.1 pre-build security) — the OTP HMAC is HMAC-SHA256 under `Linking:OtpHmacKey` over the challenge ID followed by the six-digit code (story 6.1, criterion 5); story 6.2 computes the same input to compare in constant time.
+- Decision: 2026-10-30 (Sofia, parallel re-slice) — more stories build at once after 6.1 merges. 6.3 is split: forwarded-header trust and the identity-origin log (its criteria 4 and 6) become story 6.6, after 6.1 only; 6.3 keeps the rate limits and waits on 6.5 and 6.2. The full-queue-blank check moves from 6.2's criterion 4 to 6.3, so 6.2 waits only on 6.1. After 6.1: 6.5, 6.2 and 6.6 build in parallel (with 5.3 beside them), then 6.3, then 6.4. Shared files are edited in different sections, the later merge rebases and regenerates the contract files (human directive, 2026-10-30). Criteria moved, none added; no PRD requirement or architecture decision changed. It replaces the one-at-a-time decisions above.

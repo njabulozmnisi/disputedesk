@@ -43,7 +43,7 @@ title = "OTP verification links the login, with lockout and race safety"
 description = "Adds `POST /api/v1/linking/verify`: one atomic conditional attempt update, a constant-time HMAC comparison on every attempt, consume and link in one EF Core transaction, keeping the session key (AD-12, AD-7). A correct third code links; lockout after three wrong codes; a login with no challenge row answers like a wrong code without counting."
 verify = "Integration tests cover a correct code with the link and the session kept unchanged, the attempt sequence and lockout, every kind of challenge and a login with none, the input bounds, parallel verifications, two logins racing, and the audit entries, metrics and privacy."
 covers = ["R5", "R7", "R10", "R31", "R36"]
-after = [5]
+after = [1]
 hitl = false
 risk = "high"
 refine = true
@@ -55,13 +55,13 @@ touches = ["backend/src/DisputeDesk.Contracts/Linking/ (verify request)", "backe
 supervisor_checks = ["Link customer D through the gateway with the OTP from Mailpit: Transactions loads without a new sign-in and the session cookie value is unchanged.", "Throwaway copy: remove the UQ_CustomerLinks_* entries from UniqueViolations; criterion 7 gets a 500.", "Throwaway copy: drop Attempts < 3 from the attempt statement; criteria 3 and 6 fail."]
 
 [[entry]]
-id = 3
+id = 6
 type = "story"
-title = "Linking rate limits and trusted forwarded headers"
-description = "Adds the built-in sliding-window limiters, per client IP then per login, chained with `PartitionedRateLimiter.CreateChained` on the linking routes, with one audit entry per partition per window; trusts forwarded headers only from the configured Compose network range through `ForwardedHeadersOptions.KnownIPNetworks`, with the subnet pinned in Compose; and keeps `id_token_hint` out of the identity origin's access log (AD-12, AD-23)."
-verify = "Integration tests prove both limits with their segment semantics and the chained edge, the 429 body and `Retry-After`, first-rejection audit and counted later rejections, forwarded headers trusted only from the configured range, and the options' bounds; architecture tests prove the pinned subnet matches the configured range and the identity origin's log format."
-covers = ["R8", "R10", "R31"]
-after = [2]
+title = "Trusted forwarded headers and an identity log without id_token_hint"
+description = "Trusts forwarded headers only from the configured Compose network range through `ForwardedHeadersOptions.KnownIPNetworks`, with the subnet pinned in Compose and `ForwardedHeadersOptions.AllowedHosts` holding the public app host; and keeps `id_token_hint` out of the identity origin's access log (AD-20, AD-23). Split from 6.3 so it builds beside 6.5 and 6.2."
+verify = "Integration tests prove forwarded headers are trusted only from the configured range, only the public app host is taken from `X-Forwarded-Host`, and the two keys are validated at start-up; architecture tests prove the pinned Compose subnet equals the configured range and the identity origin's log format."
+covers = ["R8", "R31"]
+after = [1]
 hitl = false
 risk = "high"
 refine = true
@@ -69,8 +69,26 @@ owner = "backend"
 lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Api/Linking/RateLimiting/", "backend/src/DisputeDesk.Api/Linking/LinkingEndpoints.cs", "backend/src/DisputeDesk.Api/Program.cs (ForwardedHeaders, UseRateLimiter)", "backend/src/DisputeDesk.Api/appsettings.json", "docker-compose.yml (pinned subnet, api keys)", "infra/nginx/templates/nginx.conf.template (identity origin log_format)", "README.md", "backend/openapi.json", "frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/RateLimits/", "backend/tests/DisputeDesk.Api.IntegrationTests/Infrastructure/ApiFactory.cs", "backend/tests/DisputeDesk.ArchitectureTests/PlatformScriptTests.cs"]
-supervisor_checks = ["Send a start through the gateway with X-Forwarded-For: 203.0.113.9; the audited ClientIp is the host's client address.", "Sign in and out as customer A; the gateway's end-session log line holds no id_token_hint value.", "Throwaway copy: chain the login limiter before the IP limiter; criterion 1's chained-edge test fails."]
+touches = ["backend/src/DisputeDesk.Api/Security/ (forwarded-headers options and registration)", "backend/src/DisputeDesk.Api/Program.cs (UseForwardedHeaders first, its registration)", "docker-compose.yml (networks.default subnet, api ForwardedHeaders keys)", "infra/nginx/templates/nginx.conf.template (identity origin log_format)", "backend/tests/DisputeDesk.Api.IntegrationTests/ForwardedHeaders/", "backend/tests/DisputeDesk.Api.IntegrationTests/Infrastructure/ApiFactory.cs (ForwardedHeaders keys)", "backend/tests/DisputeDesk.ArchitectureTests/PlatformScriptTests.cs (subnet, log format)"]
+supervisor_checks = ["Send a start through the gateway with X-Forwarded-For: 203.0.113.9; the audited ClientIp is the host's client address.", "Sign in and out as customer A; the gateway's end-session log line holds no id_token_hint value."]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Linking rate limits per login and per IP"
+description = "Adds the built-in sliding-window limiters, per client IP then per login, chained with `PartitionedRateLimiter.CreateChained` on the linking routes, with the shared 429 `rate-limited` body and `Retry-After`, and one audit entry per partition per window (AD-12, AD-23); proves the blank a full-queue 429 leaves verifies as a wrong code."
+verify = "Integration tests prove both limits with their segment semantics and the chained edge, the 429 body and `Retry-After`, first-rejection audit and counted later rejections, the full-queue blank verifying as a wrong code, and the options' bounds; `openapi.json` changes only by the 429 responses on start and verify."
+covers = ["R7", "R8", "R10"]
+after = [5, 2]
+hitl = false
+risk = "high"
+refine = true
+owner = "backend"
+lane = "M2"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Api/Linking/RateLimiting/", "backend/src/DisputeDesk.Api/Linking/LinkingEndpoints.cs", "backend/src/DisputeDesk.Api/Program.cs (UseRateLimiter)", "backend/src/DisputeDesk.Api/appsettings.json", "README.md", "backend/openapi.json", "frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/RateLimits/", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/ (full-queue blank in the verify blank-challenge tests)", "backend/tests/DisputeDesk.Api.IntegrationTests/Infrastructure/ApiFactory.cs (high limits)"]
+supervisor_checks = ["Throwaway copy: chain the login limiter before the IP limiter; criterion 1's chained-edge test fails."]
 
 [[entry]]
 id = 4

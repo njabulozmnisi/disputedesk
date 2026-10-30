@@ -4,7 +4,7 @@ type: story
 title: "OTP verification links the login, with lockout and race safety"
 parent: epic-6-linking
 covers: [R5, R7, R10, R31, R36]
-after: [5]
+after: [1]
 refined: false
 hitl: false
 risk: high
@@ -43,7 +43,7 @@ Verify: Integration tests cover a correct code with the link, the session kept u
    **And** an expired claimed challenge counts the attempt and answers the same way, the correct code included (FR-5)
 
 4. **Every kind of challenge answers like a wrong code; a login with none is never counted** (R5, R7; FR-4, FR-6, FR-7)
-   **Given** a blank challenge from each stop of story 6.1 (details that match nothing, customer A's already-linked details, customer C after the failed SIM-swap check), the blank left by a full-queue 429 (story 6.5), a released challenge (`OtpHmac` null after a failed send), and a login with no challenge row
+   **Given** a blank challenge from each stop of story 6.1 (details that match nothing, customer A's already-linked details, customer C after the failed SIM-swap check), a released challenge (`OtpHmac` null after a failed send), and a login with no challenge row
    **When** each posts codes three times
    **Then** each challenge gives the same status and body (apart from `traceId`) as customer D's challenge given wrong codes, attempt by attempt: 422 with `attemptsRemaining` 2, then 1, then 409 `linking-locked`, comparing against a fixed 32-byte dummy HMAC when `OtpHmac` is null (OWASP Authentication Cheat Sheet, generic responses); customer C ends on `linking-locked` (FR-6)
    **And** the login with no challenge row gets 422 `otp-incorrect` with `attemptsRemaining` 2 every time, never `linking-locked`, and no attempt is counted, because it holds no OTP and can never succeed (human decision, 2026-10-30)
@@ -74,7 +74,7 @@ Verify: Integration tests cover a correct code with the link, the session kept u
 
 ## Boundaries
 
-- Start, the claim, the send, the cap and the full queue (stories 6.1 and 6.5) do not change; verification only reads and updates the challenge 6.1 writes.
+- Start, the claim, the send, the cap and the full queue (stories 6.1 and 6.5) do not change; verification only reads and updates the challenge 6.1 writes. The blank a full-queue 429 leaves is proved to verify as a wrong code in story 6.3, which builds after both 6.5 and this story.
 - The per-login and per-IP rate limits are story 6.3; until then verify is limited only by the gateway's `limit_req` (AD-23).
 - No new repository, session protocol or OTP store: the existing `Unlinked` policy, antiforgery filter, `AuditLog.Record`, `UniqueViolations` and the cookie handler with `SessionTicketStore` (AD-7, AD-12); the session, its key and `SessionTicketStore` do not change.
 - The AD-3 slug catalogue does not change: `otp-incorrect` (422, adds `attemptsRemaining`) and `linking-locked` (409) already exist.
@@ -92,7 +92,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Owner: backend (backend-builder).
 - Flags: high-stakes.
 - Lane: M2.
-- Build order: after 6.5 merges, before 6.3; 6.5, 6.2 and 6.3 build one at a time, because they change the same linking files.
+- Build order: after 6.1 merges; it may build beside 6.5, 6.6 and 5.3, and 6.3 waits on it. With 6.5 it shares `Api/Linking/LinkingEndpoints.cs` (6.5 changes the start operation's result and metadata; this story adds the verify operation), `Infrastructure/Linking/` (6.5 changes the job, `OtpSends` and `LinkingOptions`; this story adds the attempt, consume and link statements and their registration) and the generated contract files, all in different sections; the later merge rebases and regenerates `openapi.json` and `frontend/src/api/generated/`. With 6.6 it shares only `Program.cs` (the verify mapping, not the pipeline's start). With 5.3 it shares no file, and `CustomerLinkConfiguration.cs` changes no model, so it adds nothing to `AppDbContextModelSnapshot` (the EF drift check proves it).
 - Success response: 204 No Content with no `Set-Cookie`; `openapi.json` names 204, 400, 401, 403, 409 and 422 on the verify operation.
 - Touches:
   - `backend/src/DisputeDesk.Contracts/Linking/` (the verify request)
@@ -129,5 +129,6 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Decision: 2026-10-30 (Sofia, 6.2 pre-build reviews) — success is 204; the race loser answers like a counted wrong attempt and records `Linked` `Rejected`; a locked attempt after the lock is audited `LinkingLocked` but counted in the metric only once.
 - Decision: 2026-10-30 (Sofia, 6.5 pre-build review) — the check that a full-queue blank verifies as a wrong code moved here from 6.5 (criterion 4).
 - Decision: 2026-10-30 (human, after this refine) — option (A): linking keeps the existing session key; there is no sign-out or sign-in, and AD-7's renewal of the key after linking is dropped. The key is minted server-side at sign-in and the ticket store rejects any key it did not mint, so session fixation is already blocked. The decided sign-out then sign-in could not work: in ASP.NET Core's `release/10.0` source, `HandleSignOutAsync` leaves the handler's `_sessionKey` set, so a later `SignInAsync` in the same request renews the removed key and the next request gets 401. It replaces the re-issue half of the decision above; the link-first half stands. Renewing the key is a production-path line (story 7.6) (docs/verification/6.2-challenge.md, Resolution).
+- Resolution: 2026-10-30 (Sofia, parallel re-slice) — the only part of this story that needed 6.5 was the full-queue blank in criterion 4; that case moved to story 6.3 (criterion 4), which waits on both, so this story now waits only on 6.1 and builds beside 6.5. The released challenge stays here: 6.1's release already clears `OtpHmac`, and verification never reads `OtpSentAtUtc`, which 6.5 keeps. No criterion was added, and no PRD requirement or architecture decision changed. It supersedes the 6.5 pre-build-review line above: the full-queue check now lives in 6.3.
 - Handoff (2026-10-30, 6.1 refine): verification reads the challenge 6.1 writes: the login's current row (`SupersededAtUtc` and `ConsumedAtUtc` null), `OtpHmac`, `ExpiresAtUtc` and `Attempts`; from 6.5 a released row keeps `OtpSentAtUtc` and has `OtpHmac` null, and verifies as a wrong code.
 - Assumption: 2026-10-30 (Sofia) — a malformed code (400) counts no attempt: it never reaches the handler, so it cannot spend a try (EXPERIENCE.md: a mistyped digit never spends one of the 3 attempts).

@@ -44,7 +44,7 @@ Verify: Integration tests prove that every claim counts toward the cap, the cap'
    **Given** the bounded channel full at a test capacity, with the job held
    **When** a well-formed start arrives, once with matching details and once with details that match nothing
    **Then** `TryWrite` returns false (Microsoft Learn, *System.Threading.Channels*, bounded channels), and both get 429 `rate-limited` ProblemDetails with the same body except `traceId` (RFC 6585 §4), through a new `ErrorKind.RateLimited` that `ErrorResults.ToProblem` maps to 429 `rate-limited` (human decision, 2026-10-30; AD-3 amended), with no `Retry-After` header
-   **And** both audit `LinkingRateLimited` `Rejected` with the client IP in a second save, beside the `LinkingStart` `Succeeded` the request already saved, and neither is queued; the blank challenge each wrote stays current and unclaimed (story 6.2 proves it verifies as a wrong code)
+   **And** both audit `LinkingRateLimited` `Rejected` with the client IP in a second save, beside the `LinkingStart` `Succeeded` the request already saved, and neither is queued; the blank challenge each wrote stays current and unclaimed (story 6.3 proves it verifies as a wrong code, once this story and 6.2 have merged)
    **And** when that second save fails, the response is still the same 429 and one error log line holds only the challenge ID and the action
 
 5. **`LinkingOptions` are bounded at start-up** (R4; FR-4, AD-26)
@@ -72,7 +72,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Owner: backend (backend-builder).
 - Flags: high-stakes.
 - Lane: M2.
-- Build order: after 6.1 merges (the job, `OtpSends` and the handler are 6.1's uncommitted files until then); before 6.2 and 6.3, which change the same linking files, so 6.5, 6.2 and 6.3 build one at a time.
+- Build order: after 6.1 merges (the job, `OtpSends` and the handler are 6.1's uncommitted files until then); it may build beside 6.2, 6.6 and 5.3, and 6.3 waits on it (for `ErrorKind.RateLimited`). With 6.2 it shares `Api/Linking/LinkingEndpoints.cs`, `Infrastructure/Linking/` and the generated contract files in different sections (story 6.2, Build facts); the later merge rebases and regenerates `openapi.json` and `frontend/src/api/generated/`. It shares no file with 6.6 or 5.3.
 - Test setup: the full-queue test sets a small `Linking:QueueCapacity` and holds the job, so the test does not need over 100 starts. The exactly-1-hour case seeds at a microsecond-aligned instant so the stored value equals now minus 1 hour exactly (review-story Known pitfall 2).
 - Touches:
   - `backend/src/DisputeDesk.Domain/ErrorKind.cs` (`RateLimited`)
@@ -108,6 +108,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Decision: 2026-10-30 (human, 6.5 challenge) — the full-queue 429 uses a new `ErrorKind.RateLimited` mapped to 429 `rate-limited` in AD-3, so `ErrorResults.ToProblem` stays the one place an error becomes HTTP; the limiter's `OnRejected` (story 6.3) and the full queue share the problem type and page.
 - Decision: 2026-10-30 (Sofia, 6.5 pre-build reviews) — 6.1 security F2 is settled: a stamped, undelivered claim counts (decision above), and an unexpected job exception records `LinkingStart` `Failed` (criterion 3). The "verifies as a wrong code" check of the full-queue blank moves to story 6.2, which builds after this story.
 - Decision: 2026-10-30 (Sofia, 6.5 pre-build reviews) — build order 6.1 → 6.5 → 6.2 → 6.3, one at a time: all four change the linking job, handler or endpoint files.
+- Resolution: 2026-10-30 (Sofia, parallel re-slice) — 6.5 and 6.2 no longer build one at a time: the full-queue blank check, the one thing 6.2 needed from this story, moved to story 6.3, which waits on both; this story and 6.2 edit different sections of the files they share. It replaces the build-order decision above (6.1 → 6.5 → 6.2 → 6.3) and its line that 6.2 holds the full-queue check. No criterion changed here apart from that pointer, and no PRD requirement or architecture decision changed.
 - Assumption: 2026-10-30 (Sofia) — a full-queue start keeps its `LinkingStart` `Succeeded` entry and `started` count and adds `LinkingRateLimited` `Rejected`; the challenge is saved before `TryWrite`, so a queued job never runs ahead of its row. Confirm at the human review of the diff.
 - Assumption: 2026-10-30 (Sofia) — a failed `LinkingRateLimited` save still answers the 429 and logs an error, as 6.1 criterion 7 treats a failed job audit save. Confirm at the human review of the diff.
 - Assumption: 2026-10-30 (Sofia) — the bounds of `QueueCapacity` (1 to 1000) and `Budget` (1 to 60 seconds) are wide enough for tests and production defaults of 100 and 10 seconds.
