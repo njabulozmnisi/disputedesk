@@ -101,8 +101,10 @@ test('Scalar loads, a pasted operations token reads a dispute, the only CSP viol
 
   // open the operation in the API client, open Authentication and paste the token into the Bearer Token field
   await page.getByRole('button', { name: 'Open Group - Operations' }).click();
-  await page.getByRole('link', { name: /disputeId/ }).last().click();
-  await page.getByRole('button', { name: /Test Request.*operations/ }).click();
+  // The Operations group lists the read, then the three actions (story 5.2); the read is the first of the last four.
+  const operationLinks = page.getByRole('link', { name: /disputeId/ });
+  await operationLinks.nth((await operationLinks.count()) - 4).click();
+  await page.getByRole('button', { name: 'Test Request (get /api/v1/operations/disputes/{disputeId})' }).click();
   await page.getByRole('button', { name: /Authentication|Auth Type/i }).last().click();
   await expect(page.getByText('Selected Auth Type: bearer')).toBeVisible();
   const requests: { url: string; hasAuthorization: boolean }[] = [];

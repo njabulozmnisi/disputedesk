@@ -6,7 +6,7 @@ namespace DisputeDesk.Api.Authorization;
 
 /// <summary>
 /// Checks on every linking request that the session's login (<c>sub</c>) has no row in <c>CustomerLinks</c> (AD-10). A
-/// linked login leaves the requirement unmet, which <see cref="LinkingRequiredResultHandler"/> answers with 403
+/// linked login leaves the requirement unmet, which <see cref="AuthorizationResultHandler"/> answers with 403
 /// <c>already-linked</c>. Scoped, because it uses the request's <see cref="AppDbContext"/>.
 /// </summary>
 public sealed class UnlinkedLoginHandler(AppDbContext db) : AuthorizationHandler<UnlinkedLoginRequirement>

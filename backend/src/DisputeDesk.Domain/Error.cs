@@ -26,7 +26,7 @@ public sealed record Error(ErrorKind Kind, string Code, string Message)
 
     /// <summary>
     /// The action is not allowed in the current status. <paramref name="statusField"/> names the extension that
-    /// carries <paramref name="currentStatus"/>: <c>customerStatus</c> for customers, <c>status</c> for operations.
+    /// carries <paramref name="currentStatus"/>: <c>customerStatus</c> for customers, <c>disputeStatus</c> for operations.
     /// </summary>
     public static Error ActionNotAllowed(string code, string message, string statusField, Enum currentStatus) =>
         new(ErrorKind.ActionNotAllowed, code, message) { Extensions = new Dictionary<string, object?> { [statusField] = currentStatus } };

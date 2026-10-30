@@ -4,6 +4,7 @@ using System.Diagnostics.Metrics;
 using System.Net;
 using System.Text;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
+using DisputeDesk.Api.IntegrationTests.Operations;
 using DisputeDesk.Api.IntegrationTests.Transactions;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Logs;
@@ -85,6 +86,71 @@ public class StoredEventPrivacyTests(PostgresFixture postgres, TransactionsStub 
         Assert.All(telemetry.Logs, log => AssertNothingPrivate(LogTexts(log)));
         Assert.Contains("withdraw", labels.Values);
         AssertNothingPrivate(labels.Values);
+    }
+
+    [Fact]
+    public async Task Resolve_SucceedsThen409404And400_TheNoteIsInNoLogSpanLabelOutboxPayloadAuditRowOrProblemBody()
+    {
+        // Story 5.2, AC8 (NFR-SEC-6; ASVS 5.0 V16.2.5): the bank's note is for the customer's timeline only.
+        const string ResolveNote = "resolve-note-marker";
+        var telemetry = new TelemetryCapture();
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, telemetry.AddTo);
+        using var labels = new LabelRecorder(factory.Services.GetRequiredService<IMeterFactory>());
+        Guid disputeId = await factory.RaiseForCustomerAAsync();
+        using HttpClient tool = factory.CreateTool();
+        Assert.Equal(HttpStatusCode.OK, (await factory.ActAsMappedAsync(tool, disputeId, "start-review")).StatusCode);
+        string token = factory.Zitadel.Issue(roles: OperationsApi.ResolveRole);
+        string json = OperationsApi.ResolveBody("upheld", ResolveNote);
+        string tooLong = OperationsApi.ResolveBody("upheld", ResolveNote + new string('a', 500));
+
+        // The success, the repeat (409), an unknown ID (404) and a note too long (400), each traced on its own.
+        (HttpResponseMessage Response, ActivityTraceId TraceId)[] resolves =
+        [
+            await ResolveTracedAsync(tool, disputeId.ToString(), token, json),
+            await ResolveTracedAsync(tool, disputeId.ToString(), token, json),
+            await ResolveTracedAsync(tool, Guid.CreateVersion7().ToString(), token, json),
+            await ResolveTracedAsync(tool, disputeId.ToString(), token, tooLong),
+        ];
+
+        Assert.Equal(
+            [HttpStatusCode.OK, HttpStatusCode.Conflict, HttpStatusCode.NotFound, HttpStatusCode.BadRequest],
+            resolves.Select(resolve => resolve.Response.StatusCode));
+        foreach ((HttpResponseMessage response, ActivityTraceId _) in resolves.Skip(1))
+        {
+            Assert.DoesNotContain(ResolveNote, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        }
+
+        foreach ((HttpResponseMessage _, ActivityTraceId traceId) in resolves)
+        {
+            await telemetry.WaitForSpanAsync(span => span.TraceId == traceId && span.Kind == ActivityKind.Server);
+            Assert.All(telemetry.Spans(traceId), span => AssertNotIn(ResolveNote, SpanTexts(span)));
+        }
+
+        Assert.All(telemetry.Logs, log => AssertNotIn(ResolveNote, LogTexts(log)));
+        Assert.Contains("resolve", labels.Values);
+        Assert.All(new[] { ResolveNote, disputeId.ToString(), FakeZitadel.OperationsSub }, value => AssertNotIn(value, labels.Values));
+        Assert.All(await factory.OutboxRowsAsync(disputeId), message => Assert.DoesNotContain(ResolveNote, message.Payload, StringComparison.Ordinal));
+        Assert.All(await factory.AuditRowsAsync(), entry => AssertNotIn(ResolveNote, [entry.ActorId, entry.CustomerId, entry.TraceId, entry.Action.ToString(), entry.Result.ToString()]));
+    }
+
+    private static async Task<(HttpResponseMessage Response, ActivityTraceId TraceId)> ResolveTracedAsync(HttpClient tool, string disputeId, string token, string json)
+    {
+        var traceId = ActivityTraceId.CreateRandom();
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri($"{OperationsApi.DisputesPath}/{disputeId}/resolve", UriKind.Relative))
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Add("Authorization", $"Bearer {token}");
+        request.Headers.Add("traceparent", $"00-{traceId.ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01");
+        return (await tool.SendAsync(request, TestContext.Current.CancellationToken), traceId);
+    }
+
+    private static void AssertNotIn(string value, IEnumerable<string?> texts)
+    {
+        foreach (string text in texts.OfType<string>())
+        {
+            Assert.DoesNotContain(value, text, StringComparison.Ordinal);
+        }
     }
 
     private static async Task<(HttpStatusCode Status, ActivityTraceId TraceId)> WithdrawTracedAsync(HttpClient browser, string disputeId, string json)

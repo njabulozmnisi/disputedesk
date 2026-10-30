@@ -16,7 +16,7 @@ namespace DisputeDesk.Api.IntegrationTests.Operations;
 /// AC6, FR-25 and NFR-SEC-10: every operations read is audited through <c>AuditLog.Record</c>, <c>Succeeded</c> for a
 /// dispute and <c>Rejected</c> for an unknown ID, with the token's <c>sub</c> and no customer ID. The entry is saved before
 /// the body is returned, so a failed save is a 500 with no dispute data (fail closed; OWASP Logging Cheat Sheet).
-/// A 401, 403 or 400 writes nothing here.
+/// A 401 or 400 writes nothing; a 403 writes one <c>Denied</c> entry (story 5.2).
 /// </summary>
 public class ReadDisputeAuditTests(PostgresFixture postgres, TransactionsStub stub) : IClassFixture<TransactionsStub>
 {
@@ -70,7 +70,7 @@ public class ReadDisputeAuditTests(PostgresFixture postgres, TransactionsStub st
     }
 
     [Fact]
-    public async Task ReadDispute_Refused401403Or400_WritesNoEntry()
+    public async Task ReadDispute_Refused401Or400_WritesNoEntryAnd403WritesOneDenied()
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         Guid disputeId = await factory.RaiseForCustomerAAsync();
@@ -80,10 +80,13 @@ public class ReadDisputeAuditTests(PostgresFixture postgres, TransactionsStub st
         Assert.Equal(HttpStatusCode.Forbidden, (await tool.ReadDisputeAsync(disputeId.ToString(), factory.Zitadel.Issue())).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await tool.ReadDisputeAsync("not-a-guid", factory.Zitadel.Issue(roles: OperationsApi.ReadRole))).StatusCode);
 
-        // The database is this test's own, so every DisputeRead entry in it would be one of these.
+        // The database is this test's own, so every DisputeRead entry in it is one of these: the 403's Denied (story 5.2,
+        // AD-14a), written by the authorization result handler.
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
-        Assert.False(await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<AuditLogEntry>()
-            .AnyAsync(entry => entry.Action == AuditAction.DisputeRead, TestContext.Current.CancellationToken));
+        List<AuditLogEntry> entries = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<AuditLogEntry>()
+            .Where(entry => entry.Action == AuditAction.DisputeRead)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        AssertOperationsEntry(Assert.Single(entries), AuditResult.Denied, disputeId);
     }
 
     private static void AssertOperationsEntry(AuditLogEntry entry, AuditResult result, Guid disputeId)

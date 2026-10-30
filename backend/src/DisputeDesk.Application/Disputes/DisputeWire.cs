@@ -19,6 +19,13 @@ public static class DisputeWire
         _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "Unmapped reason."),
     };
 
+    public static Domain.Disputes.Outcome ToDomain(Outcome outcome) => outcome switch
+    {
+        Outcome.Upheld => Domain.Disputes.Outcome.Upheld,
+        Outcome.Rejected => Domain.Disputes.Outcome.Rejected,
+        _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Unmapped outcome."),
+    };
+
     public static Reason ToWire(Domain.Disputes.Reason reason) => reason switch
     {
         Domain.Disputes.Reason.Unrecognised => Reason.Unrecognised,

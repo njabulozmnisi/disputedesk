@@ -15,6 +15,9 @@ public sealed class FailOutboxInsertInterceptor : DbCommandInterceptor
 
     private bool _disputesInserted;
 
+    /// <summary>While armed, every outbox insert fails. A test disarms it to let its arrangement through.</summary>
+    public bool Armed { get; set; } = true;
+
     public int Failed { get; private set; }
 
     /// <summary>Whether the dispute was inserted, in this command or an earlier one, before the failing outbox insert.</summary>
@@ -49,6 +52,11 @@ public sealed class FailOutboxInsertInterceptor : DbCommandInterceptor
 
     private void Break(DbCommand command)
     {
+        if (!Armed)
+        {
+            return;
+        }
+
         string sql = command.CommandText;
         int disputes = sql.IndexOf(DisputesInsert, StringComparison.Ordinal);
         int outbox = sql.IndexOf(OutboxInsert, StringComparison.Ordinal);

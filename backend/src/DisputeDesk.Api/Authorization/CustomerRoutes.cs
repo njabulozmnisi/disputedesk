@@ -18,7 +18,8 @@ public static class CustomerRoutes
     {
         services.AddScoped<CurrentCustomer>();
         services.AddScoped<IAuthorizationHandler, LinkedCustomerHandler>();
-        services.AddSingleton<IAuthorizationMiddlewareResultHandler, LinkingRequiredResultHandler>();
+        // The one result handler, for the operations routes' Denied audit as well (AD-14a).
+        services.AddSingleton<IAuthorizationMiddlewareResultHandler, AuthorizationResultHandler>();
         services.AddAuthorizationBuilder()
             .AddPolicy(LinkedPolicy, policy => policy
                 .AddAuthenticationSchemes(CookieAuthenticationDefaults.AuthenticationScheme)

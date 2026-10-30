@@ -8,7 +8,7 @@ namespace DisputeDesk.Api.Authorization;
 /// <summary>
 /// Resolves the customer on every customer request (AD-10): looks the session's login (<c>sub</c>) up in
 /// <c>CustomerLinks</c>, sets <see cref="CurrentCustomer"/> and succeeds. A login with no link leaves the requirement
-/// unmet, which <see cref="LinkingRequiredResultHandler"/> answers with 403 <c>linking-required</c>. Nothing in the
+/// unmet, which <see cref="AuthorizationResultHandler"/> answers with 403 <c>linking-required</c>. Nothing in the
 /// request, and no claim but the login's <c>sub</c>, decides which customer it is. Scoped, because it uses the
 /// request's <see cref="AppDbContext"/> and <see cref="CurrentCustomer"/>.
 /// </summary>

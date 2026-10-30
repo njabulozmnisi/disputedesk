@@ -37,11 +37,25 @@ public static class DisputeErrors
     public static Error ActionNotAllowedAs(Enum customerStatus) =>
         Error.ActionNotAllowed("action-not-allowed", ActionNotAllowed.Message, "customerStatus", customerStatus);
 
+    /// <summary>
+    /// <see cref="ActionNotAllowed"/> for operations: the problem carries the internal status under <c>disputeStatus</c>,
+    /// because RFC 9457 §3.1 keeps <c>status</c> for the HTTP status code. <paramref name="disputeStatus"/> is the wire
+    /// status, which Application maps.
+    /// </summary>
+    public static Error ActionNotAllowedWithDisputeStatus(Enum disputeStatus) =>
+        Error.ActionNotAllowed("action-not-allowed", ActionNotAllowed.Message, "disputeStatus", disputeStatus);
+
     public static readonly Error NoteTooLong =
         Error.Validation("validation", "The note must be at most 1000 characters after trimming.", "Note");
 
     public static readonly Error WithdrawNoteTooLong =
         Error.Validation("validation", "The note must be at most 500 characters after trimming.", "Note");
+
+    public static readonly Error ResolveNoteInvalid =
+        Error.Validation("validation", "A note of 1 to 500 characters after trimming is required.", "Note");
+
+    public static readonly Error OutcomeRequired =
+        Error.Validation("validation", "An outcome is required: upheld or rejected.", "Outcome");
 
     public static readonly Error ExpectedAmountRequired =
         Error.Validation("validation", "An expected amount is required for the reason wrong amount.", "ExpectedAmount");

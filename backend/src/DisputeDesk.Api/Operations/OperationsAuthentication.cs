@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using DisputeDesk.Api.Bff;
 using DisputeDesk.Application.Abstractions;
+using DisputeDesk.Contracts.Audit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
@@ -21,6 +22,15 @@ public static class OperationsAuthentication
     /// <summary>The read role, and the policy named after it (AD-9).</summary>
     public const string DisputeReadPolicy = "dispute.read";
 
+    /// <summary>The start review role, and the policy named after it (AD-9).</summary>
+    public const string StartReviewPolicy = "dispute.startReview";
+
+    /// <summary>The escalate role, and the policy named after it (AD-9).</summary>
+    public const string EscalatePolicy = "dispute.escalate";
+
+    /// <summary>The resolve role, and the policy named after it (AD-9).</summary>
+    public const string ResolvePolicy = "dispute.resolve";
+
     private const string RoleClaimType = "role";
 
     public static IServiceCollection AddOperationsAuthentication(this IServiceCollection services)
@@ -38,13 +48,22 @@ public static class OperationsAuthentication
             .Configure<IOptions<ZitadelOptions>>(ConfigureJwtBearer);
 
         services.AddAuthorizationBuilder()
-            .AddPolicy(DisputeReadPolicy, policy => policy
-                .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
-                .RequireAuthenticatedUser()
-                .RequireRole(DisputeReadPolicy)
-                .AddRequirements(new OperationsActorRequirement()));
+            .AddPolicy(DisputeReadPolicy, policy => RequireRole(policy, DisputeReadPolicy, AuditAction.DisputeRead))
+            .AddPolicy(StartReviewPolicy, policy => RequireRole(policy, StartReviewPolicy, AuditAction.StartReview))
+            .AddPolicy(EscalatePolicy, policy => RequireRole(policy, EscalatePolicy, AuditAction.Escalate))
+            .AddPolicy(ResolvePolicy, policy => RequireRole(policy, ResolvePolicy, AuditAction.Resolve));
         return services;
     }
+
+    /// <summary>
+    /// One operations policy (Microsoft Learn, "Policy-based authorization"): the JwtBearer scheme only, an authenticated
+    /// user, the <paramref name="role"/> and a mapped <c>sub</c>, which a 403 is audited under as <paramref name="action"/>.
+    /// </summary>
+    private static void RequireRole(AuthorizationPolicyBuilder policy, string role, AuditAction action) => policy
+        .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
+        .RequireAuthenticatedUser()
+        .RequireRole(role)
+        .AddRequirements(new OperationsActorRequirement(action));
 
     private static void ConfigureJwtBearer(JwtBearerOptions jwt, IOptions<ZitadelOptions> zitadel)
     {

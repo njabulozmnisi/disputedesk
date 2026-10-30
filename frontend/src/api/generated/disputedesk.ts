@@ -39,6 +39,7 @@ import type {
   OperationsDisputeResponse,
   ProblemDetails,
   RaiseDisputeRequest,
+  ResolveDisputeRequest,
   SessionResponse,
   StartLinkingRequest,
   TransactionPageResponse,
@@ -1124,6 +1125,225 @@ export function useGetApiV1OperationsDisputesDisputeId<TData = Awaited<ReturnTyp
 
 
 
+
+export const getPostApiV1OperationsDisputesDisputeIdStartReviewUrl = (disputeId: string,) => {
+
+
+
+
+  return `/api/v1/operations/disputes/${disputeId}/start-review`
+}
+
+export const postApiV1OperationsDisputesDisputeIdStartReview = async (disputeId: string, options?: Parameters<typeof customFetch>[1]): Promise<OperationsDisputeResponse> => {
+
+  return customFetch<OperationsDisputeResponse>(getPostApiV1OperationsDisputesDisputeIdStartReviewUrl(disputeId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiV1OperationsDisputesDisputeIdStartReviewMutationKey = () => ['postApiV1OperationsDisputesDisputeIdStartReview'] as const;
+
+export const getPostApiV1OperationsDisputesDisputeIdStartReviewMutationOptions = <TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdStartReview>>, TError,PostApiV1OperationsDisputesDisputeIdStartReviewMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdStartReview>>, TError,PostApiV1OperationsDisputesDisputeIdStartReviewMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1OperationsDisputesDisputeIdStartReviewMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdStartReview>>, PostApiV1OperationsDisputesDisputeIdStartReviewMutationVariables> = (props) => {
+          const {disputeId} = props ?? {};
+
+          return  postApiV1OperationsDisputesDisputeIdStartReview(disputeId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiV1OperationsDisputesDisputeIdStartReviewMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdStartReview>>>
+
+    export type PostApiV1OperationsDisputesDisputeIdStartReviewMutationError = ErrorType<HttpValidationProblemDetails | ProblemDetails>
+    export type PostApiV1OperationsDisputesDisputeIdStartReviewMutationVariables = {disputeId: string}
+
+    export const usePostApiV1OperationsDisputesDisputeIdStartReview = <TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdStartReview>>, TError,PostApiV1OperationsDisputesDisputeIdStartReviewMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdStartReview>>,
+        TError,
+        PostApiV1OperationsDisputesDisputeIdStartReviewMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiV1OperationsDisputesDisputeIdStartReviewMutationOptions(options), queryClient);
+    }
+
+export const getPostApiV1OperationsDisputesDisputeIdEscalateUrl = (disputeId: string,) => {
+
+
+
+
+  return `/api/v1/operations/disputes/${disputeId}/escalate`
+}
+
+export const postApiV1OperationsDisputesDisputeIdEscalate = async (disputeId: string, options?: Parameters<typeof customFetch>[1]): Promise<OperationsDisputeResponse> => {
+
+  return customFetch<OperationsDisputeResponse>(getPostApiV1OperationsDisputesDisputeIdEscalateUrl(disputeId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiV1OperationsDisputesDisputeIdEscalateMutationKey = () => ['postApiV1OperationsDisputesDisputeIdEscalate'] as const;
+
+export const getPostApiV1OperationsDisputesDisputeIdEscalateMutationOptions = <TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdEscalate>>, TError,PostApiV1OperationsDisputesDisputeIdEscalateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdEscalate>>, TError,PostApiV1OperationsDisputesDisputeIdEscalateMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1OperationsDisputesDisputeIdEscalateMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdEscalate>>, PostApiV1OperationsDisputesDisputeIdEscalateMutationVariables> = (props) => {
+          const {disputeId} = props ?? {};
+
+          return  postApiV1OperationsDisputesDisputeIdEscalate(disputeId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiV1OperationsDisputesDisputeIdEscalateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdEscalate>>>
+
+    export type PostApiV1OperationsDisputesDisputeIdEscalateMutationError = ErrorType<HttpValidationProblemDetails | ProblemDetails>
+    export type PostApiV1OperationsDisputesDisputeIdEscalateMutationVariables = {disputeId: string}
+
+    export const usePostApiV1OperationsDisputesDisputeIdEscalate = <TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdEscalate>>, TError,PostApiV1OperationsDisputesDisputeIdEscalateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdEscalate>>,
+        TError,
+        PostApiV1OperationsDisputesDisputeIdEscalateMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiV1OperationsDisputesDisputeIdEscalateMutationOptions(options), queryClient);
+    }
+
+export const getPostApiV1OperationsDisputesDisputeIdResolveUrl = (disputeId: string,) => {
+
+
+
+
+  return `/api/v1/operations/disputes/${disputeId}/resolve`
+}
+
+export const postApiV1OperationsDisputesDisputeIdResolve = async (disputeId: string,
+    resolveDisputeRequest: ResolveDisputeRequest, options?: Parameters<typeof customFetch>[1]): Promise<OperationsDisputeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<OperationsDisputeResponse>(getPostApiV1OperationsDisputesDisputeIdResolveUrl(disputeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(resolveDisputeRequest)
+  }
+);}
+
+
+
+
+
+export const getPostApiV1OperationsDisputesDisputeIdResolveMutationKey = () => ['postApiV1OperationsDisputesDisputeIdResolve'] as const;
+
+export const getPostApiV1OperationsDisputesDisputeIdResolveMutationOptions = <TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdResolve>>, TError,PostApiV1OperationsDisputesDisputeIdResolveMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdResolve>>, TError,PostApiV1OperationsDisputesDisputeIdResolveMutationVariables, TContext> => {
+
+const mutationKey = getPostApiV1OperationsDisputesDisputeIdResolveMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdResolve>>, PostApiV1OperationsDisputesDisputeIdResolveMutationVariables> = (props) => {
+          const {disputeId,data} = props ?? {};
+
+          return  postApiV1OperationsDisputesDisputeIdResolve(disputeId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiV1OperationsDisputesDisputeIdResolveMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdResolve>>>
+    export type PostApiV1OperationsDisputesDisputeIdResolveMutationBody = ResolveDisputeRequest
+    export type PostApiV1OperationsDisputesDisputeIdResolveMutationError = ErrorType<HttpValidationProblemDetails | ProblemDetails>
+    export type PostApiV1OperationsDisputesDisputeIdResolveMutationVariables = {disputeId: string;data: ResolveDisputeRequest}
+
+    export const usePostApiV1OperationsDisputesDisputeIdResolve = <TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdResolve>>, TError,PostApiV1OperationsDisputesDisputeIdResolveMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiV1OperationsDisputesDisputeIdResolve>>,
+        TError,
+        PostApiV1OperationsDisputesDisputeIdResolveMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiV1OperationsDisputesDisputeIdResolveMutationOptions(options), queryClient);
+    }
 
 export const getPostApiV1LinkingStartUrl = () => {
 

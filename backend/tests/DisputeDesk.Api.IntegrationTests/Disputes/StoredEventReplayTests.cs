@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
+using DisputeDesk.Api.IntegrationTests.Operations;
 using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Application.Disputes;
@@ -124,6 +125,43 @@ public class StoredEventReplayTests(PostgresFixture postgres, TransactionsStub s
             Assert.All(disputeType.GetProperties(), column =>
                 Assert.Equal(column.PropertyInfo?.GetValue(row), column.PropertyInfo?.GetValue(replayed)));
             AssertSameTimeline(body.GetProperty("timeline"), CustomerView.ToTimeline(stream));
+        }
+    }
+
+    [Fact]
+    public async Task Replay_StreamsEndingInEachOperationsType_ReproducesTheDisputesRowAndTheCustomersTimeline()
+    {
+        // Story 5.2: streams ending in ReviewStarted, DisputeEscalated and DisputeResolved, each committed by its action.
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        using HttpClient a = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
+        using HttpClient tool = factory.CreateTool();
+        Guid reviewed = (await CreatedAsync(a, DisputesApi.Body())).GetProperty("disputeId").GetGuid();
+        Guid escalated = (await CreatedAsync(a, DisputesApi.Body("TXN-A-0028", reason: "wrongAmount", expectedAmount: "200.70"))).GetProperty("disputeId").GetGuid();
+        Guid resolved = (await CreatedAsync(a, DisputesApi.Body("TXN-A-0027", reason: "duplicateCharge", note: "Twice"))).GetProperty("disputeId").GetGuid();
+        Assert.Equal(HttpStatusCode.OK, (await factory.ActAsMappedAsync(tool, reviewed, "start-review")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await factory.ActAsMappedAsync(tool, escalated, "escalate")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await factory.ActAsMappedAsync(tool, resolved, "start-review")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await factory.ActAsMappedAsync(tool, resolved, "resolve", OperationsApi.ResolveBody("rejected", "  Merchant proved delivery.  "))).StatusCode);
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        IEntityType disputeType = db.Model.FindEntityType(typeof(Dispute)) ?? throw new InvalidOperationException("Dispute is not mapped.");
+
+        foreach ((Guid disputeId, string lastType) in new[] { (reviewed, nameof(ReviewStarted)), (escalated, nameof(DisputeEscalated)), (resolved, nameof(DisputeResolved)) })
+        {
+            List<StoredEventRow> rows = await db.Set<StoredEventRow>().IgnoreQueryFilters().AsNoTracking()
+                .Where(row => row.DisputeId == disputeId).OrderBy(row => row.Version).ToListAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(lastType, rows[^1].EventType);
+            List<StoredEvent> stream = [.. rows.Select(row => row.ToStoredEvent())];
+            Dispute row = await db.Set<Dispute>().IgnoreQueryFilters().AsNoTracking()
+                .SingleAsync(dispute => dispute.Id == disputeId, TestContext.Current.CancellationToken);
+
+            var replayed = Dispute.Replay(stream);
+
+            Assert.All(disputeType.GetProperties(), column =>
+                Assert.Equal(column.PropertyInfo?.GetValue(row), column.PropertyInfo?.GetValue(replayed)));
+            HttpResponseMessage detail = await a.GetDisputeAsync(disputeId.ToString());
+            using JsonDocument body = await detail.ReadJsonAsync();
+            AssertSameTimeline(body.RootElement.GetProperty("timeline"), CustomerView.ToTimeline(stream));
         }
     }
 

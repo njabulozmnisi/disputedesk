@@ -1,6 +1,4 @@
-using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
-using System.Globalization;
 using System.Net;
 using DisputeDesk.Api.Disputes;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
@@ -70,39 +68,5 @@ public class WithdrawMetricsTests(PostgresFixture postgres, TransactionsStub stu
         Assert.Equal("s", histogram.Unit);
         Assert.Equal([60d, 300, 900, 1800, 3600, 7200, 21600, 86400, 604800, 2592000], histogram.Advice?.HistogramBucketBoundaries);
         Assert.IsType<Counter<long>>(recorder.Instrument(Actions));
-    }
-
-    /// <summary>Every measurement of the DisputeDesk meter created by one <see cref="IMeterFactory"/>, long and double.</summary>
-    private sealed class MeasurementRecorder : IDisposable
-    {
-        private readonly MeterListener _listener = new();
-        private readonly ConcurrentDictionary<string, Instrument> _instruments = new();
-        private readonly ConcurrentQueue<(string Instrument, double Value, (string Name, string Value)[] Tags)> _measurements = new();
-
-        public MeasurementRecorder(IMeterFactory meterFactory)
-        {
-            _listener.InstrumentPublished = (instrument, listener) =>
-            {
-                if (instrument.Meter.Scope == meterFactory && instrument.Meter.Name == "DisputeDesk")
-                {
-                    _instruments[instrument.Name] = instrument;
-                    listener.EnableMeasurementEvents(instrument);
-                }
-            };
-            _listener.SetMeasurementEventCallback<long>((instrument, value, tags, _) => Record(instrument, value, tags));
-            _listener.SetMeasurementEventCallback<double>((instrument, value, tags, _) => Record(instrument, value, tags));
-            _listener.Start();
-        }
-
-        public Instrument? Instrument(string name) => _instruments.GetValueOrDefault(name);
-
-        public List<(double Value, (string Name, string Value)[] Tags)> Measurements(string instrument) =>
-            [.. _measurements.Where(measurement => measurement.Instrument == instrument).Select(measurement => (measurement.Value, measurement.Tags))];
-
-        public void Dispose() => _listener.Dispose();
-
-        private void Record(Instrument instrument, double value, ReadOnlySpan<KeyValuePair<string, object?>> tags) =>
-            _measurements.Enqueue((instrument.Name, value,
-                [.. tags.ToArray().Select(tag => (tag.Key, Convert.ToString(tag.Value, CultureInfo.InvariantCulture) ?? "")).Order()]));
     }
 }
