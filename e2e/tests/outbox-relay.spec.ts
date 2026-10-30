@@ -162,8 +162,9 @@ test.describe.serial('a raised dispute reaches the topic', () => {
     const [outbox] = outboxOf(disputeId);
     const traceId = outbox.TraceParent.split('-')[1];
     await page.goto(`${dashboard}/traces/detail/${traceId}`);
+    // The dashboard names the resource disputedesk-worker-<instance> once the Worker has run as two instances (a restart).
     // The dashboard shows the Producer span `send disputedesk.disputes` as "MSG kafka disputedesk.disputes".
-    await expect(page.getByRole('row', { name: /disputedesk-worker: MSG kafka disputedesk\.disputes/ })).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByRole('row', { name: /disputedesk-worker[^:]*: MSG kafka disputedesk\.disputes/ })).toBeVisible({ timeout: 45_000 });
     const text = await page.locator('body').innerText();
     expect(text).toContain('disputedesk-api');
     expect(text).toContain('disputedesk-worker');

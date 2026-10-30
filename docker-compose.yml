@@ -260,6 +260,8 @@ services:
       DOTNET_ENVIRONMENT: Development
       OTEL_SERVICE_NAME: disputedesk-worker
       Kafka__BootstrapServers: redpanda:9092
+    # AD-25: the host's 30-second shutdown timeout finishes the record in flight; Compose waits 5 s more before SIGKILL.
+    stop_grace_period: 35s
     # AD-25: the relay touches its file every loop (at least every 10 s); older than 30 s means a hung relay.
     # The relay writes it under the system temporary directory, so the worker must not set TMPDIR.
     # Story 5.3 adds the sweep's file.

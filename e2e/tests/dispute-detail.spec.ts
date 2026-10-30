@@ -88,7 +88,7 @@ test('the raise Location serves the detail: 200, byte-equal to the 201, no-store
   const stored = queryDatabase(`select string_agg("Version" || ':' || "EventType" || ':' || "ActorType", ',' order by "Version") from "StoredEvents" where "DisputeId" = '${own.id}'`);
   expect(stored).toBe('1:DisputeRaised:Customer');
   expect(queryDatabase(`select "Status" || ':' || coalesce("Outcome"::text, 'null') from "Disputes" where "Id" = '${own.id}'`)).toBe('Submitted:null');
-  expect(queryDatabase(`select "EventType" || ':' || "Status" from "OutboxMessages" where "DisputeId" = '${own.id}'`)).toBe('disputedesk.dispute.raised.v1:Pending');
+  expect(queryDatabase(`select "EventType" || ':' || "Status" from "OutboxMessages" where "DisputeId" = '${own.id}'`)).toMatch(/^disputedesk\.dispute\.raised\.v1:(Pending|Sent)$/); // the story 4.1 relay may already have sent it
   // The customer wire view holds no internal value.
   const wire = own.text;
   expect(wire).not.toContain('CUS-0000');

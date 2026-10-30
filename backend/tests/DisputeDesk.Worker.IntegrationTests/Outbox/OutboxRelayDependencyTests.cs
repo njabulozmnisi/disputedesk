@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using OpenTelemetry.Logs;
 
 namespace DisputeDesk.Worker.IntegrationTests.Outbox;
 
@@ -12,6 +13,7 @@ namespace DisputeDesk.Worker.IntegrationTests.Outbox;
 public class OutboxRelayDependencyTests(OutboxFixture outbox)
 {
     private const string WarningStart = "Outbox relay cannot reach";
+    private const string KafkaFailLine = "Kafka client log line (FAIL)";
 
     [Theory]
     [InlineData("")]
@@ -102,13 +104,14 @@ public class OutboxRelayDependencyTests(OutboxFixture outbox)
             // The producer connects as it is built, so its log and error events start without any row to send.
             await using RelayHost host = await RelayHost.StartAsync(clock, outbox.ConnectionString, "127.0.0.1:1");
             await OutboxFixture.WaitUntilAsync(() =>
-            {
-                string[] types = [.. ErrorTypes(host, "kafka")];
-                return types.Contains("Local_Transport") && types.Contains("FAIL");
-            });
+                ErrorTypes(host, "kafka").Contains("Local_Transport") && host.LogLines.Contains(KafkaFailLine));
 
+            // The client's error events are the relay's warnings; its own log lines keep their syslog level, mapped by
+            // Confluent.Kafka (LogMessage.LevelAs), and carry the facility only.
             Assert.All(host.Logs.Snapshot().Where(record => record.FormattedMessage?.StartsWith(WarningStart, StringComparison.Ordinal) == true), record =>
                 Assert.Equal(LogLevel.Warning, record.LogLevel));
+            LogRecord fail = host.Logs.Snapshot().First(record => record.FormattedMessage == KafkaFailLine);
+            Assert.Equal(LogLevel.Error, fail.LogLevel);
         }
         finally
         {

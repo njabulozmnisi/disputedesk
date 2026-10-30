@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Text;
 using Confluent.Kafka;
 using DisputeDesk.Infrastructure.Observability;
@@ -17,13 +18,22 @@ namespace DisputeDesk.Infrastructure.Outbox;
 /// <summary>
 /// The single outbox relay (AD-17). Whoever holds a PostgreSQL advisory lock publishes the head row of each dispute to
 /// Kafka, one send at a time, and marks it Sent once the broker confirms it. Every other instance only retries the lock.
-/// Unreachable dependencies only delay it: a failed send leaves its row Pending (story 4.2 adds per-record failures).
+/// An unreachable dependency only delays it; a record the client permanently refuses is retried and set Failed on the
+/// 5th refusal; on shutdown it finishes the one record in flight and takes no new one (AD-25).
+/// <para>
+/// <c>buildProducer</c> builds the producer from the relay's configured builder. The Worker registers none, so DI passes
+/// the default, null, and the relay calls <c>Build()</c> (Microsoft Learn, .NET dependency injection: a constructor
+/// argument DI does not provide takes its default value); a test registers one to make sends fail with a chosen
+/// <see cref="Error"/>.
+/// </para>
 /// </summary>
 public sealed partial class OutboxRelay(
     IOptions<KafkaOptions> kafkaOptions,
     IConfiguration configuration,
     TimeProvider timeProvider,
-    ILogger<OutboxRelay> logger) : BackgroundService
+    IMeterFactory meterFactory,
+    ILogger<OutboxRelay> logger,
+    Func<ProducerBuilder<string, string>, IProducer<string, string>>? buildProducer = null) : BackgroundService
 {
     public const string Topic = "disputedesk.disputes";
 
@@ -37,9 +47,30 @@ public sealed partial class OutboxRelay(
     public const long LockKey = 4_017_001;
 
     private const int BatchSize = 100;
+    private const int MaxAttempts = 5;
     private static readonly TimeSpan IdleWait = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(10);
     private static readonly ActivitySource Source = new(Telemetry.ActivitySourceName);
+
+    /// <summary>
+    /// Rows set Failed (AD-20), with no tags, on the DisputeDesk Meter created through <see cref="IMeterFactory"/>
+    /// (Microsoft Learn, Creating metrics).
+    /// </summary>
+    private readonly Counter<long> _failed = meterFactory.Create(Telemetry.MeterName)
+        .CreateCounter<long>("disputedesk.outbox.failed", description: "Outbox rows set Failed after 5 permanent refusals.");
+
+    /// <summary>What a failed send means for its row (AD-17, Failures).</summary>
+    internal enum SendFailure
+    {
+        /// <summary>The broker unavailable, a timeout, leadership moving, a missing topic or any unlisted code: no attempt counts.</summary>
+        Transient,
+
+        /// <summary>The record itself is refused, and would be on every try: counts an attempt.</summary>
+        Rejected,
+
+        /// <summary>The producer can no longer be used and is recreated: no attempt counts.</summary>
+        Fatal,
+    }
 
     /// <summary>
     /// The producer settings (AD-17, Producer): idempotent with every in-sync replica acknowledging, and a send given up
@@ -58,16 +89,29 @@ public sealed partial class OutboxRelay(
     internal static TimeSpan Backoff(int failures) =>
         TimeSpan.FromSeconds(Math.Min(MaxBackoff.TotalSeconds, Math.Pow(2, failures - 1)));
 
+    /// <summary>
+    /// Classifies a delivery error, once. A fatal error is fatal whatever its code: the idempotent producer can no longer
+    /// be used (librdkafka INTRODUCTION.md, fatal errors; Confluent.Kafka reports it with <see cref="Error.IsFatal"/>). Only
+    /// a permanent refusal of the record counts an attempt; every other error is transient, because librdkafka already
+    /// retries a retriable error until <c>message.timeout.ms</c>.
+    /// </summary>
+    internal static SendFailure Classify(Error error)
+    {
+        if (error.IsFatal)
+        {
+            return SendFailure.Fatal;
+        }
+
+        return error.Code is ErrorCode.MsgSizeTooLarge or ErrorCode.InvalidMsg or ErrorCode.InvalidMsgSize or ErrorCode.InvalidRecord or ErrorCode.Local_BadMsg
+            ? SendFailure.Rejected
+            : SendFailure.Transient;
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Each producer span's parent is the row's stored context or none, never whatever started the host.
         Activity.Current = null;
-        // librdkafka's own log lines and error events (a broker down, a refused connection) become the relay's warning
-        // instead of going to stderr; they carry only the facility or error code, never the text or a record value.
-        using IProducer<string, string> producer = new ProducerBuilder<string, string>(CreateProducerConfig(kafkaOptions.Value))
-            .SetLogHandler((_, log) => LogDependencyUnavailable("kafka", log.Facility))
-            .SetErrorHandler((_, error) => LogDependencyUnavailable("kafka", error.Code.ToString()))
-            .Build();
+        IProducer<string, string> producer = BuildProducer();
         string connectionString = configuration.GetConnectionString(DependencyInjection.ConnectionStringName) ?? "";
         NpgsqlConnection? lockConnection = null;
         int failures = 0;
@@ -89,19 +133,25 @@ public sealed partial class OutboxRelay(
                 try
                 {
                     lockConnection ??= await TryTakeLockAsync(connectionString, stoppingToken);
-                    int sent = lockConnection is null ? 0 : await PublishBatchAsync(lockConnection, producer, stoppingToken);
+                    int handled = lockConnection is null ? 0 : await PublishBatchAsync(lockConnection, producer, stoppingToken);
                     failures = 0;
-                    wait = sent > 0 ? TimeSpan.Zero : IdleWait;
+                    wait = handled > 0 ? TimeSpan.Zero : IdleWait;
+                }
+                catch (ProduceException<string, string> exception) when (Classify(exception.Error) == SendFailure.Fatal)
+                {
+                    // The row stays Pending; the producer is disposed and built again (librdkafka INTRODUCTION.md, fatal errors).
+                    LogProducerRecreated(exception.Error.Code.ToString());
+                    producer.Dispose();
+                    producer = BuildProducer();
+                    wait = Backoff(++failures);
                 }
                 catch (ProduceException<string, string> exception)
                 {
-                    // The broker is unreachable or slow: the row stays Pending and this instance keeps the lock.
+                    // Transient: the row stays Pending with no attempt counted, and this instance keeps the lock.
+                    LogSendDeferred(exception.Error.Code.ToString());
                     wait = Backoff(++failures);
-                    LogDependencyUnavailable("kafka", exception.Error.Code.ToString());
                 }
-                // EF Core reports a dropped connection as an InvalidOperationException ("likely due to a transient failure")
-                // around the NpgsqlException, so that wrapper counts too; any other InvalidOperationException is a bug.
-                catch (Exception exception) when (exception is NpgsqlException or DbUpdateException || exception.InnerException is NpgsqlException)
+                catch (Exception exception) when (IsPostgresFailure(exception))
                 {
                     // The lock may be gone with the connection, so give both up and produce nothing until the lock is retaken.
                     if (lockConnection is not null)
@@ -131,7 +181,36 @@ public sealed partial class OutboxRelay(
             {
                 await lockConnection.DisposeAsync();
             }
+
+            producer.Dispose();
         }
+    }
+
+    /// <summary>
+    /// A failure of the database or its connection. EF Core reports a failed update as a <see cref="DbUpdateException"/>,
+    /// and Npgsql's default execution strategy wraps a transient failure, also one inside a <see cref="DbUpdateException"/>,
+    /// in an <see cref="InvalidOperationException"/> ("likely due to a transient failure"; Npgsql EF Core,
+    /// NpgsqlExecutionStrategy). Any other <see cref="InvalidOperationException"/> is a bug and stops the relay.
+    /// </summary>
+    private static bool IsPostgresFailure(Exception exception) =>
+        exception is NpgsqlException or DbUpdateException
+        || exception is InvalidOperationException { InnerException: NpgsqlException or DbUpdateException };
+
+    /// <summary>
+    /// librdkafka's own log lines keep their level, mapped by Confluent.Kafka (<see cref="LogMessage.LevelAs"/>), and its
+    /// error events become the relay's warning, instead of going to stderr. Each carries only the facility or the error
+    /// code, never the text, which can hold a broker address or a record value.
+    /// </summary>
+    private IProducer<string, string> BuildProducer()
+    {
+        ProducerBuilder<string, string> builder = new ProducerBuilder<string, string>(CreateProducerConfig(kafkaOptions.Value))
+            .SetLogHandler((_, log) =>
+            {
+                var level = (LogLevel)log.LevelAs(LogLevelType.MicrosoftExtensionsLogging);
+                LogKafkaClient(level, log.Facility);
+            })
+            .SetErrorHandler((_, error) => LogDependencyUnavailable("kafka", error.Code.ToString()));
+        return buildProducer is null ? builder.Build() : buildProducer(builder);
     }
 
     /// <summary>
@@ -166,13 +245,13 @@ public sealed partial class OutboxRelay(
 
     /// <summary>
     /// One batch on the lock connection: checks the connection still answers, then sends each dispute's due head row
-    /// in turn and marks it Sent with the batch's one instant (AD-4). Returns how many rows it sent.
+    /// in turn and records the outcome with the batch's one instant (AD-4). Returns how many rows it handled.
     /// </summary>
-    private async Task<int> PublishBatchAsync(NpgsqlConnection lockConnection, IProducer<string, string> producer, CancellationToken cancellationToken)
+    private async Task<int> PublishBatchAsync(NpgsqlConnection lockConnection, IProducer<string, string> producer, CancellationToken stoppingToken)
     {
         await using (var check = new NpgsqlCommand("SELECT 1", lockConnection))
         {
-            await check.ExecuteScalarAsync(cancellationToken);
+            await check.ExecuteScalarAsync(stoppingToken);
         }
 
         DateTimeOffset now = timeProvider.GetUtcNow();
@@ -189,17 +268,39 @@ public sealed partial class OutboxRelay(
                 && earlier.Status != OutboxStatus.Sent))
             .OrderBy(message => message.CreatedAtUtc)
             .Take(BatchSize)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(stoppingToken);
 
         foreach (OutboxMessage message in heads)
         {
+            // Shutdown takes no new record (AD-25).
+            if (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+
             // Touched on both sides of the send, so the file is never older than one send's 10-second delivery timeout.
             TouchHeartbeat();
-            await SendAsync(producer, message, cancellationToken);
-            message.Status = OutboxStatus.Sent;
-            message.SentAtUtc = now;
-            // Keeps the stopping token for now: story 4.2 owns graceful shutdown, including a stop right after a delivery.
-            await db.SaveChangesAsync(cancellationToken);
+            // The record in flight is never cancelled: its delivery report and update finish, bounded by the 10-second
+            // delivery timeout and the 5-second command timeout (AD-25; BackgroundService). ProduceAsync's token would
+            // only stop the wait, not the delivery.
+            ErrorCode? refusal = await SendAsync(producer, message);
+            if (refusal is null)
+            {
+                message.Status = OutboxStatus.Sent;
+                message.SentAtUtc = now;
+            }
+            else
+            {
+                CountRefusal(message, refusal.Value, now);
+            }
+
+            await db.SaveChangesAsync(CancellationToken.None);
+            if (message.Status == OutboxStatus.Failed)
+            {
+                _failed.Add(1);
+                LogFailed(message.Id, message.DisputeId);
+            }
+
             TouchHeartbeat();
         }
 
@@ -207,12 +308,31 @@ public sealed partial class OutboxRelay(
     }
 
     /// <summary>
-    /// Produces one row and waits for its delivery report. The stored trace context is read and the headers written by
-    /// the OpenTelemetry propagator only (W3C Trace Context), with no baggage; the span follows the OpenTelemetry
-    /// messaging and Kafka semantic conventions; the value is the committed CloudEvent, byte for byte (CloudEvents Kafka
-    /// protocol binding, structured mode).
+    /// Counts a permanent refusal (AD-17, Failures). <c>LastError</c> holds the code alone, never <c>Error.Reason</c>, which is
+    /// broker free text. Attempts 1 to 4 wait 1, 2, 4 then 8 seconds from the batch's instant, each times a random 0.8 to
+    /// 1.2 (Azure Architecture Center, exponential back-off with jitter); the 5th sets Failed and keeps the 4th's next try.
     /// </summary>
-    private static async Task SendAsync(IProducer<string, string> producer, OutboxMessage message, CancellationToken cancellationToken)
+    private static void CountRefusal(OutboxMessage message, ErrorCode code, DateTimeOffset now)
+    {
+        message.Attempts++;
+        message.LastError = code.ToString();
+        if (message.Attempts >= MaxAttempts)
+        {
+            message.Status = OutboxStatus.Failed;
+            return;
+        }
+
+        message.NextAttemptAtUtc = now + (Backoff(message.Attempts) * (0.8 + (0.4 * Random.Shared.NextDouble())));
+    }
+
+    /// <summary>
+    /// Produces one row and waits for its delivery report. Returns null once the broker confirmed it, or the code of a
+    /// permanent refusal; any other failure is thrown. The stored trace context is read and the headers written by the
+    /// OpenTelemetry propagator only (W3C Trace Context), with no baggage; the span follows the OpenTelemetry messaging and
+    /// Kafka semantic conventions; the value is the committed CloudEvent, byte for byte (CloudEvents Kafka protocol
+    /// binding, structured mode).
+    /// </summary>
+    private static async Task<ErrorCode?> SendAsync(IProducer<string, string> producer, OutboxMessage message)
     {
         PropagationContext stored = Propagators.DefaultTextMapPropagator.Extract(default, message, StoredTraceContext);
         string key = message.DisputeId.ToString();
@@ -233,7 +353,24 @@ public sealed partial class OutboxRelay(
         var context = new PropagationContext(span?.Context ?? stored.ActivityContext, default(Baggage));
         Propagators.DefaultTextMapPropagator.Inject(context, headers, (carrier, name, value) => carrier.Add(name, Encoding.UTF8.GetBytes(value)));
 
-        await producer.ProduceAsync(Topic, new Message<string, string> { Key = key, Value = message.Payload, Headers = headers }, cancellationToken);
+        try
+        {
+            await producer.ProduceAsync(Topic, new Message<string, string> { Key = key, Value = message.Payload, Headers = headers }, CancellationToken.None);
+            return null;
+        }
+        catch (ProduceException<string, string> exception)
+        {
+            // error.type is the Kafka error code (OpenTelemetry semantic conventions, recording errors); the status has no
+            // description and no exception event is recorded, so no broker text or record value reaches the trace.
+            span?.SetTag("error.type", exception.Error.Code.ToString());
+            span?.SetStatus(ActivityStatusCode.Error);
+            if (Classify(exception.Error) != SendFailure.Rejected)
+            {
+                throw;
+            }
+
+            return exception.Error.Code;
+        }
     }
 
     /// <summary>The propagator's carrier: the row's two trace context columns under their W3C header names.</summary>
@@ -254,10 +391,23 @@ public sealed partial class OutboxRelay(
         File.SetLastWriteTimeUtc(HeartbeatPath, timeProvider.GetUtcNow().UtcDateTime);
     }
 
-    // Carries no connection string, exception message or record value: only which dependency and the error's type or code.
+    // The failure-path lines carry no connection string, exception, message text or record value: only which dependency,
+    // the error's type or code, or the row's event and dispute IDs.
     // The relay retries with Backoff; librdkafka reconnects on its own schedule, so the line names no delay.
     [LoggerMessage(Level = LogLevel.Warning, Message = "Outbox relay cannot reach {Dependency} ({ErrorType})")]
     private partial void LogDependencyUnavailable(string dependency, string errorType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Outbox relay could not send an event ({ErrorCode}); it stays Pending and is retried")]
+    private partial void LogSendDeferred(string errorCode);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Outbox relay's Kafka producer hit a fatal error ({ErrorCode}) and is recreated")]
+    private partial void LogProducerRecreated(string errorCode);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Outbox event {EventId} of dispute {DisputeId} is Failed after 5 permanent refusals; the dispute's later events wait for an operator")]
+    private partial void LogFailed(Guid eventId, Guid disputeId);
+
+    [LoggerMessage(Message = "Kafka client log line ({Facility})")]
+    private partial void LogKafkaClient(LogLevel level, string facility);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Outbox relay holds the outbox lock and publishes")]
     private partial void LogHoldsLock();
