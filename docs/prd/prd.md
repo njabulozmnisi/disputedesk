@@ -241,6 +241,7 @@ Linking attempts, start and verify combined, are limited to 5 per login and 20 p
 - A login's 6th attempt within 15 minutes returns 429 (RFC 6585) with `Retry-After` (RFC 9110).
 - An IP address's 21st attempt within 15 minutes returns 429, whichever logins are used.
 - "In any 15 minutes" follows the built-in sliding-window limiter: the window is split into segments, and permits come back one segment at a time. Settled on 2026-10-30 (story 6.3).
+- The per-IP limiter runs before the per-login limiter, so a request the login limit rejects has already spent IP permits: two, because ASP.NET Core's rate-limiting middleware asks the chained limiter twice (`AttemptAcquire`, then `AcquireAsync`) before it rejects (dotnet/aspnetcore `release/10.0` `RateLimitingMiddleware.cs`). One login can therefore spend a shared IP's 20 permits in 13 requests; brute-force protection is unchanged. Decided 2026-10-30 (story 6.3).
 - Requests rejected with 429 do not count against the limiter that rejected them. The IP limit runs first, so a request the login limit rejects has already used one of the IP's 20. Settled on 2026-10-30 (story 6.3).
 - The client IP is read from forwarded headers only when they come from the known proxies (nginx, and CloudFront in AWS); locally that is the Compose network's configured range. Otherwise the connection address is used. A test shows that a spoofed `X-Forwarded-For` from an unknown source is ignored.
 - Limits are held in memory on the single Api instance. This is stated in the README, and shared limits for scale-out are a production-path note.
@@ -632,7 +633,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - **NFR-INFRA-3:** Terraform modules build one dev environment in a new AWS free-plan account:
   - an EC2 c7i-flex.large running the Compose stack;
   - RDS PostgreSQL db.t4g.micro;
-  - two CloudFront distributions, one for the app and one for auth;
+  - three CloudFront distributions, one for the app, one for auth and one for Mailpit (decided 2026-10-30, story 7.4);
   - Mailpit as the demo inbox, protected as in NFR-SEC-11.
 - **NFR-INFRA-4:** deployment uses a GitHub OIDC role, with no long-lived AWS keys. Terraform state is held in S3 with native locking. A budget alarm measures spend with credits excluded, so free-plan credits cannot hide real cost.
 - **NFR-INFRA-5:** `terraform destroy` removes the environment cleanly [manual check] [ASSUMPTION].
