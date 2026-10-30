@@ -132,6 +132,12 @@ discovery=$(curl -fsS "$AUTH/.well-known/openid-configuration")
 jq '{issuer, authorization_endpoint, token_endpoint, code_challenge_methods_supported}' <<< "$discovery"
 [ "$(jq -r .issuer <<< "$discovery")" = "$AUTH" ] || fail "issuer is not $AUTH"
 curl -fsS -o /dev/null "$AUTH/ui/v2/login/loginname" && ok "GET $AUTH/ui/v2/login/loginname -> 200"
+# The branding changes no framing setting: the hosted login still refuses to be framed (Login v2 sends both headers).
+login_headers=$(curl -fsS -D - -o /dev/null "$AUTH/ui/v2/login/loginname" | tr -d '\r')
+grep -i '^content-security-policy:' <<< "$login_headers" | grep -q "frame-ancestors 'none'" \
+  || fail "hosted login: no frame-ancestors 'none' in its Content-Security-Policy"
+grep -qix 'x-frame-options: deny' <<< "$login_headers" || fail "hosted login: no X-Frame-Options: deny"
+ok "hosted login: frame-ancestors 'none' and X-Frame-Options: deny"
 
 clients=$(in_provisioner cat /out/zitadel-clients.json)
 project=$(jq -r .Zitadel.ProjectId <<< "$clients")
@@ -173,10 +179,14 @@ section "provisioning is idempotent"
 before=$(clients_hash)
 log=$(docker compose run --rm --no-deps -T provision 2>&1 | grep '^\[provision\]') || fail "second provisioning run"
 echo "$log"
-! grep -qE 'created|wrote' <<< "$log" || fail "the second run changed something"
+! grep -qE 'created|wrote|colours updated|uploaded' <<< "$log" || fail "the second run changed something"
+grep -q 'label policy colours are current' <<< "$log" || fail "the second run did not find the label policy current"
 grep -q 'secrets not rotated' <<< "$log" || fail "the second run did not keep the client file"
 [ "$(clients_hash)" = "$before" ] || fail "zitadel-clients.json changed"
 ok "second run created nothing; zitadel-clients.json unchanged (sha256 ${before:0:12}...)"
+in_provisioner bash /verify.sh | grep -q '^PASS  label policy: active, from tokens.css' \
+  || fail "the active label policy changed after the second run"
+ok "the active label policy still matches tokens.css after the second run"
 
 section "Postgres roles"
 docker compose exec -T postgres sh -c 'umask 077 && cat > /tmp/smoke.pgpass' <<EOF

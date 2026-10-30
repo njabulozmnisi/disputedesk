@@ -115,6 +115,61 @@ jobs:
       - name: Compose file is valid
         run: docker compose config --quiet
 
+      # Story 2.6. The expected values are DESIGN.md's (Theme file and hosted-login theming), written here rather than
+      # re-read from tokens.css, so a changed token fails until DESIGN.md and this list agree. Case is ignored.
+      - name: Hosted-login label policy is generated from tokens.css
+        run: |
+          body=$(infra/zitadel/provision/label-policy.sh frontend/src/theme/tokens.css)
+          echo "$body"
+          expected='{"primaryColor":"#2B57C9","backgroundColor":"#F4F5F7","warnColor":"#B42318","fontColor":"#1E2430",
+            "primaryColorDark":"#8CAAF7","backgroundColorDark":"#12171E","warnColorDark":"#FF8A7E","fontColorDark":"#EEF1F5",
+            "themeMode":"THEME_MODE_AUTO"}'
+          jq -e --argjson expected "$expected" \
+            'map_values(ascii_downcase) == ($expected | map_values(ascii_downcase))' <<< "$body"
+
+      # Each bound of the generator's input exits non-zero naming the token, before any API call.
+      - name: Label policy generator rejects tokens outside its bounds
+        run: |
+          rejects(){ # description sed-script token
+            sed -E "$2" frontend/src/theme/tokens.css > "$RUNNER_TEMP/tokens.css"
+            if err=$(infra/zitadel/provision/label-policy.sh "$RUNNER_TEMP/tokens.css" 2>&1 >/dev/null); then
+              echo "::error::accepted $1"; exit 1
+            fi
+            grep -qF -- "$3" <<< "$err" || { echo "::error::$1: the error does not name $3: $err"; exit 1; }
+            echo "ok  $1: $err"
+          }
+          rejects "a named colour"            's/--primary: #2b57c9;/--primary: blue;/'                       --primary
+          rejects "a three-digit colour"      's/--background: #f4f5f7;/--background: #fff;/'                --background
+          rejects "an eight-digit colour"     's/--destructive: #b42318;/--destructive: #b42318ff;/'         --destructive
+          rejects "a token declared twice"    's/--primary: #2b57c9;/--primary: #2b57c9; --primary: #2b57c9;/' --primary
+          rejects "a twice-declared token with a space before its colon" \
+            's/--primary: #2b57c9;/--primary: #2b57c9; --primary : #000000;/' --primary
+          rejects "only a prefixed token"     '/--primary: #2b57c9;/d'                                       --primary
+          rejects "a dark token missing"      '/--foreground: #eef1f5;/d'                                    --foreground
+          rejects "only a commented-out token" 's|--primary: #2b57c9;|/* --primary: #2b57c9; */|'             --primary
+          rejects "only a multi-line comment" 's|--primary: #2b57c9;|/*\
+          --primary: #2b57c9;\
+          */|' --primary
+
+      # The files provisioning uploads: signatures from the W3C PNG (section 5.2) and WOFF 2.0 (section 3)
+      # specifications, and Zitadel's 512 KiB limit per asset.
+      - name: Hosted-login brand files
+        run: |
+          brand(){ # file signature-hex
+            size=$(wc -c < "$1")
+            [ "$size" -le 524288 ] || { echo "::error::$1 is $size bytes, over 512 KiB"; exit 1; }
+            [ "$(od -An -tx1 -N $(( ${#2} / 2 )) "$1" | tr -d ' \n')" = "$2" ] || { echo "::error::$1 is not the expected type"; exit 1; }
+            echo "ok  $1 ($size bytes)"
+          }
+          brand frontend/src/theme/wordmark.png                         89504e470d0a1a0a
+          brand frontend/src/theme/wordmark-dark.png                    89504e470d0a1a0a
+          brand frontend/src/theme/fonts/nunito-sans-latin-400-normal.woff2 774f4632
+          for f in wordmark.png wordmark-dark.png; do
+            grep -qF "$f" frontend/src/theme/tokens.css || { echo "::error::tokens.css does not name $f"; exit 1; }
+          done
+          ! grep -qE 'url\([^)]*wordmark' frontend/src/theme/tokens.css || { echo "::error::tokens.css loads a wordmark"; exit 1; }
+          echo "ok  tokens.css names both wordmarks and loads neither"
+
   floor-guard:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

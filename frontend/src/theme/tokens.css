@@ -2,7 +2,8 @@
    Mirrors docs/ux/mockups/tokens.css; names follow shadcn/ui variables. Components use only these tokens, through
    the Tailwind utilities that the @theme inline block at the foot of this file maps to them.
    Style: friendly, high-contrast retail-banking style. One cobalt accent, navy display type, pill controls.
-   To rebrand: change values here and in the generated identity-provider label policy. */
+   To rebrand: change values here and in the generated identity-provider label policy.
+   Hosted login logo: wordmark.png (light) and wordmark-dark.png (dark), both in this folder. */
 
 /* Nunito Sans (SIL Open Font License 1.1, see fonts/OFL.txt), self-hosted: CSP font-src 'self'. Latin subset. */
 @font-face {

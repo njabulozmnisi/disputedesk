@@ -1,6 +1,11 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 
 namespace DisputeDesk.ArchitectureTests;
 
@@ -153,6 +158,72 @@ public partial class PlatformScriptTests
     }
 
     [Fact]
+    public void ProvisionScript_FirstZitadelCall_IsTheOnlyOneThatRetries()
+    {
+        // Zitadel can refuse connections or answer 503 for a moment after its health check passes (story 2.6, QA F1).
+        string firstCall = ZitadelCall().Match(ProvisionScript).Value;
+
+        Assert.Equal("RETRY=1 call GET /admin/v1/policies/label/_preview", firstCall);
+        Assert.Single(ZitadelCall().Matches(ProvisionScript), call => call.Value.StartsWith("RETRY=1 ", StringComparison.Ordinal));
+        Assert.Equal(["--retry", "5", "--retry-connrefused", "--retry-max-time", "30"], RetryOptions());
+    }
+
+    [Fact]
+    public void ProvisionScript_CallCurl_AddsRetryOptionsWhenRetryIsSet()
+    {
+        // RETRY=1 on the first call does nothing unless call's curl line expands RETRY_OPTS.
+        string callCurl = CallCurlLine().Match(ProvisionScript).Groups["curl"].Value;
+
+        Assert.Contains("curl \"${CURL_OPTS[@]}\" ${RETRY:+\"${RETRY_OPTS[@]}\"} ", callCurl, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProvisionScript_RetryOptions_SucceedAfterTwo503Answers()
+    {
+        int requests = 0;
+        await using WebApplication zitadel = await StartStubZitadelAsync(0, context =>
+        {
+            bool starting = Interlocked.Increment(ref requests) <= 2;
+            context.Response.StatusCode = starting ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status200OK;
+            return context.Response.WriteAsync(starting ? "connection refused" : "{\"policy\":{}}", context.RequestAborted);
+        });
+
+        string status = await CurlWithRetryOptionsAsync(new Uri(zitadel.Urls.First()));
+
+        Assert.Equal("200", status);
+        Assert.Equal(3, Volatile.Read(ref requests));
+    }
+
+    [Fact]
+    public async Task ProvisionScript_RetryOptions_SucceedAfterTwoRefusedConnections()
+    {
+        // Nothing listens on the port at first; curl tries at 0 s and 1 s (refused), then at 3 s, when the stub listens.
+        int port = FreeLoopbackPort();
+        Task<string> curl = CurlWithRetryOptionsAsync(new Uri($"http://127.0.0.1:{port}"));
+        await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await using WebApplication zitadel = await StartStubZitadelAsync(port, context => context.Response.WriteAsync("{\"policy\":{}}", context.RequestAborted));
+
+        Assert.Equal("200", await curl);
+    }
+
+    [Fact]
+    public async Task ProvisionScript_RetryOptions_DoNotRetryABadRequest()
+    {
+        int requests = 0;
+        await using WebApplication zitadel = await StartStubZitadelAsync(0, context =>
+        {
+            Interlocked.Increment(ref requests);
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return Task.CompletedTask;
+        });
+
+        string status = await CurlWithRetryOptionsAsync(new Uri(zitadel.Urls.First()));
+
+        Assert.Equal("400", status);
+        Assert.Equal(1, Volatile.Read(ref requests));
+    }
+
+    [Fact]
     public void Compose_ZitadelExternalSecure_ComesFromConfiguration()
     {
         Assert.Contains("ZITADEL_EXTERNALSECURE: ${ZITADEL_EXTERNALSECURE:-false}", Compose, StringComparison.Ordinal);
@@ -187,6 +258,56 @@ public partial class PlatformScriptTests
     // From the "is the file current" test up to the log line it ends with.
     [GeneratedRegex(@"if \[ -s ""\$OUT_FILE"" \][^;]*;[^\n]*then\s*\n\s*log ""\$OUT_FILE is current; secrets not rotated""")]
     private static partial Regex CurrentCheck();
+
+    /// <summary>The script's RETRY_OPTS array, one option or value per item.</summary>
+    private static string[] RetryOptions() =>
+        RetryOptionsArray().Match(ProvisionScript).Groups["options"].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>Runs curl with the script's retry options against the preview path and returns the final HTTP status.</summary>
+    private static async Task<string> CurlWithRetryOptionsAsync(Uri zitadel)
+    {
+        var start = new ProcessStartInfo("curl") { RedirectStandardOutput = true };
+        foreach (string argument in RetryOptions().Concat(["-sS", "-o", "/dev/null", "-w", "%{http_code}", $"{zitadel}admin/v1/policies/label/_preview"]))
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using Process process = Process.Start(start) ?? throw new InvalidOperationException("curl did not start.");
+        string status = await process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+        return status;
+    }
+
+    /// <summary>A stand-in for Zitadel on a loopback port (0 picks a free one): every request gets the given answer.</summary>
+    private static async Task<WebApplication> StartStubZitadelAsync(int port, RequestDelegate answer)
+    {
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+        builder.WebHost.UseKestrel(kestrel => kestrel.Listen(IPAddress.Loopback, port));
+        WebApplication app = builder.Build();
+        app.Run(answer);
+        await app.StartAsync(TestContext.Current.CancellationToken);
+        return app;
+    }
+
+    private static int FreeLoopbackPort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
+    /// <summary>A Zitadel call in provision.sh with a literal path: call METHOD /path, rpc zitadel.Service/Method or upload /path.</summary>
+    [GeneratedRegex(@"(?:RETRY=1 )?(?:call (?:GET|PUT|POST) /|rpc zitadel\.|upload /)\S+")]
+    private static partial Regex ZitadelCall();
+
+    /// <summary>The first curl line inside provision.sh's call function.</summary>
+    [GeneratedRegex(@"\ncall\(\)\{\n(?:.*\n)*?(?<curl>.*\bcurl\b.*)")]
+    private static partial Regex CallCurlLine();
+
+    [GeneratedRegex(@"RETRY_OPTS=\((?<options>[^)]*)\)")]
+    private static partial Regex RetryOptionsArray();
 
     [GeneratedRegex(@"ROLES='(?<roles>[^']*)'")]
     private static partial Regex RolesBlock();

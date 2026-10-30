@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # DisputeDesk Zitadel provisioner: one-shot container, runs on every `docker compose up`.
 # It creates only what Zitadel's FirstInstance / DefaultInstance environment variables cannot: the project
-# and its roles, the BFF web app, the operations machine user and the fixture logins. Instance settings
-# (SMTP, login policy, Login v2) live in docker-compose.yml.
+# and its roles, the BFF web app, the operations machine user, the fixture logins and the hosted login's
+# label policy (branding). Instance settings (SMTP, login policy, Login v2) live in docker-compose.yml.
 # Auth:  the IAM_OWNER PAT that FirstInstance writes into the bootstrap volume before Zitadel reports ready.
 # Idempotent: every object is looked up before it is created. Client secrets are shown only once,
 #        so they are (re)generated only when the output file is missing or belongs to another instance.
@@ -24,6 +24,10 @@ OPS_USERNAME=operations-tools
 # Zitadel while the Host header stays auth.localhost:8080 (Zitadel resolves the instance from it).
 # --max-time bounds every call, so a hung Zitadel fails the one-shot instead of blocking `docker compose up`.
 CURL_OPTS=(--max-time 30 ${CURL_CONNECT_TO:+--connect-to "$CURL_CONNECT_TO"})
+# Zitadel can refuse connections or answer 503 for a moment after its health check passes, so the first call retries
+# with curl's --retry: on a refused connection or a transient status (408, 429, 500, 502, 503, 504), waiting 1 s and
+# doubling, starting no retry after 30 s. Any other status fails at once, and the last status still fails the run.
+RETRY_OPTS=(--retry 5 --retry-connrefused --retry-max-time 30)
 log(){ printf '[provision] %s\n' "$*" >&2; }
 
 # It is written straight into the app's JSON, so anything but a JSON boolean is refused up front.
@@ -38,10 +42,11 @@ trap 'rm -f "$AUTH_HEADER"' EXIT
 { printf 'Authorization: Bearer '; tr -d '\n' < "${PAT_FILE:?}"; printf '\n'; } > "$AUTH_HEADER"
 
 # call METHOD PATH [JSON]: prints the body; fails on HTTP >= 400, except 409 when ALLOW_CONFLICT=1.
+# RETRY=1 adds RETRY_OPTS; only the first call, an idempotent GET, uses it.
 call(){
   local m=$1 p=$2 d=${3:-} tmp code
   tmp=$(mktemp)
-  code=$(printf '%s' "$d" | curl "${CURL_OPTS[@]}" -sS -o "$tmp" -w '%{http_code}' -X "$m" "$Z$p" \
+  code=$(printf '%s' "$d" | curl "${CURL_OPTS[@]}" ${RETRY:+"${RETRY_OPTS[@]}"} -sS -o "$tmp" -w '%{http_code}' -X "$m" "$Z$p" \
     -H @"$AUTH_HEADER" -H 'Content-Type: application/json' -H 'Connect-Protocol-Version: 1' \
     ${d:+--data-binary @-})
   if [ "$code" -ge 400 ]; then
@@ -51,6 +56,51 @@ call(){
   cat "$tmp"; rm -f "$tmp"
 }
 rpc(){ call POST "/$1" "${2:-{\}}"; }   # Connect protocol, JSON body
+
+# upload PATH FILE: multipart POST to the Assets API, form field `file` (curl -F). `call` cannot send it, because it
+# forces a JSON Content-Type. FILE is always one of the BRAND_* constants below: curl reads ; < and @ in -F values.
+# Fails on HTTP >= 400 like `call`, logging only the method, path, status and response body.
+upload(){
+  local p=$1 f=$2 tmp code
+  tmp=$(mktemp)
+  code=$(curl "${CURL_OPTS[@]}" -sS -o "$tmp" -w '%{http_code}' "$Z$p" -H @"$AUTH_HEADER" -F "file=@$f")
+  if [ "$code" -ge 400 ]; then log "FAIL POST $p -> $code $(cat "$tmp")"; rm -f "$tmp"; return 1; fi
+  rm -f "$tmp"
+}
+
+# ------------------------------------------------------- hosted login branding: the instance label policy
+# Generated from the theme file (label-policy.sh); the four brand files are mounted read-only, one by one.
+# The Admin API's update fails with 400 when nothing changes, so the preview is compared first and every 400 fails.
+BRAND_TOKENS=/brand/tokens.css
+BRAND_FONT=/brand/nunito-sans-latin-400-normal.woff2
+BRAND_LOGO=/brand/wordmark.png
+BRAND_LOGO_DARK=/brand/wordmark-dark.png
+LABEL_FIELDS='{primaryColor, backgroundColor, warnColor, fontColor, primaryColorDark, backgroundColorDark,
+  warnColorDark, fontColorDark, themeMode} | map_values(. // "" | ascii_downcase)'
+
+label_policy=$(bash /label-policy.sh "$BRAND_TOKENS")
+preview=$(RETRY=1 call GET /admin/v1/policies/label/_preview | jq -c .policy)
+if [ "$(jq -c "$LABEL_FIELDS" <<< "$preview")" = "$(jq -c "$LABEL_FIELDS" <<< "$label_policy")" ]; then
+  log "label policy colours are current"
+else
+  call PUT /admin/v1/policies/label "$label_policy" >/dev/null
+  log "label policy colours updated"
+fi
+# shortcut: a changed font or logo file needs down -v, upgrade when rebrands are frequent
+if [ -z "$(jq -r '.fontUrl // empty' <<< "$preview")" ]; then
+  upload /assets/v1/instance/policy/label/font "$BRAND_FONT"
+  log "font uploaded"
+fi
+if [ -z "$(jq -r '.logoUrl // empty' <<< "$preview")" ]; then
+  upload /assets/v1/instance/policy/label/logo "$BRAND_LOGO"
+  log "logo uploaded"
+fi
+if [ -z "$(jq -r '.logoUrlDark // empty' <<< "$preview")" ]; then
+  upload /assets/v1/instance/policy/label/logo/dark "$BRAND_LOGO_DARK"
+  log "dark logo uploaded"
+fi
+call POST /admin/v1/policies/label/_activate '{}' >/dev/null
+log "label policy activated"
 
 ORG_ID=$(call GET /auth/v1/users/me | jq -r '.user.details.resourceOwner')
 log "organization $ORG_ID"

@@ -160,6 +160,11 @@ services:
       - zitadel-bootstrap:/zitadel/bootstrap:ro
       - zitadel-clients:/out
       - ./fixtures/local.json:/fixtures/local.json:ro
+      # The hosted login's branding sources (story 2.6), one file each, never the whole frontend/ directory.
+      - ./frontend/src/theme/tokens.css:/brand/tokens.css:ro
+      - ./frontend/src/theme/fonts/nunito-sans-latin-400-normal.woff2:/brand/nunito-sans-latin-400-normal.woff2:ro
+      - ./frontend/src/theme/wordmark.png:/brand/wordmark.png:ro
+      - ./frontend/src/theme/wordmark-dark.png:/brand/wordmark-dark.png:ro
     depends_on:
       zitadel: { condition: service_healthy }
     mem_limit: 128m
@@ -184,6 +189,8 @@ services:
       start_period: 20s
     depends_on:
       zitadel: { condition: service_healthy }
+      # Login v2 caches branding for an hour, so it starts only once the label policy is active.
+      provision: { condition: service_completed_successfully }
     mem_limit: 768m                                # transient peaks near 550 MiB under load (lab)
 
   mailpit:
