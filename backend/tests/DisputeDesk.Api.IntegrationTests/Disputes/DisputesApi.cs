@@ -8,7 +8,6 @@ using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Application.Audit;
 using DisputeDesk.Application.Disputes;
 using DisputeDesk.Contracts.Audit;
-using DisputeDesk.Contracts.Json;
 using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Domain.Transactions;
@@ -227,6 +226,114 @@ public static class DisputesApi
         return new SeededDispute(dispute.Id, customerId, createdAt);
     }
 
+    /// <summary>The withdraw path of the dispute <paramref name="disputeId"/>, written as the client sends it.</summary>
+    public static string WithdrawPath(string disputeId) => $"{RaisePath}/{disputeId}/withdraw";
+
+    /// <summary>The JSON body of a withdraw: <c>{}</c>, or the note alone.</summary>
+    public static string WithdrawBody(string? note = null) =>
+        note is null ? "{}" : JsonSerializer.Serialize(new Dictionary<string, string> { ["note"] = note });
+
+    /// <summary>POSTs <paramref name="json"/> as the withdraw body, with a fresh antiforgery token unless told not to.</summary>
+    public static async Task<HttpResponseMessage> WithdrawAsync(this HttpClient browser, string disputeId, string? json = "{}", bool withAntiforgeryToken = true) =>
+        await browser.WithdrawAsync(disputeId, json, withAntiforgeryToken ? await browser.AntiforgeryTokenAsync() : null);
+
+    /// <summary>
+    /// POSTs <paramref name="json"/> as the withdraw body with the given antiforgery token, as <paramref name="mediaType"/>;
+    /// a null <paramref name="json"/> sends no body. Parallel withdraws share one token, as parallel raises do.
+    /// </summary>
+    public static async Task<HttpResponseMessage> WithdrawAsync(
+        this HttpClient browser, string disputeId, string? json, string? antiforgeryToken, string mediaType = "application/json")
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(WithdrawPath(disputeId), UriKind.Relative));
+        if (json is not null)
+        {
+            request.Content = new StringContent(json, Encoding.UTF8, mediaType);
+        }
+
+        if (antiforgeryToken is not null)
+        {
+            request.Headers.Add("X-XSRF-TOKEN", antiforgeryToken);
+        }
+
+        return await browser.SendAsync(request, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>The 200 body of a withdraw of <paramref name="disputeId"/>, which must succeed.</summary>
+    public static async Task<JsonElement> WithdrawOkAsync(this HttpClient browser, string disputeId, string json = "{}")
+    {
+        HttpResponseMessage response = await browser.WithdrawAsync(disputeId, json);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using JsonDocument body = await response.ReadJsonAsync();
+        return body.RootElement.Clone();
+    }
+
+    /// <summary>409 <c>action-not-allowed</c> carrying <paramref name="customerStatus"/> (AD-13).</summary>
+    public static async Task AssertActionNotAllowedAsync(this HttpResponseMessage response, string customerStatus)
+    {
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using JsonDocument problem = await response.ReadJsonAsync();
+        Assert.Equal(ProblemType.For(CommonProblems.ActionNotAllowed), problem.RootElement.GetProperty("type").GetString());
+        Assert.Equal(customerStatus, problem.RootElement.GetProperty("customerStatus").GetString());
+    }
+
+    /// <summary>
+    /// Raises a dispute of customer A on <paramref name="transactionId"/> straight through the commit path at <paramref name="at"/>,
+    /// without core banking: for a raise earlier than the Api's clock (the session cookie follows that clock), or for
+    /// many open disputes in one test.
+    /// </summary>
+    public static async Task<Guid> RaiseDirectlyAsync(this ApiFactory factory, string loginSub, DateTimeOffset at, string transactionId = Disputable)
+    {
+        var transaction = new TransactionSnapshot(
+            AccountA, transactionId, "4417", at.AddDays(-2), "Steers Braamfontein", 87.23m, "ZAR", null,
+            TransactionDirection.Debit, TransactionKind.Card, TransactionState.Settled);
+        Dispute dispute = Dispute.Raise(
+            TransactionsApi.CustomerA, transaction, everDisputed: false, Reason.Unrecognised, note: null, expectedAmount: null,
+            new Actor(ActorType.Customer, loginSub), at).Value;
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Set<Dispute>().Add(dispute);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return dispute.Id;
+    }
+
+    /// <summary>The dispute's stored event rows in version order, read past the ownership filter.</summary>
+    public static async Task<List<StoredEventRow>> StreamAsync(this ApiFactory factory, Guid disputeId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<StoredEventRow>().IgnoreQueryFilters().AsNoTracking()
+            .Where(row => row.DisputeId == disputeId)
+            .OrderBy(row => row.Version)
+            .ToListAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>The dispute's <c>Disputes</c> row, read past the ownership filter.</summary>
+    public static async Task<Dispute> DisputeRowAsync(this ApiFactory factory, Guid disputeId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<Dispute>().IgnoreQueryFilters().AsNoTracking()
+            .SingleAsync(dispute => dispute.Id == disputeId, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>The dispute's outbox rows in version order.</summary>
+    public static async Task<List<OutboxMessage>> OutboxRowsAsync(this ApiFactory factory, Guid disputeId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<OutboxMessage>().AsNoTracking()
+            .Where(message => message.DisputeId == disputeId)
+            .OrderBy(message => message.DisputeVersion)
+            .ToListAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Every audit row of a dispute action (<c>Raise</c> to <c>Withdraw</c>), oldest first.</summary>
+    public static async Task<List<AuditLogEntry>> DisputeAuditRowsAsync(this ApiFactory factory)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<AuditLogEntry>().AsNoTracking()
+            .Where(entry => DisputeAuditActions.Contains(entry.Action))
+            .OrderBy(entry => entry.Id)
+            .ToListAsync(TestContext.Current.CancellationToken);
+    }
+
     /// <summary>
     /// Appends <paramref name="storedEvents"/> to the stream of the dispute <paramref name="disputeId"/>, each with its
     /// own version, instant, actor and trace ID, and moves that dispute's <c>Disputes</c> row to <paramref name="status"/>
@@ -235,18 +342,7 @@ public static class DisputesApi
     /// </summary>
     public static async Task AppendAsync(this ApiFactory factory, Guid disputeId, DisputeStatus status, Outcome? outcome, params StoredEvent[] storedEvents)
     {
-        await factory.AddRowsAsync([.. storedEvents.Select(storedEvent => new StoredEventRow
-        {
-            Id = Guid.CreateVersion7(storedEvent.OccurredAtUtc),
-            DisputeId = disputeId,
-            Version = storedEvent.Version,
-            EventType = storedEvent.GetType().Name,
-            OccurredAtUtc = storedEvent.OccurredAtUtc,
-            ActorType = storedEvent.ActorType,
-            ActorId = storedEvent.ActorId,
-            TraceId = storedEvent.TraceId,
-            Data = JsonSerializer.Serialize(storedEvent, storedEvent.GetType(), DisputeDeskJson.Options),
-        })]);
+        await factory.AddRowsAsync([.. storedEvents.Select(storedEvent => StoredEventRows.For(disputeId, storedEvent))]);
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         int version = await db.Set<StoredEventRow>().IgnoreQueryFilters()
@@ -306,6 +402,32 @@ public static class DisputesApi
         Assert.Equal([field], problem.RootElement.GetProperty("errors").EnumerateObject().Select(error => error.Name));
     }
 
+    /// <summary>
+    /// Every column of a <c>Rejected</c> audit row of customer A (login <c>login-a</c>) for <paramref name="action"/>,
+    /// recorded at <paramref name="at"/> as stored; the per-request <c>Id</c> and <c>TraceId</c> are only shaped (AD-14a).
+    /// </summary>
+    public static void AssertRejectedOfA(this AuditLogEntry row, AuditAction action, DateTimeOffset at, Guid? disputeId)
+    {
+        Assert.Equal(7, row.Id.Version);
+        Assert.Equal(at, row.OccurredAtUtc);
+        Assert.Equal(action, row.Action);
+        Assert.Equal(AuditResult.Rejected, row.Result);
+        Assert.Equal(ActorType.Customer, row.ActorType);
+        Assert.Equal("login-a", row.ActorId);
+        Assert.Equal(TransactionsApi.CustomerA, row.CustomerId);
+        Assert.Equal(disputeId, row.DisputeId);
+        Assert.Matches("^[0-9a-f]{32}$", row.TraceId);
+    }
+
+    /// <summary>400, the <c>validation</c> type, and no field named: <c>errors</c> absent or empty.</summary>
+    public static async Task AssertValidationProblemWithNoFieldAsync(this HttpResponseMessage response)
+    {
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using JsonDocument problem = await response.ReadJsonAsync();
+        Assert.Equal(ProblemType.For(CommonProblems.Validation), problem.RootElement.GetProperty("type").GetString());
+        Assert.False(problem.RootElement.TryGetProperty("errors", out JsonElement errors) && errors.EnumerateObject().Any());
+    }
+
     /// <summary>409 <c>already-disputed</c> naming the customer's existing dispute and its customer status (AD-13).</summary>
     public static async Task AssertAlreadyDisputedAsync(this HttpResponseMessage response, string disputeId, string customerStatus)
     {
@@ -334,4 +456,7 @@ public sealed record RowCounts(int Disputes, int StoredEvents, int AuditLogEntri
 
     /// <summary>What one raise writes: the dispute, its stored event and its outbox row, and no audit row (ad-009).</summary>
     public static RowCounts One { get; } = new(1, 1, 0, 1);
+
+    /// <summary>What one refused raise writes: its <c>Rejected</c> audit row and nothing else (AD-14a).</summary>
+    public static RowCounts OneRefusal { get; } = new(0, 0, 1, 0);
 }

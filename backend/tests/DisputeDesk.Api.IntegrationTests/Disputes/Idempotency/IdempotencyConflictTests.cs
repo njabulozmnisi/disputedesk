@@ -135,7 +135,10 @@ public class IdempotencyConflictTests(PostgresFixture postgres, TransactionsStub
         IdempotencyKey row = Assert.Single(await factory.KeyRowsAsync());
         Assert.NotEqual(staleLease, row.LeaseId);
         Assert.Equal(201, row.ResponseStatus);
-        Assert.Equal(RowCounts.One, await factory.CountRowsAsync());
+        // The stale request then loses to the unique index: its 409 already-disputed is a refusal, audited once
+        // (AD-14a), though its lease is lost and it cannot store the 409 on the key.
+        Assert.Equal(HttpStatusCode.Conflict, staleResponse.StatusCode);
+        Assert.Equal(RowCounts.One with { AuditLogEntries = 1 }, await factory.CountRowsAsync());
         await IdempotencyRows.AssertSameResponseAsync(takeOver, await browser.RaiseAsync(DisputesApi.Body(), token, key));
     }
 

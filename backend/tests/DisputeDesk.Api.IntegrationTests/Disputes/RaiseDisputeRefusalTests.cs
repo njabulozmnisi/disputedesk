@@ -1,7 +1,10 @@
 using System.Net;
 using System.Text.Json;
+using DisputeDesk.Api.IntegrationTests.Disputes.Idempotency;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
+using DisputeDesk.Application.Audit;
+using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
@@ -24,7 +27,7 @@ public class RaiseDisputeRefusalTests(PostgresFixture postgres, TransactionsStub
     [InlineData("ACC-A-1", "TXN-A-0029 ")] // not shaped like an ID
     [InlineData("ACC-A-1", "TXN-Ä-0029")]  // not shaped like an ID, and not ASCII
     [InlineData("ACC-A-1", "TXN-A-0029-TXN-A-0029-TXN-A-0029")] // 32 characters, the longest allowed
-    public async Task Raise_MissingOrAnotherCustomersTransaction_Returns404NotFoundAndWritesNothing(string accountRef, string transactionId)
+    public async Task Raise_MissingOrAnotherCustomersTransaction_Returns404NotFoundAndWritesOnlyItsRefusalAuditRow(string accountRef, string transactionId)
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
@@ -33,7 +36,7 @@ public class RaiseDisputeRefusalTests(PostgresFixture postgres, TransactionsStub
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(ProblemType.For(CommonProblems.NotFound), await response.ProblemTypeAsync());
-        Assert.Equal(RowCounts.None, await factory.CountRowsAsync());
+        Assert.Equal(RowCounts.OneRefusal, await factory.CountRowsAsync());
     }
 
     [Fact]
@@ -49,11 +52,11 @@ public class RaiseDisputeRefusalTests(PostgresFixture postgres, TransactionsStub
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(ProblemType.For(CommonProblems.NotFound), await response.ProblemTypeAsync());
-        Assert.Equal(RowCounts.One, await factory.CountRowsAsync());
+        Assert.Equal(RowCounts.One with { AuditLogEntries = 1 }, await factory.CountRowsAsync());
     }
 
     [Fact]
-    public async Task Raise_SameTransactionTwice_Returns409AlreadyDisputedWithTheDisputeAndWritesNothingMore()
+    public async Task Raise_SameTransactionTwice_Returns409AlreadyDisputedWithTheDisputeAndWritesOnlyItsRefusalAuditRow()
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
@@ -62,7 +65,7 @@ public class RaiseDisputeRefusalTests(PostgresFixture postgres, TransactionsStub
         HttpResponseMessage response = await browser.RaiseAsync(DisputesApi.Body(reason: "duplicateCharge"));
 
         await response.AssertAlreadyDisputedAsync(disputeId, "submitted");
-        Assert.Equal(RowCounts.One, await factory.CountRowsAsync());
+        Assert.Equal(RowCounts.One with { AuditLogEntries = 1 }, await factory.CountRowsAsync());
     }
 
     [Theory]
@@ -98,7 +101,7 @@ public class RaiseDisputeRefusalTests(PostgresFixture postgres, TransactionsStub
         using JsonDocument problem = await response.ReadJsonAsync();
         Assert.Equal(ProblemType.For(DisputeProblems.NotDisputable), problem.RootElement.GetProperty("type").GetString());
         Assert.Equal(reason, problem.RootElement.GetProperty("reason").GetString());
-        Assert.Equal(RowCounts.None, await factory.CountRowsAsync());
+        Assert.Equal(RowCounts.OneRefusal, await factory.CountRowsAsync());
     }
 
     [Theory]
@@ -141,6 +144,100 @@ public class RaiseDisputeRefusalTests(PostgresFixture postgres, TransactionsStub
         HttpResponseMessage response = await browser.RaiseAsync(DisputesApi.Body(reason: "wrongAmount", expectedAmount: "100000.00"));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Raise_AnotherCustomersTransactionAndAnUnknownOne_EachAuditOneRejectedRowWithNoDisputeAndNothingOfB()
+    {
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        using HttpClient customerA = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await customerA.RaiseAsync(DisputesApi.Body("TXN-B-0027", "ACC-B-1"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await customerA.RaiseAsync(DisputesApi.Body("TXN-A-9999"))).StatusCode);
+
+        List<AuditLogEntry> rows = await factory.DisputeAuditRowsAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, row => row.AssertRejectedOfA(AuditAction.Raise, stub.NowAsStored, disputeId: null));
+        Assert.All(rows, row => Assert.NotEqual(TransactionsApi.CustomerB, row.CustomerId));
+        Assert.Equal(
+            (rows[0].Action, rows[0].Result, rows[0].ActorType, rows[0].ActorId, rows[0].CustomerId, rows[0].DisputeId),
+            (rows[1].Action, rows[1].Result, rows[1].ActorType, rows[1].ActorId, rows[1].CustomerId, rows[1].DisputeId));
+    }
+
+    [Fact]
+    public async Task Raise_AnotherCustomersDisputedTransaction_AuditsNoColumnOfBsDispute()
+    {
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        using HttpClient customerB = await factory.SignInLinkedAsync("login-b", TransactionsApi.CustomerB);
+        Guid theirs = (await customerB.RaiseCreatedAsync(DisputesApi.Body("TXN-B-0027", "ACC-B-1"))).GetProperty("disputeId").GetGuid();
+        using HttpClient customerA = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await customerA.RaiseAsync(DisputesApi.Body("TXN-B-0027", "ACC-B-1"))).StatusCode);
+
+        AuditLogEntry row = Assert.Single(await factory.DisputeAuditRowsAsync());
+        row.AssertRejectedOfA(AuditAction.Raise, stub.NowAsStored, disputeId: null);
+        Assert.NotEqual(theirs, row.DisputeId);
+    }
+
+    [Fact]
+    public async Task Raise_AlreadyDisputed_AuditsOneRejectedRowForTheExistingDispute()
+    {
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
+        string disputeId = await RaisedDisputeIdAsync(browser);
+
+        Assert.Equal(HttpStatusCode.Conflict, (await browser.RaiseAsync(DisputesApi.Body())).StatusCode);
+
+        Assert.Single(await factory.DisputeAuditRowsAsync()).AssertRejectedOfA(AuditAction.Raise, stub.NowAsStored, Guid.Parse(disputeId));
+    }
+
+    [Fact]
+    public async Task Raise_NotDisputable_AuditsOneRejectedRowWithNoDispute()
+    {
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.RaiseAsync(DisputesApi.Body(DisputesApi.Pending))).StatusCode);
+
+        Assert.Single(await factory.DisputeAuditRowsAsync()).AssertRejectedOfA(AuditAction.Raise, stub.NowAsStored, disputeId: null);
+    }
+
+    [Fact]
+    public async Task Raise_SuccessValidationAndAuthorisationRefusals_AuditNothing()
+    {
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
+        using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
+        using HttpClient anonymous = factory.CreateBrowser(new CookieContainer());
+        using HttpClient unlinked = factory.CreateBrowser(new CookieContainer());
+        await unlinked.SignInAsync(factory.Zitadel, "unlinked-login");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.RaiseAsync(DisputesApi.Body(), antiforgeryToken: null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await unlinked.RaiseAsync(DisputesApi.Body())).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await browser.RaiseAsync(DisputesApi.Body(), withAntiforgeryToken: false)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await browser.RaiseAsync("[]")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await browser.RaiseAsync(DisputesApi.Body(note: new string('a', 1001)))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await browser.RaiseAsync(DisputesApi.Body(reason: "wrongAmount", expectedAmount: "100.00"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await browser.RaiseAsync(DisputesApi.Body())).StatusCode);
+
+        Assert.Empty(await factory.DisputeAuditRowsAsync());
+    }
+
+    [Fact]
+    public async Task Raise_AuditSaveFails_Returns500AndReleasesTheKey()
+    {
+        var failAudit = new FailAuditInsertInterceptor { Armed = false };
+        await using ApiFactory factory = await TransactionsApi.StartAsync(
+            postgres, stub, services => services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(failAudit)));
+        using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
+        // Armed only after sign-in, which audits too, so only the refusal's entry fails.
+        failAudit.Armed = true;
+
+        HttpResponseMessage response = await browser.RaiseAsync(DisputesApi.Body("TXN-A-9999"));
+
+        Assert.Equal(1, failAudit.Failed);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Empty(await factory.KeyRowsAsync());
+        Assert.Empty(await factory.DisputeAuditRowsAsync());
     }
 
     private static async Task<string> RaisedDisputeIdAsync(HttpClient browser)

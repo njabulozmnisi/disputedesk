@@ -20,11 +20,11 @@ namespace DisputeDesk.Api.IntegrationTests.Disputes.Idempotency;
 public class IdempotencyRefusalTests(PostgresFixture postgres, TransactionsStub stub) : IClassFixture<TransactionsStub>
 {
     [Theory]
-    [InlineData("ACC-A-1", "TXN-A-9999", "unrecognised", null, 404)]                    // not found
-    [InlineData("ACC-A-1", DisputesApi.Pending, "unrecognised", null, 422)]              // not disputable
-    [InlineData("ACC-A-1", DisputesApi.Disputable, "wrongAmount", "100.00", 400)]        // expected amount not below
+    [InlineData("ACC-A-1", "TXN-A-9999", "unrecognised", null, 404, 1)]                    // not found
+    [InlineData("ACC-A-1", DisputesApi.Pending, "unrecognised", null, 422, 1)]              // not disputable
+    [InlineData("ACC-A-1", DisputesApi.Disputable, "wrongAmount", "100.00", 400, 0)]        // expected amount not below
     public async Task Raise_HandlerRefusal_IsStoredAndReplayedByteForByte(
-        string accountRef, string transactionId, string reason, string? expectedAmount, int status)
+        string accountRef, string transactionId, string reason, string? expectedAmount, int status, int auditRows)
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
@@ -40,7 +40,8 @@ public class IdempotencyRefusalTests(PostgresFixture postgres, TransactionsStub 
         IdempotencyKey stored = Assert.Single(await factory.KeyRowsAsync());
         Assert.Equal(IdempotencyKeyStatus.Completed, stored.Status);
         Assert.Equal(status, stored.ResponseStatus);
-        Assert.Equal(RowCounts.None, await factory.CountRowsAsync());
+        // A refusal is audited once, by the original; the replay is the stored copy and audits nothing (AD-14a).
+        Assert.Equal(RowCounts.None with { AuditLogEntries = auditRows }, await factory.CountRowsAsync());
     }
 
     [Fact]
@@ -57,7 +58,7 @@ public class IdempotencyRefusalTests(PostgresFixture postgres, TransactionsStub 
 
         Assert.Equal(HttpStatusCode.Conflict, original.StatusCode);
         await IdempotencyRows.AssertSameResponseAsync(original, replay);
-        Assert.Equal(RowCounts.One, await factory.CountRowsAsync());
+        Assert.Equal(RowCounts.One with { AuditLogEntries = 1 }, await factory.CountRowsAsync());
     }
 
     [Fact]
@@ -78,7 +79,7 @@ public class IdempotencyRefusalTests(PostgresFixture postgres, TransactionsStub 
         Assert.NotEqual(-1, loser);
         await IdempotencyRows.AssertSameResponseAsync(responses[loser], await browser.RaiseAsync(DisputesApi.Body(), token, keys[loser]));
         Assert.Equal([201, 409], (await factory.KeyRowsAsync()).Select(row => row.ResponseStatus ?? 0).Order());
-        Assert.Equal(RowCounts.One, await factory.CountRowsAsync());
+        Assert.Equal(RowCounts.One with { AuditLogEntries = 1 }, await factory.CountRowsAsync());
     }
 
     [Fact]

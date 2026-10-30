@@ -192,7 +192,8 @@ public class PublishMappingTests
         where TEvent : StoredEvent =>
         storedEvent with { DisputeId = DisputeId, Version = version, OccurredAtUtc = Now, ActorType = actorType, ActorId = actorId };
 
-    private static void AssertValid(string json)
+    /// <summary>Asserts <paramref name="json"/> is valid against the committed status-changed schema, built once here.</summary>
+    internal static void AssertValid(string json)
     {
         EvaluationResults results = Evaluate(json);
         Assert.True(results.IsValid, JsonSerializer.Serialize(results));

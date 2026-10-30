@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
+using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,7 +36,10 @@ public class RaiseDisputeConcurrencyTests(PostgresFixture postgres, Transactions
         HttpResponseMessage loser = responses.Single(response => response.StatusCode == HttpStatusCode.Conflict);
         // The loser re-reads the winning dispute (the customer's own) and names it, as the check before the save does.
         await loser.AssertAlreadyDisputedAsync(created.RootElement.GetProperty("disputeId").GetString() ?? "", "submitted");
-        Assert.Equal(RowCounts.One, await factory.CountRowsAsync());
+        // After losing the race the refusal is audited on the cleared change tracker, naming the winner (AD-14a).
+        Assert.Equal(RowCounts.One with { AuditLogEntries = 1 }, await factory.CountRowsAsync());
+        Assert.Single(await factory.DisputeAuditRowsAsync())
+            .AssertRejectedOfA(AuditAction.Raise, stub.NowAsStored, created.RootElement.GetProperty("disputeId").GetGuid());
     }
 
     [Fact]
@@ -50,6 +54,7 @@ public class RaiseDisputeConcurrencyTests(PostgresFixture postgres, Transactions
         Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Created);
         Assert.All(responses.Where(response => response.StatusCode != HttpStatusCode.Created),
             response => Assert.Equal(HttpStatusCode.Conflict, response.StatusCode));
-        Assert.Equal(RowCounts.One, await factory.CountRowsAsync());
+        // Each of the four 409s is audited once (AD-14a).
+        Assert.Equal(RowCounts.One with { AuditLogEntries = 4 }, await factory.CountRowsAsync());
     }
 }

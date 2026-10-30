@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using DisputeDesk.Application.Abstractions;
+using DisputeDesk.Application.Audit;
+using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Json;
 using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
@@ -13,7 +15,8 @@ namespace DisputeDesk.Application.Disputes.RaiseDispute;
 /// The transaction is read from core banking now, so its snapshot never comes from the request; core banking answers
 /// only for the customer's own transactions, so another customer's is not found (404). The aggregate then decides
 /// (409, 422, 400) and one commit writes the dispute with its stored event and outbox row (AD-14), and the
-/// idempotency key completed with the 201 (AD-16).
+/// idempotency key completed with the 201 (AD-16). Refusals on rule or status (404, 409, 422) are audited as
+/// <c>Rejected</c> (AD-14a); validation errors and an unavailable core banking are not.
 /// </summary>
 public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer currentCustomer, ICoreBankingClient coreBanking, TimeProvider time)
 {
@@ -33,7 +36,9 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
             currentCustomer.CustomerId, request.AccountRef, request.TransactionId, cancellationToken);
         if (found.IsFailure)
         {
-            return found.Error;
+            return found.Error == CoreBankingErrors.NotFound
+                ? await RefuseAsync(found.Error, disputeId: null, now, cancellationToken)
+                : found.Error;
         }
 
         Transaction transaction = found.Value;
@@ -50,7 +55,15 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
             now);
         if (raised.IsFailure)
         {
-            return earlier is not null && raised.Error == DisputeErrors.AlreadyDisputed ? AlreadyDisputed(earlier) : raised.Error;
+            if (earlier is not null && raised.Error == DisputeErrors.AlreadyDisputed)
+            {
+                return await RefuseAsync(AlreadyDisputed(earlier), earlier.Id, now, cancellationToken);
+            }
+
+            // 422 not-disputable is a refusal; the expected amount's 400s are validation errors.
+            return raised.Error.Kind == ErrorKind.BusinessRule
+                ? await RefuseAsync(raised.Error, disputeId: null, now, cancellationToken)
+                : raised.Error;
         }
 
         // A new dispute's stream is the one stored event the raise appended.
@@ -68,10 +81,22 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
             // Nothing of the lost save committed, the completed key included, and the context no longer tracks it.
             Dispute winner = await FindDisputeAsync(transaction, cancellationToken)
                 ?? throw new InvalidOperationException("The unique index reported a dispute the ownership filter does not show.");
-            return AlreadyDisputed(winner);
+            return await RefuseAsync(AlreadyDisputed(winner), winner.Id, now, cancellationToken);
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Audits the refusal as <c>Rejected</c> through <see cref="AuditLog.Record"/> (AD-14a), saves it and returns it.
+    /// The Api's idempotency filter then stores the 4xx on the key in its own commit (AD-16).
+    /// </summary>
+    private async Task<Result<Contracts.Disputes.DisputeResponse>> RefuseAsync(Error error, Guid? disputeId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        AuditLog.Record(
+            db, AuditAction.Raise, AuditResult.Rejected, new Actor(ActorType.Customer, currentCustomer.LoginSub), now, currentCustomer.CustomerId, disputeId);
+        await db.SaveChangesAsync(cancellationToken);
+        return error;
     }
 
     // The ownership filter limits this to the customer's own disputes, which is enough: the transaction is theirs.

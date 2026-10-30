@@ -32,3 +32,4 @@ export * from './transactionPageResponse';
 export * from './transactionResponse';
 export * from './transactionSnapshotResponse';
 export * from './transactionState';
+export * from './withdrawDisputeRequest';

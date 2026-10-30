@@ -12,6 +12,9 @@ public static class DisputeRoutes
     /// <summary>The detail's route pattern, relative to the <c>/api/v1</c> group it is mapped on.</summary>
     public const string Detail = "/disputes/{disputeId}";
 
+    /// <summary>The withdraw's route pattern, relative to the <c>/api/v1</c> group (FR-18).</summary>
+    public const string Withdraw = "/disputes/{disputeId}/withdraw";
+
     /// <summary>The path of the detail of <paramref name="disputeId"/>, as the raise's <c>Location</c> carries it.</summary>
     public static string DetailPath(Guid disputeId) => $"/api/v1/disputes/{disputeId}";
 }

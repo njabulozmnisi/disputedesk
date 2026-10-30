@@ -12,6 +12,9 @@ public sealed class Dispute
 {
     public const int NoteMaxLength = 1000;
 
+    /// <summary>The longest withdraw note, in UTF-16 code units after trimming (FR-18).</summary>
+    public const int WithdrawNoteMaxLength = 500;
+
     /// <summary>An unresolved dispute is escalated this long after it was raised (FR-26).</summary>
     public static readonly TimeSpan Sla = TimeSpan.FromHours(240);
 
@@ -162,6 +165,50 @@ public sealed class Dispute
 
         return dispute;
     }
+
+    /// <summary>
+    /// The customer withdraws the dispute (FR-18). The checks run in the AD-8 order: the note's own rule (400), then the
+    /// allowed-actions table (409). A withdraw appends one <see cref="DisputeWithdrawn"/> at the next version.
+    /// </summary>
+    /// <param name="note">The customer's note, trimmed here; empty or whitespace becomes no note.</param>
+    /// <param name="actor">The customer, by their login.</param>
+    /// <param name="now">The use case's one instant (AD-4).</param>
+    public Result Withdraw(string? note, Actor actor, DateTimeOffset now)
+    {
+        string? trimmedNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        if (trimmedNote?.Length > WithdrawNoteMaxLength)
+        {
+            return DisputeErrors.WithdrawNoteTooLong;
+        }
+
+        if (!IsAllowed(Status, DisputeAction.Withdraw))
+        {
+            return DisputeErrors.ActionNotAllowed;
+        }
+
+        Append(new DisputeWithdrawn(Status, DisputeStatus.Withdrawn, trimmedNote)
+        {
+            DisputeId = Id,
+            Version = Version + 1,
+            OccurredAtUtc = now,
+            ActorType = actor.Type,
+            ActorId = actor.Id,
+        });
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// The allowed-actions table (FR-24): whether a dispute in <paramref name="status"/> allows <paramref name="action"/>.
+    /// Every other pair is refused with 409. Raise creates a dispute, so it is never an action on one.
+    /// </summary>
+    public static bool IsAllowed(DisputeStatus status, DisputeAction action) => (status, action) switch
+    {
+        (DisputeStatus.Submitted, DisputeAction.StartReview) => true,
+        (DisputeStatus.Submitted or DisputeStatus.UnderReview, DisputeAction.Escalate) => true,
+        (DisputeStatus.UnderReview or DisputeStatus.Escalated, DisputeAction.Resolve) => true,
+        (DisputeStatus.Submitted or DisputeStatus.UnderReview or DisputeStatus.Escalated, DisputeAction.Withdraw) => true,
+        _ => false,
+    };
 
     /// <summary>The stored events not yet committed, in order; the commit (AD-14) takes them once.</summary>
     public IReadOnlyList<StoredEvent> TakePendingChanges()

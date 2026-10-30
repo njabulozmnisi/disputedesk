@@ -55,6 +55,51 @@ public class StoredEventPrivacyTests(PostgresFixture postgres, TransactionsStub 
         AssertNothingPrivate(labels.Values);
     }
 
+    [Fact]
+    public async Task Withdraw_SucceedsThen409And404_NoLogSpanOrMetricLabelHoldsTheNoteTheLoginOrTheCustomer()
+    {
+        var telemetry = new TelemetryCapture();
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub, telemetry.AddTo);
+        using var labels = new LabelRecorder(factory.Services.GetRequiredService<IMeterFactory>());
+        using HttpClient browser = await factory.SignInLinkedAsync(LoginSub, TransactionsApi.CustomerA);
+        string disputeId = (await browser.RaiseCreatedAsync(DisputesApi.Body())).GetProperty("disputeId").GetString() ?? "";
+        string json = DisputesApi.WithdrawBody(Note);
+
+        // Each with a trace ID of the test's own, as above: the success, the repeat (409) and an unknown ID (404).
+        (HttpStatusCode Status, ActivityTraceId TraceId)[] withdraws =
+        [
+            await WithdrawTracedAsync(browser, disputeId, json),
+            await WithdrawTracedAsync(browser, disputeId, json),
+            await WithdrawTracedAsync(browser, Guid.CreateVersion7().ToString(), json),
+        ];
+
+        Assert.Equal([HttpStatusCode.OK, HttpStatusCode.Conflict, HttpStatusCode.NotFound], withdraws.Select(withdraw => withdraw.Status));
+        foreach ((HttpStatusCode _, ActivityTraceId traceId) in withdraws)
+        {
+            await telemetry.WaitForSpanAsync(span => span.TraceId == traceId && span.Kind == ActivityKind.Server);
+            IReadOnlyList<Activity> spans = telemetry.Spans(traceId);
+            Assert.Contains(spans, span => span.Source.Name == "Npgsql");
+            Assert.All(spans, span => AssertNothingPrivate(SpanTexts(span)));
+        }
+
+        Assert.All(telemetry.Logs, log => AssertNothingPrivate(LogTexts(log)));
+        Assert.Contains("withdraw", labels.Values);
+        AssertNothingPrivate(labels.Values);
+    }
+
+    private static async Task<(HttpStatusCode Status, ActivityTraceId TraceId)> WithdrawTracedAsync(HttpClient browser, string disputeId, string json)
+    {
+        var traceId = ActivityTraceId.CreateRandom();
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(DisputesApi.WithdrawPath(disputeId), UriKind.Relative))
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Add("X-XSRF-TOKEN", await browser.AntiforgeryTokenAsync());
+        request.Headers.Add("traceparent", $"00-{traceId.ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01");
+        HttpResponseMessage response = await browser.SendAsync(request, TestContext.Current.CancellationToken);
+        return (response.StatusCode, traceId);
+    }
+
     private static IEnumerable<string?> SpanTexts(Activity span) =>
     [
         span.DisplayName,

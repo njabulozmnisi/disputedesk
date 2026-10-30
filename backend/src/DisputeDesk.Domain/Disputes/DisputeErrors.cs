@@ -23,8 +23,25 @@ public static class DisputeErrors
     public static readonly Error VersionClash =
         Error.Conflict("action-not-allowed", "The dispute was changed by another action at the same time.");
 
+    /// <summary>
+    /// The action is not allowed in the dispute's status (FR-24). Each handler returns it as its caller sees the status,
+    /// through <see cref="ActionNotAllowedAs"/> for a customer.
+    /// </summary>
+    public static readonly Error ActionNotAllowed =
+        new(ErrorKind.ActionNotAllowed, "action-not-allowed", "This action is not allowed in the dispute's current status.");
+
+    /// <summary>
+    /// <see cref="ActionNotAllowed"/> for a customer: the problem carries the status as they see it (AD-13),
+    /// <paramref name="customerStatus"/>, which Application maps.
+    /// </summary>
+    public static Error ActionNotAllowedAs(Enum customerStatus) =>
+        Error.ActionNotAllowed("action-not-allowed", ActionNotAllowed.Message, "customerStatus", customerStatus);
+
     public static readonly Error NoteTooLong =
         Error.Validation("validation", "The note must be at most 1000 characters after trimming.", "Note");
+
+    public static readonly Error WithdrawNoteTooLong =
+        Error.Validation("validation", "The note must be at most 500 characters after trimming.", "Note");
 
     public static readonly Error ExpectedAmountRequired =
         Error.Validation("validation", "An expected amount is required for the reason wrong amount.", "ExpectedAmount");

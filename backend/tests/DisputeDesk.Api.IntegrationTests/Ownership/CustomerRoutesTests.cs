@@ -20,6 +20,7 @@ public class CustomerRoutesTests(PostgresFixture postgres)
         "POST /api/v1/disputes",
         "GET /api/v1/disputes",
         "GET /api/v1/disputes/{disputeId}",
+        "POST /api/v1/disputes/{disputeId}/withdraw",
     ];
 
     [Fact]

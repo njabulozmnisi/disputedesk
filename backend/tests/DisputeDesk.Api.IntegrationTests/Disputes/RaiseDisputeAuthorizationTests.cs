@@ -136,6 +136,8 @@ public class RaiseDisputeAuthorizationTests(PostgresFixture postgres, Transactio
         HttpResponseMessage response = await browser.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.Equal(RowCounts.None, await factory.CountRowsAsync());
+        // The 404 is audited as A's refusal (AD-14a), for the linked customer, not the one the request named.
+        Assert.Equal(RowCounts.OneRefusal, await factory.CountRowsAsync());
+        Assert.Equal(TransactionsApi.CustomerA, Assert.Single(await factory.DisputeAuditRowsAsync()).CustomerId);
     }
 }
