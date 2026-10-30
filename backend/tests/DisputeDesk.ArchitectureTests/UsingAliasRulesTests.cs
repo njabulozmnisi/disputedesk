@@ -73,7 +73,7 @@ public partial class UsingAliasRulesTests
     [InlineData("<Compile Include=\"Alias.cs\" Alias=\"Wire\" />", false)]
     public void MsBuildUsingAlias_SampleItemGroup_IsMatchedOnlyForAnAlias(string items, bool expected)
     {
-        XDocument project = XDocument.Parse($"<Project><ItemGroup>{items}</ItemGroup></Project>");
+        var project = XDocument.Parse($"<Project><ItemGroup>{items}</ItemGroup></Project>");
 
         Assert.Equal(expected, MsBuildUsingAliases(project).Any());
     }
