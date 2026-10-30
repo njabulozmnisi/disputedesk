@@ -33,7 +33,7 @@ Inputs: the route `/disputes` takes no path or search parameter (no `validateSea
    **Given** `frontend/src/features/disputes/customerStatus.ts` and `DisputeStatusBadge.tsx` from story 3.10
    **When** a badge is described for a `customerStatus` and an `outcome`
    **Then** `resolved` with `upheld` is "Resolved · Upheld" (success tone, check icon), `resolved` with `rejected` is "Resolved · Rejected" (danger tone, cross icon), `resolved` with null stays "Resolved" (neutral, flag) as on transaction rows, and every other status keeps 3.10's label, tone and icon (DESIGN.md, status tone table; EXPERIENCE.md, Copy deck); the badge gains the `success` and `danger` tones on the existing `status-*` tokens
-   **And** the mapping stays one exhaustive `switch` per enum, its `default` assigning to a `never` variable that is also read, with no suppression (TypeScript Handbook, *Narrowing: exhaustiveness checking*); an unknown `outcome` on a resolved dispute gives plain "Resolved"
+   **And** the mapping stays one exhaustive `switch` per enum, closed in its `default` with `x satisfies never`, as `customerStatus.ts` already does, with no suppression (TypeScript Handbook, *Narrowing: exhaustiveness checking*); an unknown `outcome` on a resolved dispute gives plain "Resolved"
 
 3. **Load more, focus and announcement** (R16, R40; FR-16, NFR-CODE-6)
    **Given** a first page whose `nextCursor` is set
@@ -64,7 +64,7 @@ Inputs: the route `/disputes` takes no path or search parameter (no `validateSea
 ## Boundaries
 
 - Must not change: transaction rows and their badges apart from the shared badge mapping (story 3.10), the raise screens (story 3.6), the route-change `h1` focus rule.
-- Not here: the dispute detail, timeline and withdraw, the `/disputes/$disputeId` route, the remaining plain `/disputes/<id>` anchors and the `returnUrl` rule for the detail (story 3.12); browser spans for this screen (story 3.11 covers raise only).
+- Not here: the dispute detail, timeline and withdraw, the real `/disputes/$disputeId` route (a placeholder route marked `// shortcut:` may exist so the typed links compile; story 3.12 replaces it), the remaining plain `/disputes/<id>` anchors and the `returnUrl` rule for the detail (story 3.12); browser spans for this screen (story 3.11 covers raise only).
 - No dispute data goes into the URL, `localStorage` or `sessionStorage`, and no TanStack Query persister is added (pre-build security S4).
 
 ## Supervisor checks
@@ -112,3 +112,4 @@ Deliberate-break proofs, run by the supervisor, not the verifier.
 - Input (from 2.4 QA, 2026-10-28): each route change focuses the `<h1>` and there was no skip link; criterion 6 adds one.
 - Waits on 3.9 (the list operation and regenerated client), 3.10 (`customerStatus.ts` and the badge) and 3.11 (both edit `frontend/src/test/support.tsx`; collision check 2026-10-30).
 - Moved out (challenger, simplest design, 2026-10-30): the 3.6 round-2 cleanups (`FieldSet` and `FieldLegend` in `field.tsx`; `text-body` on the reason label in `RaiseScreen.tsx`) are tied to no criterion here; they are now in the epic's Notes as a Small-tier change.
+- Resolution: 2026-10-30 (Sofia, after the 3.7 verify) — wording aligned with what was accepted, no behaviour change: criterion 2's exhaustiveness check is the repo convention, an exhaustive `switch` closed with `x satisfies never` (`customerStatus.ts`, accepted in 3.10; TypeScript Handbook, *Narrowing: exhaustiveness checking*), replacing "a `never` variable that is also read"; the Boundaries line now allows the placeholder `/disputes/$disputeId` route marked `// shortcut:` until 3.12 (docs/verification/3.7-verify.md, Supervisor disposition). No PRD requirement or architecture decision changed.

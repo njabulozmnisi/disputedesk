@@ -50,14 +50,15 @@ Verify: Integration tests cover a correct code with the link, the session kept u
 
 5. **The code's bounds; a malformed code counts nothing** (R7; FR-5, AD-3, AD-8)
    **Given** the one request field: `code`, required, a JSON string of exactly six ASCII digits `0`–`9` (leading zeros allowed), not trimmed; any other field is ignored
-   **When** an unlinked login posts `code` missing, null, empty, 5 digits, 7 digits, with a letter, padded with a space, as a JSON number, in Arabic-Indic digits (`"١٢٣٤٥٦"`), 10,000 characters long, a body that is not valid JSON, and no body
+   **When** an unlinked login posts a well-formed JSON body whose `code` is missing, null, empty, 5 digits, 7 digits, with a letter, padded with a space, in Arabic-Indic digits (`"١٢٣٤٥٦"`) or 10,000 characters long
    **Then** each gets 400 `validation` naming only `code`, the body never contains the submitted value, and no attempt is counted and no audit row written, through the built-in minimal API validation (`AddValidation` with `[RegularExpression("^[0-9]{6}$")]`, not `\d` or `char.IsDigit`, which accept other Unicode digits; Microsoft Learn, *Minimal APIs validation*)
+   **And** a body the framework cannot bind (`code` as a JSON number, a body that is not valid JSON, no body) gets the framework's 400 `validation` with no field named, before any lookup, and likewise counts no attempt and writes no audit row (AD-8; Microsoft Learn, *Parameter binding in minimal APIs*: endpoint filters do not run for body-reading failures)
    **And** checks run 401 (anonymous, bearer only), 403 `already-linked` (a linked login), 400 (missing antiforgery token, then the body), as on the start route (AD-8, AD-7)
 
 6. **Parallel verifications count at most 3 and link once** (R7; FR-6, FR-7, NFR-TEST-3)
    **Given** customer D's current claimed challenge
    **When** the login sends 10 verifications with the correct code in parallel
-   **Then** exactly one gets 204 and exactly one `CustomerLinks` row exists, `Attempts` is exactly 3, the conditional consume lets only one transaction through, and every other response is 422 `otp-incorrect`, 409 `linking-locked` or 403 `already-linked`, never 500
+   **Then** exactly one gets 204 and exactly one `CustomerLinks` row exists, at most 3 attempts are counted (counting stops once the challenge is consumed), the conditional consume lets only one transaction through, and every other response is 422 `otp-incorrect`, 409 `linking-locked` or 403 `already-linked`, never 500
 
 7. **Two logins racing for one customer** (R7; FR-6, NFR-DATA-5)
    **Given** two logins, each with a current claimed challenge for customer D and its correct code
@@ -96,8 +97,8 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Success response: 204 No Content with no `Set-Cookie`; `openapi.json` names 204, 400, 401, 403, 409 and 422 on the verify operation.
 - Touches:
   - `backend/src/DisputeDesk.Contracts/Linking/` (the verify request)
-  - `backend/src/DisputeDesk.Application/Linking/VerifyOtp/` (new: the handler), `Application/Linking/LinkingErrors.cs`
-  - `backend/src/DisputeDesk.Infrastructure/Linking/` (the attempt statement, the consume, the link insert), `Infrastructure/Persistence/UniqueViolations.cs`, `Infrastructure/Persistence/CustomerLinkConfiguration.cs` (index name constants)
+  - `backend/src/DisputeDesk.Application/Linking/LinkingErrors.cs`
+  - `backend/src/DisputeDesk.Infrastructure/Linking/` (new: the verify handler, beside 6.1's `LinkingJobSteps`, because `CustomerLink` and `Database.SqlQuery` live in Infrastructure; the attempt statement, the consume, the link insert), `Infrastructure/Persistence/UniqueViolations.cs`, `Infrastructure/Persistence/CustomerLinkConfiguration.cs` (index name constants)
   - `backend/src/DisputeDesk.Api/Linking/` (the endpoint), `Api/Program.cs` (maps verify), `Api/Errors/` (only if `attemptsRemaining` needs it)
   - `backend/openapi.json`, `frontend/src/api/generated/` (regenerated; CI fails on drift)
   - `backend/tests/DisputeDesk.Api.IntegrationTests/Linking/` (new verify tests), `Authorization/EndpointAuthorizationTests.cs` (`Unlinked` on verify)
@@ -132,3 +133,4 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Resolution: 2026-10-30 (Sofia, parallel re-slice) — the only part of this story that needed 6.5 was the full-queue blank in criterion 4; that case moved to story 6.3 (criterion 4), which waits on both, so this story now waits only on 6.1 and builds beside 6.5. The released challenge stays here: 6.1's release already clears `OtpHmac`, and verification never reads `OtpSentAtUtc`, which 6.5 keeps. No criterion was added, and no PRD requirement or architecture decision changed. It supersedes the 6.5 pre-build-review line above: the full-queue check now lives in 6.3.
 - Handoff (2026-10-30, 6.1 refine): verification reads the challenge 6.1 writes: the login's current row (`SupersededAtUtc` and `ConsumedAtUtc` null), `OtpHmac`, `ExpiresAtUtc` and `Attempts`; from 6.5 a released row keeps `OtpSentAtUtc` and has `OtpHmac` null, and verifies as a wrong code.
 - Assumption: 2026-10-30 (Sofia) — a malformed code (400) counts no attempt: it never reaches the handler, so it cannot spend a try (EXPERIENCE.md: a mistyped digit never spends one of the 3 attempts).
+- Resolution: 2026-10-30 (Sofia, after the 6.2 verify and review) — wording aligned with decisions already made, no PRD requirement or architecture decision changed: criterion 6's "`Attempts` is exactly 3" becomes "at most 3 counted attempts and exactly one link", the property FR-7 needs, since counting stops once the challenge is consumed (the test may still gate the consumes to make exactly 3 deterministic) (docs/verification/6.2-verify.md, Supervisor disposition); criterion 5's "naming only `code`" applies to a well-formed body whose `code` breaks its bounds, while a body the framework cannot bind gets the framework's 400 `validation` with no field named, as 3.4, 5.2 and 6.1 do (AD-8; docs/verification/6.2-verify.md, Supervisor decision on AC5); the Touches list puts the handler in `Infrastructure/Linking/` (docs/verification/6.2-review.md, Handler location). Criterion 7 (the race loser's audit action) is unchanged while security judges it.

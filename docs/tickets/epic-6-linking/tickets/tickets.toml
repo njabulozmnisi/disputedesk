@@ -51,7 +51,7 @@ owner = "backend"
 lane = "M2"
 high_stakes = true
 migration = false
-touches = ["backend/src/DisputeDesk.Contracts/Linking/ (verify request)", "backend/src/DisputeDesk.Application/Linking/VerifyOtp/", "backend/src/DisputeDesk.Application/Linking/LinkingErrors.cs", "backend/src/DisputeDesk.Infrastructure/Linking/ (attempt statement, consume, link insert)", "backend/src/DisputeDesk.Infrastructure/Persistence/ (UniqueViolations.cs, CustomerLinkConfiguration.cs)", "backend/src/DisputeDesk.Api/Linking/", "backend/src/DisputeDesk.Api/Program.cs", "backend/openapi.json", "frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/", "backend/tests/DisputeDesk.Api.IntegrationTests/Authorization/EndpointAuthorizationTests.cs"]
+touches = ["backend/src/DisputeDesk.Contracts/Linking/ (verify request)", "backend/src/DisputeDesk.Application/Linking/LinkingErrors.cs", "backend/src/DisputeDesk.Infrastructure/Linking/ (verify handler, attempt statement, consume, link insert)", "backend/src/DisputeDesk.Infrastructure/Persistence/ (UniqueViolations.cs, CustomerLinkConfiguration.cs)", "backend/src/DisputeDesk.Api/Linking/", "backend/src/DisputeDesk.Api/Program.cs", "backend/openapi.json", "frontend/src/api/generated/", "backend/tests/DisputeDesk.Api.IntegrationTests/Linking/", "backend/tests/DisputeDesk.Api.IntegrationTests/Authorization/EndpointAuthorizationTests.cs"]
 supervisor_checks = ["Link customer D through the gateway with the OTP from Mailpit: Transactions loads without a new sign-in and the session cookie value is unchanged.", "Throwaway copy: remove the UQ_CustomerLinks_* entries from UniqueViolations; criterion 7 gets a 500.", "Throwaway copy: drop Attempts < 3 from the attempt statement; criteria 3 and 6 fail."]
 
 [[entry]]
