@@ -55,8 +55,8 @@ Inputs:
    **Given** a push to main that passes every job
    **When** `publish` runs
    **Then** it builds and pushes exactly these five, each tagged `sha-<12>` and never `latest`:
-   - `ghcr.io/njabulozmnisi/disputedesk-api` from `backend`, target `api`;
-   - `ghcr.io/njabulozmnisi/disputedesk-worker` from `backend`, target `worker`;
+   - `ghcr.io/njabulozmnisi/disputedesk-api` from `backend`, target `api-local` (the api image plus the `wget` probe its Compose health check calls; human decision 2026-10-30, P57);
+   - `ghcr.io/njabulozmnisi/disputedesk-worker` from `backend`, target `worker-local` (the worker image plus the busybox its Compose health check calls; human decision 2026-10-30, P57);
    - `ghcr.io/njabulozmnisi/disputedesk-core-banking` from `backend`, target `core-banking`;
    - `ghcr.io/njabulozmnisi/disputedesk-gateway` from the repository root with `-f infra/nginx/Dockerfile` (the SPA built in);
    - `ghcr.io/njabulozmnisi/disputedesk-provision` from `infra/zitadel/provision`
@@ -67,7 +67,7 @@ Inputs:
 6. **The Trivy gate covers every published image** (R33; NFR-SEC-8)
    **Given** `security.yml`'s `trivy` job
    **When** it runs on a pull request
-   **Then** it also builds `core-banking` (`backend`, target `core-banking`) and `provision` (`infra/zitadel/provision`) and scans both with `trivy image --severity HIGH,CRITICAL --exit-code 1`, as it does `api`, `worker` and `gateway`, and its `api` build names `--target api`, so the scanned targets are the published ones; this is the pull-request gate, and criterion 5's scan is the gate on the pushed bytes, because commits often reach main by direct push (`scripts/push-and-watch.sh`)
+   **Then** it also builds `core-banking` (`backend`, target `core-banking`) and `provision` (`infra/zitadel/provision`) and scans both with `trivy image --severity HIGH,CRITICAL --exit-code 1`, as it does `api`, `worker` and `gateway`, and its `api` and `worker` builds name `--target api-local` and `--target worker-local`, so the scanned targets are the published ones; this is the pull-request gate, and criterion 5's scan is the gate on the pushed bytes, because commits often reach main by direct push (`scripts/push-and-watch.sh`)
 
 ## Boundaries
 
@@ -93,7 +93,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Packages: none. The ZAP image is pinned by digest, as Compose pins its images.
 - Touches:
   - `.github/workflows/ci.yml` (the `e2e` and `publish` jobs)
-  - `.github/workflows/security.yml` (Trivy builds and scans `core-banking` and `provision`; `--target api`)
+  - `.github/workflows/security.yml` (Trivy builds and scans `core-banking` and `provision`; `--target api-local` and `--target worker-local`)
   - `.zap/rules.tsv` (new)
   - `e2e/playwright.config.ts` (`forbidOnly`)
 
@@ -109,7 +109,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Decision: 2026-10-30 (human, 7.3 challenge) — story 7.3 owns publishing the images to GHCR from CI on main; AD-32 is amended so the AWS story 7.5 only consumes them.
 - Decision: 2026-10-30 (Sofia, 7.3 challenge) — the ZAP gate fails on every untriaged alert, which is stricter than NFR-SEC-8's high or critical: ZAP's own exit status is the documented gate, and filtering by risk would need a home-grown parser of its report. A triaged alert is an `IGNORE` line with its reason in `.zap/rules.tsv`.
 - Decision: 2026-10-30 (Sofia, 7.3 challenge) — the short SHA is 12 characters, fixed, so tags never change length as the history grows.
-- Handoff to 7.4 and 7.5: the published `api` and `worker` images are the `api` and `worker` targets, without the `api-local` and `worker-local` probes that `docker-compose.yml`'s health checks call; the AWS override must give those services health checks that work on the published images. GHCR creates new packages private; their visibility and the instance's pull are 7.5's.
+- Handoff to 7.4 and 7.5: the published `api` and `worker` images are the `api-local` and `worker-local` targets, so `docker-compose.yml`'s health checks work unchanged in AWS (human decision 2026-10-30 during 7.4's build: AWS runs Compose on one instance with no load balancer to probe; P57). GHCR creates new packages private; their visibility and the instance's pull are 7.5's.
 - Decision: 2026-10-30 (Sofia, pre-build review 2) — ZAP gets a writable temp directory with the rules file copied in, because it writes its plan into `/zap/wrk` as its own user; unverified until the pull request's run, which criterion 3 requires to complete.
 - Decision: 2026-10-30 (Sofia, pre-build review 3; security S7.3-1) — `publish` still builds the images itself, but scans each built image with Trivy before pushing it, so the pushed bytes are the scanned bytes; building once and promoting the tested image by digest is a production-path entry (story 7.6).
 - Decision: 2026-10-30 (Sofia, security S7.3-2) — images carry the OCI `source` and `revision` labels; SLSA build attestations need a new action and go to the production path (story 7.6).
