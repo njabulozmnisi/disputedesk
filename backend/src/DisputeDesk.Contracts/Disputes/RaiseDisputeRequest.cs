@@ -39,7 +39,7 @@ public sealed record RaiseDisputeRequest(
     /// Only the type name: a record's generated <c>ToString</c> prints every property, and the note is free text that
     /// may hold personal data (OWASP Logging Cheat Sheet: data to exclude).
     /// </summary>
-    public override string ToString() => nameof(RaiseDisputeRequest);
+    public sealed override string ToString() => nameof(RaiseDisputeRequest);
 
     /// <summary>The rules between fields, and the note's length after trimming (AD-4), which no attribute expresses.</summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

@@ -20,5 +20,5 @@ public sealed record LinkingJob(
     /// Only the type name: a record's generated <c>ToString</c> prints every property, and this one holds the ID number
     /// (OWASP Logging Cheat Sheet: data to exclude).
     /// </summary>
-    public override string ToString() => nameof(LinkingJob);
+    public sealed override string ToString() => nameof(LinkingJob);
 }

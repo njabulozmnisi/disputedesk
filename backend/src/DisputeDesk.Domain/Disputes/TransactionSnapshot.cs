@@ -17,4 +17,11 @@ public sealed record TransactionSnapshot(
     string? MaskedCard,
     TransactionDirection Direction,
     TransactionKind Kind,
-    TransactionState State);
+    TransactionState State)
+{
+    /// <summary>
+    /// Only the type name: a record's generated <c>ToString</c> prints every property, and this one holds the account
+    /// reference, the transaction ID and the masked card (OWASP Logging Cheat Sheet: data to exclude).
+    /// </summary>
+    public sealed override string ToString() => nameof(TransactionSnapshot);
+}

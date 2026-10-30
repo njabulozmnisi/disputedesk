@@ -7,5 +7,5 @@ public sealed record CustomerMatch(string CustomerId, string Cellphone)
     /// Only the type name: a record's generated <c>ToString</c> prints every property, and this one holds the cellphone
     /// (OWASP Logging Cheat Sheet: data to exclude).
     /// </summary>
-    public override string ToString() => nameof(CustomerMatch);
+    public sealed override string ToString() => nameof(CustomerMatch);
 }

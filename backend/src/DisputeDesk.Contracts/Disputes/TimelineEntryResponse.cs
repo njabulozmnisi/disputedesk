@@ -6,4 +6,11 @@ public sealed record TimelineEntryResponse(
     CustomerStatus CustomerStatus,
     TimelineActor Actor,
     DateTimeOffset OccurredAt,
-    string? Note);
+    string? Note)
+{
+    /// <summary>
+    /// Only the type name: a record's generated <c>ToString</c> prints every property, and the note is free text that
+    /// may hold personal data (OWASP Logging Cheat Sheet: data to exclude).
+    /// </summary>
+    public sealed override string ToString() => nameof(TimelineEntryResponse);
+}

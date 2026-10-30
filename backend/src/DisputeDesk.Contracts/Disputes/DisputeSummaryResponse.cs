@@ -13,4 +13,8 @@ public sealed record DisputeSummaryResponse(
     Reason Reason,
     TransactionSnapshotResponse Transaction,
     Money DisputedAmount,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt)
+{
+    /// <summary>Only the type name, like the transaction snapshot it holds (OWASP Logging Cheat Sheet: data to exclude).</summary>
+    public sealed override string ToString() => nameof(DisputeSummaryResponse);
+}
