@@ -12,9 +12,10 @@ namespace DisputeDesk.Api.IntegrationTests.Disputes;
 /// <summary>
 /// AC2 and AC4, the input table: each body that breaks it gets 400 <c>validation</c> before the transaction is looked
 /// up. Core banking here is a fake that fails and counts requests, so "before the lookup" is proved by the count not
-/// moving. One Api serves the whole class; no test here writes a row.
+/// moving. One Api serves the class, and no test on it writes a row; the reason-case tests raise on an Api of their own.
 /// </summary>
-public sealed class RaiseDisputeInputTests(RaiseDisputeInputTests.LinkedCustomerA api) : IClassFixture<RaiseDisputeInputTests.LinkedCustomerA>
+public sealed class RaiseDisputeInputTests(PostgresFixture postgres, RaiseDisputeInputTests.LinkedCustomerA api)
+    : IClassFixture<RaiseDisputeInputTests.LinkedCustomerA>
 {
     private static readonly string Id33 = new('A', 33);
 
@@ -76,6 +77,8 @@ public sealed class RaiseDisputeInputTests(RaiseDisputeInputTests.LinkedCustomer
         Assert.Equal(RowCounts.None, await Factory.CountRowsAsync());
     }
 
+    // Story 3.9 AC7: a name of no member ("fraud") and comma lists of names are refused here; any casing of one name
+    // binds (Raise_ReasonInEitherCase_BindsToThatReason).
     public static TheoryData<string> BodiesThatDoNotBind => new()
     {
         Body(reason: "fraud"),
@@ -140,6 +143,22 @@ public sealed class RaiseDisputeInputTests(RaiseDisputeInputTests.LinkedCustomer
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.True(CoreBanking.RequestCount > coreBankingRequests);
+    }
+
+    [Theory]
+    [InlineData("wrongAmount")]
+    [InlineData("WrongAmount")]
+    public async Task Raise_ReasonInEitherCase_BindsToThatReason(string reason)
+    {
+        // SingleNameEnumConverter wraps the framework's JsonStringEnumConverter, whose reads ignore case (AD-5). An Api
+        // of its own against the real stub, so the class's failing core banking keeps its circuit closed.
+        await using var coreBanking = new TransactionsStub();
+        await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, coreBanking);
+        using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
+
+        JsonElement created = await browser.RaiseCreatedAsync(Body(reason: reason, expectedAmount: "80.00"));
+
+        Assert.Equal("wrongAmount", created.GetProperty("reason").GetString());
     }
 
     [Fact]

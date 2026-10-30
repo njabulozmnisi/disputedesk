@@ -7,7 +7,7 @@ namespace DisputeDesk.Application.Disputes;
 /// <summary>
 /// A dispute as its customer sees it (AD-13), mapped once here: the customer status, "you" or "the bank" for the
 /// actor, and no actor identity, SLA or due date. The timeline is built from the dispute's stored events. The raise 201
-/// and the detail both use it.
+/// and the detail use <see cref="ToResponse"/>, the history list <see cref="ToSummary"/>.
 /// </summary>
 public static class CustomerView
 {
@@ -17,18 +17,21 @@ public static class CustomerView
         dispute.Outcome is Outcome outcome ? DisputeWire.ToWire(outcome) : null,
         DisputeWire.ToWire(dispute.Reason),
         dispute.Note,
-        new Contracts.Disputes.TransactionSnapshotResponse(
-            dispute.TransactionId,
-            dispute.AccountRef,
-            dispute.AccountLast4,
-            dispute.TransactionDateUtc,
-            dispute.Description,
-            ToMoney(dispute.TransactionAmount, dispute.Currency),
-            dispute.MaskedCard),
+        ToSnapshot(dispute),
         dispute.ExpectedAmount is decimal expected ? ToMoney(expected, dispute.Currency) : null,
         ToMoney(dispute.DisputedAmount, dispute.Currency),
         dispute.CreatedAtUtc,
         ToTimeline(storedEvents));
+
+    /// <summary>One row of the history list: the same fields as <see cref="ToResponse"/>, without the note, expected amount or timeline.</summary>
+    public static Contracts.Disputes.DisputeSummaryResponse ToSummary(Dispute dispute) => new(
+        dispute.Id,
+        DisputeWire.ToCustomerStatus(dispute.Status),
+        dispute.Outcome is Outcome outcome ? DisputeWire.ToWire(outcome) : null,
+        DisputeWire.ToWire(dispute.Reason),
+        ToSnapshot(dispute),
+        ToMoney(dispute.DisputedAmount, dispute.Currency),
+        dispute.CreatedAtUtc);
 
     /// <summary>The customer's timeline: one entry for each stored event the allowlist admits, in stream order.</summary>
     public static IReadOnlyList<Contracts.Disputes.TimelineEntryResponse> ToTimeline(IEnumerable<StoredEvent> storedEvents) =>
@@ -54,6 +57,15 @@ public static class CustomerView
         DisputeWire.ToTimelineActor(storedEvent.ActorType),
         storedEvent.OccurredAtUtc,
         note);
+
+    private static Contracts.Disputes.TransactionSnapshotResponse ToSnapshot(Dispute dispute) => new(
+        dispute.TransactionId,
+        dispute.AccountRef,
+        dispute.AccountLast4,
+        dispute.TransactionDateUtc,
+        dispute.Description,
+        ToMoney(dispute.TransactionAmount, dispute.Currency),
+        dispute.MaskedCard);
 
     // AD-4: exactly two decimals, as a string.
     private static Money ToMoney(decimal amount, string currency) => new(amount.ToString("0.00", CultureInfo.InvariantCulture), currency);

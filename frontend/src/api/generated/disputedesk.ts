@@ -30,8 +30,10 @@ import type {
 
 import type {
   AntiforgeryResponse,
+  DisputePageResponse,
   DisputeResponse,
   GetApiV1BffLoginParams,
+  GetApiV1DisputesParams,
   GetApiV1TransactionsParams,
   HttpValidationProblemDetails,
   ProblemDetails,
@@ -674,6 +676,178 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiV1DisputesMutationOptions(options), queryClient);
     }
+
+export const getGetApiV1DisputesUrl = (params?: GetApiV1DisputesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/disputes?${stringifiedParams}` : `/api/v1/disputes`
+}
+
+export const getApiV1Disputes = async (params?: GetApiV1DisputesParams, options?: Parameters<typeof customFetch>[1]): Promise<DisputePageResponse> => {
+
+  return customFetch<DisputePageResponse>(getGetApiV1DisputesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiV1DisputesInfiniteQueryKey = (params?: GetApiV1DisputesParams,) => {
+    return [
+    'infinite', `/api/v1/disputes`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+export const getGetApiV1DisputesQueryKey = (params?: GetApiV1DisputesParams,) => {
+    return [
+    `/api/v1/disputes`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiV1DisputesInfiniteQueryOptions = <TData = InfiniteData<Awaited<ReturnType<typeof getApiV1Disputes>>, GetApiV1DisputesParams['cursor']>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(params?: GetApiV1DisputesParams, options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData, QueryKey, GetApiV1DisputesParams['cursor']>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiV1DisputesInfiniteQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiV1Disputes>>, QueryKey, GetApiV1DisputesParams['cursor']> = ({ signal, pageParam }) => getApiV1Disputes({...params, 'cursor': pageParam ?? params?.['cursor']}, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseInfiniteQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData, QueryKey, GetApiV1DisputesParams['cursor']> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiV1DisputesInfiniteQueryResult = NonNullable<Awaited<ReturnType<typeof getApiV1Disputes>>>
+export type GetApiV1DisputesInfiniteQueryError = ErrorType<HttpValidationProblemDetails | ProblemDetails>
+
+
+export function useGetApiV1DisputesInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getApiV1Disputes>>, GetApiV1DisputesParams['cursor']>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ params: undefined |  GetApiV1DisputesParams, options: { query:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData, QueryKey, GetApiV1DisputesParams['cursor']>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1Disputes>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1Disputes>>, QueryKey
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1DisputesInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getApiV1Disputes>>, GetApiV1DisputesParams['cursor']>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ params?: GetApiV1DisputesParams, options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData, QueryKey, GetApiV1DisputesParams['cursor']>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1Disputes>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1Disputes>>, QueryKey
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1DisputesInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getApiV1Disputes>>, GetApiV1DisputesParams['cursor']>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ params?: GetApiV1DisputesParams, options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData, QueryKey, GetApiV1DisputesParams['cursor']>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiV1DisputesInfinite<TData = InfiniteData<Awaited<ReturnType<typeof getApiV1Disputes>>, GetApiV1DisputesParams['cursor']>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ params?: GetApiV1DisputesParams, options?: { query?:Partial<UseInfiniteQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData, QueryKey, GetApiV1DisputesParams['cursor']>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiV1DisputesInfiniteQueryOptions(params,options)
+
+  const query = useInfiniteQuery(queryOptions, queryClient) as  UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetApiV1DisputesQueryOptions = <TData = Awaited<ReturnType<typeof getApiV1Disputes>>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(params?: GetApiV1DisputesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiV1DisputesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiV1Disputes>>> = ({ signal }) => getApiV1Disputes(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiV1DisputesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiV1Disputes>>>
+export type GetApiV1DisputesQueryError = ErrorType<HttpValidationProblemDetails | ProblemDetails>
+
+
+export function useGetApiV1Disputes<TData = Awaited<ReturnType<typeof getApiV1Disputes>>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ params: undefined |  GetApiV1DisputesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1Disputes>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1Disputes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1Disputes<TData = Awaited<ReturnType<typeof getApiV1Disputes>>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ params?: GetApiV1DisputesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiV1Disputes>>,
+          TError,
+          Awaited<ReturnType<typeof getApiV1Disputes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiV1Disputes<TData = Awaited<ReturnType<typeof getApiV1Disputes>>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ params?: GetApiV1DisputesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiV1Disputes<TData = Awaited<ReturnType<typeof getApiV1Disputes>>, TError = ErrorType<HttpValidationProblemDetails | ProblemDetails>>(
+ params?: GetApiV1DisputesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiV1Disputes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiV1DisputesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetApiV1DisputesDisputeIdUrl = (disputeId: string,) => {
 
