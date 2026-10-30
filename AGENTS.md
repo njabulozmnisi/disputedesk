@@ -127,7 +127,7 @@ Agents learn only from what is written down where the right agent loads it.
 - **After every epic (retrospective).** Aggregate the epic's escapes and metrics, propose countermeasures to the human as one batch, and prune stale skill lines.
 - **Immediately (trigger).** A recurring escape category, a second fix round, a stage failing for tooling (account, lock, disk), a full pipeline re-run, a supervisor context over 200k tokens, or free disk under 15 GB: write a short postmortem and a fix proposal at once.
 - **A repeated mistake becomes a check, not a sentence.** Countermeasures in this order: a deterministic check (guard, analyzer, architecture test, floor-guard, script exit code); one line in the responsible agent's skill, under "Known pitfalls", at most about 10 lines, deleted once a check covers it; a field in the story template. Never in AGENTS.md or a tool's instruction file.
-- **Machine hygiene.** After every merge, remove merged clean worktrees and their branches and the session's throwaway copies; weekly, or under 15 GB free, prune only DisputeDesk-scoped Docker leftovers (the Docker daemon is shared with other projects).
+- **Machine hygiene.** Once a story is completely done, remove every worktree and copy it used on both machines (builder and fix-round worktrees, QA, verification and review copies, lane files) and their branches, even when they hold uncommitted copies of the merged change; weekly, or under 15 GB free, prune only DisputeDesk-scoped Docker leftovers (the Docker daemon is shared with other projects).
 
 ## Human gates
 
