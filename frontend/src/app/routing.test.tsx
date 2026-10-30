@@ -4,7 +4,16 @@ import { axe } from 'vitest-axe';
 
 import type { SessionState } from '@/api/generated/model';
 import { server } from '@/test/server';
-import { failWith, renderApp, serveDisputes, serveTransactions, signInAs } from '@/test/support';
+import {
+  disputeGuid,
+  failWith,
+  makeDispute,
+  problemResponse,
+  renderApp,
+  serveDisputes,
+  serveTransactions,
+  signInAs,
+} from '@/test/support';
 
 const startHeading = 'Something wrong with a card transaction?';
 const notFoundHeading = "We can't find that dispute";
@@ -318,17 +327,24 @@ describe('the disputes route', () => {
 
 // Criterion 10: screens whose story has not landed render not-found until it adds its route.
 describe('screens not built yet', () => {
-  it.each(['/link', '/link/otp', '/disputes/abc'])(
-    'shows not-found at %s for a linked customer',
-    async (path) => {
-      signInAs('linked');
-      renderApp({ path });
+  it.each(['/link', '/link/otp'])('shows not-found at %s for a linked customer', async (path) => {
+    signInAs('linked');
+    renderApp({ path });
 
-      expect(
-        await screen.findByRole('heading', { level: 1, name: notFoundHeading }),
-      ).toBeInTheDocument();
-    },
-  );
+    expect(
+      await screen.findByRole('heading', { level: 1, name: notFoundHeading }),
+    ).toBeInTheDocument();
+  });
+
+  // The route exists (story 3.12), but `params.parse` refuses an ID that is not a GUID.
+  it('shows not-found at /disputes/abc for a linked customer, through params.parse', async () => {
+    signInAs('linked');
+    renderApp({ path: '/disputes/abc' });
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: notFoundHeading }),
+    ).toBeInTheDocument();
+  });
 
   it('offers a way on from not-found, without a document load', async () => {
     signInAs('linked');
@@ -476,6 +492,30 @@ describe('the skip link', () => {
 
     expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveFocus();
   });
+
+  // Story 3.12: the detail screen shows loading, then the dispute, a failure or not-found on one `h1`, so a direct
+  // load of its URL is still one screen and leaves focus alone.
+  it.each([
+    ['the dispute', 'ZXP*GLOBALSVCS 0800', () => HttpResponse.json(makeDispute())],
+    ['a failure', 'Dispute', () => problemResponse('internal', 500)],
+    ['an API 404', notFoundHeading, () => problemResponse('not-found', 404)],
+  ])(
+    'is the first thing Tab reaches on a direct load of a dispute that ends as %s, even when effects run twice (StrictMode)',
+    async (_name, heading, respond) => {
+      signInAs('linked');
+      server.use(http.get(`*/api/v1/disputes/${disputeGuid}`, respond));
+      const { user } = renderApp({ path: `/disputes/${disputeGuid}`, strictMode: true });
+      await screen.findByRole('heading', { level: 1, name: heading });
+      // The failure's heading reads "Dispute" while loading too, so wait for the notice.
+      if (_name === 'a failure') {
+        await screen.findByText('Something went wrong on our side. Try again.');
+      }
+
+      await user.tab();
+
+      expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveFocus();
+    },
+  );
 
   it('is hidden until it has focus', async () => {
     signInAs('linked');

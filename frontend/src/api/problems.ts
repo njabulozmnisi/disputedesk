@@ -13,7 +13,8 @@ export type ProblemSlug =
   | 'already-disputed'
   | 'not-disputable'
   | 'idempotency-in-progress'
-  | 'idempotency-mismatch';
+  | 'idempotency-mismatch'
+  | 'action-not-allowed';
 
 export function problemType(slug: ProblemSlug): string {
   return `${problemTypeBase}/${slug}.md`;
@@ -31,7 +32,7 @@ export function traceIdOf(error: ApiError | TypeError): string | undefined {
 /** A string extension member of the problem body (RFC 9457 section 3.2), such as `disputeId` or `reason`. */
 export function problemExtension(
   error: ApiError,
-  name: 'disputeId' | 'reason',
+  name: 'disputeId' | 'reason' | 'customerStatus',
 ): string | undefined {
   const value = (error.problem as Record<string, unknown> | undefined)?.[name];
   return typeof value === 'string' ? value : undefined;

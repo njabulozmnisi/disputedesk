@@ -50,4 +50,11 @@ describe('problemExtension', () => {
     expect(problemExtension(new ApiError(422, numeric), 'reason')).toBeUndefined();
     expect(problemExtension(new ApiError(502, undefined), 'reason')).toBeUndefined();
   });
+
+  it('reads customerStatus from an action-not-allowed problem', () => {
+    const notAllowed = { type: problemType('action-not-allowed'), customerStatus: 'resolved' };
+
+    expect(isProblem(new ApiError(409, notAllowed), 'action-not-allowed')).toBe(true);
+    expect(problemExtension(new ApiError(409, notAllowed), 'customerStatus')).toBe('resolved');
+  });
 });

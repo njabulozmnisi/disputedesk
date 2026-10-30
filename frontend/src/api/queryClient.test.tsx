@@ -16,6 +16,7 @@ import { failWith, problemResponse, serveAntiforgeryToken } from '@/test/support
 import {
   getGetApiV1BffSessionQueryKey,
   usePostApiV1BffLogout,
+  usePostApiV1DisputesDisputeIdWithdraw,
   useGetApiV1Transactions,
 } from './generated/disputedesk';
 import { createQueryClient } from './queryClient';
@@ -226,6 +227,43 @@ describe('errors handled once in the QueryCache and MutationCache (criterion 2)'
       });
     },
   );
+
+  // Story 3.12 criterion 7 (AD-31): no dispute ID reaches the BFF login URL, and the compare ignores case because the
+  // router matches routes case-insensitively.
+  const guid = '0b9a1c7e-5d3f-4a62-9e1b-7c2d8f4a6b10';
+  it.each([
+    [`/disputes/${guid}`, '/disputes'],
+    [`/Disputes/${guid}`, '/disputes'],
+    ['/disputes', '/disputes'],
+    ['/Transactions/TXN-123/dispute', '/transactions'],
+  ])(
+    'returns from %s to %s after a 401, with no identifier in returnUrl',
+    async (path, expected) => {
+      failWith('/api/v1/transactions', 'unauthorized', 401);
+      const { router, wrapper } = setUp('linked', path);
+
+      renderHook(() => useGetApiV1Transactions(), { wrapper });
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe('/signed-out');
+      });
+      expect(router.state.location.search).toEqual({ reason: 'expired', returnUrl: expected });
+    },
+  );
+
+  it('returns to /disputes after a 401 on the withdraw POST from a detail path', async () => {
+    serveAntiforgeryToken();
+    failWith(`/api/v1/disputes/${guid}/withdraw`, 'unauthorized', 401);
+    const { router, wrapper } = setUp('linked', `/disputes/${guid}`);
+
+    const { result } = renderHook(() => usePostApiV1DisputesDisputeIdWithdraw(), { wrapper });
+    result.current.mutate({ disputeId: guid, data: {} });
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/signed-out');
+    });
+    expect(router.state.location.search).toEqual({ reason: 'expired', returnUrl: '/disputes' });
+  });
 
   it('sends a 401 from a mutation to the session-ended screen too', async () => {
     serveAntiforgeryToken();

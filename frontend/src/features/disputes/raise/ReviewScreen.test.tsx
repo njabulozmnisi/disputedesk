@@ -13,7 +13,7 @@ import {
   recordRaiseRequests,
   type RaiseRequest,
 } from '@/test/raise';
-import { makeDispute, makeRow, problemResponse } from '@/test/support';
+import { disputeGuid, makeDispute, makeRow, problemResponse, serveDispute } from '@/test/support';
 
 const quotedUuid = /^"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"$/;
 const submit = () => screen.getByRole('button', { name: /^Submit/ });
@@ -171,7 +171,7 @@ describe('the review screen', () => {
       submit().click();
     });
 
-    await screen.findByRole('heading', { level: 1, name: "We can't find that dispute" });
+    await screen.findByRole('heading', { level: 1, name: 'ZXP*GLOBALSVCS 0800' });
     expect(requests).toHaveLength(1);
   });
 
@@ -210,14 +210,14 @@ describe('the review screen', () => {
     const consoleCalls = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) =>
       vi.spyOn(console, method),
     );
-    recordRaiseRequests();
+    const requests = recordRaiseRequests();
     const { user, router, queryClient } = await openRaiseScreen();
     await chooseReason(user, 'Unrecognised');
     await user.click(screen.getByLabelText('Note (optional)'));
     await user.paste('a private sentence');
     await continueToReview(user);
     await user.click(submit());
-    await screen.findByRole('heading', { level: 1, name: "We can't find that dispute" });
+    await screen.findByRole('heading', { level: 1, name: 'ZXP*GLOBALSVCS 0800' });
 
     const everywhere = JSON.stringify([
       router.state.location,
@@ -228,7 +228,10 @@ describe('the review screen', () => {
         .map((query) => query.queryKey),
     ]);
     expect(everywhere).not.toContain('a private sentence');
-    expect(everywhere).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
+    // The submit key stays out; the dispute's own ID is in the URL by design.
+    const submitKey = (requests[0]?.headers.get('idempotency-key') ?? '').replaceAll('"', '');
+    expect(submitKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(everywhere).not.toContain(submitKey);
     for (const call of consoleCalls) expect(call).not.toHaveBeenCalled();
     expect(localStorage).toHaveLength(0);
     expect(sessionStorage).toHaveLength(0);
@@ -248,8 +251,10 @@ describe('after a 201', () => {
 
     await user.click(submit());
 
-    await screen.findByRole('heading', { level: 1, name: "We can't find that dispute" });
-    expect(router.state.location.pathname).toBe('/disputes/D-1');
+    await screen.findByRole('heading', { level: 1, name: 'ZXP*GLOBALSVCS 0800' });
+    expect(router.state.location.pathname).toBe(`/disputes/${disputeGuid}`);
+    expect(router.state.location.state.justSubmitted).toBe(true);
+    expect(screen.getByText('Dispute submitted', { selector: 'strong' })).toBeInTheDocument();
     expect(requests).toHaveLength(1);
     expect(screen.getByRole('status')).toHaveTextContent('Dispute submitted');
     const stateOf = (key: readonly unknown[]) => queryClient.getQueryState(key)?.isInvalidated;
@@ -263,7 +268,7 @@ describe('after a 201', () => {
     recordRaiseRequests();
     const { user, router } = await openReviewScreen();
     await user.click(submit());
-    await screen.findByRole('heading', { level: 1, name: "We can't find that dispute" });
+    await screen.findByRole('heading', { level: 1, name: 'ZXP*GLOBALSVCS 0800' });
 
     act(() => {
       router.history.back();
@@ -274,15 +279,15 @@ describe('after a 201', () => {
   });
 
   it('treats a replayed 201 the same way', async () => {
-    recordRaiseRequests(() =>
-      HttpResponse.json(makeDispute({ disputeId: 'D-9' }), { status: 201 }),
-    );
+    const replayed = makeDispute({ disputeId: '22222222-2222-4222-8222-222222222222' });
+    serveDispute(replayed);
+    recordRaiseRequests(() => HttpResponse.json(replayed, { status: 201 }));
     const { user, router } = await openReviewScreen();
 
     await user.click(submit());
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/disputes/D-9');
+      expect(router.state.location.pathname).toBe('/disputes/22222222-2222-4222-8222-222222222222');
     });
   });
 
@@ -344,7 +349,7 @@ describe('retries', () => {
     await passSeconds(1);
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/disputes/D-1');
+      expect(router.state.location.pathname).toBe(`/disputes/${disputeGuid}`);
     });
     expect(requests).toHaveLength(3);
     expectOneKeyAndToken(requests);
@@ -371,7 +376,7 @@ describe('retries', () => {
     await user.click(tryAgain());
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/disputes/D-1');
+      expect(router.state.location.pathname).toBe(`/disputes/${disputeGuid}`);
     });
     expect(requests).toHaveLength(7);
     expectOneKeyAndToken(requests);
@@ -393,7 +398,7 @@ describe('an attempt that ends without a final answer', () => {
     );
     await user.click(tryAgain());
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/disputes/D-1');
+      expect(router.state.location.pathname).toBe(`/disputes/${disputeGuid}`);
     });
     expect(requests).toHaveLength(2);
     expectOneKeyAndToken(requests);
@@ -424,7 +429,7 @@ describe('an attempt that ends without a final answer', () => {
     );
     await user.click(tryAgain());
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/disputes/D-1');
+      expect(router.state.location.pathname).toBe(`/disputes/${disputeGuid}`);
     });
     expectOneKeyAndToken(requests);
   });

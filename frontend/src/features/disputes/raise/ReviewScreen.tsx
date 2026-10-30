@@ -117,7 +117,12 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
         }
         // Navigate first: once the draft is marked submitted, the raise routes send Back to /transactions.
         void router
-          .navigate({ href: `/disputes/${encodeURIComponent(dispute.disputeId)}`, replace: true })
+          .navigate({
+            to: '/disputes/$disputeId',
+            params: { disputeId: dispute.disputeId },
+            replace: true,
+            state: { justSubmitted: true },
+          })
           .then(() => {
             markSubmitted(row.transactionId);
           });

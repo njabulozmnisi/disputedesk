@@ -40,6 +40,23 @@ export function formatDayWithYear(isoDateTime: string): string {
   return `${part('day')} ${part('month')} ${part('year')}`;
 }
 
+const timeFormat = new Intl.DateTimeFormat('en-US', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+  timeZone: 'Africa/Johannesburg',
+});
+
+/** "26 Oct 2026, 14:32 SAST": a timeline entry's instant in South African time, which has no daylight saving (AD-4). */
+export function formatTimelineTime(isoDateTime: string): string {
+  const parts = timeFormat.formatToParts(new Date(isoDateTime));
+  const part = (type: string) => parts.find((candidate) => candidate.type === type)?.value ?? '';
+  return `${part('day')} ${part('month')} ${part('year')}, ${part('hour')}:${part('minute')} SAST`;
+}
+
 function isDecimalString(value: string): value is `${number}` {
   return /^\d+\.\d{2}$/.test(value);
 }

@@ -15,11 +15,15 @@ function shouldRetryRead(failureCount: number, error: Error): boolean {
 }
 
 /**
- * "Sign in again" returns to the route the person was on, except from a raise screen: its path holds a transaction
- * ID, which must not reach the BFF login URL, so it returns to the list (AD-31).
+ * "Sign in again" returns to the route the person was on, except from a raise or dispute detail route: its path
+ * holds a transaction or dispute ID, which must not reach the BFF login URL, so it returns to the list (AD-31). The
+ * router matches paths case-insensitively, so this compare does too.
  */
 function returnUrlAfterSignIn(location: { pathname: string; href: string }): string {
-  return location.pathname.startsWith('/transactions/') ? '/transactions' : location.href;
+  const pathname = location.pathname.toLowerCase();
+  if (pathname.startsWith('/transactions/')) return '/transactions';
+  if (pathname.startsWith('/disputes/')) return '/disputes';
+  return location.href;
 }
 
 /**

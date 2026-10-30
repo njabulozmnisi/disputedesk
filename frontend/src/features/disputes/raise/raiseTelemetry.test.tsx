@@ -13,6 +13,7 @@ import {
 import { server } from '@/test/server';
 import { endedSpans, spansNamed } from '@/test/spans';
 import {
+  disputeGuid,
   failWith,
   makeDispute,
   makeRow,
@@ -230,7 +231,7 @@ describe('the open span', () => {
     const { user, router } = await openReviewScreen(entry);
     await user.click(submit());
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/disputes/D-1');
+      expect(router.state.location.pathname).toBe(`/disputes/${disputeGuid}`);
     });
 
     act(() => {
