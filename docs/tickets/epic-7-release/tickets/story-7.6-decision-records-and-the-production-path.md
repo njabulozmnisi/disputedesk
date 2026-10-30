@@ -7,48 +7,89 @@ covers: [R39]
 after: []
 hitl: false
 risk: low
+refined: false
 ---
 
 # Decision records and the production path
 
 ## Description
 
-Writes decision records ad-001 to ad-008 (ad-004 exists; ad-009 stored events exists) and `docs/production-path.md` with every prd §6.2 deferral and every spine Deferred item, each with a reason, written for a large retail bank with tens of millions of clients; docs only.
+Writes the seven missing decision records (ad-001, ad-002, ad-003, ad-005, ad-006, ad-007, ad-008; ad-004 and ad-009 exist and stay unchanged) and `docs/production-path.md`, written for a large retail bank with tens of millions of clients. The production path opens with a source-to-entry mapping, so its completeness is checkable: every PRD §6.2 bullet and sub-bullet, every row of the architecture's Deferred table and every `Input` line in this story's Notes maps to one entry. Docs only; it designs nothing (no jobs, distributed limiters or ordering systems), it records what is deferred and why.
 
 ## Requirements
 
-Verify: Each new record named below follows the Nygard ADR form (status, context, decision, consequences) plus options rejected; every prd §6.2 bullet appears in `docs/production-path.md` with a one-line reason.
+Verify: the docs agent records in `docs/verification/7.6-check.md` (1) a count of PRD §6.2 bullets and sub-bullets, Deferred rows and Notes `Input` lines, each equal to the number of mapping rows citing that source kind, and (2) for each new record, that it has the five headings of criterion 1 and cites at least one AD; `git diff` shows ad-004 and ad-009 unchanged and no file outside `docs/decisions/`, `docs/production-path.md` and `docs/verification/7.6-check.md` changed.
 
-1. **Decision records** (R39; NFR-DOC-3)
+Inputs: none at runtime (docs only). The text sources are fixed at the commit the story builds on: PRD §6.2, the architecture's Deferred table, and the `Input` and production-path `Decision` lines in Notes below.
+
+1. **Seven records in one short form** (R39; NFR-DOC-3)
    **Given** `docs/decisions/`
    **When** it is read
-   **Then** it holds ad-001 Zitadel as the external identity provider, ad-002 `IAppDbContext`, ad-003 Result types, ad-004 model roles (exists, unchanged), ad-005 QA data integrity, ad-006 actor-agnostic dispute actions, ad-007 the BFF session (no tokens in the browser), ad-008 linking (including the SIM-swap check before the OTP) and ad-009 stored events (exists, unchanged), each citing the AD numbers it records
-   **And** ad-008 records the deviation from NIST SP 800-63B's limit on failed attempts: restarting linking creates a fresh challenge with 0 attempts, so the real bound on guesses is the per-login linking rate limit (FR-8) plus the send cap of 3 OTPs per customer per hour (FR-4)
+   **Then** it holds ad-001 Zitadel as the external identity provider (AD-6), ad-002 `IAppDbContext` (AD-2), ad-003 Result types (AD-3), ad-005 QA data integrity (AD-30, the Gate 2 fresh-stack reset), ad-006 actor-agnostic dispute actions (AD-9, AD-13, AD-14a), ad-007 the BFF session with no tokens in the browser (AD-7) and ad-008 linking, including the SIM-swap check before the OTP is sent (AD-12), beside the unchanged ad-004 and ad-009
+   **And** each new record has the headings Status, Context, Decision, Options rejected and Consequences (Nygard, *Documenting Architecture Decisions*, plus the options-rejected section ad-004 and ad-009 use), cites the AD numbers it records, and is at most about one screen (60 lines)
 
-2. **Production path** (R39; NFR-DOC-2, NFR-DATA-7)
-   **Given** `docs/production-path.md`
+2. **ad-007 states its one exception** (R39; NFR-DOC-3, AD-7)
+   **Given** ad-007
    **When** it is read
-   **Then** every prd §6.2 item and every spine Deferred item appears once with a one-line reason, including retention and de-identification jobs
-   **And** its context is "a large retail bank with tens of millions of clients", and every scale figure in it is labelled as an estimate
-   **And** it holds the stored-event items of ad-009 and the spine's Deferred table: order across disputes (Kafka offsets, a high-water mark with `pg_snapshot_xmin`, or change data capture), crypto-shredding of personal data in stored events, stored event schema evolution beyond additive changes, snapshots to shorten replay, and a database-level append-only grant on `AuditLogEntries` and `StoredEvents`
-   **And** it holds the EF-only idempotency claim: replacing the raw-SQL claim (`IdempotencyKeyClaims.ClaimAsync`, `INSERT … ON CONFLICT`) with EF Core alone, as `docs/research/ef-core-upsert/ef-core-upsert.md` recommends, with AD-16's statement updated when it is built
+   **Then** it says the browser never holds an access or refresh token, and names the one exception plainly: the ID token crosses the browser once, in the end-session redirect as `id_token_hint` (OpenID Connect RP-Initiated Logout 1.0), already spent and short-lived, because without it Zitadel's session outlives sign-out
+   **And** it records that linking keeps the session key minted at sign-in (decided 2026-10-30, story 6.2) and points at the production-path entry for renewal at a privilege change
+
+3. **ad-008 records the guess bound as it is** (R39; NFR-DOC-3, FR-4, FR-7, FR-8, AD-12)
+   **Given** ad-008
+   **When** it is read
+   **Then** it states plainly that the controls bound OTP guesses per challenge (lockout after three wrong codes, FR-7) and per login window (the per-login and per-IP linking rate limits, FR-8, held in memory in the one Api instance and reset on restart), and that the send cap of three OTPs per customer per hour (FR-4) limits codes issued, not verification attempts
+   **And** it states that this is not the account-wide limit on failed attempts that NIST SP 800-63B describes (SP 800-63B-4, *Rate Limiting (Throttling)*), because restarting linking creates a fresh challenge with 0 attempts; it does not call the existing controls an overall bound on guesses
+   **And** it names the upgrade and points at its production-path entry: a persistent per-customer failure counter that survives restarts and new challenges; no control changes in v1
+
+4. **The production path opens with a checkable mapping** (R39; NFR-DOC-2)
+   **Given** `docs/production-path.md`
+   **When** its mapping table (columns: source, entry, one-line reason) is read
+   **Then** each PRD §6.2 bullet is one source row, and each sub-bullet of "Operations features" (dead-letter topic, outbox cleanup, topic retention tuned to POPIA, listing and search for operations tools) is its own source row
+   **And** every row of the architecture's Deferred table is a source row: either it maps to an entry, or it is marked "settled in v1" with the story or decision that settled it (for example "Copy for each linking state", story 6.4; "README runbook for failed outbox rows", story 7.7)
+   **And** every `Input` line and every production-path `Decision` line in this story's Notes is a source row mapped to an entry, so none is missed (for example the `IdempotencyKeys.ResponseBody` retention, trace-context trust, credential placement, the route rate limits and audit cancellation)
+   **And** one entry may cite several sources where they overlap (for example §6.2 "Retention and de-identification jobs", the Deferred "Outbox cleanup, topic retention, retention and de-identification jobs" and the `ResponseBody` input); no source maps to two entries; every entry has a one-line reason
+
+5. **Context, estimates and the named entries** (R39; NFR-DOC-2, NFR-DATA-7, ad-009)
+   **Given** the production path's entries
+   **When** they are read
+   **Then** its context line is "a large retail bank with tens of millions of clients", and every scale figure is labelled as an estimate
+   **And** it holds the stored-event entries of ad-009: order across disputes (Kafka offsets, a high-water mark with `pg_snapshot_xmin`, or change data capture), crypto-shredding of personal data in stored events, stored event schema evolution beyond additive changes, snapshots to shorten replay, and a database-level append-only grant on `AuditLogEntries` and `StoredEvents`
+   **And** it holds the OTP guess bound upgrade of criterion 3 and, from the 2026-10-27 decisions, migrations as a bundle run as a one-off job and problem `type` URLs moved to an owned domain
+
+6. **The idempotency claim is a proposal, not the current mechanism** (R39; NFR-DOC-2, AD-16)
+   **Given** the idempotency entry
+   **When** it is read
+   **Then** it states the current mechanism first: `IdempotencyKeyClaims.ClaimAsync` claims with PostgreSQL `INSERT … ON CONFLICT`, as AD-16 specifies
+   **And** it frames the replacement as a proposed future change, not built: EF Core alone, through a unique constraint plus EF Core's documented optimistic concurrency, with explicit handling of the insert conflict (`DbUpdateException` on the unique index) and of the lease and stored response, as `docs/research/ef-core-upsert/ef-core-upsert.md` recommends; it does not call it an EF Core upsert (EF Core has none) or an established guarantee; AD-16 changes only when it is built
+
+## Boundaries
+
+- Docs only: no code, configuration or architecture change. ad-004 and ad-009 are not edited.
+- The production path records deferrals and their reasons; it does not design the deferred mechanisms beyond one or two sentences each.
+- The outbox and having no schema registry stay in the architecture spine (AD-14, AD-17, AD-19), not as records (Gate 2).
 
 ## Supervisor checks
 
-Deliberate-break proofs and Docker checks, run by the supervisor, not the verifier.
-
-- None beyond the story flow.
+- Pick three `Input` lines at random from Notes; each has its mapping row and entry.
+- Read ad-008: it contains no claim that the controls bound guesses account-wide.
 
 ## Build facts
 
 - Owner: docs (docs agent, not a builder).
 - Flags: none.
 - Lane: docs.
-- Touches: docs/decisions/ad-001 to ad-008 (except ad-004); `docs/production-path.md`.
+- Mechanisms and sources: architecture decision records (Michael Nygard, <https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions>); NIST SP 800-63B-4, rate limiting (<https://pages.nist.gov/800-63-4/sp800-63b.html>); OpenID Connect RP-Initiated Logout 1.0 (<https://openid.net/specs/openid-connect-rpinitiated-1_0.html>); EF Core concurrency conflicts (<https://learn.microsoft.com/ef/core/saving/concurrency>).
+- Packages: none.
+- Touches: `docs/decisions/ad-001` to `ad-008` (except `ad-004`); `docs/production-path.md` (new); `docs/verification/7.6-check.md` (new).
 
 ## References
 
-- parent — docs/tickets/epic-7-release/epic-7-release.md
+- parent — docs/tickets/epic-7-release/epic-7-release.md, section Requirements
+- prd — docs/prd/prd.md, §6.2, NFR-DOC-2, NFR-DOC-3, FR-4, FR-7, FR-8
+- architecture — docs/architecture/architecture.md, AD-2, AD-3, AD-6, AD-7, AD-9, AD-12, AD-13, AD-14a, AD-16, AD-30, Deferred
+- decisions — docs/decisions/ad-004-model-roles.md, docs/decisions/ad-009-stored-events.md
+- research — docs/research/ef-core-upsert/ef-core-upsert.md
+- verification — docs/verification/7.6-challenge.md
 
 ## Notes
 
@@ -82,3 +123,9 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Input (from 5.2 review and security, 2026-10-30): add to `docs/production-path.md`: "A wrong method or an unmatched path under `/api/v1/operations` reaches the framework's 405 or 404 endpoint, which carries no policy, so the cookie-only fallback answers bearer callers with 401 and no `Bearer` challenge (RFC 6750 §3); it fails closed and runs no handler. Production gives the operations group its own fallback answer. Audit saves for `Denied` and `Rejected` use the request's cancellation token, so a client that disconnects mid-request can cancel its own audit row; production saves audit rows with `CancellationToken.None` (OWASP Logging Cheat Sheet)."
 - Input (from 6.6 security, 2026-10-30): add to `docs/production-path.md`: "Request lines in nginx logs: the identity origin's access log records only the path, but its `error_log` still writes the request line with `id_token_hint` on an upstream error, and the app origin's combined access log keeps query strings (the dev-only GET sign-in callback's single-use code). Production logs paths only on both origins and lowers the identity origin's error-log detail. The Api trusts forwarded headers from the whole Compose network, which on a Linux Docker host also includes the host's bridge address; production trusts only the load balancer's or gateway's own addresses (ASVS 5.0 V4.1.3, V16.2.5)."
 - Input (from the start-up exit fix, 2026-10-30): add to `docs/production-path.md`: "Containers run an init process as PID 1 (Compose `init: true`), because the kernel drops signals PID 1 has no handler for, so a .NET process that fails to start would spin instead of exiting (pid_namespaces(7)). Any deployment outside Compose needs the same: ECS `linuxParameters.initProcessEnabled`, or an init in the image."
+- Risk low (proposed): docs only; an overstated security claim misleads a bank reading the records, so the supervisor checks ad-008's wording beyond the criteria.
+- Decision: 2026-10-30 (human, 7.6 challenge) — ad-008 records plainly that the controls bound OTP guesses per challenge and per login window, not account-wide as NIST SP 800-63B describes, and the production path names the upgrade: a persistent per-customer failure counter. No control change (criteria 3 and 5). This replaces the 2026-10-27 wording "the real bound on guesses is the per-login linking rate limit plus the send cap".
+- Decision: 2026-10-30 (Sofia, refine) — the production path's completeness is checked through a source-to-entry mapping (criterion 4); every `Input` line in these Notes stays here, one line each, as the inventory the mapping counts.
+- Input (from 7.4 refine, 2026-10-30): add to `docs/production-path.md`: "Browser telemetry in a deployed environment: the AWS gateway routes no `/otlp/` and the SPA built for AWS exports nothing, so browser spans are a local-stack feature. Before switching it on, add an authenticated or sampled intake (for example behind the BFF session with per-session limits) and filter browser spans at the collector."
+- Input (from 7.5 refine, 2026-10-30): add to `docs/production-path.md`: "The AWS dev environment is written and checked with `terraform fmt`, `validate` and plans against mocked providers only, and has never been applied, because the account does not exist. Before any real use, run `infra/terraform/README.md`'s apply, deploy, check and destroy procedure, and move Terraform's two state-held secrets (the origin-verify value and the RDS master password) to write-only arguments or ephemeral resources."
+- Input (from 7.7 refine, 2026-10-30): add to `docs/production-path.md`: "A `Failed` outbox row is released by an operator's targeted `UPDATE` (the runbook, AD-22's one operator exception). A row whose payload itself is refused cannot be released, because the payload is never edited; production adds a reviewed repair path or a dead-letter topic with an audited replay."

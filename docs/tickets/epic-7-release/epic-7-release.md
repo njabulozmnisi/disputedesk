@@ -35,7 +35,7 @@ R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard acce
 ## Done when
 
 - UJ-1, UJ-2, UJ-5a, UJ-5b and UJ-5d pass in CI with axe and ZAP clean.
-- Images publish to GHCR on main; the dev environment deploys and destroys cleanly.
+- Images publish to GHCR on main (story 7.3); the dev environment deploys and destroys cleanly once the AWS account exists (until then, story 7.5 closes on `terraform fmt`, `validate` and plans against mocked providers, with the procedure written).
 - README ends with the ten-area map; `docs/production-path.md` and the decision records exist.
 
 ## Boundaries
@@ -55,11 +55,11 @@ R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard acce
 
 - Decision: 2026-10-26 — epic Requirements are the parent's lines only, ids kept (`R<n> (parent R<n>)`); each line names the part this epic delivers where the parent line is shared.
 - Decision: 2026-10-26 — tracer bullet: story 1, QA journey UJ-1 on the real stack with axe and ZAP; it is the thinnest path through every layer this epic touches.
-- Waits on 6.4, 3.6, 3.10, 3.11, 3.7, 2.5, 2.6, 4.1 because: 1 needs what those stories build (3.10 the Submitted badge in UJ-1 step 6, 3.11 the browser hop of the trace) (see its References and Description).
-- Waits on 5.4 because: 2 needs what those stories build (see its References and Description).
+- Waits on 6.4, 3.6, 3.10, 3.11, 3.7, 3.12, 2.5, 2.6, 4.1 because: 1 needs what those stories build (3.10 the Submitted badge in UJ-1 step 6, 3.11 the browser hop of the trace, 3.12 the detail timeline) (see its References and Description).
+- Waits on 5.4 and 3.12 because: 2 needs what those stories build (see its References and Description).
 - Waits on 5.1 because: 4 needs what those stories build (see its References and Description).
-- Waits on 5.1 because: 7 needs what those stories build (see its References and Description).
-- Waits on 2.6, 2.8, 3.7, 4.1, 4.2, 5.3, 5.4, 6.4 because: 10 reviews the merged system those stories complete (see its Description).
+- Waits on 5.1, 5.5 and 5.3 because: 7 needs what those stories build (Scalar and the SLA demo dispute in the README) (see its References and Description).
+- Waits on 2.6, 2.8, 3.7, 3.12, 4.1, 4.2, 5.3, 5.4, 6.4, 6.6 and every other story of this epic because: 10 reviews the merged system those stories complete, last (see its Description).
 - Waits on: epic 2 (the themed hosted login for UJ-1), epic 3 (dispute screens for UJ-1, UJ-2 and UJ-5), epic 4 (events on the topic for the four-hop trace), epic 5 (Scalar and the sweep for the README and the sweep story), epic 6 (linking screens for UJ-1).
 - Decision: 2026-10-29 — the release stories run in the order 7.10, 7.1, 7.2, 7.3, 7.6, 7.7, then the AWS stories 7.4 and 7.5 last; the production readiness review checks glossary terms and suppressions across the codebase (story 10), and the project has no separate closing refactor-sweep story.
 - Decision: 2026-10-26 — Gate 2: the docs stories 7.6 (decision records and production path) and 7.7 (README, runbook and onboarding) change owner to `docs`, a docs agent rather than a builder; runbook and onboarding stay short.
@@ -67,3 +67,10 @@ R40 (parent R40): The customer portal meets WCAG 2.2 AA (contrast, keyboard acce
 - Decision: 2026-10-26 — Gate 2: decision records follow kickoff amendment 1: ad-001 Zitadel as the external identity provider, ad-002 `IAppDbContext`, ad-003 Result types, ad-004 model roles (exists), ad-005 QA data integrity, ad-006 actor-agnostic dispute actions, ad-007 BFF session (no tokens in the browser), ad-008 linking (7.6); ad-009 stored events (2026-10-29).
 - Decision: 2026-10-26 — Gate 2: backend-builder may write `scripts/dev-login.sh`, `contracts/`, `.nvmrc`, `docker-compose.aws.yml` and `.zap/` (guard updated), so 7.3 and 7.4 keep owner backend.
 - Decision: 2026-10-26 — Gate 2: code in every builder-owned story of this epic is stupid simple and logical, per AGENTS.md (smallest change that meets the criteria; every abstraction earns its place).
+- Decision: 2026-10-30 (human, 7.10 challenge) — the release stories run in the order 7.1, 7.2, 7.3, 7.6, 7.7, 7.11, 7.4, 7.5, then 7.10 last, so the production readiness review covers every component it assesses; this replaces the 2026-10-29 order that put 7.10 first. 7.6 and 7.11 wait on nothing in this epic and may build beside the QA stories.
+- Decision: 2026-10-30 (human, 7.3 challenge) — story 7.3 owns publishing the images to GHCR from CI on main; AD-32 is amended so the AWS story 7.5 only consumes them by digest.
+- Decision: 2026-10-30 (human, 7.4 challenge) — no browser telemetry intake in AWS: the AWS gateway routes no `/otlp/` and the SPA built for AWS exports nothing; browser spans stay a local-stack feature, and backend telemetry still reaches CloudWatch and X-Ray. AD-29 is amended; the SPA's build switch is the new story 7.11, split from 7.4 because the frontend is a separate owner.
+- Decision: 2026-10-30 (human, 7.5 challenge) — 7.5 closes on `terraform fmt -check`, `terraform validate` and plans against mocked providers, with the apply and destroy steps written and a production-path note; no AWS command is ever run, because the account does not exist. "Done when" now reads "deploys and destroys cleanly once the AWS account exists".
+- Decision: 2026-10-30 (human, 7.7 challenge) — a `Failed` outbox row is released by one documented operator procedure (a targeted `UPDATE` in a PostgreSQL transaction back to `Pending`, attempts reset, after the cause is fixed, proved by its event reaching the topic before its successor); AD-22 names this one operator exception; no new code.
+- Decision: 2026-10-30 (human, 7.6 challenge) — ad-008 records that the controls bound OTP guesses per challenge and per login window, not account-wide as NIST SP 800-63B describes; the production path names the upgrade (a persistent per-customer failure counter); no control change.
+- Decision: 2026-10-30 (Sofia, 7.1 to 7.3 refine) — the Playwright suite has two projects, `journeys` (`e2e/tests/journeys/`) and `regression`, each run on its own fresh stack, so the five journeys never share customer D or seeded disputes with the regression specs; CI's `e2e` job runs the journeys project (AD-30's fresh stack per QA run holds per project run).
