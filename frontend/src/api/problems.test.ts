@@ -1,5 +1,12 @@
-import { ApiError } from './mutator';
-import { isProblem, problemExtension, problemType, traceIdOf } from './problems';
+import { ApiError, type Problem } from './mutator';
+import {
+  isProblem,
+  problemExtension,
+  problemInteger,
+  problemType,
+  traceIdOf,
+  validationFields,
+} from './problems';
 
 // Criterion 2: problems are identified by the full `type` URI (RFC 9457 section 3.1.1), compared with ===.
 describe('problem types', () => {
@@ -56,5 +63,43 @@ describe('problemExtension', () => {
 
     expect(isProblem(new ApiError(409, notAllowed), 'action-not-allowed')).toBe(true);
     expect(problemExtension(new ApiError(409, notAllowed), 'customerStatus')).toBe('resolved');
+  });
+});
+
+// Story 6.4: the linking problem slugs and the number reader for `attemptsRemaining`.
+describe('linking problems', () => {
+  it.each(['already-linked', 'otp-incorrect', 'linking-locked', 'rate-limited'] as const)(
+    'builds the %s type from the base and the slug',
+    (slug) => {
+      expect(problemType(slug)).toBe(
+        `https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/${slug}.md`,
+      );
+    },
+  );
+
+  it('reads an integer extension member, and nothing else', () => {
+    const read = (value: unknown) =>
+      problemInteger(
+        new ApiError(422, { attemptsRemaining: value } as Problem),
+        'attemptsRemaining',
+      );
+
+    expect(read(2)).toBe(2);
+    expect(read(0)).toBe(0);
+    expect(read(1.5)).toBeUndefined();
+    expect(read('2')).toBeUndefined();
+    expect(read(null)).toBeUndefined();
+    expect(read(undefined)).toBeUndefined();
+    expect(problemInteger(new ApiError(502, undefined), 'attemptsRemaining')).toBeUndefined();
+  });
+});
+
+describe('validationFields', () => {
+  it('lists the keys of the errors member, and nothing when there are none', () => {
+    const named = new ApiError(400, { errors: { idNumber: ['x'], code: ['y'] } } as Problem);
+
+    expect(validationFields(named)).toEqual(['idNumber', 'code']);
+    expect(validationFields(new ApiError(400, { title: 'Bad' }))).toEqual([]);
+    expect(validationFields(new ApiError(502, undefined))).toEqual([]);
   });
 });

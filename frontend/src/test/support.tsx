@@ -190,3 +190,34 @@ export function makeSummary(
     ...overrides,
   };
 }
+
+export type LinkingRequest = { headers: Headers; body: unknown };
+
+/**
+ * Answers `POST /api/v1/linking/start` or `.../verify` with `respond(attempt)` (1 for the first request) and records
+ * every request.
+ */
+export function recordLinkingRequests(
+  step: 'start' | 'verify',
+  respond: (attempt: number) => Response | Promise<Response>,
+) {
+  const requests: LinkingRequest[] = [];
+  server.use(
+    http.post(`*/api/v1/linking/${step}`, async ({ request }) => {
+      requests.push({ headers: request.headers, body: await request.json() });
+      return respond(requests.length);
+    }),
+  );
+  return requests;
+}
+
+/** The empty answers: 202 to a start, 204 to a verify. */
+export const accepted = () => new HttpResponse(null, { status: 202 });
+export const noContent = () => new HttpResponse(null, { status: 204 });
+
+/** A 429 as the API or the gateway sends it: a `rate-limited` problem, with `Retry-After` when given. */
+export function rateLimited(retryAfter?: string) {
+  const response = problemResponse('rate-limited', 429);
+  if (retryAfter !== undefined) response.headers.set('Retry-After', retryAfter);
+  return response;
+}

@@ -7,6 +7,10 @@ const problemTypeBase = 'https://github.com/njabulozmnisi/disputedesk/blob/main/
 /** The slugs the SPA acts on. Add one when a screen needs to tell that problem apart. */
 export type ProblemSlug =
   | 'linking-required'
+  | 'already-linked'
+  | 'otp-incorrect'
+  | 'linking-locked'
+  | 'rate-limited'
   | 'core-banking-unavailable'
   | 'validation'
   | 'not-found'
@@ -36,4 +40,16 @@ export function problemExtension(
 ): string | undefined {
   const value = (error.problem as Record<string, unknown> | undefined)?.[name];
   return typeof value === 'string' ? value : undefined;
+}
+
+/** An integer extension member of the problem body (RFC 9457 section 3.2), such as `attemptsRemaining`. */
+export function problemInteger(error: ApiError, name: 'attemptsRemaining'): number | undefined {
+  const value = (error.problem as Record<string, unknown> | undefined)?.[name];
+  return Number.isInteger(value) ? (value as number) : undefined;
+}
+
+/** The names of the fields a 400 `validation` problem lists in its `errors` member (RFC 9457 section 3.2). */
+export function validationFields(error: ApiError): string[] {
+  const named = (error.problem as { errors?: Record<string, unknown> } | undefined)?.errors;
+  return named ? Object.keys(named) : [];
 }

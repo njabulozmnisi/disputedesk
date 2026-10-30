@@ -181,6 +181,18 @@ describe('errors handled once in the QueryCache and MutationCache (criterion 2)'
     });
   });
 
+  it('ends a linked session in the cache on a 403 linking-required, before it goes to /link', async () => {
+    failWith('/api/v1/transactions', 'linking-required', 403);
+    const { router, queryClient, wrapper } = setUp('linked');
+
+    renderHook(() => useGetApiV1Transactions(), { wrapper });
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/link');
+    });
+    expect(queryClient.getQueryData(sessionKey)).toEqual({ state: 'unlinked' });
+  });
+
   it('does not treat a 403 of another kind as linking-required', async () => {
     failWith('/api/v1/transactions', 'unauthorized', 403);
     const { router, wrapper } = setUp('linked');

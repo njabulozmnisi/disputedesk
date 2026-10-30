@@ -11,6 +11,8 @@ import { SignedOutPage } from '@/pages/SignedOutPage';
 import { StartPage } from '@/pages/StartPage';
 import { DisputeDetailScreen } from '@/features/disputes/detail/DisputeDetailScreen';
 import { DisputesScreen } from '@/features/disputes/history/DisputesScreen';
+import { DetailsScreen } from '@/features/linking/DetailsScreen';
+import { OtpScreen } from '@/features/linking/OtpScreen';
 import { RaiseDraftProvider } from '@/features/disputes/raise/RaiseDraft';
 import { RaiseLayout } from '@/features/disputes/raise/RaiseLayout';
 import { RaiseScreen } from '@/features/disputes/raise/RaiseScreen';
@@ -20,8 +22,7 @@ import { TransactionsScreen } from '@/features/transactions/TransactionsScreen';
 import { RootLayout } from './RootLayout';
 import { SessionGate } from './SessionGate';
 
-// Routes are defined with TanStack Router (AD-31). `/`, `/signed-out` and the not-found route are public. A screen
-// whose story has not landed (linking) has no screen yet, so its path renders the not-found screen.
+// Routes are defined with TanStack Router (AD-31). `/`, `/signed-out` and the not-found route are public.
 // The raise draft lives above every route, so Change keeps its values and Back after a submit finds it submitted.
 const rootRoute = createRootRoute({
   component: () => (
@@ -39,6 +40,27 @@ const startRoute = createRoute({
   component: () => (
     <SessionGate allow="anonymous">
       <StartPage />
+    </SessionGate>
+  ),
+});
+
+// 2a and 2b are for an unlinked login only. 2b keeps nothing from 2a: the challenge is held by the server (AD-12).
+const linkRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/link',
+  component: () => (
+    <SessionGate allow="unlinked">
+      <DetailsScreen />
+    </SessionGate>
+  ),
+});
+
+const linkOtpRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/link/otp',
+  component: () => (
+    <SessionGate allow="unlinked">
+      <OtpScreen />
     </SessionGate>
   ),
 });
@@ -133,6 +155,8 @@ const signedOutRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   startRoute,
+  linkRoute,
+  linkOtpRoute,
   transactionsRoute,
   disputesRoute,
   disputeDetailRoute,

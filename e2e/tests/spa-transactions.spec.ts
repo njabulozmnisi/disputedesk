@@ -110,7 +110,12 @@ test.describe('anonymous', () => {
     await page.goto(`${spa}/transactions`);
     await expect(page).toHaveURL(`${spa}/`);
 
-    for (const path of ['/link', '/nope', '/signed-out', '/signed-out?reason=other']) {
+    // /link is an unlinked-login screen since story 6.4: an anonymous visit goes to the start page, as for /transactions.
+    await page.goto(`${spa}/link`);
+    await expect(page).toHaveURL(`${spa}/`);
+    await expect(page.getByRole('heading', { name: "We can't find that dispute" })).toHaveCount(0);
+
+    for (const path of ['/nope', '/signed-out', '/signed-out?reason=other']) {
       await page.goto(`${spa}${path}`);
       await expect(page.getByRole('heading', { name: "We can't find that dispute" }), path).toBeVisible();
       expect(new URL(page.url()).pathname, path).toBe(path.split('?')[0]);
@@ -164,7 +169,7 @@ test.describe('anonymous', () => {
 });
 
 test.describe('unlinked customer C', () => {
-  test('is sent to /link (not built: not-found), never to /transactions, and no transactions call is made', async ({ browser }) => {
+  test('is sent to /link (the details form since story 6.4), never to /transactions, and no transactions call is made', async ({ browser }) => {
     const { context, page } = await signIn(browser, 'customer-c');
     const transactionCalls: string[] = [];
     page.on('request', (request) => {
@@ -173,7 +178,8 @@ test.describe('unlinked customer C', () => {
     for (const path of ['/', '/transactions']) {
       await page.goto(`${spa}${path}`);
       await expect(page).toHaveURL(`${spa}/link`);
-      await expect(page.getByRole('heading', { name: "We can't find that dispute" })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Link your login' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: "We can't find that dispute" })).toHaveCount(0);
     }
     await page.goto(`${spa}/signed-out?reason=expired`);
     await expect(page.getByRole('heading', { name: "You've been signed out" })).toBeVisible();
