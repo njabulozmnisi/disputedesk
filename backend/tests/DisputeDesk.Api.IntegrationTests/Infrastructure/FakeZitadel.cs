@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,7 +17,8 @@ namespace DisputeDesk.Api.IntegrationTests.Infrastructure;
 /// Plays Zitadel's part in the code flow for the Api's real OpenID Connect handler: a fixed discovery document, a
 /// signing key, a token endpoint and an end-session endpoint. The test acts as the browser and the hosted login: it
 /// reads the authorize redirect, asks for a code here, and sends the code to the Api's callback; at sign-out it brings
-/// the end-session redirect here and follows the redirect back.
+/// the end-session redirect here and follows the redirect back. For operations tools it signs access tokens with the
+/// same key, which the Api's JwtBearer handler reads from the same discovery document.
 /// </summary>
 public sealed class FakeZitadel
 {
@@ -26,6 +28,15 @@ public sealed class FakeZitadel
 
     /// <summary>The post-logout redirect URI registered for the app: the Api origin's signed-out callback path.</summary>
     public const string PostLogoutRedirectUri = "https://localhost/api/signout-callback-oidc";
+
+    /// <summary>The project ID: the audience of operations access tokens (AD-8).</summary>
+    public const string ProjectId = "project-test";
+
+    /// <summary>The operations machine user's ID, its tokens' <c>sub</c>; <see cref="ApiFactory"/> maps it to the operations actor.</summary>
+    public const string OperationsSub = "ops-tool-test";
+
+    /// <summary>The claim Zitadel puts this project's granted roles in (AD-9).</summary>
+    public const string ProjectRolesClaim = $"urn:zitadel:iam:org:project:{ProjectId}:roles";
 
     private readonly RsaSecurityKey _signingKey = new(RSA.Create(2048)) { KeyId = "test-key" };
     private readonly ConcurrentDictionary<string, PendingCode> _codes = new();
@@ -57,7 +68,46 @@ public sealed class FakeZitadel
             oidc.ConfigurationManager = new Discovery(this);
             oidc.Backchannel = new HttpClient(new TokenEndpoint(this));
         });
+        services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, jwt => jwt.ConfigurationManager = new Discovery(this));
     }
+
+    /// <summary>
+    /// An access token as Zitadel issues it to the operations machine user through the client-credentials grant: this
+    /// issuer, the project as audience, valid for 5 minutes from the system clock (JwtBearer validates against the system
+    /// clock, not the injected <see cref="TimeProvider"/>), and <paramref name="roles"/> under the project's roles claim.
+    /// A test changes the descriptor to break one property, then signs it with <see cref="Sign"/>.
+    /// </summary>
+    public SecurityTokenDescriptor AccessToken(string sub = OperationsSub, params string[] roles)
+    {
+        DateTime now = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var claims = new Dictionary<string, object> { ["sub"] = sub };
+        if (roles.Length > 0)
+        {
+            claims[ProjectRolesClaim] = RolesValue(roles);
+        }
+
+        return new SecurityTokenDescriptor
+        {
+            Issuer = Issuer,
+            Audience = ProjectId,
+            IssuedAt = now,
+            NotBefore = now,
+            Expires = now.AddMinutes(5),
+            Claims = claims,
+            SigningCredentials = new SigningCredentials(_signingKey, SecurityAlgorithms.RsaSha256),
+        };
+    }
+
+    /// <summary>A signed access token for <paramref name="sub"/> holding <paramref name="roles"/>.</summary>
+    public string Issue(string sub = OperationsSub, params string[] roles) => Sign(AccessToken(sub, roles));
+
+    /// <summary>Signs <paramref name="descriptor"/> exactly as given: no exp, iat or nbf is added when it has none.</summary>
+    public static string Sign(SecurityTokenDescriptor descriptor) =>
+        new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false }.CreateToken(descriptor);
+
+    /// <summary>A roles claim value as Zitadel writes it: each role key maps to the organisations that granted it.</summary>
+    public static Dictionary<string, object> RolesValue(params string[] roles) =>
+        roles.ToDictionary(role => role, object (_) => new Dictionary<string, object> { ["org-test"] = "disputedesk.test" });
 
     /// <summary>
     /// What Zitadel does after a successful hosted login: remembers the authorize request and returns a code for the

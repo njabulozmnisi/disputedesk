@@ -112,7 +112,7 @@ public class IdempotencyKeyRequiredTests(PostgresFixture postgres, TransactionsS
     [Fact]
     public async Task Document_RaiseOperation_DeclaresIdempotencyKeyAsARequiredHeader()
     {
-        await using var factory = new ApiFactory(postgres.ConnectionString, environment: "Development");
+        await using var factory = new ApiFactory(postgres.ConnectionString, environment: "Development", settings: ApiFactory.ApiReferenceOn);
         using HttpClient client = factory.CreateClient();
         HttpResponseMessage response = await client.GetAsync(new Uri("/openapi/v1.json", UriKind.Relative), TestContext.Current.CancellationToken);
         using JsonDocument document = await response.ReadJsonAsync();

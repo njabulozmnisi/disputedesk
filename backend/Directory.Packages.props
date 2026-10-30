@@ -20,6 +20,7 @@
     <!-- The Kafka client the architecture names (AD-17, Stack); it brings in the native librdkafka.redist 2.16.0. -->
     <PackageVersion Include="Confluent.Kafka" Version="2.16.0" />
     <PackageVersion Include="MailKit" Version="4.18.2" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.14" />
     <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.14" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />

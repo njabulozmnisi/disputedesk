@@ -631,10 +631,103 @@
           }
         }
       }
+    },
+    "/api/v1/operations/disputes/{disputeId}": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "parameters": [
+          {
+            "name": "disputeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationsDisputeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": [ ]
+          }
+        ]
+      }
     }
   },
   "components": {
     "schemas": {
+      "ActorType": {
+        "enum": [
+          "customer",
+          "operations",
+          "automation"
+        ],
+        "description": "Who acted, as events and operations see it (AD-19): `customer`, `operations` or `automation`."
+      },
       "AntiforgeryResponse": {
         "required": [
           "requestToken"
@@ -758,6 +851,16 @@
         },
         "description": "A dispute as its customer sees it (AD-13): no actor identity, SLA or due date. `outcome` is `upheld` or\n`rejected` once the dispute is resolved, and null until then. `expectedAmount` is set only for the reason\n`wrongAmount`; `disputedAmount` is then the transaction amount minus it."
       },
+      "DisputeStatus": {
+        "enum": [
+          "submitted",
+          "underReview",
+          "escalated",
+          "resolved",
+          "withdrawn"
+        ],
+        "description": "A dispute's internal status, as events and operations see it. Customers see CustomerStatus instead."
+      },
       "DisputeSummaryResponse": {
         "required": [
           "disputeId",
@@ -872,6 +975,119 @@
           "notEligible",
           "outsideWindow"
         ]
+      },
+      "OperationsDisputeResponse": {
+        "required": [
+          "disputeId",
+          "status",
+          "outcome",
+          "reason",
+          "transaction",
+          "expectedAmount",
+          "disputedAmount",
+          "createdAt",
+          "timeline"
+        ],
+        "type": "object",
+        "properties": {
+          "disputeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DisputeStatus"
+          },
+          "outcome": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Outcome"
+              }
+            ]
+          },
+          "reason": {
+            "$ref": "#/components/schemas/Reason"
+          },
+          "transaction": {
+            "$ref": "#/components/schemas/TransactionSnapshotResponse"
+          },
+          "expectedAmount": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Money"
+              }
+            ]
+          },
+          "disputedAmount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperationsTimelineEntryResponse"
+            }
+          }
+        },
+        "description": "A dispute as operations see it (FR-30): the internal status, the outcome (null until resolved), the reason, the\nstored transaction snapshot, the amounts and the timeline of every stored event. No note the customer wrote, no\ncustomer ID and no actor identity."
+      },
+      "OperationsTimelineEntryResponse": {
+        "required": [
+          "eventType",
+          "actorType",
+          "occurredAt",
+          "fromStatus",
+          "toStatus",
+          "note"
+        ],
+        "type": "object",
+        "properties": {
+          "eventType": {
+            "$ref": "#/components/schemas/StoredEventType"
+          },
+          "actorType": {
+            "$ref": "#/components/schemas/ActorType"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fromStatus": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DisputeStatus"
+              }
+            ]
+          },
+          "toStatus": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DisputeStatus"
+              }
+            ]
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "One stored event as operations see it (FR-30): its type, who acted (the actor type, never the identity), when, and\nthe statuses it moved between. `fromStatus` is null on `disputeRaised` and `slaWarningRaised`, and\n`toStatus` on `slaWarningRaised`. `note` is set only on `disputeResolved`: the bank's note\nmeant for the customer."
       },
       "Outcome": {
         "enum": [
@@ -997,6 +1213,17 @@
           "linked"
         ],
         "description": "Where the caller stands (AD-10): not signed in, signed in but not yet a linked customer, or linked."
+      },
+      "StoredEventType": {
+        "enum": [
+          "disputeRaised",
+          "reviewStarted",
+          "disputeEscalated",
+          "disputeResolved",
+          "disputeWithdrawn",
+          "slaWarningRaised"
+        ],
+        "description": "The type of a stored event on an operations timeline: the closed set of AD-14a, camelCase on the wire."
       },
       "TimelineActor": {
         "enum": [
@@ -1221,6 +1448,13 @@
         },
         "description": "The body of `POST /api/v1/disputes/{disputeId}/withdraw` (FR-18). The note is checked after the dispute is\nloaded, so an unknown dispute gets 404 before a note too long gets 400 (AD-8). Any other property is ignored."
       }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
     }
   },
   "tags": [
@@ -1232,6 +1466,9 @@
     },
     {
       "name": "Disputes"
+    },
+    {
+      "name": "Operations"
     }
   ]
 }

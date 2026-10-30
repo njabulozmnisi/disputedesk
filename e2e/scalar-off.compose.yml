@@ -1,0 +1,7 @@
+# QA override: Scalar__Enabled=false on the api (story 5.5 criterion 1). Used as
+#   docker compose -f docker-compose.yml -f e2e/scalar-off.compose.yml up -d --wait api
+# and undone with the plain `docker compose up -d --wait api`.
+services:
+  api:
+    environment:
+      Scalar__Enabled: "false"
