@@ -9,6 +9,8 @@ cd "$(dirname "$0")/.."
 
 GW=http://localhost:8080
 AUTH=http://auth.localhost:8080          # curl resolves *.localhost to 127.0.0.1 (RFC 6761): the gateway
+MAILPIT=http://localhost:${DISPUTEDESK_MAILPIT_PORT:-8025}         # the same host ports as docker-compose.yml
+DASHBOARD=http://localhost:${DISPUTEDESK_DASHBOARD_PORT:-18888}
 APP_PW=${APP_DB_PASSWORD:-dev-only-app-db}          # the same dev-only defaults as docker-compose.yml
 QA_PW=${QA_DB_PASSWORD:-dev-only-qa-db}
 ADMIN_PW=${POSTGRES_PASSWORD:-dev-only-postgres}
@@ -175,9 +177,9 @@ echo "$topics"
 grep -qE '^disputedesk\.disputes[[:space:]]+3[[:space:]]+1$' <<< "$topics" || fail "topic disputedesk.disputes (3 partitions, 1 replica)"
 
 section "Mailpit and Aspire dashboard"
-curl -fsS http://localhost:8025/api/v1/info | jq -ec '{mailpit: .Version}' || fail "mailpit"
-curl -fsS -o /dev/null http://localhost:18888/health && ok "Aspire dashboard /health -> 200"
-[ "$(curl -sS -o /dev/null -w '%{redirect_url}' http://localhost:18888/)" = http://localhost:18888/structuredlogs ] \
+curl -fsS "$MAILPIT/api/v1/info" | jq -ec '{mailpit: .Version}' || fail "mailpit"
+curl -fsS -o /dev/null "$DASHBOARD/health" && ok "Aspire dashboard /health -> 200"
+[ "$(curl -sS -o /dev/null -w '%{redirect_url}' "$DASHBOARD/")" = "$DASHBOARD/structuredlogs" ] \
   || fail "Aspire dashboard asks for sign-in"
 ok "Aspire dashboard / -> /structuredlogs (anonymous, no sign-in)"
 

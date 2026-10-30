@@ -5,6 +5,12 @@
 #   http://localhost:18888                Aspire dashboard (traces, metrics, logs)
 #   127.0.0.1:5433 / :19092 / :4317       Postgres, Redpanda and OTLP for apps run on the host
 #
+# Host ports that clash with a process already listening can be moved, from the shell or an untracked .env:
+#   POSTGRES_HOST_PORT (5433), DISPUTEDESK_REDPANDA_PORT (19092), DISPUTEDESK_MAILPIT_PORT (8025),
+#   DISPUTEDESK_DASHBOARD_PORT (18888), DISPUTEDESK_OTLP_GRPC_PORT (4317), DISPUTEDESK_OTLP_HTTP_PORT (4318).
+# The gateway's 8080 stays fixed (see the gateway service). infra/smoke.sh reads the same variables, from the
+# shell only, so export them there rather than in .env when running it.
+#
 # Every credential below is a fixed DEV-ONLY value, overridable from an untracked .env file.
 # Generated client IDs and secrets never touch the repo: the provisioner writes them to the
 # `zitadel-clients` volume (see infra/README.md).
@@ -49,11 +55,12 @@ services:
       - --smp=1
       - --memory=1G
       - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      # Clients on the host are told to reconnect to the advertised address, so it follows the host port.
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:${DISPUTEDESK_REDPANDA_PORT:-19092}
       - --rpc-addr=redpanda:33145
       - --advertise-rpc-addr=redpanda:33145
       - --default-log-level=warn
-    ports: ["127.0.0.1:19092:19092"]
+    ports: ["127.0.0.1:${DISPUTEDESK_REDPANDA_PORT:-19092}:19092"]
     volumes: ["redpanda:/var/lib/redpanda/data"]
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -Eq 'Healthy:[[:space:]]+true'"]
@@ -182,7 +189,7 @@ services:
   mailpit:
     image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
     restart: unless-stopped
-    ports: ["127.0.0.1:8025:8025"]
+    ports: ["127.0.0.1:${DISPUTEDESK_MAILPIT_PORT:-8025}:8025"]
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
@@ -276,9 +283,9 @@ services:
     environment:
       ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"   # dev only: no sign-in for the UI or OTLP
     ports:
-      - "127.0.0.1:18888:18888"                    # UI, loopback only
-      - "127.0.0.1:4317:18889"                     # OTLP/gRPC for apps run on the host
-      - "127.0.0.1:4318:18890"                     # OTLP/HTTP for apps run on the host
+      - "127.0.0.1:${DISPUTEDESK_DASHBOARD_PORT:-18888}:18888"   # UI, loopback only
+      - "127.0.0.1:${DISPUTEDESK_OTLP_GRPC_PORT:-4317}:18889"    # OTLP/gRPC for apps run on the host
+      - "127.0.0.1:${DISPUTEDESK_OTLP_HTTP_PORT:-4318}:18890"    # OTLP/HTTP for apps run on the host
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:18888/health"]
       interval: 5s
@@ -290,6 +297,9 @@ services:
     image: disputedesk-gateway:local
     build: { context: ., dockerfile: infra/nginx/Dockerfile }   # the repo root, so it reads frontend/ too
     restart: unless-stopped
+    # Fixed on purpose (AD-24 keeps the zero-click http://localhost:8080 and http://auth.localhost:8080): 8080 is
+    # also baked into Zitadel's issuer and Login v2 URLs, the BFF redirect URIs and the GATEWAY_* and zitadel-login
+    # Host headers, and containers reach the issuer through this gateway's network alias on its container port.
     ports: ["127.0.0.1:8080:8080"]
     environment:
       # Rendered into the nginx templates at start (infra/nginx/templates). Hosts are Host header values (with the
