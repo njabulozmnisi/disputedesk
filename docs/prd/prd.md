@@ -608,7 +608,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - **NFR-TEST-3:** integration tests run against real PostgreSQL in Testcontainers. They cover the ownership filter, the uniqueness constraints, concurrent actions, parallel OTP verification, atomic outbox writes and idempotency. No in-memory database fakes are used.
 - **NFR-TEST-4:** contract tests check `openapi.json` for drift and check each event type against its JSON Schema.
 - **NFR-TEST-5:** thin Playwright E2E tests run UJ-1, UJ-2, UJ-5a, UJ-5b and UJ-5d through the real stack. QA traces each criterion through the browser, the network, the database and the events.
-- **NFR-TEST-6:** no test is weakened to make it pass. CI runs every suite on every pull request.
+- **NFR-TEST-6:** no test is weakened to make it pass. CI runs the backend and frontend suites, the e2e journeys project and the ZAP baseline on every pull request; the e2e regression project runs on its own fresh stack in each story's QA (decided 2026-10-30, story 7.3).
 
 ### 5.8 Observability
 

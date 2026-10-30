@@ -1,6 +1,6 @@
 # Build order
 
-Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, 3.9 right after 3.3, 3.10 and 3.11 right after 3.6, 5.5 right after 5.1, 6.6 before 6.3, and 7.10 before 7.1).
+Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, 3.9 right after 3.3, 3.10 and 3.11 right after 3.6, 5.5 right after 5.1, 6.6 before 6.3, 7.6 and 7.7 right after 7.3, 7.11 before 7.4, and 7.10 last).
 
 Status: done (merged on main), in progress, or planned. The supervisor updates it when a story merges.
 
@@ -91,11 +91,14 @@ Needs: epic 2 (the themed hosted login for UJ-1); epic 3 (dispute screens for UJ
 
 | Story | Title | Owner | Status |
 |---|---|---|---|
-| 7.10 | [Production readiness review](epic-7-release/tickets/story-7.10-production-readiness-review.md) | supervisor | planned |
 | 7.1 | [QA journey UJ-1 on the real stack with axe and ZAP](epic-7-release/tickets/story-7.1-qa-journey-uj-1-on-the-real-stack-with-axe-and-zap.md) | qa | planned |
 | 7.2 | [QA journeys UJ-2, UJ-5a, UJ-5b and UJ-5d](epic-7-release/tickets/story-7.2-qa-journeys-uj-2-uj-5a-uj-5b-and-uj-5d.md) | qa | planned |
 | 7.3 | [CI runs the journeys with ZAP and publishes images to GHCR](epic-7-release/tickets/story-7.3-ci-runs-the-journeys-with-zap-and-publishes-images-to-ghcr.md) | backend | planned |
 | 7.6 | [Decision records and the production path](epic-7-release/tickets/story-7.6-decision-records-and-the-production-path.md) | docs | planned |
 | 7.7 | [README, runbook and onboarding](epic-7-release/tickets/story-7.7-readme-runbook-and-onboarding.md) | docs | planned |
+| 7.11 | [SPA skips browser tracing when built without it](epic-7-release/tickets/story-7.11-spa-skips-browser-tracing-when-built-without-it.md) | frontend | planned |
 | 7.4 | [AWS Compose override and OpenTelemetry collector](epic-7-release/tickets/story-7.4-aws-compose-override-and-opentelemetry-collector.md) | backend | planned |
 | 7.5 | [Terraform dev environment and OIDC deploy](epic-7-release/tickets/story-7.5-terraform-dev-environment-and-oidc-deploy.md) | backend | planned |
+| 7.10 | [Production readiness review](epic-7-release/tickets/story-7.10-production-readiness-review.md) | supervisor | planned |
+
+Build-order constraint (decided 2026-10-30): 7.1 starts once 6.4 and 3.12 have merged; 7.2 follows 7.1 and 7.3 follows 7.2 (they share `e2e/playwright.config.ts`, and CI runs the journeys 7.1 and 7.2 add). 7.6 waits on nothing and 7.11 waits only on 3.11, so both may build beside the QA stories; 7.7 follows 7.3 and 5.3. 7.4 follows 7.3 and 7.11, and 7.5 follows 7.4 (one lane, B). 7.10 runs last, after every other epic 7 story. No AWS command is run in this epic: the account does not exist, so 7.5 closes on fmt, validate and mocked-provider plans.
