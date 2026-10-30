@@ -1,5 +1,6 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { axe } from 'vitest-axe';
 
 import { getApiV1Transactions } from '@/api/generated/disputedesk';
 import { server } from '@/test/server';
@@ -54,6 +55,14 @@ describe('the inactivity warning', () => {
     );
     expect(screen.getByRole('button', { name: 'Stay signed in' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  it('has no accessibility violations while the warning is open', async () => {
+    await openTransactions();
+    await passMinutes(13);
+    await screen.findByRole('alertdialog', { name: warningTitle });
+
+    expect(await axe(document.body)).toHaveNoViolations();
   });
 
   it('does not appear for someone who is not signed in', async () => {
