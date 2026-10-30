@@ -9,15 +9,24 @@ import {
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { SignedOutPage } from '@/pages/SignedOutPage';
 import { StartPage } from '@/pages/StartPage';
+import { RaiseDraftProvider } from '@/features/disputes/raise/RaiseDraft';
+import { RaiseLayout } from '@/features/disputes/raise/RaiseLayout';
+import { RaiseScreen } from '@/features/disputes/raise/RaiseScreen';
+import { ReviewScreen } from '@/features/disputes/raise/ReviewScreen';
 import { TransactionsScreen } from '@/features/transactions/TransactionsScreen';
 
 import { RootLayout } from './RootLayout';
 import { SessionGate } from './SessionGate';
 
 // Routes are defined with TanStack Router (AD-31). `/`, `/signed-out` and the not-found route are public. A screen
-// whose story has not landed (linking, raise, disputes) has no route yet, so its path renders the not-found screen.
+// whose story has not landed (linking, disputes) has no route yet, so its path renders the not-found screen.
+// The raise draft lives above every route, so Change keeps its values and Back after a submit finds it submitted.
 const rootRoute = createRootRoute({
-  component: RootLayout,
+  component: () => (
+    <RaiseDraftProvider>
+      <RootLayout />
+    </RaiseDraftProvider>
+  ),
   notFoundComponent: NotFoundPage,
 });
 
@@ -40,6 +49,23 @@ const transactionsRoute = createRoute({
       <TransactionsScreen />
     </SessionGate>
   ),
+});
+
+// 4a and 4b share one parent: it finds the cached row and sends anything else to the list (story 3.6).
+const raiseRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/transactions/$transactionId/dispute',
+  component: RaiseLayout,
+});
+const raiseFormRoute = createRoute({
+  getParentRoute: () => raiseRoute,
+  path: '/',
+  component: RaiseScreen,
+});
+const raiseReviewRoute = createRoute({
+  getParentRoute: () => raiseRoute,
+  path: 'review',
+  component: ReviewScreen,
 });
 
 // The BFF accepts a returnUrl of at most 2048 characters, and only a local path (IsLocalUrl, AD-7). The SPA keeps a
@@ -72,7 +98,12 @@ const signedOutRoute = createRoute({
   component: SignedOutPage,
 });
 
-const routeTree = rootRoute.addChildren([startRoute, transactionsRoute, signedOutRoute]);
+const routeTree = rootRoute.addChildren([
+  startRoute,
+  transactionsRoute,
+  raiseRoute.addChildren([raiseFormRoute, raiseReviewRoute]),
+  signedOutRoute,
+]);
 
 /** Tests pass a memory history; the app uses the browser's. */
 export function createAppRouter(history?: RouterHistory) {

@@ -342,7 +342,7 @@ describe('disputability', () => {
     expect(within(row).queryByRole('link')).not.toBeInTheDocument();
   });
 
-  // A card payment that has a dispute is not "not a card payment". Story 3.6 shows its status badge; until then the
+  // A card payment that has a dispute is not "not a card payment". Story 3.10 shows its status badge; until then the
   // row has no hint and no Dispute link.
   it('shows no hint and no Dispute link on a row that is already disputed', async () => {
     serveTransactions([

@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import type { Ref } from 'react';
 
 import type { TransactionResponse } from '@/api/generated/model';
@@ -6,7 +7,7 @@ import { describeAmount, showAmount } from './format';
 import { notDisputableHint } from './notDisputableHint';
 
 /** "Card 492345•• •••• 3456" for a card, "Account •••• 4821" otherwise. Screen readers get the short form. */
-function MaskedNumber({ row }: { row: TransactionResponse }) {
+export function MaskedNumber({ row }: { row: TransactionResponse }) {
   if (row.maskedCard) {
     const firstSix = row.maskedCard.slice(0, 6);
     const lastFour = row.maskedCard.slice(-4);
@@ -59,13 +60,13 @@ export function TransactionRow({
         <span className="sr-only">{describeAmount(row)}</span>
       </span>
       {row.disputable ? (
-        // shortcut: a plain link (a full page load) until the raise story adds its route
-        <a
-          href={`/transactions/${encodeURIComponent(row.transactionId)}/dispute`}
+        <Link
+          to="/transactions/$transactionId/dispute"
+          params={{ transactionId: row.transactionId }}
           className="col-start-2 row-start-2 justify-self-end py-2 text-label font-strong"
         >
           Dispute <span className="sr-only">this transaction</span>
-        </a>
+        </Link>
       ) : null}
     </li>
   );

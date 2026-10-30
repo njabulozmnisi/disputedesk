@@ -20,8 +20,8 @@ import {
 } from './generated/disputedesk';
 import { createQueryClient } from './queryClient';
 
-function setUp(sessionState?: 'anonymous' | 'unlinked' | 'linked') {
-  const router = createAppRouter(createMemoryHistory({ initialEntries: ['/transactions'] }));
+function setUp(sessionState?: 'anonymous' | 'unlinked' | 'linked', path = '/transactions') {
+  const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
   const queryClient = createQueryClient(router);
   queryClient.setDefaultOptions({
     ...queryClient.getDefaultOptions(),
@@ -207,6 +207,25 @@ describe('errors handled once in the QueryCache and MutationCache (criterion 2)'
     });
     expect(hasSession(queryClient)).toEqual({ state: 'anonymous' });
   });
+
+  // Story 3.6 criterion 8 (AD-31): no identifier from a raise route reaches the BFF login URL.
+  it.each(['/transactions/TXN-123/dispute', '/transactions/TXN-123/dispute/review'])(
+    'returns to /transactions after a 401 on %s, so the transaction ID is not in returnUrl',
+    async (path) => {
+      failWith('/api/v1/transactions', 'unauthorized', 401);
+      const { router, wrapper } = setUp('linked', path);
+
+      renderHook(() => useGetApiV1Transactions(), { wrapper });
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe('/signed-out');
+      });
+      expect(router.state.location.search).toEqual({
+        reason: 'expired',
+        returnUrl: '/transactions',
+      });
+    },
+  );
 
   it('sends a 401 from a mutation to the session-ended screen too', async () => {
     serveAntiforgeryToken();

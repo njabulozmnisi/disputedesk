@@ -15,6 +15,14 @@ function shouldRetryRead(failureCount: number, error: Error): boolean {
 }
 
 /**
+ * "Sign in again" returns to the route the person was on, except from a raise screen: its path holds a transaction
+ * ID, which must not reach the BFF login URL, so it returns to the list (AD-31).
+ */
+function returnUrlAfterSignIn(location: { pathname: string; href: string }): string {
+  return location.pathname.startsWith('/transactions/') ? '/transactions' : location.href;
+}
+
+/**
  * The one QueryClient. Its caches handle the two errors that send the person elsewhere, once, for every query and
  * mutation: a 403 `linking-required` goes to /link, and a 401 while signed in goes to the session-ended screen.
  */
@@ -32,10 +40,9 @@ export function createQueryClient(router: Pick<AppRouter, 'navigate' | 'state'>)
       queryClient.setQueryData<SessionResponse>(getGetApiV1BffSessionQueryKey(), {
         state: 'anonymous',
       });
-      // "Sign in again" returns to the route the person was on.
       void router.navigate({
         to: '/signed-out',
-        search: { reason: 'expired', returnUrl: router.state.location.href },
+        search: { reason: 'expired', returnUrl: returnUrlAfterSignIn(router.state.location) },
       });
     }
   }

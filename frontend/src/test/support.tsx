@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { http, HttpResponse } from 'msw';
 
-import type { SessionState, TransactionResponse } from '@/api/generated/model';
+import type { DisputeResponse, SessionState, TransactionResponse } from '@/api/generated/model';
 import { problemType, type ProblemSlug } from '@/api/problems';
 import { createQueryClient } from '@/api/queryClient';
 import { createAppRouter } from '@/app/router';
@@ -56,16 +56,17 @@ export function serveTransactions(items: TransactionResponse[] = []) {
 
 /** A problem response (RFC 9457) as the API writes it: the full `type` URI, a status and a `traceId`. */
 export function problemResponse(
-  slug: ProblemSlug | 'unauthorized',
+  slug: ProblemSlug | 'unauthorized' | 'internal',
   status: number,
   traceId = 'trace-1',
+  extensions: Record<string, unknown> = {},
 ) {
   const type =
-    slug === 'unauthorized'
-      ? 'https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/unauthorized.md'
+    slug === 'unauthorized' || slug === 'internal'
+      ? `https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/${slug}.md`
       : problemType(slug);
   return HttpResponse.json(
-    { type, title: slug, status, traceId },
+    { type, title: slug, status, traceId, ...extensions },
     { status, headers: { 'content-type': 'application/problem+json' } },
   );
 }
@@ -92,6 +93,32 @@ export function makeRow(overrides: Partial<TransactionResponse> = {}): Transacti
     notDisputableReason: null,
     disputeId: null,
     customerStatus: null,
+    ...overrides,
+  };
+}
+
+/** The 201 body of a raised dispute, for the row's transaction. */
+export function makeDispute(overrides: Partial<DisputeResponse> = {}): DisputeResponse {
+  const row = makeRow();
+  return {
+    disputeId: 'D-1',
+    customerStatus: 'submitted',
+    outcome: null,
+    reason: 'unrecognised',
+    note: null,
+    transaction: {
+      transactionId: row.transactionId,
+      accountRef: row.accountRef,
+      accountLast4: row.accountLast4,
+      transactionDate: row.transactionDate,
+      description: row.description,
+      amount: row.amount,
+      maskedCard: row.maskedCard,
+    },
+    expectedAmount: null,
+    disputedAmount: row.amount,
+    createdAt: '2026-10-30T08:00:00Z',
+    timeline: [],
     ...overrides,
   };
 }

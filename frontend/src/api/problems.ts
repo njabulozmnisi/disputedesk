@@ -5,7 +5,15 @@ import { ApiError } from './mutator';
 const problemTypeBase = 'https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems';
 
 /** The slugs the SPA acts on. Add one when a screen needs to tell that problem apart. */
-export type ProblemSlug = 'linking-required' | 'core-banking-unavailable';
+export type ProblemSlug =
+  | 'linking-required'
+  | 'core-banking-unavailable'
+  | 'validation'
+  | 'not-found'
+  | 'already-disputed'
+  | 'not-disputable'
+  | 'idempotency-in-progress'
+  | 'idempotency-mismatch';
 
 export function problemType(slug: ProblemSlug): string {
   return `${problemTypeBase}/${slug}.md`;
@@ -18,4 +26,13 @@ export function isProblem(error: unknown, slug: ProblemSlug): boolean {
 /** The reference to quote to the bank, when the error is a response whose problem body carried one. */
 export function traceIdOf(error: ApiError | TypeError): string | undefined {
   return error instanceof ApiError ? error.problem?.traceId : undefined;
+}
+
+/** A string extension member of the problem body (RFC 9457 section 3.2), such as `disputeId` or `reason`. */
+export function problemExtension(
+  error: ApiError,
+  name: 'disputeId' | 'reason',
+): string | undefined {
+  const value = (error.problem as Record<string, unknown> | undefined)?.[name];
+  return typeof value === 'string' ? value : undefined;
 }
