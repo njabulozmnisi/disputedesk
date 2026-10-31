@@ -93,6 +93,8 @@ Every PRD §6.2 bullet, every "Operations features" sub-bullet, every row of the
 | Input (7.4 security re-run I1): layer-2 spoofing on the Compose network | P59 | Only the per-IP linking limit is at stake; the per-login limit holds |
 | Input (7.3 security F1): COOP not checked in CI | P60 | ZAP's 90004 line also hides a dropped Cross-Origin-Opener-Policy; `infra/tests/smoke.sh` checks it outside CI |
 | Input (7.5 security S7.5-L1): deploy secrets readable by the containers | P61 | The Api and the collector hold the instance role, which can decrypt every deploy secret |
+| Input (7.5 Security workflow, Trivy AWS-0104, human decision): instance egress | P62 | HTTPS out to any address; no NAT gateway, proxy or VPC endpoints |
+| Input (7.5 Security workflow, Trivy AWS-0132, human decision): state bucket encryption | P63 | S3-managed keys, not a customer-managed KMS key |
 | Input (7.4 pre-build security S7.4-1, human decision): three distributions | P47 | Mailpit has its own distribution; all three disable caching |
 | Decision 2026-10-27 (standards audit): migrations; deferred operations stories | P28 | No operations story is deferred: 5.3 and 5.4 are in v1's scope (initiative scope decision 2026-10-27) |
 | Decision 2026-10-27 (2.7 security review): problem `type` URLs | P39 | Accepted risk under the GitHub namespace |
@@ -357,3 +359,11 @@ ZAP's baseline keys its rules by plugin ID, so the triaged `90004 IGNORE` line (
 ### P61. Deploy secrets apart from the containers' credentials
 
 On the AWS instance the internet-facing Api and the collector reach instance metadata (S7.4-8), so they hold the instance role, and that role reads and decrypts every deploy secret under the SSM path, the RDS master password and Zitadel's master key included (story 7.5 security S7.5-L1). Production gives the containers their own credentials and keeps the deploy secrets from them: an RDS-managed master password in Secrets Manager that the instance role cannot read, a key-ring delivery that needs no metadata access, or deleting the master password parameter after the first init. The same instance's `DOCKER-USER` exceptions are by source address, which a container with `NET_RAW` can spoof (S7.5-L2; see P59). *Why it waits:* the demo account is dedicated and holds only synthetic data, and the README says plainly what a compromise of the Api or the collector exposes.
+
+### P62. Instance egress
+
+The AWS instance's security group allows HTTPS out to any address (Trivy AWS-0104), because the instance sits in a public subnet with no NAT gateway or proxy and pulls from GHCR, reaches SSM, CloudWatch, X-Ray and KMS, and calls CloudFront for the identity origin; PostgreSQL out goes only to the database's group. Production sends AWS traffic through interface VPC endpoints and the rest through an egress proxy with an allow-list of host names (GHCR, the release downloads), and drops the open rule. *Why it waits:* each interface endpoint costs about USD 7 a month, GHCR has no fixed addresses, and the demo account is dedicated and holds only synthetic data (human decision, 2026-10-31).
+
+### P63. State bucket encryption key
+
+The Terraform state bucket uses S3-managed encryption (SSE-S3; Trivy AWS-0132), which meets story 7.5's "default encryption" but gives no key policy and no CloudTrail record of each decrypt. The state holds the origin-verify secret and the values Terraform writes to SSM. Production uses SSE-KMS with a customer-managed key whose policy admits only the deploy and operator roles. *Why it waits:* access to the bucket is already limited by IAM, public access is blocked and TLS is required, on a dedicated demo account (human decision, 2026-10-31).
