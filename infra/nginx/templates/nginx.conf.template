@@ -37,7 +37,11 @@ http {
   uwsgi_temp_path       /tmp/uwsgi_temp;
   scgi_temp_path        /tmp/scgi_temp;
 
-  upstream api           { server api:8080;           keepalive 16; }
+  # The api is looked up at run time (resolve), through Docker's embedded DNS, not at start, so the gateway starts
+  # before the api: the api waits for this gateway, whose auth.localhost alias its issuer lookups need
+  # (docker-compose.yml). Until the api starts, nginx logs that it could not be resolved.
+  resolver 127.0.0.11 valid=10s;
+  upstream api           { zone api 64k; server api:8080 resolve; keepalive 16; }
   upstream zitadel_api   { server zitadel:8080;       keepalive 16; }
   upstream zitadel_login { server zitadel-login:3000; keepalive 16; }
 

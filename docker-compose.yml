@@ -267,6 +267,10 @@ services:
       redpanda-topics: { condition: service_completed_successfully }
       provision: { condition: service_completed_successfully }
       core-banking: { condition: service_healthy }
+      # The issuer's auth.localhost must reach the gateway's alias from the api's first lookup. Before the alias
+      # exists, Docker's DNS passes the name to the host's resolver, which may answer loopback for *.localhost
+      # (RFC 6761), and the api would fetch the discovery document from itself.
+      gateway: { condition: service_healthy }
     # Longer than the host's 30-second ShutdownTimeout, so an in-flight request or linking job can finish (AD-25).
     stop_grace_period: 35s
     mem_limit: 512m
@@ -343,9 +347,8 @@ services:
       timeout: 5s
       retries: 20
     depends_on:
-      # nginx resolves its upstreams at start, so they must exist. The api only needs to be started:
-      # once its readiness probes Zitadel through this gateway, waiting for healthy would deadlock.
-      api: { condition: service_started }
+      # nginx resolves these upstreams at start, so they must exist. It finds the api at run time instead, because
+      # the api starts after this gateway (see the api's depends_on).
       zitadel: { condition: service_healthy }
       zitadel-login: { condition: service_healthy }
       aspire-dashboard: { condition: service_started }

@@ -254,6 +254,17 @@ public partial class PlatformScriptTests
     }
 
     [Fact]
+    public void Compose_Api_StartsAfterTheGatewayThatHoldsTheIssuerAlias()
+    {
+        // Before the gateway's auth.localhost alias exists, Docker's DNS passes the name to the host's resolver, which may
+        // answer loopback for *.localhost (RFC 6761): the api then fetches the issuer's discovery document from itself.
+        // So the api waits for the gateway, and the gateway, which cannot wait for the api too, finds it at run time.
+        Assert.Contains("      gateway: { condition: service_healthy }\n", ComposeService("api"), StringComparison.Ordinal);
+        Assert.DoesNotContain("      api: {", ComposeService("gateway"), StringComparison.Ordinal);
+        Assert.Contains("server api:8080 resolve;", GatewayTemplate(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void GatewayTemplate_IdentityOriginAccessLog_RecordsThePathWithoutTheQuery()
     {
         // 6.6 AC2 (AD-20, ASVS 5.0 V14.2.1): the end-session GET carries the ID token as id_token_hint in its query.
