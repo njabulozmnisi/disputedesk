@@ -99,8 +99,8 @@ so the SLA sweep escalates it a few minutes after `docker compose up --wait` ret
 The seed's dates are relative to start-up. After a day boundary, or to start again from the seed, reset with
 `docker compose down -v` (it deletes every volume; see the [runbook](docs/runbook.md)).
 
-An AWS deployment from `infra/terraform/` (story 7.5) uses the same fixture logins and published passwords, and holds
-only synthetic data.
+An AWS deployment from `infra/terraform/` ([its README](infra/terraform/README.md)) uses the same fixture logins and
+published passwords, and holds only synthetic data.
 
 ## Operations
 

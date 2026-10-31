@@ -125,6 +125,10 @@ jobs:
       - name: AWS gateway
         run: infra/deploy/aws/gateway.test.sh
 
+      # Story 7.5: the instance's deploy script with aws, curl, docker, iptables and systemctl stubbed.
+      - name: AWS deploy script
+        run: infra/deploy/aws/deploy.test.sh
+
       # Story 2.6. The expected values are DESIGN.md's (Theme file and hosted-login theming), written here rather than
       # re-read from tokens.css, so a changed token fails until DESIGN.md and this list agree. Case is ignored.
       - name: Hosted-login label policy is generated from tokens.css
@@ -182,6 +186,57 @@ jobs:
           done
           ! grep -qE 'url\([^)]*wordmark' frontend/src/theme/tokens.css || { echo "::error::tokens.css loads a wordmark"; exit 1; }
           echo "ok  tokens.css names both wordmarks and loads neither"
+
+  # Story 7.5 (AD-28): the AWS dev environment's Terraform, checked with no AWS credentials and no AWS call. Plans and
+  # applies run only from the maintainer's machine (infra/terraform/README.md); here every test plans against mocked
+  # providers.
+  terraform:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Formatting
+        run: terraform fmt -check -recursive -diff infra/terraform
+
+      # -backend=false: no state bucket is read. The providers come from the committed lock files.
+      - name: Validate and test (mocked plans)
+        run: |
+          for root in infra/terraform/bootstrap infra/terraform/envs/dev; do
+            echo "== $root"
+            terraform -chdir="$root" init -backend=false -input=false -lockfile=readonly
+            terraform -chdir="$root" validate
+            terraform -chdir="$root" test
+          done
+
+      # What a plan cannot show, or the dev environment rules out (AD-28): prevent_destroy, deletion protection turned
+      # on, a NAT gateway, a load balancer, an IAM user or access key.
+      - name: Nothing that blocks destroy or that AD-28 rules out
+        run: |
+          if grep -rnE 'prevent_destroy|deletion_protection[[:space:]]*=[[:space:]]*true|resource "aws_(nat_gateway|lb|alb|elb|iam_user|iam_access_key)"' \
+            infra/terraform --include='*.tf'; then
+            echo "::error::infra/terraform holds one of the lines above."
+            exit 1
+          fi
+          echo "None found."
+
+      # The instance's rules are inline in its security group, where the compute test reads them; a standalone rule
+      # resource would add to that group unseen. Only the database's one ingress rule is standalone.
+      - name: Standalone security-group rules only in the database module
+        run: |
+          if grep -rnE 'resource "aws_(security_group_rule|vpc_security_group_(ingress|egress)_rule)"' \
+            infra/terraform --include='*.tf' | grep -v '^infra/terraform/modules/database/main\.tf:'; then
+            echo "::error::A standalone security-group rule outside infra/terraform/modules/database/main.tf."
+            exit 1
+          fi
+          echo "None outside the database module."
 
   floor-guard:
     runs-on: ubuntu-24.04

@@ -92,6 +92,7 @@ Every PRD §6.2 bullet, every "Operations features" sub-bullet, every row of the
 | Input (7.4 security F1): collector image CVE | P58 | Not reachable in this configuration; no fixed release yet |
 | Input (7.4 security re-run I1): layer-2 spoofing on the Compose network | P59 | Only the per-IP linking limit is at stake; the per-login limit holds |
 | Input (7.3 security F1): COOP not checked in CI | P60 | ZAP's 90004 line also hides a dropped Cross-Origin-Opener-Policy; `infra/tests/smoke.sh` checks it outside CI |
+| Input (7.5 security S7.5-L1): deploy secrets readable by the containers | P61 | The Api and the collector hold the instance role, which can decrypt every deploy secret |
 | Input (7.4 pre-build security S7.4-1, human decision): three distributions | P47 | Mailpit has its own distribution; all three disable caching |
 | Decision 2026-10-27 (standards audit): migrations; deferred operations stories | P28 | No operations story is deferred: 5.3 and 5.4 are in v1's scope (initiative scope decision 2026-10-27) |
 | Decision 2026-10-27 (2.7 security review): problem `type` URLs | P39 | Accepted risk under the GitHub namespace |
@@ -352,3 +353,7 @@ In AWS the api trusts forwarded headers only from the gateway's pinned address, 
 ### P60. Cross-origin headers checked in CI
 
 ZAP's baseline keys its rules by plugin ID, so the triaged `90004 IGNORE` line (COEP and CORP) also hides a dropped `Cross-Origin-Opener-Policy`, which the gateway sets today; only `infra/tests/smoke.sh` and the regression spec `e2e/tests/scalar-reference.spec.ts` check it, and neither runs in CI (story 7.3 security F1). Production adds a header assertion to the CI journeys, or uses ZAP's Automation Framework, whose alert filters match alert references. *Why it waits:* the header is set by one template the smoke check covers, and a change to it shows in review.
+
+### P61. Deploy secrets apart from the containers' credentials
+
+On the AWS instance the internet-facing Api and the collector reach instance metadata (S7.4-8), so they hold the instance role, and that role reads and decrypts every deploy secret under the SSM path, the RDS master password and Zitadel's master key included (story 7.5 security S7.5-L1). Production gives the containers their own credentials and keeps the deploy secrets from them: an RDS-managed master password in Secrets Manager that the instance role cannot read, a key-ring delivery that needs no metadata access, or deleting the master password parameter after the first init. The same instance's `DOCKER-USER` exceptions are by source address, which a container with `NET_RAW` can spoof (S7.5-L2; see P59). *Why it waits:* the demo account is dedicated and holds only synthetic data, and the README says plainly what a compromise of the Api or the collector exposes.

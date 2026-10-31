@@ -98,7 +98,7 @@ Needs: epic 2 (the themed hosted login for UJ-1); epic 3 (dispute screens for UJ
 | 7.7 | [README, runbook and onboarding](epic-7-release/tickets/story-7.7-readme-runbook-and-onboarding.md) | docs | done |
 | 7.11 | [SPA skips browser tracing when built without it](epic-7-release/tickets/story-7.11-spa-skips-browser-tracing-when-built-without-it.md) | frontend | done |
 | 7.4 | [AWS Compose override and OpenTelemetry collector](epic-7-release/tickets/story-7.4-aws-compose-override-and-opentelemetry-collector.md) | backend | done |
-| 7.5 | [Terraform dev environment and OIDC deploy](epic-7-release/tickets/story-7.5-terraform-dev-environment-and-oidc-deploy.md) | backend | planned |
+| 7.5 | [Terraform dev environment and OIDC deploy](epic-7-release/tickets/story-7.5-terraform-dev-environment-and-oidc-deploy.md) | backend | done |
 | 7.10 | [Production readiness review](epic-7-release/tickets/story-7.10-production-readiness-review.md) | supervisor | planned |
 
 Build-order constraint (decided 2026-10-30): 7.1 starts once 6.4 and 3.12 have merged; 7.2 follows 7.1 and 7.3 follows 7.2 (they share `e2e/playwright.config.ts`, and CI runs the journeys 7.1 and 7.2 add). 7.6 waits on nothing and 7.11 waits only on 3.11, so both may build beside the QA stories; 7.7 follows 7.3 and 5.3. 7.4 follows 7.3 and 7.11, and 7.5 follows 7.4 (one lane, B). 7.10 runs last, after every other epic 7 story. No AWS command is run in this epic: the account does not exist, so 7.5 closes on fmt, validate and mocked-provider plans.

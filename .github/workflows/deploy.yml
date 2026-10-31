@@ -1,0 +1,121 @@
+name: Deploy (dev)
+
+# Deploys a commit of main to the AWS dev environment (story 7.5, AD-28), by hand only. Rollback is this workflow with
+# an earlier SHA. infra/terraform/README.md sets the four repository variables from Terraform's outputs.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: The full 40-character commit SHA on main to deploy (its images must be published).
+        required: true
+        type: string
+
+# Least privilege: nothing for the workflow as a whole; the job asks for what it needs.
+permissions: {}
+
+# Two deploys never interleave on the one instance; a second one waits for the first to finish.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # The role's trust policy accepts only main's subject, and no environment: is set, since one would change it
+    # (GitHub, "Configuring OpenID Connect in Amazon Web Services").
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    # The document's 1800-second step, plus its delivery and the digest lookups.
+    timeout-minutes: 40
+    permissions:
+      id-token: write # the OIDC token the role is assumed with
+      contents: read
+    # Inputs reach the scripts only as environment variables, never as ${{ }} inside run: (GitHub, "Security hardening
+    # for GitHub Actions", script injection).
+    env:
+      SHA: ${{ inputs.sha }}
+    steps:
+      - name: Check the SHA
+        run: |
+          if [[ ! $SHA =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::sha must be a full 40-character lower-case commit SHA."
+            exit 1
+          fi
+
+      # Anonymous lookups, with no docker login: a package that is still private fails here, before anything is sent
+      # (docker buildx imagetools inspect). Each image must be the one story 7.3 published for this SHA: tag sha- plus
+      # the first 12 characters, and its revision label the full SHA.
+      - name: Resolve the five image digests
+        id: images
+        run: |
+          for name in api worker gateway core-banking zitadel; do
+            image="ghcr.io/njabulozmnisi/disputedesk-$name"
+            digest=$(docker buildx imagetools inspect "$image:sha-${SHA::12}" --format '{{json .Manifest}}' | jq -r .digest)
+            if [[ ! $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::$image:sha-${SHA::12} has no digest."
+              exit 1
+            fi
+            # A single image's config, or the linux/amd64 one of an index.
+            revision=$(docker buildx imagetools inspect "$image@$digest" --format '{{json .Image}}' \
+              | jq -r '(.config // .["linux/amd64"].config).Labels["org.opencontainers.image.revision"] // empty')
+            if [[ $revision != "$SHA" ]]; then
+              echo "::error::$image@$digest was built from '$revision', not $SHA."
+              exit 1
+            fi
+            echo "$name=$image@$digest" >> "$GITHUB_OUTPUT"
+            echo "ok  $image@$digest"
+          done
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: deploy-dev-${{ github.run_id }}
+
+      # SSM Run Command accepts the command at once and runs it later, so the job waits for the invocation's final
+      # status and fails unless it is Success (AWS Systems Manager, "Understanding command statuses";
+      # GetCommandInvocation). `aws ssm wait command-executed` gives up after 100 seconds, so the job polls itself, for
+      # up to the document's 1800 seconds plus the 60-second delivery timeout.
+      - name: Run the deploy document and wait for its result
+        env:
+          INSTANCE_ID: ${{ vars.DEPLOY_INSTANCE_ID }}
+          DOCUMENT_NAME: ${{ vars.DEPLOY_DOCUMENT_NAME }}
+          API_IMAGE: ${{ steps.images.outputs.api }}
+          WORKER_IMAGE: ${{ steps.images.outputs.worker }}
+          GATEWAY_IMAGE: ${{ steps.images.outputs.gateway }}
+          CORE_BANKING_IMAGE: ${{ steps.images.outputs.core-banking }}
+          ZITADEL_IMAGE: ${{ steps.images.outputs.zitadel }}
+        run: |
+          parameters=$(jq -n --arg sha "$SHA" --arg api "$API_IMAGE" --arg worker "$WORKER_IMAGE" \
+            --arg gateway "$GATEWAY_IMAGE" --arg coreBanking "$CORE_BANKING_IMAGE" --arg zitadel "$ZITADEL_IMAGE" \
+            '{sha: [$sha], apiImage: [$api], workerImage: [$worker], gatewayImage: [$gateway],
+              coreBankingImage: [$coreBanking], zitadelImage: [$zitadel]}')
+          # --timeout-seconds: the command is dropped if the instance has not started it within 60 seconds.
+          command_id=$(aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name "$DOCUMENT_NAME" \
+            --parameters "$parameters" --timeout-seconds 60 --comment "deploy $SHA" \
+            --query Command.CommandId --output text)
+          echo "Sent command $command_id to $INSTANCE_ID."
+
+          deadline=$((SECONDS + 1800 + 60))
+          status=Pending
+          while [[ $status == Pending || $status == InProgress || $status == Delayed ]]; do
+            if (( SECONDS > deadline )); then
+              echo "::error::The deploy command $command_id is still $status after 1860 seconds."
+              exit 1
+            fi
+            sleep 10
+            # Right after send-command the invocation may not exist yet; that one error means "not started".
+            if ! status=$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+              --query Status --output text 2> "$RUNNER_TEMP/invocation-error"); then
+              grep -q InvocationDoesNotExist "$RUNNER_TEMP/invocation-error" || { cat "$RUNNER_TEMP/invocation-error"; exit 1; }
+              status=Pending
+            fi
+            echo "$(date -u +%H:%M:%S) $status"
+          done
+
+          if [[ $status != Success ]]; then
+            echo "::error::The deploy command $command_id ended $status. Its standard error (deploy.sh never prints a secret):"
+            aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+              --query StandardErrorContent --output text
+            exit 1
+          fi
+          echo "Deployed $SHA."

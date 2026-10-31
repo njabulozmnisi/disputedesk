@@ -1,7 +1,8 @@
 # Runbook
 
 These procedures are for the local Compose stack only. An AWS deployment's database is private and is not reached
-this way. Run every command from the repo root, with the stack up (`docker compose up --wait`).
+this way ([infra/terraform/README.md](../infra/terraform/README.md) covers the AWS environment). Run every command
+from the repo root, with the stack up (`docker compose up --wait`).
 
 ## 1. Release a `Failed` outbox row
 
