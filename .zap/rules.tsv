@@ -1,0 +1,5 @@
+# ZAP baseline rules (zap-baseline.py -c). Tab separated: <rule ID>	IGNORE	<reason>. Each line is a triaged alert;
+# a new line needs its reason and a reviewer's approval in its pull request (story 7.3).
+10049	IGNORE	Storable and Cacheable Content: the SPA shell and hashed assets are public static files; triaged in docs/verification/2.5-qa.md (Q1, Cache-Control)
+10109	IGNORE	Modern Web Application: informational, ZAP has detected the SPA the gateway serves; triaged in docs/verification/2.5-qa.md
+90004	IGNORE	Insufficient Site Isolation Against Spectre Vulnerability: zap-baseline keys by plugin ID, so this hides 90004-1 CORP, 90004-2 COEP and 90004-3 COOP. CORP and COEP are triaged in docs/verification/2.5-qa.md and docs/verification/7.1-qa.md (the CSP allows only same-origin resources and nothing needs cross-origin isolation); COOP is set by the gateway (infra/nginx/templates/security-headers.conf.template) and checked by infra/smoke.sh outside CI

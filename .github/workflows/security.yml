@@ -126,14 +126,19 @@ jobs:
         run: trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 1 --ignorefile .github/trivyignore.yaml .
 
       # The gateway builds from the repository root, so its one build reads frontend/ and infra/nginx/.
-      - name: Build the api, worker and gateway images
+      # The five images ci.yml's publish job pushes, from the same targets (api-local and worker-local, P57).
+      - name: Build the api, worker, core-banking, gateway and provision images
         run: |
-          docker build -t disputedesk-api:ci backend
-          docker build -t disputedesk-worker:ci --target worker backend
+          docker build -t disputedesk-api:ci --target api-local backend
+          docker build -t disputedesk-worker:ci --target worker-local backend
+          docker build -t disputedesk-core-banking:ci --target core-banking backend
           docker build -t disputedesk-gateway:ci -f infra/nginx/Dockerfile .
+          docker build -t disputedesk-provision:ci infra/zitadel/provision
 
       - name: Image scan
         run: |
           trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-api:ci
           trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-worker:ci
+          trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-core-banking:ci
           trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-gateway:ci
+          trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-provision:ci

@@ -91,6 +91,7 @@ Every PRD §6.2 bullet, every "Operations features" sub-bullet, every row of the
 | Decision 2026-10-30 (human, 7.4 build): published api and worker images | P57 | They carry a busybox probe for the Compose health checks |
 | Input (7.4 security F1): collector image CVE | P58 | Not reachable in this configuration; no fixed release yet |
 | Input (7.4 security re-run I1): layer-2 spoofing on the Compose network | P59 | Only the per-IP linking limit is at stake; the per-login limit holds |
+| Input (7.3 security F1): COOP not checked in CI | P60 | ZAP's 90004 line also hides a dropped Cross-Origin-Opener-Policy; `infra/smoke.sh` checks it outside CI |
 | Input (7.4 pre-build security S7.4-1, human decision): three distributions | P47 | Mailpit has its own distribution; all three disable caching |
 | Decision 2026-10-27 (standards audit): migrations; deferred operations stories | P28 | No operations story is deferred: 5.3 and 5.4 are in v1's scope (initiative scope decision 2026-10-27) |
 | Decision 2026-10-27 (2.7 security review): problem `type` URLs | P39 | Accepted risk under the GitHub namespace |
@@ -347,3 +348,7 @@ The pinned collector image (`otel/opentelemetry-collector-contrib:0.164.0`) carr
 ### P59. Container network capabilities
 
 In AWS the api trusts forwarded headers only from the gateway's pinned address, but containers keep Docker's default `NET_RAW` capability, so a compromised container on the Compose network could try ARP spoofing of that address (story 7.4 security re-run I1). Production drops `NET_RAW` on the internet-facing services (`cap_drop`), or runs each service in its own network namespace under an orchestrator. *Why it waits:* the only gain would be getting past the per-IP linking limit, and the per-login limit and the OTP lockout still hold.
+
+### P60. Cross-origin headers checked in CI
+
+ZAP's baseline keys its rules by plugin ID, so the triaged `90004 IGNORE` line (COEP and CORP) also hides a dropped `Cross-Origin-Opener-Policy`, which the gateway sets today; only `infra/smoke.sh` and the regression spec `e2e/tests/scalar-reference.spec.ts` check it, and neither runs in CI (story 7.3 security F1). Production adds a header assertion to the CI journeys, or uses ZAP's Automation Framework, whose alert filters match alert references. *Why it waits:* the header is set by one template the smoke check covers, and a change to it shows in review.

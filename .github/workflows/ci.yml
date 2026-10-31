@@ -207,3 +207,116 @@ jobs:
             exit 1
           fi
           echo "No forbidden terms."
+
+  # Story 7.3 (AD-32). The runner's fresh checkout and Docker daemon make the stack fresh, so customer D starts
+  # unlinked (AD-30). Only the journeys run here; the regression project is not run in CI.
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - run: npm ci
+        working-directory: e2e
+
+      - run: npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      # --wait fails on a service that exits or turns unhealthy, and at the 600-second limit.
+      - name: Start the stack
+        run: docker compose up --build --wait --wait-timeout 600
+
+      # forbidOnly fails a committed test.only on CI; retries stay 0.
+      - run: npm run journeys
+        working-directory: e2e
+
+      # Scope: an unauthenticated, passive scan of what the spider reaches from the gateway origin; the signed-in
+      # screens are covered by the journeys above and per-story QA. ZAP's exit status is the gate (1 a FAIL, 2 a WARN,
+      # 3 an incomplete scan): every alert not marked IGNORE, with its reason, in .zap/rules.tsv fails the job.
+      # ZAP writes its plan into /zap/wrk as its own user, so it gets a writable copy rather than the checkout.
+      - name: ZAP baseline
+        run: |
+          mkdir "$RUNNER_TEMP/zap"
+          cp .zap/rules.tsv "$RUNNER_TEMP/zap/"
+          chmod a+rwx "$RUNNER_TEMP/zap"
+          docker run --rm --network host -v "$RUNNER_TEMP/zap:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:2.17.0@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
+            zap-baseline.py -t http://localhost:8080 -c rules.tsv -m 2 -T 10
+
+      - name: Stack diagnostics
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --tail 200
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v
+
+  # Story 7.3 (AD-32): the only job that can write packages, on main only and only after every other CI job passes.
+  # Each image is built, scanned and only then pushed, so the pushed bytes are the scanned bytes.
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend, platform, floor-guard, e2e]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # The same Trivy version and SHA-256 pin as security.yml; change both together.
+      TRIVY_VERSION: 0.76.1
+      TRIVY_SHA256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
+      TRIVY_NO_PROGRESS: "true" # no download progress bars in the log
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Trivy
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/trivy.tar.gz" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  $RUNNER_TEMP/trivy.tar.gz" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP/bin" trivy
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      # Each image is tagged sha-<the first 12 characters of the commit>, never latest. A failed build, scan or push
+      # stops the step before the next image.
+      - name: Build, scan and push the five images
+        run: |
+          publish(){ # name context [options passed on to docker build]
+            image="ghcr.io/njabulozmnisi/disputedesk-$1:sha-${GITHUB_SHA::12}"
+            docker build -t "$image" \
+              --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+              --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              "${@:3}" "$2"
+            trivy image --image-src docker --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 "$image"
+            docker push "$image"
+            digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image")
+            revision=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
+            echo "| $1 | \`$digest\` | \`$revision\` |" >> "$GITHUB_STEP_SUMMARY"
+          }
+          printf '| Image | Digest | Revision |\n|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+          # api and worker are the -local targets: they carry the probe Compose's health checks call (P57).
+          publish api          backend --target api-local
+          publish worker       backend --target worker-local
+          publish core-banking backend --target core-banking
+          publish gateway      .       -f infra/nginx/Dockerfile
+          publish provision    infra/zitadel/provision
+
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io
