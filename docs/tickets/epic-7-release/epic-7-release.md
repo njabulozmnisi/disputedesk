@@ -3,7 +3,7 @@ id: 7
 type: epic
 title: "Journeys proven on the stack, deployed and documented"
 parent: initiative-disputedesk
-covers: [R28, R32, R33, R34, R35, R36, R38, R39, R40]
+covers: [R28, R31, R32, R33, R34, R35, R36, R38, R39, R40]
 sources: []
 companions: []
 after: []
