@@ -3,7 +3,7 @@ import { request as httpRequest } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { fixtureLogin, queryDatabase, topicRecords } from './support';
+import { fixtureLogin, holdsCode, otpCodesSentTo, queryDatabase, telemetryValues, topicRecords } from './support';
 
 // Story 6.1: POST /api/v1/linking/start, through the real gateway, BFF, API, job, database (qa_readonly) and Mailpit.
 // Signed in as customer C's login, the one fixture login with no link; customer A's login is linked (the 403 case).
@@ -339,10 +339,13 @@ test('criterion 7: every start audit row carries the connection address, not a f
   expect(sql(`select count(*) from "AuditLogEntries" where "Action" in ('SignIn', 'SignOut') and "ClientIp" is not null`)).toBe('0');
 });
 
+const otpsSeen = new Set<string>();
+
 test('criterion 8: no ID number, account number, cellphone or OTP in any table, the Api logs or the topic; no event is emitted by linking', async () => {
   const smsToD = await smsTo(customerD.cellphone);
   const otps = (await Promise.all(smsToD.map((message) => smsText(message.ID)))).map((text) => text.match(/\b(\d{6})\b/)?.[1]).filter(Boolean) as string[];
   expect(otps.length).toBeGreaterThan(0);
+  otps.forEach((otp) => otpsSeen.add(otp));
   const secrets = [
     ...[customerA, customerC, customerD].flatMap((entry) => [entry.idNumber, entry.cellphone, entry.cellphone.replace('+', '')]),
     ...(fixture.customers as FixtureCustomer[]).flatMap((entry) => entry.accounts.map((account) => account.accountNumber)),
@@ -352,18 +355,20 @@ test('criterion 8: no ID number, account number, cellphone or OTP in any table, 
   // Every row of every table as JSON. The bank's own record is not here: the stub keeps it in the core-banking container.
   const tables = sql(`select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE' order by 1`).split('\n').filter(Boolean);
   expect(tables).toContain('LinkingChallenges');
+  // The six-digit OTPs need a non-hex boundary: an audit row's TraceId holds six digits by chance (5.4 QA F2).
+  const holds = (text: string, secret: string) => (otps.includes(secret) ? holdsCode(text, secret) : text.includes(secret));
   for (const table of tables) {
     const dump = sql(`select coalesce(string_agg(row_to_json(t)::text, E'\\n'), '') from "${table}" t`);
-    for (const secret of secrets) expect(dump.includes(secret), `${table} holds a secret`).toBe(false);
+    for (const secret of secrets) expect(holds(dump, secret), `${table} holds a secret`).toBe(false);
   }
 
   const logs = apiLogsSinceStart();
-  for (const secret of secrets) expect(logs.includes(secret), 'api logs hold a secret').toBe(false);
+  for (const secret of secrets) expect(holds(logs, secret), 'api logs hold a secret').toBe(false);
   // The warning line for a full queue is the only linking log line allowed to hold anything; none is expected here.
   expect(logs).not.toMatch(/StartLinkingRequest\s*\{/);
 
   const topic = JSON.stringify(topicRecords());
-  for (const secret of secrets) expect(topic.includes(secret), 'topic holds a secret').toBe(false);
+  for (const secret of secrets) expect(holds(topic, secret), 'topic holds a secret').toBe(false);
   expect(topicRecords().length).toBe(topicBaseline);
   expect(mailBaseline).toBeGreaterThanOrEqual(0);
 });
@@ -379,9 +384,9 @@ test('criterion 8: no ID number, account number, cellphone or OTP in any table, 
 // throwaway logins in Zitadel (the IAM_OWNER token is read from its volume and never printed) and signs each in.
 // The "held job" of the story's parallel test is held here with Postgres: a session-level advisory lock on D's key pair
 // (the same key the job's transaction takes) keeps every D job waiting on its first statement.
-//   Full queue and budget need a small queue and a short budget, set outside the tree:
+//   Full queue and budget need a small queue and the budget the Api runs with (the 10 s default), set from outside:
 //   E2E_LINKING_QUEUE_CAPACITY (the Api's Linking:QueueCapacity) and E2E_LINKING_BUDGET_SECONDS (Linking:Budget);
-//   those two tests skip when the variables are not set.
+//   e2e/run-regression.sh sets both; those two tests skip when the variables are not set.
 // ---------------------------------------------------------------------------------------------------------------------
 const queueCapacity = Number(process.env.E2E_LINKING_QUEUE_CAPACITY ?? 0);
 const budgetSeconds = Number(process.env.E2E_LINKING_BUDGET_SECONDS ?? 0);
@@ -492,13 +497,16 @@ test.describe('story 6.5', () => {
     try {
       const holder = holdCustomerLock();
       await untilLockHeld();
-      const results = await Promise.all(pool.slice(0, 6).map((login) => startAt(login, details(customerD))));
-      for (const result of results) {
+      // Four starts at once, then the two that wait in the queue once the four jobs have left it: sent all six together, the
+      // channel (capacity 2) can still hold the first ones when the last arrive, and the sixth gets a 429 (seen in e2e-fix run E).
+      const first = await Promise.all(pool.slice(0, jobsAtOnce).map((login) => startAt(login, details(customerD))));
+      await until('4 jobs waiting on the lock', () => lockWaiters() === jobsAtOnce);
+      const queued = await Promise.all(pool.slice(jobsAtOnce, 6).map((login) => startAt(login, details(customerD))));
+      for (const result of [...first, ...queued]) {
         expect(result.status).toBe(202);
         expect(result.text).toBe('');
       }
       // Every job reaches the lock (4 at once; the other 2 wait in the queue) and none has counted or claimed yet.
-      await until('4 jobs waiting on the lock', () => lockWaiters() === jobsAtOnce);
       expect(sendsToD(), 'nothing is claimed while the lock is held').toBe(2);
       await holder.release();
       await until('6 job stops', () => auditSummary(mark).filter((row) => !row.startsWith('LinkingStart|')).length === 6);
@@ -652,8 +660,13 @@ test.describe('story 6.5', () => {
     const spans = await (await fetch(`${dashboard}/spans?limit=5000`)).text();
     const logs = await (await fetch(`${dashboard}/logs?limit=5000`)).text();
     expect(spans.length).toBeGreaterThan(1000);
-    for (const [name, text] of [['api logs', apiLogsSinceStart()], ['spans', spans], ['dashboard logs', logs], ['topic', JSON.stringify(topicRecords())]] as const) {
+    // The OTPs sent to D: attribute and event values only, with a non-hex boundary (hex ids and timestamps hold them by chance).
+    // Mailpit was restarted by the 6.5 tests, so the codes the criterion 8 test read earlier are kept in `otpsSeen`.
+    const codes = [...new Set([...otpsSeen, ...(await otpCodesSentTo(customerD.cellphone))])];
+    expect(codes.length).toBeGreaterThan(0);
+    for (const [name, text, scanned] of [['api logs', apiLogsSinceStart(), apiLogsSinceStart()], ['spans', spans, telemetryValues(spans)], ['dashboard logs', logs, telemetryValues(logs)], ['topic', JSON.stringify(topicRecords()), JSON.stringify(topicRecords())]] as const) {
       for (const secret of secrets) expect(text.includes(secret), `${name} holds a secret`).toBe(false);
+      for (const code of codes) expect(holdsCode(scanned, code), `${name} holds an OTP`).toBe(false);
     }
     expect(spans).toContain('linking job');
   });

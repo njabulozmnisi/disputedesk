@@ -120,6 +120,30 @@ test.afterAll(async () => {
   await customerB.close();
 });
 
+type OtlpAttribute = { key: string; value: { stringValue?: string } };
+type OtlpSpan = { name: string; kind: number; startTimeUnixNano: string; status?: { code?: number }; attributes?: OtlpAttribute[] };
+type OtlpResourceSpans = { resource: { attributes: OtlpAttribute[] }; scopeSpans: { spans: OtlpSpan[] }[] };
+
+/**
+ * How many producer send spans of the Worker started between `from` and `until` (ISO instants) ended with status Error (OTLP
+ * status code 2) and carry `error.type`, from the dashboard's telemetry API. Only the relay's own span counts: kind PRODUCER
+ * (OTLP span kind 4), named `send disputedesk.disputes` (OutboxRelay.SendAsync), which sets `error.type` to the Kafka error
+ * code when the send fails. A failed send is not always on one of the spec's own rows: a row raised by the spec before, still
+ * Pending when the broker stops, is the one the relay may be sending when the outage begins.
+ */
+async function failedProducerSendSpansBetween(from: string, until: string): Promise<number> {
+  const body = await (await fetch(`${dashboard}/api/telemetry/spans?limit=20000`)).json();
+  const first = BigInt(Date.parse(from)) * 1_000_000n;
+  const last = BigInt(Date.parse(until)) * 1_000_000n;
+  const spans = ((body.data?.resourceSpans ?? []) as OtlpResourceSpans[]).flatMap((resource) => {
+    const service = resource.resource.attributes.find((attribute) => attribute.key === 'service.name')?.value.stringValue ?? '';
+    return service.startsWith('disputedesk-worker') ? resource.scopeSpans.flatMap((scope) => scope.spans) : [];
+  });
+  return spans.filter((span) => span.kind === 4 && span.name === 'send disputedesk.disputes' && span.status?.code === 2
+    && span.attributes?.some((attribute) => attribute.key === 'error.type')
+    && BigInt(span.startTimeUnixNano) >= first && BigInt(span.startTimeUnixNano) <= last).length;
+}
+
 test.describe.serial('a 30 second broker outage', () => {
   test.setTimeout(300_000);
   const raised: Raised[] = [];
@@ -191,7 +215,6 @@ test.describe.serial('a 30 second broker outage', () => {
     const log = docker('logs', '--since', outageStart, 'disputedesk-worker-1');
     for (const marker of markers) expect(log, 'a private value in the Worker log').not.toContain(marker);
     // The dashboard shows each raise's trace with the Worker's producer span, where error.type sits on a failed send.
-    let errorSpanTraces = 0;
     for (const { disputeId } of raised) {
       const traceId = outboxOf(disputeId)[0].TraceParent.split('-')[1];
       await page.goto(`${dashboard}/traces/detail/${traceId}`);
@@ -204,11 +227,13 @@ test.describe.serial('a 30 second broker outage', () => {
         await expect(producerRows.last(), `producer span of trace ${traceId.slice(0, 8)}`).toBeVisible({ timeout: 4000 });
       }).toPass({ timeout: 60_000, intervals: [2000] });
       // A transient failure ends the batch, so only rows attempted during the outage have failed sends (Status = Error); the rest first send after recovery.
-      errorSpanTraces += await page.getByRole('row', { name: /disputedesk-worker[^:]*: MSG kafka disputedesk\.disputes Status = Error/ }).count() > 0 ? 1 : 0;
       const text = await page.locator('body').innerText();
       for (const marker of markers) expect(text, 'a private value in the trace').not.toContain(marker);
     }
-    expect(errorSpanTraces, 'at least one row attempted during the outage has an Error producer span').toBeGreaterThanOrEqual(1);
+    // A failed send ends its producer span with status Error. Counted from the telemetry API over the outage window (plus the
+    // 10 s send timeout), not from the trace page's row text, and not only on this spec's rows (see failedProducerSendSpansBetween).
+    const windowEnd = new Date(Date.parse(outageEnd) + 15_000).toISOString();
+    expect(await failedProducerSendSpansBetween(outageStart, windowEnd), 'a send attempted during the outage has an Error producer span').toBeGreaterThanOrEqual(1);
     // Every span the Worker sent and every Worker log record in the dashboard, searched as page text.
     for (const path of ['/traces', '/structuredlogs']) {
       await page.goto(`${dashboard}${path}`);

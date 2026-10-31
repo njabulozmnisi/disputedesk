@@ -339,7 +339,9 @@ test.describe.serial('only the owner, only through the cookie', () => {
     expect(entries.length).toBeGreaterThanOrEqual(4);
     for (const entry of entries) expect(entry).toEqual(entries[0]);
     expect(entries[0]).toEqual({ Action: 'Withdraw', Result: 'Rejected', ActorType: 'Customer', ActorId: aSub, CustomerId: aCustomer, DisputeId: null });
-    expect(rows(`select 1 from "AuditLogEntries" where "DisputeId" = '${bId}' or ("Action" = 'Withdraw' and ("CustomerId" = '${bCustomer}' or "ActorId" = '${bBefore.stream[0].ActorId}'))`)).toHaveLength(0);
+    // Only rows from B's raise on: an earlier spec (dispute-detail) leaves a Withdraw Rejected row for the same login B.
+    const sinceBRaised = `"OccurredAtUtc" >= '${bBefore.stream[0].OccurredAtUtc}'`;
+    expect(rows(`select 1 from "AuditLogEntries" where "DisputeId" = '${bId}' or ("Action" = 'Withdraw' and ${sinceBRaised} and ("CustomerId" = '${bCustomer}' or "ActorId" = '${bBefore.stream[0].ActorId}'))`)).toHaveLength(0);
   });
 });
 

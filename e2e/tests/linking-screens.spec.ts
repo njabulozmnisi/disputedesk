@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Browser, type BrowserContext, type Page, type Response } from '@playwright/test';
-import { queryDatabase, topicRecords } from './support';
+import { holdsCode, queryDatabase, telemetryValues, topicRecords } from './support';
 
 // Story 6.4: the linking screens 2a (/link) and 2b (/link/otp) in a real browser, through the real gateway, BFF, Api,
 // job, database (qa_readonly), Mailpit (the SMS sink) and the Aspire telemetry API. Customer D is the only customer a
@@ -13,8 +13,10 @@ import { queryDatabase, topicRecords } from './support';
 // 15 minutes), held in memory, so each journey restarts the Api for a clean window (sessions live in the database).
 // Fixture bank details and OTPs are only compared and typed, never printed.
 //
-// Run on a fresh database, alone: it takes customer D's one link. The full-queue journey (429 with no Retry-After)
-// needs the Api started with Linking:QueueCapacity=1 (E2E_LINKING_QUEUE_CAPACITY=1) and runs last.
+// Run on a fresh database, alone: it takes customer D's one link. The full-queue journey (429 with no Retry-After) needs the
+// Api started with a small queue (e2e/small-queue.compose.yml, E2E_LINKING_QUEUE_CAPACITY=2) and D unlinked, and its six held
+// starts take all of D's three sends an hour, so it runs in its own project on its own stack (`linking-queue`); this file's
+// project runs every other journey (D sends: login 1 one, login 3 one).
 test.describe.configure({ mode: 'serial' });
 
 const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
@@ -426,6 +428,69 @@ test('login 2: five starts spend the login limit, the sixth shows the 15-minute 
   await context.close();
 });
 
+// ---- journey 5: the full queue, a 429 with no Retry-After -----------------------------------------------------------------
+
+function holdCustomerLock(): { release: () => Promise<void> } {
+  const secondKey = `(('x' || substr(encode(sha256(convert_to('${customerD.customerId}', 'UTF8')), 'hex'), 1, 8))::bit(32)::int)`;
+  const child: ChildProcessWithoutNullStreams = spawn('docker',
+    ['exec', '-i', '-e', `PGPASSWORD=${process.env.QA_DB_PASSWORD ?? 'dev-only-qa-db'}`, 'disputedesk-postgres-1', 'psql', '-h', 'localhost', '-U', 'qa_readonly', '-d', 'disputedesk', '-At'],
+    { stdio: 'pipe' });
+  child.stdin.write(`select pg_advisory_lock(6005, ${secondKey});\n`);
+  return { release: () => new Promise((resolve) => { child.on('close', () => resolve()); child.stdin.end(); }) };
+}
+const lockWaiters = () => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and not granted`));
+
+test('full queue: the sixth start gets 429 with no Retry-After, "Try again later.", and the button stays usable', async ({ browser }) => {
+  test.skip(queueCapacity === 0, 'needs the Api started with Linking:QueueCapacity=2 (E2E_LINKING_QUEUE_CAPACITY=2, e2e/run-regression.sh)');
+  test.setTimeout(300_000);
+  await restartApi();
+  const holder = holdCustomerLock();
+  try {
+    await until('the lock holder', () => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and granted and classid = 6005`)) === 1);
+    const accepted = 4 + queueCapacity;
+    for (let index = 0; index < accepted; index++) {
+      const { context, page } = await signIn(browser, logins[4 + index]);
+      const token = (await (await context.request.get('/api/v1/bff/antiforgery')).json()).requestToken as string;
+      const response = await context.request.post('/api/v1/linking/start', {
+        data: JSON.stringify({ idNumber: customerD.idNumber, accountNumber: customerD.accountNumber }),
+        headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': token }, maxRedirects: 0,
+      });
+      expect(response.status(), `accepted start ${index + 1}`).toBe(202);
+      await page.close();
+      await context.close();
+      if (index === 3) await until('4 jobs waiting on the lock', () => lockWaiters() === 4);
+    }
+    const { context, page } = await signIn(browser, logins[4 + accepted]);
+    const calls = recordLinking(page);
+    await page.goto('/link');
+    await submitDetails(page, customerD.idNumber, customerD.accountNumber);
+    await expect(page.getByRole('alert').filter({ hasText: 'Too many attempts. Try again later.' })).toBeVisible();
+    expect(calls[0]).toMatchObject({ path: '/api/v1/linking/start', status: 429, retryAfter: null });
+    expect(await page.locator('main').innerText()).not.toMatch(/minute/);
+    await expect(page.getByRole('button', { name: 'Continue' })).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(page).toHaveURL(`${origin}/link`);
+    await checkState(page, '2a rate limited without Retry-After (full queue)');
+    // the button works again at once: a second press sends a request
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await until('a second start request', () => calls.length === 2, 10);
+    await expectNothingKept(page, context, [customerD.idNumber, customerD.accountNumber], 'full queue end');
+    await context.close();
+  } finally {
+    await holder.release();
+  }
+  // The held starts now run: three claim D's hourly sends and the rest are capped. Each of the six starts already wrote its
+  // request-time LinkingStart/Succeeded row (202), so wait for the six job-stop rows instead (every other Linking row), mirroring
+  // linking-start's "job stops" filter; then no job is still running when the group ends. (This test needs D unlinked: once D is
+  // linked a start ends before it waits on D's lock, so the queue could not fill. It has its own stack, run-regression.sh.)
+  const heldSubs = logins.slice(4, 4 + 4 + queueCapacity).map((login) => `'${login.sub}'`).join(', ');
+  const jobStops = () => Number(sql(`select count(*) from "AuditLogEntries" where "ActorId" in (${heldSubs}) and "Action" like 'Linking%' and not ("Action" = 'LinkingStart' and "Result" = 'Succeeded') and "OccurredAtUtc" > '${startedAt}'`));
+  await until('the held jobs stopped', () => {
+    const stops = jobStops();
+    console.log(`held job stop rows: ${stops} of ${4 + queueCapacity}`);
+    return stops === 4 + queueCapacity;
+  }, 120);
+});
+
 // ---- journey 3: a real link ------------------------------------------------------------------------------------------------------
 
 test('login 3: 2a -> 202 -> 2b, two wrong codes, the real code from the SMS sink links, lands on /transactions and stays', async ({ browser }) => {
@@ -521,58 +586,6 @@ test('login 4: details of an already-linked customer give the same 202 and the s
   await context.close();
 });
 
-// ---- journey 5: the full queue, a 429 with no Retry-After -----------------------------------------------------------------
-
-function holdCustomerLock(): { release: () => Promise<void> } {
-  const secondKey = `(('x' || substr(encode(sha256(convert_to('${customerD.customerId}', 'UTF8')), 'hex'), 1, 8))::bit(32)::int)`;
-  const child: ChildProcessWithoutNullStreams = spawn('docker',
-    ['exec', '-i', '-e', `PGPASSWORD=${process.env.QA_DB_PASSWORD ?? 'dev-only-qa-db'}`, 'disputedesk-postgres-1', 'psql', '-h', 'localhost', '-U', 'qa_readonly', '-d', 'disputedesk', '-At'],
-    { stdio: 'pipe' });
-  child.stdin.write(`select pg_advisory_lock(6005, ${secondKey});\n`);
-  return { release: () => new Promise((resolve) => { child.on('close', () => resolve()); child.stdin.end(); }) };
-}
-const lockWaiters = () => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and not granted`));
-
-test('full queue: the sixth start gets 429 with no Retry-After, "Try again later.", and the button stays usable', async ({ browser }) => {
-  test.skip(queueCapacity === 0, 'needs the Api started with Linking:QueueCapacity=1 (E2E_LINKING_QUEUE_CAPACITY=1)');
-  test.setTimeout(300_000);
-  await restartApi();
-  const holder = holdCustomerLock();
-  try {
-    await until('the lock holder', () => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and granted and classid = 6005`)) === 1);
-    const accepted = 4 + queueCapacity;
-    for (let index = 0; index < accepted; index++) {
-      const { context, page } = await signIn(browser, logins[4 + index]);
-      const token = (await (await context.request.get('/api/v1/bff/antiforgery')).json()).requestToken as string;
-      const response = await context.request.post('/api/v1/linking/start', {
-        data: JSON.stringify({ idNumber: customerD.idNumber, accountNumber: customerD.accountNumber }),
-        headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': token }, maxRedirects: 0,
-      });
-      expect(response.status(), `accepted start ${index + 1}`).toBe(202);
-      await page.close();
-      await context.close();
-      if (index === 3) await until('4 jobs waiting on the lock', () => lockWaiters() === 4);
-    }
-    const { context, page } = await signIn(browser, logins[4 + accepted]);
-    const calls = recordLinking(page);
-    await page.goto('/link');
-    await submitDetails(page, customerD.idNumber, customerD.accountNumber);
-    await expect(page.getByRole('alert').filter({ hasText: 'Too many attempts. Try again later.' })).toBeVisible();
-    expect(calls[0]).toMatchObject({ path: '/api/v1/linking/start', status: 429, retryAfter: null });
-    expect(await page.locator('main').innerText()).not.toMatch(/minute/);
-    await expect(page.getByRole('button', { name: 'Continue' })).not.toHaveAttribute('aria-disabled', 'true');
-    await expect(page).toHaveURL(`${origin}/link`);
-    await checkState(page, '2a rate limited without Retry-After (full queue)');
-    // the button works again at once: a second press sends a request
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await until('a second start request', () => calls.length === 2, 10);
-    await expectNothingKept(page, context, [customerD.idNumber, customerD.accountNumber], 'full queue end');
-    await context.close();
-  } finally {
-    await holder.release();
-  }
-});
-
 // ---- the typed values in telemetry, logs and the topic -----------------------------------------------------------------------
 
 test('no typed value in any network URL, the Aspire spans or logs, the Api logs or the topic', async () => {
@@ -584,7 +597,12 @@ test('no typed value in any network URL, the Aspire spans or logs, the Api logs 
   const apiLogs = execFileSync('sh', ['-c', `docker logs --since ${startedAt} disputedesk-api-1 2>&1`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   expect(spans.length).toBeGreaterThan(1000);
   note(`spans scanned: ${spans.length} chars, containing /api/v1/linking/start ${spans.includes('/api/v1/linking/start')} and verify ${spans.includes('/api/v1/linking/verify')}`);
-  for (const [name, text] of [['spans', spans], ['dashboard logs', logs], ['api logs', apiLogs], ['topic', JSON.stringify(topicRecords())]] as const) {
-    for (const secret of secrets) expect(text.includes(secret), `${name} holds a typed value`).toBe(false);
+  // Six-digit codes: attribute and event values only, with a non-hex boundary (hex ids and timestamps hold them by chance).
+  // The ID and account numbers stay raw substring checks. Telemetry is parsed; the api logs and the topic are raw text.
+  const codes = secrets.filter((secret) => secret.length === 6);
+  const longSecrets = secrets.filter((secret) => secret.length !== 6);
+  for (const [name, text, scanned] of [['spans', spans, telemetryValues(spans)], ['dashboard logs', logs, telemetryValues(logs)], ['api logs', apiLogs, apiLogs], ['topic', JSON.stringify(topicRecords()), JSON.stringify(topicRecords())]] as const) {
+    for (const secret of longSecrets) expect(text.includes(secret), `${name} holds a typed value`).toBe(false);
+    for (const code of codes) expect(holdsCode(scanned, code), `${name} holds a typed code`).toBe(false);
   }
 });
