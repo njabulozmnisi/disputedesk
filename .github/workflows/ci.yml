@@ -249,11 +249,13 @@ jobs:
             ghcr.io/zaproxy/zaproxy:2.17.0@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
             zap-baseline.py -t http://localhost:8080 -c rules.tsv -m 2 -T 10
 
+      # error-context.md is Playwright's accessibility snapshot of the page a failed test was on (synthetic data only).
       - name: Stack diagnostics
         if: failure()
         run: |
           docker compose ps -a
           docker compose logs --no-color --tail 200
+          find e2e/test-results -name error-context.md -print -exec cat {} \; 2>/dev/null || true
 
       - name: Stop the stack
         if: always()
