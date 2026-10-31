@@ -53,7 +53,7 @@ builder.Services.AddDisputeDeskProblemDetails();
 builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
 builder.Services.AddApiReference();
 builder.Services.AddDisputeDeskHealthChecks();
-builder.Services.AddBff();
+builder.Services.AddBff(builder.Configuration);
 builder.Services.AddRequestTimeouts();
 builder.Services.AddCustomerRoutes();
 builder.Services.AddTransactions();

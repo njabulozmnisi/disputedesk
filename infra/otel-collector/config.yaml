@@ -1,0 +1,70 @@
+# The OpenTelemetry Collector in AWS (AD-29): it takes the Aspire Dashboard's place for the Api and the Worker, which
+# export OTLP/gRPC to it, and sends traces to X-Ray, logs to CloudWatch Logs and metrics to CloudWatch, signed with the
+# instance role (OpenTelemetry Collector, "Configuration"; AWS, "CloudWatch OTLP endpoints"). The browser sends nothing
+# here: AWS has no browser telemetry intake.
+# docker-compose.aws.yml mounts this file and sets AWS_REGION and OTEL_LOG_GROUP; infra/aws/check-compose.sh validates it
+# with the pinned image's `validate` command.
+
+extensions:
+  # SigV4 request signing with the default AWS credential chain, which on the instance is its role (sigv4auth README).
+  sigv4auth/xray:
+    region: ${env:AWS_REGION}
+    service: xray
+  sigv4auth/logs:
+    region: ${env:AWS_REGION}
+    service: logs
+
+receivers:
+  otlp:
+    protocols:
+      # Explicitly every interface: recent collector versions listen on localhost by default, which other containers
+      # cannot reach. The Compose network is private and the service publishes no port.
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # First in every pipeline, so the collector refuses data before it runs out of memory; the limits sit under the
+  # service's 128 MiB mem_limit (memory_limiter README).
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 100
+    spike_limit_mib: 20
+  batch: {}
+
+exporters:
+  otlphttp/xray:
+    traces_endpoint: https://xray.${env:AWS_REGION}.amazonaws.com/v1/traces
+    auth:
+      authenticator: sigv4auth/xray
+  # The logs endpoint needs the target log group and stream in these two headers.
+  otlphttp/logs:
+    logs_endpoint: https://logs.${env:AWS_REGION}.amazonaws.com/v1/logs
+    headers:
+      x-aws-log-group: ${env:OTEL_LOG_GROUP}
+      x-aws-log-stream: otlp
+    auth:
+      authenticator: sigv4auth/logs
+  # Metrics as CloudWatch embedded metric format records in the same log group (awsemf README).
+  awsemf:
+    region: ${env:AWS_REGION}
+    namespace: DisputeDesk
+    log_group_name: ${env:OTEL_LOG_GROUP}
+    log_stream_name: metrics
+
+service:
+  extensions: [sigv4auth/xray, sigv4auth/logs]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/xray]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/logs]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [awsemf]

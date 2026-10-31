@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using DisputeDesk.Application.Audit;
 using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Domain.Disputes;
@@ -19,10 +20,26 @@ namespace DisputeDesk.Api.Bff;
 /// </summary>
 public static partial class BffAuthentication
 {
-    public static IServiceCollection AddBff(this IServiceCollection services)
+    public static IServiceCollection AddBff(this IServiceCollection services, IConfiguration configuration)
     {
         OptionsBuilder<ZitadelOptions> zitadelSettings = services.AddOptions<ZitadelOptions>().BindConfiguration(ZitadelOptions.Section).ValidateDataAnnotations();
         OptionsBuilder<BffOptions> bffSettings = services.AddOptions<BffOptions>().BindConfiguration(BffOptions.Section).ValidateDataAnnotations();
+        // The errors name the keys, never their values (Microsoft Learn, Options pattern: options validation).
+        OptionsBuilder<KeyRingOptions> keyRingSettings = services.AddOptions<KeyRingOptions>().BindConfiguration(KeyRingOptions.Section)
+            .Validate(
+                keyRing => !keyRing.StoresKeysInSsm || (keyRing.SsmParameterPath.StartsWith('/') && !keyRing.SsmParameterPath.EndsWith('/')),
+                "DataProtection:SsmParameterPath must start with / and have no trailing /.")
+            .Validate(
+                keyRing => !keyRing.StoresKeysInSsm || !string.IsNullOrWhiteSpace(keyRing.KmsKeyId),
+                "DataProtection:KmsKeyId is required when DataProtection:SsmParameterPath is set.")
+            // Only a key ID or key ARN, the same bound as infra/aws/input-bounds.sh: an alias, or an alias ARN, can be
+            // repointed to another key, such as SSM's default alias/aws/ssm (AWS KMS, "Aliases in AWS KMS").
+            .Validate(
+                keyRing => keyRing.KmsKeyId is null || KmsKeyIdOrKeyArn().IsMatch(keyRing.KmsKeyId),
+                "DataProtection:KmsKeyId must be a key ID or key ARN, not an alias.");
+        // Where the keys live is decided while the services are registered, so it is read here; the validation above
+        // still stops the start on a bad value, before the key ring is first read.
+        KeyRingOptions keyRing = configuration.GetSection(KeyRingOptions.Section).Get<KeyRingOptions>() ?? new KeyRingOptions();
         IDataProtectionBuilder dataProtection = services.AddDataProtection().SetApplicationName("DisputeDesk");
         services.AddSingleton<SessionTicketStore>();
         services.AddSingleton<ExpiredSessionCleanup>();
@@ -36,8 +53,18 @@ public static partial class BffAuthentication
         {
             zitadelSettings.ValidateOnStart();
             bffSettings.ValidateOnStart();
-            // One key ring in Postgres, so every Api instance can read every session and antiforgery cookie.
-            dataProtection.PersistKeysToDbContext<AppDbContext>();
+            keyRingSettings.ValidateOnStart();
+            // One key ring, so every Api instance can read every session and antiforgery cookie: in AWS, SecureStrings in
+            // SSM Parameter Store under the path, encrypted with the named KMS key (AWS's documented provider); elsewhere,
+            // Postgres.
+            if (keyRing.StoresKeysInSsm)
+            {
+                dataProtection.PersistKeysToAWSSystemsManager(keyRing.SsmParameterPath, ssm => ssm.KMSKeyId = keyRing.KmsKeyId);
+            }
+            else
+            {
+                dataProtection.PersistKeysToDbContext<AppDbContext>();
+            }
             services.AddHostedService(provider => provider.GetRequiredService<ExpiredSessionCleanup>());
         }
 
@@ -178,4 +205,8 @@ public static partial class BffAuthentication
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Sign-in failed: {Reason}")]
     private static partial void LogSignInFailed(ILogger logger, string? reason);
+
+    // A key ID (the key's lower-case UUID), optionally inside a key ARN; \z, not $, so a trailing newline is no match.
+    [GeneratedRegex(@"^(arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z")]
+    private static partial Regex KmsKeyIdOrKeyArn();
 }

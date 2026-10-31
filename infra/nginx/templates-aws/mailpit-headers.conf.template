@@ -1,0 +1,10 @@
+# The Mailpit origin's browser security headers in AWS (AD-28, OWASP HTTP Headers Cheat Sheet). Not the app's CSP:
+# its script-src would block Mailpit's own UI. Mailpit sends its own CSP (script-src by nonce, no frame-ancestors),
+# which passes through, and this second policy forbids framing; a browser enforces both (CSP Level 3, multiple
+# policies). Mailpit's Referrer-Policy is replaced by the same value, so it is sent once on every response, the
+# gateway's own 403 and 429 included.
+add_header Content-Security-Policy "frame-ancestors 'none'" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "DENY" always;
+add_header Referrer-Policy "no-referrer" always;
+add_header Strict-Transport-Security "${GATEWAY_HSTS}" always;

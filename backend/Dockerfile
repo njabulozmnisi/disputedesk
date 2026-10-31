@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
-# Build context: backend/. Targets: `api` (default, last stage), `worker`, `api-local` and `worker-local` (Compose only) and
+# Build context: backend/. Targets: `api` (default, last stage), `worker`, `api-local` and `worker-local` (with the probe
+# Compose's health checks call; Compose runs them, and CI publishes them as the api and worker images, P57) and
 # `core-banking`.
 #   docker build -t disputedesk-api backend
 #   docker build -t disputedesk-worker --target worker backend

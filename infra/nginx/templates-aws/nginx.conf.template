@@ -1,0 +1,259 @@
+# DisputeDesk gateway in AWS (AD-23, AD-28): the same edge as infra/nginx/templates/nginx.conf.template, behind the
+# three CloudFront distributions.
+#   app origin       the SPA; /api/, /scalar/ and /openapi/v1.json -> api; no /otlp/ and no /mailpit/ (both 404)
+#   identity origin  Zitadel API and Login v2 (/ui/v2/login); the console answers 404
+#   Mailpit origin   Mailpit's UI and API, behind Mailpit's own basic auth (MP_UI_AUTH)
+#
+# docker-compose.aws.yml selects this directory with NGINX_ENVSUBST_TEMPLATE_DIR, and the image's entrypoint renders it
+# with envsubst into /etc/nginx, filling in the GATEWAY_* variables (nginx official image, "Using environment variables
+# in nginx configuration"). The Dockerfile copies security-headers.conf.template and scalar-headers.conf.template in
+# from infra/nginx/templates/, so both gateways send the same app headers.
+#
+# Differences from the local edge:
+#   - Only CloudFront reaches this origin. Every server block answers 403 unless the request carries the origin-verify
+#     header CloudFront adds (CloudFront, "Adding custom headers to origin requests"), and no upstream ever sees it.
+#   - The client address and scheme come from CloudFront's headers, trusted only from CloudFront's origin-facing ranges.
+#     As locally, every proxied location drops a client's RFC 7239 Forwarded header (Forwarded "": an empty value is not
+#     passed), because Zitadel resolves its instance from it.
+#   - Upstreams are resolved through Docker's DNS while running (upstream "resolve"), not once at start: provisioning
+#     reaches Zitadel through CloudFront and so through this gateway, which therefore starts before the api and the
+#     login exist.
+worker_processes 1;
+pid /tmp/nginx.pid;
+
+events { worker_connections 1024; }
+
+http {
+  include       /etc/nginx/mime.types;
+  default_type  application/octet-stream;
+  sendfile      on;
+  server_tokens off;
+  access_log    /var/log/nginx/access.log;
+
+  # As locally: on the identity origin the path ($uri) in place of the request line, and no Referer, so the end-session
+  # GET's id_token_hint is never logged (AD-20, ASVS 5.0 V14.2.1). No format logs the origin-verify header.
+  log_format    identity '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" '
+                         '$status $body_bytes_sent "$http_user_agent"';
+
+  # The image runs as a non-root user, which can write only under /tmp (the image's own defaults).
+  client_body_temp_path /tmp/client_temp;
+  proxy_temp_path       /tmp/proxy_temp;
+  fastcgi_temp_path     /tmp/fastcgi_temp;
+  uwsgi_temp_path       /tmp/uwsgi_temp;
+  scgi_temp_path        /tmp/scgi_temp;
+
+  # Docker's embedded DNS server on the Compose network (Docker, "Networking overview", DNS services). "resolve" keeps
+  # each name current and lets nginx start before the container exists (nginx, ngx_http_upstream_module, server).
+  resolver 127.0.0.11 valid=10s ipv6=off;
+  upstream api           { zone api 64k;           server api:8080           resolve; keepalive 16; }
+  upstream zitadel_api   { zone zitadel_api 64k;   server zitadel:8080       resolve; keepalive 16; }
+  upstream zitadel_login { zone zitadel_login 64k; server zitadel-login:3000 resolve; keepalive 16; }
+  upstream mailpit       { zone mailpit 64k;       server mailpit:8025       resolve; }
+
+  # The client address (AD-23, nginx ngx_http_realip_module): only from CloudFront's origin-facing ranges, which the
+  # deploy script writes as set_real_ip_from lines into this file, is CloudFront-Viewer-Address (address:port) taken as
+  # the client; from anywhere else the socket address stays. IPv4 only: every distribution has IPv6 disabled.
+  include /etc/nginx/cloudfront-realip.conf;
+  real_ip_header CloudFront-Viewer-Address;
+  real_ip_recursive off;
+
+  # The viewer's scheme. The distributions redirect HTTP to HTTPS, so a request without the header is HTTPS too; any
+  # value but http is https, so upstreams never get an empty or unexpected scheme.
+  map $http_cloudfront_forwarded_proto $forwarded_proto {
+    default https;
+    http    http;
+  }
+
+  # Mailpit's UI keeps a WebSocket open for new messages (nginx, "WebSocket proxying").
+  map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+  }
+
+  # The coarse per-client limit (AD-23), on the client address realip sets: 10 requests per second, with bursts of up
+  # to 20 served at once (nodelay). A rejected request gets 429 (RFC 6585).
+  limit_req_zone $binary_remote_addr zone=coarse:10m rate=10r/s;
+  limit_req_status 429;
+
+  # ---------------------------------------------------------------------------------------------
+  # App origin: every host that is neither the identity nor the Mailpit origin.
+  # ---------------------------------------------------------------------------------------------
+  server {
+    listen 8080 default_server;
+
+    # Before any location, so a request that did not come through CloudFront never reaches an upstream.
+    if ($http_x_origin_verify != "${GATEWAY_ORIGIN_VERIFY}") { return 403; }
+
+    include /etc/nginx/security-headers.conf;
+
+    # The gateway's own 429 as RFC 9457 problem details, as locally (AD-3).
+    error_page 429 @rate_limited;
+    location @rate_limited {
+      include /etc/nginx/security-headers.conf;
+      add_header Retry-After "1" always;
+      types { }
+      default_type application/problem+json;
+      return 429 '{"type":"https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/rate-limited.md","title":"Too many requests","status":429}';
+    }
+
+    # The SPA, with the same cache headers as locally (RFC 9111 5.2.2.4, RFC 8246); each location repeats the headers.
+    root /usr/share/nginx/html;
+    location / {
+      include /etc/nginx/security-headers.conf;
+      add_header Cache-Control "no-cache";
+      try_files $uri /index.html;
+    }
+    location /assets/ {
+      include /etc/nginx/security-headers.conf;
+      add_header Cache-Control "public, max-age=31536000, immutable";
+      try_files $uri =404;
+    }
+
+    # No browser telemetry intake in AWS (AD-29), and Mailpit is on its own origin (AD-28): neither path reaches anything.
+    location /otlp/ { return 404; }
+    location /mailpit/ { return 404; }
+
+    location /api/health/ {
+      limit_req zone=coarse burst=20 nodelay;
+      proxy_pass http://api/health/;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Proto $forwarded_proto;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
+      proxy_set_header X-Origin-Verify "";
+    }
+
+    location /api/ {
+      limit_req zone=coarse burst=20 nodelay;
+      proxy_pass http://api;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Proto $forwarded_proto;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
+      proxy_set_header X-Origin-Verify "";
+    }
+
+    location = /scalar {
+      include /etc/nginx/scalar-headers.conf;
+      limit_req zone=coarse burst=20 nodelay;
+      proxy_pass http://api;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Proto $forwarded_proto;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
+      proxy_set_header X-Origin-Verify "";
+    }
+
+    location /scalar/ {
+      include /etc/nginx/scalar-headers.conf;
+      limit_req zone=coarse burst=20 nodelay;
+      proxy_pass http://api;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Proto $forwarded_proto;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
+      proxy_set_header X-Origin-Verify "";
+    }
+
+    location = /openapi/v1.json {
+      include /etc/nginx/scalar-headers.conf;
+      limit_req zone=coarse burst=20 nodelay;
+      proxy_pass http://api;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
+      proxy_set_header X-Forwarded-Proto $forwarded_proto;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
+      proxy_set_header X-Origin-Verify "";
+    }
+  }
+
+  # ---------------------------------------------------------------------------------------------
+  # Identity origin: Zitadel API and Login v2 on one host. Zitadel resolves its instance from the Host, which must be
+  # exactly ExternalDomain (port 443 is implied). No app CSP here: the login sets its own.
+  # ---------------------------------------------------------------------------------------------
+  server {
+    listen 8080;
+    server_name ${GATEWAY_AUTH_HOST};
+    access_log /var/log/nginx/access.log identity;
+
+    if ($http_x_origin_verify != "${GATEWAY_ORIGIN_VERIFY}") { return 403; }
+
+    add_header Strict-Transport-Security "${GATEWAY_HSTS}" always;
+
+    # The console is an admin interface behind a password-only admin; provisioning uses the API instead (ASVS 5.0
+    # V13.4). The prefix match covers /ui/console, /ui/console/ and everything below.
+    location ^~ /ui/console { return 404; }
+
+    location /ui/v2/login {
+      proxy_pass http://zitadel_login;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_AUTH_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_AUTH_HOST};
+      proxy_set_header X-Forwarded-Proto $forwarded_proto;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
+      proxy_set_header X-Origin-Verify "";
+    }
+
+    location = / { return 302 /ui/v2/login/; }
+
+    # OIDC, REST, Connect (HTTP/1.1) and assets.
+    location / {
+      proxy_pass http://zitadel_api;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host ${GATEWAY_AUTH_HOST};
+      proxy_set_header X-Forwarded-Host ${GATEWAY_AUTH_HOST};
+      proxy_set_header X-Forwarded-Proto $forwarded_proto;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
+      proxy_set_header X-Origin-Verify "";
+      proxy_buffering off;
+    }
+  }
+
+  # ---------------------------------------------------------------------------------------------
+  # Mailpit origin (AD-28): its own host, so no third-party UI shares the SPA's origin (ASVS 5.0 V3). Mailpit asks for
+  # its basic-auth credentials on the UI and the API itself; this block adds the origin check, the coarse limit
+  # against password guessing (ASVS 5.0 V2.4) and the headers in mailpit-headers.conf.
+  # ---------------------------------------------------------------------------------------------
+  server {
+    listen 8080;
+    server_name ${GATEWAY_MAILPIT_HOST};
+
+    if ($http_x_origin_verify != "${GATEWAY_ORIGIN_VERIFY}") { return 403; }
+
+    include /etc/nginx/mailpit-headers.conf;
+    limit_req zone=coarse burst=20 nodelay;
+
+    location / {
+      proxy_pass http://mailpit;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_set_header Host ${GATEWAY_MAILPIT_HOST};
+      proxy_set_header X-Forwarded-Proto $forwarded_proto;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header Forwarded "";
+      proxy_set_header X-Origin-Verify "";
+      # mailpit-headers.conf sends the same no-referrer, once.
+      proxy_hide_header Referrer-Policy;
+    }
+  }
+}
