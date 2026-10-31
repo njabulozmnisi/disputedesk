@@ -168,9 +168,9 @@ supervisor_checks = ["Throwaway copy: GATEWAY_HSTS back to max-age=31536000; cri
 id = 13
 type = "story"
 title = "Backend hardening from the readiness review"
-description = "Fixes the 7.10 review's backend findings (A-F3, C-F8, E-F12, F-F5, F-F8, F-F9, F-F11): __Host- correlation and nonce cookies in AWS, RS256-only ID tokens, no redirects on the banking clients, refusal and sign-out audits saved despite a client disconnect within a 5-second bound, a named Kestrel shutdown test with a raise in flight, a named test of two Api instances starting together on an empty key store (no custom key refresh; blocked if it fails), and idempotency answers counted once in the raise rejection metric."
+description = "Fixes the 7.10 review's backend findings (A-F3, C-F8, E-F12, F-F5, F-F8, F-F9, F-F11): __Host- correlation and nonce cookies in AWS, RS256-only ID tokens, no redirects on the banking clients, refusal and sign-out audits saved despite a client disconnect (CancellationToken.None, as linking does), a named Kestrel shutdown test with a raise in flight, a named test of two Api instances starting together on an empty key store (no custom key refresh; blocked if it fails), and idempotency answers counted once in the raise rejection metric."
 verify = "The named Api integration tests and the full backend suite pass under the testcontainers lock; dotnet format and warnings-as-errors pass; openapi.json unchanged."
-covers = ["R2", "R10", "R11", "R26", "R27", "R36"]
+covers = ["R2", "R3", "R5", "R10", "R11", "R15", "R26", "R27", "R36", "R41"]
 after = [4]
 hitl = false
 risk = "medium"
