@@ -35,3 +35,21 @@ Watch item: `linking-queue` holds D's lock while seven browser sign-ins run agai
 Supervisor ruling: lows alone do not open a fix round. The batch merges as approved once main is green; D1 to D5 go in one Small-tier test-only fix right after it (standing approval for test and tooling fixes).
 
 D1 to D5 fixed before merge (QA lane, `e2e-fix-qa.md` "Delta fix (D1 to D5)"); the supervisor read the delta: each point closed as written, `--list` counts match the reviewer's (7, 5, 1, 6, 3, 2, 232), D1's break (target 7) timed out. The batch and the delta merge as one commit.
+
+## Merge check (2026-10-31)
+
+Applied on main `story 7.5 commit "feat(infra): 7.5 Terraform dev environment and OIDC deploy: one EC2 instance behind CloudFront with RDS, KMS and SSM, deployed by digest from GitHub Actions through SSM" (2026-10-31)` (7.5 merged). The README's e2e block now says what `npm test` does (`run-regression.sh`, seven fresh-stack groups, the customer D count, the stack stopped at the end) and drops the second manual `down -v`/`up`, since the script starts its own stacks; this also closes the 7.7 note on the five known failures. Supervisor checks: `telemetry-scan.spec.ts` 4 passed; `playwright test --list` journeys 5, linking-rate-limits 7, linking-screens 5, linking-queue 1, linking-verify-a 6, linking-verify-b 3, linking-verify-c 2, regression 232; shellcheck clean.
+
+## Escapes
+
+| Finding | Caught by | Should have been caught by | Category | Countermeasure |
+|---|---|---|---|---|
+| A test reset customer D through the database owner, against ad-005 ("QA only reads") | reviewer | builder | non-standard mechanism | Human decision: more fresh-stack groups; `run-regression.sh` reads D's sends through `qa_readonly` after each group |
+| The outbox failure check counted any Worker error span, not the producer send span | reviewer | builder | missing test | Filter on kind, name and `error.type`; break run shows it can fail |
+| An override named "short budget" raised the budget | reviewer | builder | spec gap | Deleted; the regression group runs on the 10 s default |
+| The full-queue wait matched the request-time audit row, so it passed at once | reviewer (delta) | builder | missing test | Count only job-stop rows; break with target 7 times out |
+| Span scans matched OTP digits inside trace IDs and timestamps | QA | builder (5.4, 6.x) | flaky | `telemetryValues` plus `holdsCode`, tested with no stack |
+
+## Metrics
+
+Fix rounds: 1, plus one Small-tier delta fix (D1 to D5) before merge. Stages: build and QA on the M1, reviewer full plus delta, supervisor delta read. Full regression runs: first pass 7 (A to G), fix round 2, delta 1 group plus 1 break. Wall time: about a day elapsed. Disk: no notable change.
