@@ -7,3 +7,22 @@ misconfigurations:
     statement: >-
       Local Compose only, one-shot and never deployed. The provisioner runs as root on purpose: it chowns the
       generated client file to the .NET images' non-root user (see provision.sh).
+  - id: AWS-0011
+    paths:
+      - "infra/terraform/modules/edge/main.tf"
+    statement: >-
+      No WAF on the AWS demo's CloudFront distributions: accepted by the human decision on 7.4 and 7.5 pre-build security
+      (docs/production-path.md P52); the demo holds only synthetic data on a dedicated account.
+  - id: AWS-0104
+    paths:
+      - "infra/terraform/modules/compute/main.tf"
+    statement: >-
+      HTTPS (443 only) out to any address: the instance has no NAT gateway, proxy or VPC endpoints and must reach GHCR,
+      SSM, CloudWatch, X-Ray, KMS and CloudFront; PostgreSQL out is limited to the database's group. Human decision
+      2026-10-31; production path P62.
+  - id: AWS-0132
+    paths:
+      - "infra/terraform/bootstrap/main.tf"
+    statement: >-
+      The state bucket uses S3-managed encryption (default encryption, story 7.5 criterion 1) with public access blocked,
+      TLS required and versioning on; a customer-managed KMS key is production path P63. Human decision 2026-10-31.
