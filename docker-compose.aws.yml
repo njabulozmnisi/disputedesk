@@ -1,0 +1,194 @@
+# DisputeDesk in AWS (AD-28): the same stack as docker-compose.yml, merged with this file on the one EC2 instance.
+#   docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d --wait
+#
+# Every secret and deployment value comes from .env, which the deploy script writes from SSM (AD-26): each is
+# ${VAR:?message}, with no default, so a missing one stops Compose before anything starts (Compose, "Interpolation").
+# infra/tests/fixtures/compose.test.env holds a dummy value for each, for infra/deploy/aws/check-compose.sh only.
+#
+# Compose merges this file into the base one (Compose, "Merge Compose files"): scalar values are replaced, but maps
+# (environment, depends_on) are merged and sequences (ports) are appended. So every service whose environment,
+# depends_on or ports changes here replaces it whole with !override, or clears it with !reset, and nothing local
+# survives: no localhost, no dev-only value, no Development environment, no published port but the gateway's.
+#
+# Not started here: postgres (RDS replaces it, with sslmode=verify-full and the RDS CA bundle) and aspire-dashboard (the
+# otel-collector takes its place, AD-29). Both stay in the `local` profile.
+#
+# Memory (mem_limit, MiB), long-running: redpanda 768, zitadel 704, mailpit 128, core-banking 192,
+# api 512, worker 320, otel-collector 128, gateway 64; 3456 in all, under the 3482 (3.4 GiB) budget. The one-shots
+
+# The same extension key as the base file, so the merged x-app-config holds the AWS values, not the local ones.
+x-app-config: &aws-app-config
+  ConnectionStrings__DisputeDesk: Host=${DB_HOST:?DB_HOST, the RDS endpoint host name, is required};Port=5432;Database=disputedesk;Username=disputedesk;Password=${APP_DB_PASSWORD:?APP_DB_PASSWORD is required};SSL Mode=VerifyFull;Root Certificate=/run/rds/ca-bundle.pem
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+
+# The RDS CA bundle the deploy script writes, mounted read-only wherever a database connection verifies RDS (AD-28).
+x-rds-ca: &rds-ca ${RDS_CA_BUNDLE:?RDS_CA_BUNDLE, the RDS CA bundle path on the instance, is required}:/run/rds/ca-bundle.pem:ro
+
+services:
+  postgres:
+    profiles: [local]
+
+  aspire-dashboard:
+    profiles: [local]
+
+  redpanda:
+    # The same flags as locally, at half a gigabyte, with no listener or advertised address for host clients.
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=512M
+      - --kafka-addr=internal://0.0.0.0:9092
+      - --advertise-kafka-addr=internal://redpanda:9092
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --default-log-level=warn
+    ports: !reset []
+    mem_limit: 768m                                # --memory=512M for Seastar plus process overhead
+
+  zitadel:
+    environment: !override
+      ZITADEL_EXTERNALDOMAIN: ${AUTH_HOST:?AUTH_HOST, the identity distribution's host name, is required}
+      ZITADEL_EXTERNALPORT: "443"
+      ZITADEL_EXTERNALSECURE: "true"                 # behind HTTPS at CloudFront (AD-24)
+      ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY:?ZITADEL_MASTERKEY is required}
+      ZITADEL_PORT: "8080"
+      ZITADEL_TLS_ENABLED: "false"                   # TLS ends at CloudFront
+      GOMEMLIMIT: 600MiB
+      ZITADEL_DATABASE_POSTGRES_DSN: postgresql://zitadel:${ZITADEL_DB_PASSWORD:?ZITADEL_DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/zitadel?sslmode=verify-full&sslrootcert=/run/rds/ca-bundle.pem
+      ZITADEL_FIRSTINSTANCE_INSTANCENAME: DisputeDesk
+      ZITADEL_FIRSTINSTANCE_ORG_NAME: DisputeDesk
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_FIRSTNAME: Dispute
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_LASTNAME: Admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS: admin@disputedesk.test
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_VERIFIED: "true"
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD:?ZITADEL_ADMIN_PASSWORD is required}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: provisioner
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Provisioner (IAM_OWNER)
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2030-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /zitadel/bootstrap/admin.pat
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_SMTP_HOST: mailpit:1025
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_TLS: "false"
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROM: noreply@disputedesk.test
+      ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROMNAME: DisputeDesk
+    volumes:
+      - *rds-ca
+    depends_on: !reset {}                            # RDS is up before the stack
+    mem_limit: 704m
+
+  mailpit:
+    # Served at the root of its own origin (no MP_WEBROOT), with its UI and API behind basic auth (Mailpit, "HTTP").
+    environment: !override
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_UI_AUTH: ${MAILPIT_UI_AUTH:?MAILPIT_UI_AUTH, one user:password pair, is required}
+    ports: !reset []
+
+  core-banking:
+    image: ${CORE_BANKING_IMAGE:?CORE_BANKING_IMAGE, the published core-banking image by digest, is required}
+    build: !reset null
+    mem_limit: 192m
+
+  api:
+    image: ${API_IMAGE:?API_IMAGE, the published api image by digest, is required}
+    build: !reset null
+    # The health checks stay the base file's: the published api and worker images are the api-local and worker-local
+    # targets, which carry the wget and busybox probes (P57, story 7.3).
+    environment: !override
+      <<: *aws-app-config
+      ASPNETCORE_ENVIRONMENT: Production
+      OTEL_SERVICE_NAME: disputedesk-api
+      # No Authentication__* keys: appsettings.json's __Host- cookie names and SecurePolicy Always apply (AD-24).
+      CoreBanking__BaseUrl: http://core-banking:8080
+      Sms__Host: mailpit
+      Sms__Port: "1025"
+      Sms__UseTls: "false"
+      Seed__Enabled: "true"                          # the demo's fixture customers and disputes (AD-26, AD-30)
+      Seed__FixturesPath: /fixtures/local.json
+      Scalar__Enabled: "true"
+      Linking__OtpHmacKey: ${LINKING_OTP_HMAC_KEY:?LINKING_OTP_HMAC_KEY is required}
+      ForwardedHeaders__TrustedNetwork: 10.201.89.12/32   # the gateway alone, so no other container can spoof X-Forwarded-*
+      ForwardedHeaders__AllowedHosts: ${APP_HOST:?APP_HOST is required}
+      # The key ring in SSM Parameter Store, encrypted with the one customer-managed KMS key (AD-7).
+      DataProtection__SsmParameterPath: ${DATAPROTECTION_SSM_PATH:?DATAPROTECTION_SSM_PATH is required}
+      DataProtection__KmsKeyId: ${DATAPROTECTION_KMS_KEY_ID:?DATAPROTECTION_KMS_KEY_ID is required}
+      AWS_REGION: ${AWS_REGION:?AWS_REGION is required}
+    volumes:
+      - *rds-ca
+    depends_on: !override
+      core-banking: { condition: service_healthy }
+    networks:
+      default:
+        ipv4_address: 10.201.89.10                   # one of the two containers allowed to reach instance metadata
+
+  worker:
+    image: ${WORKER_IMAGE:?WORKER_IMAGE, the published worker image by digest, is required}
+    build: !reset null
+    environment: !override
+      <<: *aws-app-config
+      DOTNET_ENVIRONMENT: Production
+      OTEL_SERVICE_NAME: disputedesk-worker
+      Kafka__BootstrapServers: redpanda:9092
+    volumes:
+      - *rds-ca
+    depends_on: !override
+      api: { condition: service_healthy }
+    mem_limit: 320m
+
+  otel-collector:   # AD-29: traces to X-Ray, logs and metrics to CloudWatch, signed with the instance role
+    image: otel/opentelemetry-collector-contrib:0.164.0@sha256:340c9ca6a36617084c6661bdc4f0fe92b7cda5a805d61673ec8db375fddc522b
+    restart: unless-stopped
+    environment:
+      AWS_REGION: ${AWS_REGION:?AWS_REGION is required}
+      OTEL_LOG_GROUP: ${OTEL_LOG_GROUP:?OTEL_LOG_GROUP, the collector's log group, is required}
+    volumes:
+      - ./infra/images/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    networks:
+      default:
+        ipv4_address: 10.201.89.11                   # the other container allowed to reach instance metadata
+    mem_limit: 128m
+
+  gateway:
+    image: ${GATEWAY_IMAGE:?GATEWAY_IMAGE, the published gateway image by digest, is required}
+    build: !reset null
+    # CloudFront reaches the instance on port 80; the security group admits only CloudFront's origin-facing ranges.
+    ports: !override ["80:8080"]
+    environment: !override
+      NGINX_ENVSUBST_TEMPLATE_DIR: /etc/nginx/templates-aws
+      GATEWAY_APP_HOST: ${APP_HOST:?APP_HOST is required}
+      GATEWAY_AUTH_HOST: ${AUTH_HOST:?AUTH_HOST is required}
+      GATEWAY_MAILPIT_HOST: ${MAILPIT_HOST:?MAILPIT_HOST, the Mailpit distribution's host name, is required}
+      GATEWAY_AUTH_ORIGIN: https://${AUTH_HOST:?AUTH_HOST is required}
+      GATEWAY_HSTS: max-age=31536000
+      GATEWAY_ORIGIN_VERIFY: ${GATEWAY_ORIGIN_VERIFY:?GATEWAY_ORIGIN_VERIFY, the origin-verify header value, is required}
+    volumes:
+      # The set_real_ip_from lines for CloudFront's origin-facing ranges, written by the deploy script.
+      - ${GATEWAY_REALIP_CONF:?GATEWAY_REALIP_CONF, the realip file path on the instance, is required}:/etc/nginx/cloudfront-realip.conf:ro
+    # Containers reach the identity origin through CloudFront, so the gateway needs no auth.localhost alias. Its address
+    # is pinned because the api trusts X-Forwarded-* only from it.
+    networks: !override
+      default:
+        ipv4_address: 10.201.89.12
+    # Like CloudFront, the health check sends the origin-verify header; it reads it from the container's environment.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --header \"Host: $$GATEWAY_AUTH_HOST\" --header \"X-Origin-Verify: $$GATEWAY_ORIGIN_VERIFY\" http://127.0.0.1:8080/debug/healthz >/dev/null && wget -qO- --header \"X-Origin-Verify: $$GATEWAY_ORIGIN_VERIFY\" http://127.0.0.1:8080/ >/dev/null"]
+    # Upstreams resolve while running (infra/images/gateway/templates-aws), so only Zitadel, which the health check probes, needs
+    # to be up first.
+    depends_on: !override
+      zitadel: { condition: service_healthy }
+
+# AD-28: a fixed subnet, so the deploy script's DOCKER-USER rule can let only the api (10.201.89.10) and the
+# otel-collector (10.201.89.11) reach 169.254.169.254; the gateway's 10.201.89.12 is the api's one trusted proxy.
+# Docker hands out addresses only from ip_range, so no other container can take any of the three (Compose, "Networks
+# top-level element", ipam).
+networks:
+  default:
+    ipam:
+      config: !override
+        - subnet: 10.201.89.0/24
+          ip_range: 10.201.89.128/25

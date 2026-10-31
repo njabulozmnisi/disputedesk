@@ -69,6 +69,22 @@ for path in / /api/health/live; do
   ! grep -qi '^strict-transport-security:' <<< "$headers" || fail "$path: HSTS sent over plain HTTP"
   ok "$path no strict-transport-security"
 done
+# index.html (for / and client routes) is revalidated on every load; the hashed build files are cached for a year
+# (RFC 9111 5.2.2.4, RFC 8246). Each of these locations repeats the security headers, checked once each above for /.
+index=$(curl -fsS "$GW/")
+# grep finds nothing in a broken build; || true lets the line below say so instead of set -e ending the run silently.
+asset=$(grep -oE '/assets/[^"]+\.js' <<< "$index" | sed -n 1p) || true
+[ -n "$asset" ] || fail "index.html names no /assets/ script"
+for path_cache in "/|no-cache" "/disputes|no-cache" "$asset|public, max-age=31536000, immutable"; do
+  path=${path_cache%%|*} expected=${path_cache#*|}
+  headers=$(curl -fsSI "$GW$path" | tr -d '\r')
+  [ "$(grep -ic '^cache-control:' <<< "$headers")" = 1 ] || fail "$path: not exactly one cache-control"
+  grep -qix "cache-control: $expected" <<< "$headers" || fail "$path: cache-control is not $expected"
+  for h in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
+    [ "$(grep -ic "^$h:" <<< "$headers")" = 1 ] || fail "$path: header $h is not sent exactly once"
+  done
+  ok "$path cache-control: $expected, with each security header once"
+done
 # The Api owns Cache-Control on its responses; the gateway adds none of its own.
 cache_control=$(curl -fsSI "$GW/api/health/live" | grep -i '^cache-control:' | tr -d '\r')
 [ "$(grep -c . <<< "$cache_control")" = 1 ] || fail "/api/health/live: not exactly one cache-control: $cache_control"

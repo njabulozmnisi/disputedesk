@@ -10,7 +10,11 @@ WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN npm run build
+# Browser tracing is on unless the build says off (story 7.11): CI's publish job builds the image for AWS with
+# --build-arg BROWSER_TELEMETRY=off, because the AWS gateway takes in no browser telemetry (AD-29). Vite reads
+# VITE_BROWSER_TELEMETRY at build time (Docker, "Build variables"; Vite, "Env Variables and Modes").
+ARG BROWSER_TELEMETRY=on
+RUN VITE_BROWSER_TELEMETRY=$BROWSER_TELEMETRY npm run build
 
 FROM nginxinc/nginx-unprivileged:1.31.7-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
 # The newest base still ships brotli-libs and curl/libcurl with HIGH CVEs that Alpine 3.24 has fixed, so upgrade
@@ -27,6 +31,10 @@ RUN rm /etc/nginx/nginx.conf /etc/nginx/conf.d/default.conf
 ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx \
     NGINX_ENVSUBST_FILTER=^GATEWAY_
 COPY infra/images/gateway/templates/ /etc/nginx/templates/
+# The AWS edge (docker-compose.aws.yml selects it with NGINX_ENVSUBST_TEMPLATE_DIR), with the app's security and Scalar
+# headers copied from the one source above.
+COPY infra/images/gateway/templates-aws/ /etc/nginx/templates-aws/
+COPY infra/images/gateway/templates/security-headers.conf.template infra/images/gateway/templates/scalar-headers.conf.template /etc/nginx/templates-aws/
 COPY --from=spa /src/frontend/dist/ /usr/share/nginx/html/
 # The base image already runs as its non-root nginx user (UID 101); restated so the Dockerfile says so (Trivy DS-0002).
 USER 101

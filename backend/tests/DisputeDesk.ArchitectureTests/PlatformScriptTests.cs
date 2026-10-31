@@ -294,13 +294,15 @@ public partial class PlatformScriptTests
         Assert.DoesNotMatch(QueryVariables(), definition);
     }
 
-    [Fact]
-    public void GatewayTemplate_ProxiedLocations_DropTheClientsForwardedHeader()
+    [Theory]
+    [InlineData("infra/images/gateway/templates/nginx.conf.template")]
+    [InlineData("infra/images/gateway/templates-aws/nginx.conf.template")]
+    public void GatewayTemplate_ProxiedLocations_DropTheClientsForwardedHeader(string templatePath)
     {
         // 6.6 QA O1: Zitadel resolves its instance from an RFC 7239 Forwarded header, so a client's own must not reach an
         // upstream. An empty proxy_set_header value is not passed on, and a location that sets any proxy_set_header
         // inherits none from its server (nginx, proxy_set_header), so each proxied location drops it itself.
-        string template = GatewayTemplate();
+        string template = File.ReadAllText(Path.Combine(SourceRoots.Repo, templatePath));
         string[] proxied = [.. MultiLineLocation().Matches(template)
             .Select(match => match.Value)
             .Where(block => block.Contains("proxy_pass ", StringComparison.Ordinal))];

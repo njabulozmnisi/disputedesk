@@ -53,7 +53,7 @@ builder.Services.AddDisputeDeskProblemDetails();
 builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
 builder.Services.AddApiReference();
 builder.Services.AddDisputeDeskHealthChecks();
-builder.Services.AddWebAppAuthentication();
+builder.Services.AddWebAppAuthentication(builder.Configuration);
 builder.Services.AddRequestTimeouts();
 builder.Services.AddCustomerRoutes();
 builder.Services.AddTransactions();

@@ -11,6 +11,8 @@ Not intermittent; test-only changes queued here so no story carries them.
 1. **`Authentication.SignOutTests.Login_AlreadySignedIn_RecordsSignOutForTheEndedSessionBeforeTheNewSignIn`** (2.8 review nit, moved out of 3.4 on 2026-10-30): the name promises an order the test does not assert. Rename it to drop "BeforeTheNewSignIn", or assert the order.
 3. **`infra/images/zitadel/provision.sh` and `verify.sh` curl calls** (2.6 review): add `--max-time` to `CURL_OPTS` so every provisioning network call has a timeout; tooling only. With it, `verify.sh:79` prints `fontUrl`, `logoUrl` and `logoUrlDark` instead of the joined `logos` detail, and the `provision` service comment in `docker-compose.yml` names the label policy.
 4. **`RaiseScreen.test.tsx`, "takes focus on the summary even when a field error already shows after blur"** (3.6 round 3 delta review): in jsdom the test passes without the fix. Attach a `vi.fn()` `focus` listener to the note before pressing Continue and assert it is never called (fails without `shouldFocusError: false`, verified by the reviewer). Also add `frontend/tsconfig.tsbuildinfo` to `.gitignore`.
+- `RateLimitWindowTests.Window_PermitSpentInTheFirstSegment_ComesBackWhenThatSegmentLeavesTheWindowAndNotBefore` (`RateLimitWindowTests.cs:75`) failed once in the 7.4 re-verify with "already past 00:00:05" and passed alone: a wall-clock race; drive it with `FakeTimeProvider` only.
+- `LinkingSendCapTests` "ClaimsExactlyOneMore" (401) and `IdempotencyConflictTests.Raise_TimesOut_Returns504…` (timeout) failed once in the 7.7 verifier's full run (1575/1577) and passed on a targeted rerun.
 
 ## Done 2026-10-30
 

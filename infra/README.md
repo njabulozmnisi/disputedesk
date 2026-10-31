@@ -34,6 +34,9 @@ A second stack beside this one (another worktree or a throwaway copy) sets anoth
 | `images/zitadel/` | One-shot, idempotent provisioner (`provision.sh`: project, roles, web app, operations machine user, fixture logins) and its read-only check of facts invisible from outside (`verify.sh`). |
 | `probe/` | The Aspire dashboard image plus a static `wget` so Compose can healthcheck it (the api gets the same probe from the `api-local` stage in `backend/Dockerfile`). |
 | `smoke.sh` | The black-box smoke check through the gateway; every check fails the run. |
+| `aws/` | Offline checks of the AWS stack (`docker-compose.aws.yml`, AD-28): `check-compose.sh` renders the override with the dummy inputs in `compose.test.env` and checks it and the collector config; `gateway.test.sh` tests the AWS gateway's edge rules on a throwaway network; `input-bounds.sh` holds each input's bound, shared with the deploy script. |
+| `nginx/templates-aws/` | The AWS gateway's config, selected by `NGINX_ENVSUBST_TEMPLATE_DIR`: three server blocks (app, identity, Mailpit), each refusing requests without CloudFront's origin-verify header, with the client address and scheme from CloudFront's headers. |
+| `otel-collector/` | The OpenTelemetry Collector config in AWS: OTLP in from the Api and the Worker, traces to X-Ray, logs and metrics to CloudWatch (AD-29). |
 
 ## Credentials
 

@@ -106,7 +106,8 @@ jobs:
 
   platform:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    # The AWS gateway test builds the gateway image twice (with and without browser telemetry).
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -114,6 +115,15 @@ jobs:
 
       - name: Compose file is valid
         run: docker compose config --quiet
+
+      # Story 7.4, offline with dummy inputs: the AWS override's render (every input required, nothing local left, the
+      # instance's memory budget) and the collector config, validated by the pinned collector image.
+      - name: AWS Compose override
+        run: infra/deploy/aws/check-compose.sh
+
+      # Story 7.4: the AWS gateway's edge rules, against the gateway image and Mailpit on a throwaway Docker network.
+      - name: AWS gateway
+        run: infra/deploy/aws/gateway.test.sh
 
       # Story 2.6. The expected values are DESIGN.md's (Theme file and hosted-login theming), written here rather than
       # re-read from tokens.css, so a changed token fails until DESIGN.md and this list agree. Case is ignored.
@@ -316,7 +326,8 @@ jobs:
           publish api          backend --target api-local
           publish worker       backend --target worker-local
           publish core-banking backend --target core-banking
-          publish gateway      .       -f infra/images/gateway/Dockerfile
+          # The AWS gateway takes in no browser telemetry (AD-29), so the published UI sends none.
+          publish gateway      .       -f infra/images/gateway/Dockerfile --build-arg BROWSER_TELEMETRY=off
           publish zitadel      infra/images/zitadel
 
       - name: Log out of GHCR
