@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { fixtureLogin, queryDatabase, sessionCookieName, topicRecords } from './support';
+import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser } from '@playwright/test';
+import { fixtureLogin, mailpit, mailpitSearch, messageText, origin, pause, queryDatabase, registerLogin, sessionCookieName, smsTo, topicRecords, type Login } from './support';
 
 // Story 6.2: POST /api/v1/linking/verify, through the real gateway, BFF, API, job, database (qa_readonly), Mailpit and
 // the Aspire telemetry API. Customer D is the only customer a new login can link to and links once per database, so the
@@ -14,9 +14,7 @@ test.describe.configure({ mode: 'serial' });
 
 const verifyPath = '/api/v1/linking/verify';
 const startPath = '/api/v1/linking/start';
-const mailpit = process.env.MAILPIT_URL ?? `http://localhost:${process.env.DISPUTEDESK_MAILPIT_PORT ?? '8025'}`;
 const dashboard = process.env.ASPIRE_URL ?? `http://localhost:${process.env.DISPUTEDESK_DASHBOARD_PORT ?? '18888'}`;
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const problemType = (slug: string) => `https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/${slug}.md`;
 
 type FixtureCustomer = { key: string; customerId: string; idNumber: string; cellphone: string; accounts: { accountNumber: string }[] };
@@ -32,10 +30,8 @@ const customerD = customer('D');
 const startDetails = (value: { idNumber: string; accountNumber: string }) => JSON.stringify({ idNumber: value.idNumber, accountNumber: value.accountNumber });
 const dDetails = startDetails(customerD);
 const sql = (statement: string) => queryDatabase(statement);
-const pause = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const startedAt = new Date().toISOString();
 
-type Login = { label: string; context: BrowserContext; sub: string };
 const logins: Record<string, Login> = {};
 let anonymous: APIRequestContext;
 let topicBaseline = 0;
@@ -54,49 +50,7 @@ async function signInFixture(browser: Browser, key: string): Promise<Login> {
   await page.getByTestId('password-text-input').press('Enter');
   await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   await page.close();
-  return { label: key, context, sub: loginSub(key) };
-}
-
-type MailSummary = { ID: string; Created: string; Subject: string; To: { Address: string }[] };
-async function mailpitSearch(query: string): Promise<MailSummary[]> {
-  const response = await fetch(`${mailpit}/api/v1/search?query=${encodeURIComponent(query)}&limit=500`);
-  return ((await response.json()).messages ?? []) as MailSummary[];
-}
-async function messageText(id: string): Promise<string> {
-  return ((await (await fetch(`${mailpit}/api/v1/message/${id}`)).json()).Text ?? '') as string;
-}
-
-/** Registers a new user on Zitadel's register page, confirms the e-mail with the code from Mailpit and signs in. */
-async function registerLogin(browser: Browser, label: string): Promise<Login> {
-  const email = `qa62-${label}-${Date.now()}@disputedesk.test`;
-  const password = 'Dev-Only-Qa62-Pass1!';
-  const knownSessions = sql('select "Id" from "Sessions"').split('\n').filter(Boolean);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/bff/login');
-  await page.getByRole('button', { name: 'Register new user' }).click();
-  await page.getByTestId('firstname-text-input').fill('Qa');
-  await page.getByTestId('lastname-text-input').fill(`Sixtwo${label}`);
-  await page.getByTestId('email-text-input').fill(email);
-  await page.getByText('Password', { exact: true }).click();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByTestId('password-text-input').fill(password, { timeout: 60_000 });
-  await page.getByTestId('password-confirm-text-input').fill(password);
-  await page.getByRole('button', { name: 'Continue' }).click();
-  let code: string | undefined;
-  for (let attempt = 0; attempt < 60 && !code; attempt++) {
-    const messages = await mailpitSearch(`to:${email} subject:"Verify email"`);
-    if (messages.length > 0) code = (await messageText(messages[0].ID)).match(/\bCode ([A-Z0-9]{6})\b/)?.[1];
-    if (!code) await pause(500);
-  }
-  expect(code, `verification e-mail for ${label}`).toBeTruthy();
-  await page.getByTestId('code-text-input').fill(code!);
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  const newRows = sql('select "Id" || \'|\' || "LoginSub" from "Sessions"').split('\n').filter((row) => row && !knownSessions.includes(row.split('|')[0]));
-  expect(newRows, `one new session for ${label}`).toHaveLength(1);
-  return { label, context, sub: newRows[0].split('|')[1] };
+  return { label: key, email: login.username, context, sub: loginSub(key) };
 }
 
 // ---- requests ------------------------------------------------------------------------------------------------------
@@ -174,16 +128,11 @@ async function untilAudited(sub: string, since: string, action: string): Promise
   throw new Error(`no ${action} audit row for ${sub} after ${since}`);
 }
 
-async function smsTo(cellphone: string): Promise<MailSummary[]> {
-  const all = await mailpitSearch('subject:"DisputeDesk SMS"');
-  return all.filter((message) => new Date(message.Created).getTime() >= new Date(startedAt).getTime()
-    && message.To.some((to) => to.Address.includes(cellphone.replace('+', ''))));
-}
 /** Waits for the next OTP SMS to D's cellphone beyond `knownCount` and returns its code. */
 async function nextOtpForD(knownCount: number): Promise<string> {
   const deadline = Date.now() + 40_000;
   while (Date.now() < deadline) {
-    const messages = await smsTo(customerD.cellphone);
+    const messages = await smsTo(customerD.cellphone, startedAt);
     if (messages.length > knownCount) {
       // Mailpit lists newest first.
       const code = (await messageText(messages[0].ID)).match(/\b(\d{6})\b/)?.[1];
@@ -195,7 +144,7 @@ async function nextOtpForD(knownCount: number): Promise<string> {
   }
   throw new Error('no OTP SMS reached customer D');
 }
-const smsCountToD = async () => (await smsTo(customerD.cellphone)).length;
+const smsCountToD = async () => (await smsTo(customerD.cellphone, startedAt)).length;
 
 /** Starts linking for `login` with `details` and waits for the job's stop; returns the code when D's OTP was sent. */
 async function startFor(login: Login, details: string, expectedAuditAction: string): Promise<string | null> {
@@ -222,7 +171,7 @@ test.beforeAll(async ({ browser }) => {
   test.setTimeout(240_000);
   logins.c = await signInFixture(browser, 'customer-c');
   logins.a = await signInFixture(browser, 'customer-a');
-  for (const label of ['none', 'lock', 'expiry', 'released', 'win', 'lose']) logins[label] = await registerLogin(browser, label);
+  for (const label of ['none', 'lock', 'expiry', 'released', 'win', 'lose']) logins[label] = await registerLogin(browser, 'qa62', label);
   anonymous = await playwrightRequest.newContext({ baseURL: origin });
   topicBaseline = topicRecords().length;
 });

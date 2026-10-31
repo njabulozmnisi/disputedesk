@@ -91,12 +91,12 @@ Needs: epic 2 (the themed hosted login for UJ-1); epic 3 (dispute screens for UJ
 
 | Story | Title | Owner | Status |
 |---|---|---|---|
-| 7.1 | [QA journey UJ-1 on the real stack with axe and ZAP](epic-7-release/tickets/story-7.1-qa-journey-uj-1-on-the-real-stack-with-axe-and-zap.md) | qa | planned |
+| 7.1 | [QA journey UJ-1 on the real stack with axe and ZAP](epic-7-release/tickets/story-7.1-qa-journey-uj-1-on-the-real-stack-with-axe-and-zap.md) | qa | done |
 | 7.2 | [QA journeys UJ-2, UJ-5a, UJ-5b and UJ-5d](epic-7-release/tickets/story-7.2-qa-journeys-uj-2-uj-5a-uj-5b-and-uj-5d.md) | qa | planned |
 | 7.3 | [CI runs the journeys with ZAP and publishes images to GHCR](epic-7-release/tickets/story-7.3-ci-runs-the-journeys-with-zap-and-publishes-images-to-ghcr.md) | backend | planned |
-| 7.6 | [Decision records and the production path](epic-7-release/tickets/story-7.6-decision-records-and-the-production-path.md) | docs | planned |
+| 7.6 | [Decision records and the production path](epic-7-release/tickets/story-7.6-decision-records-and-the-production-path.md) | docs | done |
 | 7.7 | [README, runbook and onboarding](epic-7-release/tickets/story-7.7-readme-runbook-and-onboarding.md) | docs | planned |
-| 7.11 | [SPA skips browser tracing when built without it](epic-7-release/tickets/story-7.11-spa-skips-browser-tracing-when-built-without-it.md) | frontend | planned |
+| 7.11 | [SPA skips browser tracing when built without it](epic-7-release/tickets/story-7.11-spa-skips-browser-tracing-when-built-without-it.md) | frontend | done |
 | 7.4 | [AWS Compose override and OpenTelemetry collector](epic-7-release/tickets/story-7.4-aws-compose-override-and-opentelemetry-collector.md) | backend | planned |
 | 7.5 | [Terraform dev environment and OIDC deploy](epic-7-release/tickets/story-7.5-terraform-dev-environment-and-oidc-deploy.md) | backend | planned |
 | 7.10 | [Production readiness review](epic-7-release/tickets/story-7.10-production-readiness-review.md) | supervisor | planned |

@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 const fixturePath = fileURLToPath(new URL('../../fixtures/local.json', import.meta.url));
 
@@ -94,4 +95,68 @@ export function ownDisputable<T extends DisputableRow>(rows: T[], spec: keyof ty
   const lists: Record<string, string[] | undefined> = reservedTransactions[spec];
   const ids = lists[customer] ?? [];
   return ids.flatMap((id) => rows.filter((row) => row.transactionId === id && row.disputable));
+}
+
+// ---- sign-up, Mailpit and SMS helpers (moved from linking-verify.spec.ts, story 7.1) -----------------------------------
+
+export const mailpit = process.env.MAILPIT_URL ?? `http://localhost:${process.env.DISPUTEDESK_MAILPIT_PORT ?? '8025'}`;
+export const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
+
+export const pause = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+export type MailSummary = { ID: string; Created: string; Subject: string; To: { Address: string }[] };
+export async function mailpitSearch(query: string): Promise<MailSummary[]> {
+  const response = await fetch(`${mailpit}/api/v1/search?query=${encodeURIComponent(query)}&limit=500`);
+  return ((await response.json()).messages ?? []) as MailSummary[];
+}
+export async function messageText(id: string): Promise<string> {
+  return ((await (await fetch(`${mailpit}/api/v1/message/${id}`)).json()).Text ?? '') as string;
+}
+
+/** The SMS messages Mailpit holds for `cellphone` created at or after `startedAt` (an ISO instant), newest first. */
+export async function smsTo(cellphone: string, startedAt: string): Promise<MailSummary[]> {
+  const all = await mailpitSearch('subject:"DisputeDesk SMS"');
+  return all.filter((message) => new Date(message.Created).getTime() >= new Date(startedAt).getTime()
+    && message.To.some((to) => to.Address.includes(cellphone.replace('+', ''))));
+}
+
+export type Login = { label: string; email: string; context: BrowserContext; sub: string };
+
+/** Registers a new user on Zitadel's register page, confirms the e-mail with the code from Mailpit and signs in. The address is `<prefix>-<label>-<epoch ms>@disputedesk.test`. `inspect`, when given, is called on the hosted register, password and e-mail code pages (UJ-1 scans them with axe). */
+export async function registerLogin(browser: Browser, prefix: string, label: string, inspect?: (page: Page, stage: 'register' | 'password' | 'verify') => Promise<void>): Promise<Login> {
+  const email = `${prefix}-${label}-${Date.now()}@disputedesk.test`;
+  const password = 'Dev-Only-Qa62-Pass1!';
+  const knownSessions = queryDatabase('select "Id" from "Sessions"').split('\n').filter(Boolean);
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto('/api/v1/bff/login');
+  await page.getByRole('button', { name: 'Register new user' }).click();
+  await page.getByTestId('firstname-text-input').waitFor();
+  await inspect?.(page, 'register');
+  await page.getByTestId('firstname-text-input').fill('Qa');
+  await page.getByTestId('lastname-text-input').fill(`Sixtwo${label}`);
+  await page.getByTestId('email-text-input').fill(email);
+  await page.getByText('Password', { exact: true }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByTestId('password-text-input').waitFor({ timeout: 60_000 });
+  await inspect?.(page, 'password');
+  await page.getByTestId('password-text-input').fill(password, { timeout: 60_000 });
+  await page.getByTestId('password-confirm-text-input').fill(password);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  let code: string | undefined;
+  for (let attempt = 0; attempt < 60 && !code; attempt++) {
+    const messages = await mailpitSearch(`to:${email} subject:"Verify email"`);
+    if (messages.length > 0) code = (await messageText(messages[0].ID)).match(/\bCode ([A-Z0-9]{6})\b/)?.[1];
+    if (!code) await pause(500);
+  }
+  expect(code, `verification e-mail for ${label}`).toBeTruthy();
+  await page.getByTestId('code-text-input').waitFor();
+  await inspect?.(page, 'verify');
+  await page.getByTestId('code-text-input').fill(code!);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
+  await page.close();
+  const newRows = queryDatabase('select "Id" || \'|\' || "LoginSub" from "Sessions"').split('\n').filter((row) => row && !knownSessions.includes(row.split('|')[0]));
+  expect(newRows, `one new session for ${label}`).toHaveLength(1);
+  return { label, email, context, sub: newRows[0].split('|')[1] };
 }
