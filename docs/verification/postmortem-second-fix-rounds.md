@@ -37,3 +37,11 @@ The supervisor accepted a verifier finding (keep the loaded card and dialog on a
 **Category.** Missing test (a test that cannot fail), with an unrun break reported as run.
 
 **Countermeasure (proposed for the epic 7 retrospective).** A deterministic check is the target: the builder's `breaks` entries are re-run by a script in a throwaway copy before the report goes out (apply the break patch, run the named test, expect a failure). Until then the reviewer runs each break it relies on, as it did here.
+
+## 7.2 fix round 2 (2026-10-31)
+
+**What happened.** Pre-build review's five `[story]` points were never folded into story 7.2 (no "Sofia" resolution was written, and the readiness check did not catch it). The first verifier failed criterion 5 on the unfolded wording; Sofia then folded all five, which added "actor A" for UJ-2's rejected raise to criterion 1 while QA's fix round 1 was already running. The delta review found UJ-2 counted the row without checking the actor (the same gap M2 fixed in UJ-5b) and logged it as a low for later; the re-verify judged it against the amended criterion and failed it, which opened round 2.
+
+**Category.** Spec gap (a pre-build fold skipped), then a story amended mid-round.
+
+**Countermeasure (proposed for the epic 7 retrospective).** A deterministic readiness check: a script fails a story whose `<story>-prebuild-review.md` or `-challenge.md` has `[story]` points but no "Sofia, <date>." resolution, run by the supervisor before dispatch. Until then, the supervisor greps for the resolution line before dispatching. A story amended during a fix round goes back through the delta review against the amended text before the re-verify, so a criterion-level gap is fixed in the same round rather than logged as a low.

@@ -31,19 +31,19 @@ Inputs:
    **Given** A signed in and the detail of the `TXN-A-0022` dispute showing "Under review"
    **When** A chooses "Withdraw dispute", types "Parcel arrived" in "Note (optional)" and confirms
    **Then** the detail shows the badge "Withdrawn" and no Withdraw control; its timeline's last entry is Withdrawn, actor "You", with the note "Parcel arrived"
-   **And** on `/transactions` the `TXN-A-0022` row shows "Withdrawn" and no Dispute control; through the browser context's request client (Playwright, `browserContext.request`), that row in `GET /api/v1/transactions` has `disputable: false`, and a raise on it answers 409 `already-disputed` (FR-13)
+   **And** on `/transactions` the `TXN-A-0022` row shows "Withdrawn" and no Dispute control; through the browser context's request client (Playwright, `browserContext.request`), that row in `GET /api/v1/transactions` has `disputable: false`, and a raise on it (`POST /api/v1/disputes` with the body `{ accountRef: 'ACC-A-1', transactionId: 'TXN-A-0022', reason: 'unrecognised' }`, the antiforgery cookie, its `X-XSRF-TOKEN` header and a quoted `Idempotency-Key`, so neither antiforgery nor validation can refuse it first) answers 409 `already-disputed` (FR-13); that rejected raise adds one `AuditLogEntries` row, `Raise`, `Rejected`, actor A (AD-14a), so criterion 2's audit expectations count it
 
 2. **UJ-2 traced to the database and the topic** (R35; NFR-TEST-5, FR-28, NFR-DATA-2, AD-17)
    **Given** the dispute's `Version` and stored events read before the withdraw
    **When** the withdraw's 200 arrives
    **Then** through `qa_readonly` the `Disputes` row has `Status` `Withdrawn` and `Version` one higher; exactly one new `StoredEvents` row, `EventType` `DisputeWithdrawn`, holds the note; exactly one new `OutboxMessages` row has the same `Id`, and within 30 seconds (`expect.poll`, `timeout: 30_000`; a timeout fails) its `Status` is `Sent`
-   **And** at least one record on `disputedesk.disputes` is keyed by the dispute ID with `type` `disputedesk.dispute.status-changed.v1`, `id` equal to the new stored event's `Id`, to-status Withdrawn, action withdraw and actor type customer; every record with that `id` is the same event (at-least-once, AD-17)
+   **And** at least one record on `disputedesk.disputes` is keyed by the dispute ID with `type` `disputedesk.dispute.status-changed.v1`, `id` equal to the new stored event's `Id`, `data.fromStatus` `underReview`, `data.toStatus` `withdrawn`, `data.action` `withdraw` and `data.actorType` `customer` (camelCase wire values, `contracts/events/disputedesk.dispute.status-changed.v1.schema.json`); every record with that `id` is the same event (at-least-once, AD-17)
 
 3. **UJ-5a: another customer's dispute is not found, exactly like an unknown ID** (R35; NFR-TEST-5, FR-17, NFR-SEC-6)
    **Given** B's `TXN-B-0025` dispute, whose `Disputes.CustomerId` is B's customer ID through `qa_readonly`, and which B can read (`GET /api/v1/disputes/<id>` as B answers 200)
    **When** A opens `/disputes/<B's id>` in the browser, and A's request client calls `GET /api/v1/disputes/<B's id>` and `GET /api/v1/disputes/<random GUID>`
    **Then** the browser shows the one not-found screen ("We can't find that dispute"); both API calls answer 404 with the same `Content-Type`, and their complete JSON bodies are equal once `traceId` is removed (RFC 9110 section 15.5.5; RFC 9457)
-   **And** the read writes nothing: B's dispute keeps its `Version`, and no stored event or outbox row is added for it
+   **And** the read writes nothing: B's dispute keeps its `Version`, and no stored event, outbox row or audit row is added for it (AD-14a: customer reads write none)
 
 4. **UJ-5b: a resolved dispute cannot be withdrawn** (R35; NFR-TEST-5, FR-20, FR-24)
    **Given** A's `TXN-A-0015` dispute (Resolved, Upheld)
@@ -54,19 +54,20 @@ Inputs:
 5. **UJ-5d: an unlinked login is sent to linking** (R35; NFR-TEST-5, FR-9)
    **Given** customer C's fixture login, signed in
    **When** it opens `/transactions`
-   **Then** `GET /api/v1/transactions` answers 403 `linking-required` (captured with `page.waitForResponse`), and the SPA shows `/link` with the linking details screen (story 6.4)
+   **Then** the browser lands on `/link` and shows the linking details screen with its heading "Link your login" (story 6.4), and sends no `/api/v1/transactions` request: C's session state is `unlinked`, so `SessionGate` redirects `/transactions` to `/link` before the page requests anything (checked with `page.on('request')` or `page.waitForRequest` negated)
+   **And** through the browser context's request client (`context.request.get('/api/v1/transactions')`, Playwright `browserContext.request`) the API answers 403 `linking-required` (checked with `support.ts`'s `expectProblemShape`)
    **And** no `CustomerLinks` row exists for C's login afterwards
 
 6. **Accessibility: axe at two widths and the manual keyboard pass** (R40; NFR-CODE-6)
    **Given** the SPA screen states these journeys visit: the Under review detail, the withdraw dialog open, the withdraw dialog with the note, the Withdrawn detail, transactions with the Withdrawn row, the not-found screen, the Resolved detail and the linking details screen
-   **When** `@axe-core/playwright` runs on each at 1280px and 320px wide with the existing `axeTags` (`wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`)
+   **When** `@axe-core/playwright` runs on each at 1280px and 320px wide through the journeys' shared `e2e/tests/journeys/screens.ts` (`axeTags`, `expectAccessibleAtBothWidths`, from 7.1) with the tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`
    **Then** no violation is reported, and at 320px `document.documentElement.scrollWidth` is at most the viewport width (WCAG 2.2 SC 1.4.10)
    **And** `7.2-qa.md` records a manual keyboard pass over the same states as 7.1 does: logical Tab order, visible focus, no keyboard trap, focus inside the dialog and returned on close (WCAG 2.2 SC 2.1.1, 2.1.2, 2.4.3, 2.4.7), with pass or the finding; axe and this pass together check WCAG 2.2 AA, neither alone proves it
 
 ## Boundaries
 
 - Must not change: `seeded-disputes.spec.ts` or any other `regression` spec; the seed (story 5.4).
-- Each journey is independent of the order its project runs files: UJ-2 changes only `TXN-A-0022`'s dispute, which no other journey reads; UJ-5a, UJ-5b and UJ-5d write nothing but the one audit row.
+- Each journey is independent of the order its project runs files: UJ-2 changes only `TXN-A-0022`'s dispute, which no other journey reads; UJ-5a and UJ-5d write nothing; UJ-5b writes one audit row, and UJ-2's rejected raise writes one.
 - Never `TXN-A-0011`: it is the SLA demo dispute, escalated five minutes after seeding, so its status moves during a run (AD-30).
 - No reset endpoint, database write, new test framework or fixture layer; no application code.
 
@@ -82,7 +83,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Owner: qa (qa agent).
 - Flags: none.
 - Lane: QA.
-- Mechanisms and sources: Playwright projects (story 7.1), `browserContext.request` (<https://playwright.dev/docs/api/class-browsercontext#browser-context-request>), `page.waitForResponse` (<https://playwright.dev/docs/network>), `expect.poll` (<https://playwright.dev/docs/test-assertions#expectpoll>); `@axe-core/playwright` WCAG tags (<https://github.com/dequelabs/axe-core/blob/develop/doc/API.md#options-parameter>); WCAG 2.2 (<https://www.w3.org/TR/WCAG22/>); RFC 9457 problem details and RFC 9110 404 (<https://www.rfc-editor.org/rfc/rfc9457>, <https://www.rfc-editor.org/rfc/rfc9110#section-15.5.5>).
+- Mechanisms and sources: Playwright projects (story 7.1), `browserContext.request` (<https://playwright.dev/docs/api/class-browsercontext#browser-context-request>), `page.waitForRequest` and `page.on('request')` (<https://playwright.dev/docs/network>), `expect.poll` (<https://playwright.dev/docs/test-assertions#expectpoll>); `@axe-core/playwright` WCAG tags (<https://github.com/dequelabs/axe-core/blob/develop/doc/API.md#options-parameter>); WCAG 2.2 (<https://www.w3.org/TR/WCAG22/>); RFC 9457 problem details and RFC 9110 404 (<https://www.rfc-editor.org/rfc/rfc9457>, <https://www.rfc-editor.org/rfc/rfc9110#section-15.5.5>).
 - Packages: none.
 - Touches:
   - `e2e/tests/journeys/uj-2.spec.ts`, `uj-5a.spec.ts`, `uj-5b.spec.ts`, `uj-5d.spec.ts` (new)

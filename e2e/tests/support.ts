@@ -9,10 +9,10 @@ export const sessionCookieName = 'disputedesk-session';
 export const antiforgeryCookieName = 'disputedesk-antiforgery';
 export const problemTypeBase = 'https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/';
 
-export function fixtureLogin(key: string): { username: string; password: string } {
+export function fixtureLogin(key: string): { userId: string; username: string; password: string } {
   const fixtures = JSON.parse(readFileSync(fixturePath, 'utf8'));
   const login = fixtures.logins.find((entry: { key: string }) => entry.key === key);
-  return { username: login.username, password: login.password };
+  return { userId: login.userId, username: login.username, password: login.password };
 }
 
 /** Runs one query as the read-only QA role (infra/db). The role cannot write, so this is evidence only. */
@@ -81,6 +81,13 @@ export const reservedTransactions = {
   'spa-disputes-history': { a: transactionIds('A', [10, 43, 44, 45]) },
 };
 
+/** Seeded disputes the journeys (e2e/tests/journeys) read or change. seededDisputes already keeps them out of the reserved lists. */
+export const journeySeededDisputes = {
+  withdrawnByUj2: { accountRef: 'ACC-A-1', transactionId: 'TXN-A-0022' },
+  otherCustomersUj5a: { accountRef: 'ACC-B-1', transactionId: 'TXN-B-0025' },
+  resolvedUj5b: { accountRef: 'ACC-A-1', transactionId: 'TXN-A-0015' },
+};
+
 const everyReserved = Object.values(reservedTransactions).flatMap((lists) => Object.values(lists).flat());
 const problems = [
   ...everyReserved.filter((id, index) => everyReserved.indexOf(id) !== index).map((id) => `${id} is reserved twice`),
@@ -95,6 +102,29 @@ export function ownDisputable<T extends DisputableRow>(rows: T[], spec: keyof ty
   const lists: Record<string, string[] | undefined> = reservedTransactions[spec];
   const ids = lists[customer] ?? [];
   return ids.flatMap((id) => rows.filter((row) => row.transactionId === id && row.disputable));
+}
+
+/** Signs a fixture login in through the hosted Zitadel pages and returns the signed-in browser context. */
+export async function signInContext(browser: Browser, loginKey: string): Promise<BrowserContext> {
+  const login = fixtureLogin(loginKey);
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto('/api/v1/bff/login');
+  await page.getByTestId('username-text-input').fill(login.username);
+  await page.getByTestId('username-text-input').press('Enter');
+  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
+  await page.getByTestId('password-text-input').press('Enter');
+  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
+  await page.close();
+  return context;
+}
+
+/** An API problem body without its per-request traceId, for comparing two answers. */
+export const withoutTraceId = ({ traceId: _ignored, ...rest }: Record<string, unknown>) => rest;
+
+/** Query rows as objects (qa_readonly). */
+export function queryRows<T>(sql: string): T[] {
+  return JSON.parse(queryDatabase(`select coalesce(json_agg(t), '[]') from (${sql}) t`)) as T[];
 }
 
 // ---- sign-up, Mailpit and SMS helpers (moved from linking-verify.spec.ts, story 7.1) -----------------------------------
