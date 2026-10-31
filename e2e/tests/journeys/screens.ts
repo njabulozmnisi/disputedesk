@@ -16,3 +16,11 @@ export async function expectAccessibleAtBothWidths(page: Page, state: string) {
     }
   }
 }
+
+/** Where keyboard focus is now: the element's text and whether it is inside the alert dialog. */
+export async function focusSummary(page: Page) {
+  return page.evaluate(() => {
+    const element = document.activeElement;
+    return { text: (element?.textContent ?? '').trim().slice(0, 40), inDialog: element?.closest('[role="alertdialog"]') != null };
+  });
+}
