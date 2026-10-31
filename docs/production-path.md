@@ -118,6 +118,7 @@ Every PRD §6.2 bullet, every "Operations features" sub-bullet, every row of the
 | Input (7.10 PRR F-F7, human decision): arrival order across a relay handover | P18 | Per-dispute order by `disputeVersion`, not strict arrival order |
 | Input (7.10 PRR F-F10, human decision): observability scope | P42 | No browser telemetry in AWS |
 | Input (7.10 PRR F-F23, human decision): stack lock scope | P72 | The lock is held per command, not per session |
+| Input (7.12 refine, F-F4): no-store on gateway errors before a location | P73 | nginx 400, 414, 494 and the AWS origin-verify 403 on `/api` keep their headers |
 | Input (7.4 pre-build security S7.4-1, human decision): three distributions | P47 | Mailpit has its own distribution; all three disable caching |
 | Decision 2026-10-27 (standards audit): migrations; deferred operations stories | P28 | No operations story is deferred: 5.3 and 5.4 are in v1's scope (initiative scope decision 2026-10-27) |
 | Decision 2026-10-27 (2.7 security review): problem `type` URLs | P39 | Accepted risk under the GitHub namespace |
@@ -426,3 +427,8 @@ Audit records go only to the application database; the collector receives the Ap
 ### P72. Stack lock scope
 
 `scripts/test-lock.sh run` releases the lock when its wrapped command ends, so separately locked bring-up and request commands let another lane take the stack between them; the documented workaround runs the whole check in one locked script. The upgrade adds separate acquire and release commands, so a lane holds the stack for its whole session (7.10 PRR F-F23). *Why it waits:* the one-locked-script workaround holds, and no contamination of recorded evidence was found (human decision 2026-10-31).
+
+### P73. `no-store` on gateway errors raised before a location
+
+Story 7.12 adds `Cache-Control: no-store` to the `/api` responses nginx generates in a location (429, 413, 500, 502, 504; AD-23 as amended 2026-10-31). nginx produces 400, 414 and 494, and the AWS template its origin-verify 403, before it selects a location, so a rule scoped to `/api` cannot reach them (7.10 finding F-F4). Production adds the header to those responses with a server-level rule keyed on the request path (nginx `map`), or confirms each body holds no customer data. *Why it waits:* these bodies are nginx's fixed error pages with no customer data, and the demo holds only synthetic data (story 7.12 refine, 2026-10-31).
+
