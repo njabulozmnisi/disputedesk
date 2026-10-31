@@ -23,6 +23,7 @@ test-results/
 *.tfstate
 *.tfstate.*
 *.tfvars
+*.tfplan
 !*.tfvars.example
 
 # OS / editors
