@@ -24,3 +24,4 @@ A repeated mistake becomes a check. Add one architecture test: every `record` in
 ## Decision (2026-10-30)
 
 Approved: add the architecture test with the sealed records, as a Small-tier change through a builder and the reviewer, then delete the pitfall line from the review and security skills. It starts after 5.2 and 5.4 merge, because their fix rounds seal `OperationsDisputeResponse`, `OperationsTimelineEntryResponse` and the fixture records; starting earlier would edit the same records twice.
+- TransactionSnapshot (Domain, story 3.8) keeps the generated record ToString (AccountRef, TransactionId): covered by the approved ToString architecture check (postmortem-record-tostring.md), which starts after 5.4 merges.
