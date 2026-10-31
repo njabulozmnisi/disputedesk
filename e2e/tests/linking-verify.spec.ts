@@ -2,13 +2,14 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser } from '@playwright/test';
-import { fixtureLogin, mailpit, mailpitSearch, messageText, origin, pause, queryDatabase, registerLogin, sessionCookieName, smsTo, topicRecords, type Login } from './support';
+import { fixtureLogin, holdsCode, mailpit, mailpitSearch, messageText, origin, pause, queryDatabase, registerLogin, sessionCookieName, smsTo, topicRecords, type Login } from './support';
 
 // Story 6.2: POST /api/v1/linking/verify, through the real gateway, Api, job, database (qa_readonly), Mailpit and
 // the Aspire telemetry API. Customer D is the only customer a new login can link to and links once per database, so the
 // journeys are ordered: every journey that must not link runs first, the race for D (and the happy path of the winner)
 // runs last. Only customer C has a fixture login that is unlinked, so the other unlinked logins are registered through
-// Zitadel (register page, e-mail code read from Mailpit), as a new user would. Fixture bank details and OTPs are only
+// Zitadel (register page, e-mail code read from Mailpit), as a new user would. D takes three OTP sends an hour, so the tests
+// run as three Playwright projects on three fresh stacks, picked by tag (@verify-a, @verify-b, @verify-c; e2e/playwright.config.ts). Fixture bank details and OTPs are only
 // compared, never printed. Expiry waits for the real five minutes: the stack has no clock to move.
 test.describe.configure({ mode: 'serial' });
 
@@ -35,6 +36,15 @@ const startedAt = new Date().toISOString();
 const logins: Record<string, Login> = {};
 let anonymous: APIRequestContext;
 let topicBaseline = 0;
+let outboxBaseline = 0;
+let outboxBaselineAt = '1970-01-01';
+const outboxRows = () => Number(sql(`select count(*) from "OutboxMessages"`));
+/** The topic's record count once the relay has sent every outbox row (on a fresh stack it is still sending the seeded disputes). */
+async function settledTopicCount(): Promise<number> {
+  for (let attempt = 0; attempt < 60 && sql(`select count(*) from "OutboxMessages" where "Status" <> 'Sent'`) !== '0'; attempt++) await pause(500);
+  expect(sql(`select count(*) from "OutboxMessages" where "Status" <> 'Sent'`), 'the relay sent every outbox row within 30 s').toBe('0');
+  return topicRecords().length;
+}
 const everyCodeSeen = new Set<string>();
 
 // ---- sign-in and registration -------------------------------------------------------------------------------------
@@ -173,7 +183,9 @@ test.beforeAll(async ({ browser }) => {
   logins.a = await signInFixture(browser, 'customer-a');
   for (const label of ['none', 'lock', 'expiry', 'released', 'win', 'lose']) logins[label] = await registerLogin(browser, 'qa62', label);
   anonymous = await playwrightRequest.newContext({ baseURL: origin });
-  topicBaseline = topicRecords().length;
+  topicBaseline = await settledTopicCount();
+  outboxBaseline = outboxRows();
+  outboxBaselineAt = sql(`select coalesce(max("CreatedAtUtc")::text, '1970-01-01') from "OutboxMessages"`);
 });
 
 test.afterAll(async () => {
@@ -183,7 +195,7 @@ test.afterAll(async () => {
 
 // ---- criterion 5: route states, check order and the code's bounds ---------------------------------------------------
 
-test('criterion 5: 401, 403 already-linked, 400 antiforgery come first; the code bounds give 400 naming only code and count nothing', async () => {
+test('criterion 5: 401, 403 already-linked, 400 antiforgery come first; the code bounds give 400 naming only code and count nothing', { tag: ['@verify-a'] }, async () => {
   const api = logins.none.context.request;
   const token = await antiforgeryToken(api);
   const auditBefore = auditCount();
@@ -252,7 +264,7 @@ test('criterion 5: 401, 403 already-linked, 400 antiforgery come first; the code
 
 // ---- criterion 4: a login with no challenge row -----------------------------------------------------------------------
 
-test('criterion 4: a login with no challenge row gets 422 attemptsRemaining 2 every time, never locked, nothing counted', async () => {
+test('criterion 4: a login with no challenge row gets 422 attemptsRemaining 2 every time, never locked, nothing counted', { tag: ['@verify-a'] }, async () => {
   const login = logins.none;
   const api = login.context.request;
   const token = await antiforgeryToken(api);
@@ -274,7 +286,7 @@ test('criterion 4: a login with no challenge row gets 422 attemptsRemaining 2 ev
 
 let referenceSequence: Observed[] = [];
 
-test('criterion 3, 8: D, wrong, wrong, wrong gives 2, 1, locked; the correct code on a fourth attempt stays locked; counted and audited', async () => {
+test('criterion 3, 8: D, wrong, wrong, wrong gives 2, 1, locked; the correct code on a fourth attempt stays locked; counted and audited', { tag: ['@verify-a'] }, async () => {
   const login = logins.lock;
   const api = login.context.request;
   const code = (await startFor(login, dDetails, 'LinkingOtpSent'))!;
@@ -347,7 +359,7 @@ async function expectLikeWrongCode(login: Login, kind: string, expectedCustomerI
   ]);
 }
 
-test('criterion 4: blank challenges (no match, customer A already linked, customer C after the failed SIM-swap check) answer like wrong codes', async () => {
+test('criterion 4: blank challenges (no match, customer A already linked, customer C after the failed SIM-swap check) answer like wrong codes', { tag: ['@verify-a'] }, async () => {
   const login = logins.c;
   const stops: { kind: string; details: string; audit: string; customerId: string | null }[] = [
     { kind: 'no match', details: JSON.stringify({ idNumber: customerD.idNumber, accountNumber: '1000000049' }), audit: 'LinkingNoMatch', customerId: null },
@@ -365,7 +377,7 @@ test('criterion 4: blank challenges (no match, customer A already linked, custom
   expect(sql(`select count(*) from "CustomerLinks" where "LoginSub" = '${login.sub}'`)).toBe('0');
 });
 
-test('criterion 4: a released challenge (the SMS send failed; OtpHmac null) answers like wrong codes', async () => {
+test('criterion 4: a released challenge (the SMS send failed; OtpHmac null) answers like wrong codes', { tag: ['@verify-a'] }, async () => {
   const login = logins.released;
   const api = login.context.request;
   const token = await antiforgeryToken(api);
@@ -380,7 +392,9 @@ test('criterion 4: a released challenge (the SMS send failed; OtpHmac null) answ
   }
   expect(auditRows(login.sub, since)).toContain(`LinkingOtpSent|Failed|${customerD.customerId}|true`);
   expect(currentChallenge(login.sub).split('|').slice(2, 4)).toEqual([customerD.customerId, 'false']);
-  expect(sql(`select ("ExpiresAtUtc" is null)::text || ("OtpSentAtUtc" is null)::text from "LinkingChallenges" where "LoginSub" = '${login.sub}' and "SupersededAtUtc" is null`)).toBe('truetrue');
+  // A release clears the expiry and the HMAC but keeps OtpSentAtUtc, so the claim still counts toward the hourly send cap
+  // (decided 2026-10-30, OtpSends.ReleaseAsync).
+  expect(sql(`select ("ExpiresAtUtc" is null)::text || ("OtpSentAtUtc" is null)::text from "LinkingChallenges" where "LoginSub" = '${login.sub}' and "SupersededAtUtc" is null`)).toBe('truefalse');
   for (let attempt = 0; attempt < 40; attempt++) {
     try { if ((await fetch(`${mailpit}/api/v1/info`)).ok) break; } catch { /* still starting */ }
     await pause(500);
@@ -394,7 +408,7 @@ let expiryCode = '';
 let expiryChallengeId = '';
 let supersededCode = '';
 
-test('criterion 1: a later start supersedes: the earlier code fails like a wrong code on the current challenge', async () => {
+test('criterion 1: a later start supersedes: the earlier code fails like a wrong code on the current challenge', { tag: ['@verify-b'] }, async () => {
   const login = logins.expiry;
   const api = login.context.request;
   supersededCode = (await startFor(login, dDetails, 'LinkingOtpSent'))!;
@@ -427,7 +441,7 @@ async function sessionCookie(login: Login): Promise<string | undefined> {
   return (await login.context.cookies()).find((cookie) => cookie.name === sessionCookieName)?.value;
 }
 
-test('criteria 1, 2, 6, 7, 8: two logins and ten parallel verifications race for D: exactly one 204 and one link; the winner keeps its session and reads D', async ({ browser }) => {
+test('criteria 1, 2, 6, 7, 8: two logins and ten parallel verifications race for D: exactly one 204 and one link; the winner keeps its session and reads D', { tag: ['@verify-c'] }, async ({ browser }) => {
   test.setTimeout(120_000);
   const contenders = [logins.win, logins.lose];
   const codes: Record<string, string> = {};
@@ -546,7 +560,7 @@ test('criteria 1, 2, 6, 7, 8: two logins and ten parallel verifications race for
 
 // ---- criterion 3, 8: an expired claimed challenge counts the attempt and answers the same way ------------------------------
 
-test('criterion 3, 8: an expired claimed challenge counts the attempt, the correct code included: 422 then 409 linking-locked', async () => {
+test('criterion 3, 8: an expired claimed challenge counts the attempt, the correct code included: 422 then 409 linking-locked', { tag: ['@verify-b'] }, async () => {
   test.setTimeout(420_000);
   const login = logins.expiry;
   const api = login.context.request;
@@ -575,9 +589,10 @@ test('criterion 3, 8: an expired claimed challenge counts the attempt, the corre
 
 // ---- criterion 8: nothing personal or secret anywhere ---------------------------------------------------------------------
 
-test('criterion 8: no OTP, HMAC or ID number in any table column but OtpHmac, the Api and worker logs, the Aspire logs and spans, or the topic', async () => {
+test('criterion 8: no OTP, HMAC or ID number in any table column but OtpHmac, the Api and worker logs, the Aspire logs and spans, or the topic', { tag: ['@verify-a', '@verify-b', '@verify-c'] }, async () => {
   const hmacs = sql(`select encode("OtpHmac", 'hex') from "LinkingChallenges" where "OtpHmac" is not null`).split('\n').filter(Boolean);
-  expect(hmacs.length).toBeGreaterThan(3);
+  // The spec runs as three groups on three stacks (run-regression.sh), so a stack holds one or two HMACs and codes, not many.
+  expect(hmacs.length).toBeGreaterThanOrEqual(1);
   const hmacForms = hmacs.flatMap((hex) => [hex, hex.toUpperCase(), Buffer.from(hex, 'hex').toString('base64'), Buffer.from(hex, 'hex').toString('base64url')]);
   // The codes this run submitted or was sent, plus every OTP SMS Mailpit still holds (a run of this test alone has only those).
   for (const message of await mailpitSearch('subject:"DisputeDesk SMS"')) {
@@ -585,17 +600,15 @@ test('criterion 8: no OTP, HMAC or ID number in any table column but OtpHmac, th
     if (code) everyCodeSeen.add(code);
   }
   const otpCodes = [...everyCodeSeen];
-  expect(otpCodes.length).toBeGreaterThan(3);
+  expect(otpCodes.length).toBeGreaterThanOrEqual(1);
   const personal = [
     ...[customerA, customerC, customerD].flatMap((entry) => [entry.idNumber, entry.cellphone, entry.cellphone.replace('+', '')]),
     ...(fixture.customers as FixtureCustomer[]).flatMap((entry) => entry.accounts.map((account) => account.accountNumber)),
   ];
-  // A 6-digit code counts as present only as a whole token, so a digit run inside an ID or a timestamp is not a hit.
-  const wholeToken = (haystack: string, token: string) => new RegExp(`(?<![0-9A-Za-z])${token}(?![0-9A-Za-z])`).test(haystack);
   const scan = (where: string, text: string) => {
     for (const hmac of hmacForms) expect(text.includes(hmac), `${where} holds an HMAC`).toBe(false);
     for (const secret of personal) expect(text.includes(secret), `${where} holds personal data`).toBe(false);
-    for (const code of otpCodes) expect(wholeToken(text, code), `${where} holds an OTP`).toBe(false);
+    for (const code of otpCodes) expect(holdsCode(text, code), `${where} holds an OTP`).toBe(false);
   };
 
   const tables = sql(`select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE' order by 1`).split('\n').filter(Boolean);
@@ -614,6 +627,12 @@ test('criterion 8: no OTP, HMAC or ID number in any table column but OtpHmac, th
   scan('Aspire spans', spans);
   // The dashboard keeps a bounded buffer of spans, so by now the verify spans may have aged out; what remains is scanned.
   scan('topic', JSON.stringify(topicRecords()));
-  expect(topicRecords().length, 'linking emits no event').toBe(topicBaseline);
+  // Linking writes no outbox row and sends no event. The topic may still grow by the dispute events other writers add (the SLA
+  // sweep runs on a timer), so every new record must be explained by a new outbox row.
+  const topicNow = await settledTopicCount();
+  expect(topicNow - topicBaseline, 'linking emits no event: every new record has a new outbox row').toBe(outboxRows() - outboxBaseline);
+  // ... and every outbox row since the baseline is one the SLA sweep raised (a status change), not a linking event.
+  expect(sql(`select count(*) from "OutboxMessages" where "CreatedAtUtc" > '${outboxBaselineAt}' and "EventType" <> 'disputedesk.dispute.status-changed.v1'`),
+    'a new outbox row of a type other than the SLA sweep status change').toBe('0');
   scan('OtpHmac-less audit text', sql(`select coalesce(string_agg(to_jsonb(t)::text, E'\\n'), '') from "AuditLogEntries" t`));
 });

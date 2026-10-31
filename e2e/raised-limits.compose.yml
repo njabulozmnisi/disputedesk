@@ -1,0 +1,10 @@
+# E2E override: raises the linking rate limits (production: 5 requests per login, 20 per client address, 15 minutes) so the
+# specs that send more than that from one login or one address can run. 6.3 QA conflict C1. Used with Compose's documented
+# merge of several files (https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/):
+#   docker compose -f docker-compose.yml -f e2e/raised-limits.compose.yml -f e2e/small-queue.compose.yml up -d --wait
+# linking-rate-limits, linking-screens and linking-queue run WITHOUT this file, at the production limits (e2e/run-regression.sh).
+services:
+  api:
+    environment:
+      Linking__RateLimits__PermitsPerLogin: "1000"
+      Linking__RateLimits__PermitsPerIp: "1000"

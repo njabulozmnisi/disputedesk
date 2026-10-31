@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { queryDatabase, topicRecords } from './support';
+import { holdsCode, otpCodesSentTo, queryDatabase, telemetryValues, topicRecords } from './support';
 
 // Story 6.3: the linking rate limits (5 requests per login, 20 per client IP, a 15-minute window), through the real
 // gateway, Api, job, database (qa_readonly) and Mailpit. The limits are held in memory on the one Api instance, so
@@ -413,8 +413,11 @@ test('no personal data in the Api logs, the dashboard spans and logs, or the top
   const logs = await (await fetch(`${dashboard}/logs?limit=5000`)).text();
   const apiLogs = execFileSync('sh', ['-c', 'docker logs disputedesk-api-1 2>&1'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   expect(spans.length).toBeGreaterThan(1000);
-  for (const [name, text] of [['api logs', apiLogs], ['spans', spans], ['dashboard logs', logs], ['topic', JSON.stringify(topicRecords())]] as const) {
+  // The OTPs sent to D: attribute and event values only, with a non-hex boundary (hex ids and timestamps hold them by chance).
+  const codes = await otpCodesSentTo(customerD.cellphone);
+  for (const [name, text, scanned] of [['api logs', apiLogs, apiLogs], ['spans', spans, telemetryValues(spans)], ['dashboard logs', logs, telemetryValues(logs)], ['topic', JSON.stringify(topicRecords()), JSON.stringify(topicRecords())]] as const) {
     for (const secret of secrets) expect(text.includes(secret), `${name} holds a secret`).toBe(false);
+    for (const code of codes) expect(holdsCode(scanned, code), `${name} holds an OTP`).toBe(false);
     // The rate-limit partition keys are the login's sub and the client address: neither is logged by the limiter.
     for (const login of pool) expect(text.includes(login.sub), `${name} holds ${login.sub}`).toBe(false);
   }

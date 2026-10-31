@@ -1,0 +1,7 @@
+# E2E override: a small linking job queue, so a full queue (429) is reachable with a handful of logins. 6.3 QA conflict C3.
+# The specs read the same value from E2E_LINKING_QUEUE_CAPACITY (e2e/run-regression.sh sets it). Merged with -f like
+# e2e/raised-limits.compose.yml. A queue of 2 means 4 running jobs + 2 waiting = 6 accepted starts.
+services:
+  api:
+    environment:
+      Linking__QueueCapacity: "2"

@@ -62,8 +62,10 @@ npm run format
 npm test
 ```
 
-End-to-end, in `e2e/`, with Playwright against the running stack. The two projects each need a fresh stack:
-`journeys` (the user journeys, which CI runs) and the regression project (`npm test`, every other spec).
+End-to-end, in `e2e/`, with Playwright against the running stack. `npm run journeys` runs the user journeys (which CI
+runs) on a fresh stack you start. `npm test` runs every other spec through `e2e/run-regression.sh`, which starts its
+own fresh stack for each of its seven groups (`docker compose down -v`, then `up --build --wait`) and prints how many
+OTPs each group sent to customer D; it stops the stack at the end.
 
 ```sh
 npm ci
@@ -71,8 +73,6 @@ npx playwright install chromium
 docker compose down -v
 docker compose up --build --wait
 npm run journeys
-docker compose down -v
-docker compose up --build --wait
 npm test
 ```
 

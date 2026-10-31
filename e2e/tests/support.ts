@@ -190,3 +190,41 @@ export async function registerLogin(browser: Browser, prefix: string, label: str
   expect(newRows, `one new session for ${label}`).toHaveLength(1);
   return { label, email, context, sub: newRows[0].split('|')[1] };
 }
+
+// ---- telemetry privacy scans (e2e-fix) ---------------------------------------------------------------------------------
+// The dashboard's span and log JSON holds random hex trace and span ids and nanosecond timestamps. A six-digit code is a
+// substring of those by chance, so a raw `includes` flakes on a big run (docs/verification/span-privacy-check.md).
+// Long secrets (ID, account and cellphone numbers, HMACs) stay raw substring checks: a chance hit is negligible.
+// Codes are compared on attribute, event and exception values only, with a non-hex boundary on both sides.
+
+const identifierKeys = new Set(['traceId', 'spanId', 'parentSpanId', 'startTimeUnixNano', 'endTimeUnixNano', 'timeUnixNano', 'observedTimeUnixNano']);
+
+/** Every string and number in an OTLP JSON document except trace and span ids and timestamps, one per line. */
+export function telemetryValues(json: string): string {
+  const values: string[] = [];
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) node.forEach(walk);
+    else if (node !== null && typeof node === 'object') {
+      for (const [key, child] of Object.entries(node)) if (!identifierKeys.has(key)) walk(child);
+    } else if (typeof node === 'string' || typeof node === 'number') values.push(String(node));
+  };
+  walk(JSON.parse(json));
+  return values.join('\n');
+}
+
+/**
+ * True when `code` appears with no hex digit on either side (a hex id or a longer number does not count) and no `.` before it
+ * (the six-digit microsecond fraction of a timestamp, `12:00:00.482913`, is not a code).
+ */
+export const holdsCode = (text: string, code: string): boolean => new RegExp(`(?<![0-9a-fA-F.])${code}(?![0-9a-fA-F])`).test(text);
+
+/** The six-digit codes of every OTP SMS Mailpit holds for `cellphone`. */
+export async function otpCodesSentTo(cellphone: string): Promise<string[]> {
+  const codes: string[] = [];
+  for (const message of await mailpitSearch('subject:"DisputeDesk SMS"')) {
+    if (!message.To.some((to) => to.Address.includes(cellphone.replace('+', '')))) continue;
+    const code = (await messageText(message.ID)).match(/\b(\d{6})\b/)?.[1];
+    if (code) codes.push(code);
+  }
+  return codes;
+}
