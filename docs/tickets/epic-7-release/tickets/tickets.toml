@@ -1,6 +1,6 @@
 # Journeys proven on the stack, deployed and documented: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
 
-next_id = 12
+next_id = 15
 
 [[entry]]
 id = 1
@@ -147,13 +147,67 @@ touches = ["infra/terraform/bootstrap/", "infra/terraform/modules/ (network, com
 supervisor_checks = ["Throwaway copy: make the trust policy :sub StringLike repo:<repo>:*; criterion 5 fails.", "Throwaway copy: add ingress on port 22; criterion 2 fails.", "Throwaway copy: set publicly_accessible = true; criterion 3 fails.", "Throwaway copy: write .env in place; criterion 6 fails.", "Throwaway copy: put AWS-RunShellScript back in ssm:SendCommand; criterion 5 fails.", "Throwaway copy: remove the DOCKER-USER rule from deploy.sh; criterion 6 fails."]
 
 [[entry]]
+id = 12
+type = "story"
+title = "Gateway and edge hardening"
+description = "Fixes the 7.10 review's gateway and edge findings (A-F4, A-F5, A-F6, B-F1, B-F2, F-F3, F-F4, F-F21, F-F22): HSTS with includeSubDomains in AWS, base-uri 'none' in both CSPs, the browser-security baseline on every identity-origin response, UTF-8 charset on textual responses, CloudFront HTTPS-only on /api/*, path-only access logs on every origin (the identity error log stays P43), Cache-Control: no-store on the gateway's own /api responses, and a reliable smoke throttling probe and missing-header diagnostic."
+verify = "infra/deploy/aws/gateway.test.sh, check-compose.sh, terraform test in envs/dev and PlatformScriptTests pass locally and in CI; infra/tests/smoke.sh passes on a fresh stack under the stack lock; the CI journeys pass."
+covers = ["R32", "R31", "R38"]
+after = [4, 5]
+hitl = false
+risk = "medium"
+refine = true
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = false
+touches = ["infra/images/gateway/templates/ (security-headers, scalar-headers, nginx.conf, new identity header include)", "infra/images/gateway/templates-aws/nginx.conf.template", "infra/images/gateway/Dockerfile (only if the include needs copying)", "docker-compose.aws.yml (GATEWAY_HSTS only)", "infra/terraform/modules/edge/main.tf", "infra/terraform/envs/dev/tests/edge.tftest.hcl", "infra/terraform/README.md (post-deploy checks)", "infra/deploy/aws/gateway.test.sh", "infra/deploy/aws/check-compose.sh (only if it asserts HSTS)", "infra/tests/smoke.sh", "backend/tests/DisputeDesk.ArchitectureTests/PlatformScriptTests.cs (access-log template test only)"]
+supervisor_checks = ["Throwaway copy: GATEWAY_HSTS back to max-age=31536000; criterion 1 fails.", "Throwaway copy: base-uri 'self' back in the Scalar CSP; criterion 2 fails.", "Throwaway copy: drop proxy_hide_header X-Content-Type-Options on the identity login location and run smoke.sh; record whether criterion 3 fails.", "Throwaway copy: one /api/* behaviour back to redirect-to-https; criterion 5's terraform test fails.", "Throwaway copy: app access_log back to combined; criterion 6 fails.", "Throwaway copy: remove no-store from @rate_limited; criterion 7 fails.", "Throwaway copy: hide the Api's Cache-Control at the gateway and run smoke.sh; it prints SMOKE FAIL: /api/health/live: no cache-control."]
+
+[[entry]]
+id = 13
+type = "story"
+title = "Backend hardening from the readiness review"
+description = "Fixes the 7.10 review's backend findings (A-F3, C-F8, E-F12, F-F5, F-F8, F-F9, F-F11): __Host- correlation and nonce cookies in AWS, RS256-only ID tokens, no redirects on the banking clients, refusal and sign-out audits saved despite a client disconnect within a 5-second bound, a named Kestrel shutdown test with a raise in flight, a named test of two Api instances starting together on an empty key store (no custom key refresh; blocked if it fails), and idempotency answers counted once in the raise rejection metric."
+verify = "The named Api integration tests and the full backend suite pass under the testcontainers lock; dotnet format and warnings-as-errors pass; openapi.json unchanged."
+covers = ["R2", "R10", "R11", "R26", "R27", "R36"]
+after = [4]
+hitl = false
+risk = "medium"
+refine = true
+owner = "backend"
+lane = "B"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Api/Authentication/ (WebAppAuthentication, BrowserCookieOptions, AuthenticationEndpoints)", "backend/src/DisputeDesk.Api/appsettings.json", "docker-compose.yml (two local cookie-name lines)", "backend/src/DisputeDesk.Infrastructure/CoreBanking/CoreBankingRegistration.cs", "backend/src/DisputeDesk.Api/Authorization/AuthorizationResultHandler.cs", "backend/src/DisputeDesk.Application/ (refusal audit saves)", "backend/src/DisputeDesk.Api/Disputes/ (IdempotencyFilter, DisputeEndpoints, RaiseMetrics)", "backend/tests/DisputeDesk.Api.IntegrationTests/"]
+supervisor_checks = ["Throwaway copy: remove the correlation cookie's Path; criterion 1 fails.", "Throwaway copy: remove ValidAlgorithms from the OIDC handler; criterion 2 fails.", "Throwaway copy: remove AllowAutoRedirect = false from the SIM-swap client; criterion 3 fails.", "Throwaway copy: pass RequestAborted to the Denied save; criterion 4 fails.", "Throwaway copy: count rejections in the handler path only; criterion 8 fails."]
+
+[[entry]]
+id = 14
+type = "story"
+title = "Customer data cleared at session end, copy and operations docs"
+description = "Fixes the 7.10 review's E-F8, F-F20, F-F6 and F-F12: the SPA clears its in-memory customer data and raise draft on a 401, the idle limit (one timer shared across tabs through BroadcastChannel), sign-out (before any request), another tab's session end and a back/forward-cache restore; the not-eligible hint says card transaction; the README says real deployments send OTPs by SMS; the runbook gains a transient Kafka outage procedure, run and recorded on a fresh stack."
+verify = "npm run typecheck, lint, format and test pass in frontend/; CI's e2e job passes; the runbook procedure is run under the stack lock and recorded in docs/verification/7.14-run.md; secret scan passes."
+covers = ["R2", "R3", "R34", "R39", "R28"]
+after = [7]
+hitl = false
+risk = "medium"
+refine = true
+owner = "frontend"
+lane = "M1"
+high_stakes = true
+migration = false
+touches = ["frontend/src/app/ (InactivityWarning, useSignOut, router)", "frontend/src/api/queryClient.ts", "frontend/src/features/disputes/raise/RaiseDraft.tsx", "frontend/src/pages/StartPage.tsx", "frontend/src/features/transactions/ (notDisputableHint and its test)", "docs/ux/EXPERIENCE.md (copy deck, docs agent)", "e2e/tests/spa-transactions.spec.ts and spa-dispute-status-badges.spec.ts (copy only, QA)", "README.md (docs agent)", "docs/runbook.md (docs agent)", "docs/verification/7.14-run.md"]
+supervisor_checks = ["Throwaway copy: drop the draft reset; criterion 1 fails.", "Throwaway copy: submit the logout form before clearing; criterion 3 fails.", "Throwaway copy: ignore expired messages; criterion 4 fails.", "Throwaway copy: restart the idle timer on a 401; criterion 2 fails."]
+
+[[entry]]
 id = 10
 type = "story"
 title = "Production readiness review"
 description = "An independent, evidence-based review of the whole system, run last in epic 7, modelled on the Production Readiness Review in Google's SRE practice: one checklist matrix (OWASP ASVS 5.0.0 Level 1 and 2 plus the named PRD areas) at a recorded commit, evidence from a fresh throwaway stack, enumerated races, ranked findings, then a person's disposition per finding."
 verify = "`docs/verification/7.10-prr.md` exists with the recorded SHA, a verdict and evidence on every matrix row, the ranked findings, and a Disposition section filled by a person; the supervisor's three re-runs are recorded."
 covers = ["R9", "R11", "R28", "R30", "R31", "R32", "R34", "R35", "R36"]
-after = ["2.6", "2.8", "3.7", "3.12", "4.1", "4.2", "5.3", "5.4", "6.4", "6.6", 1, 2, 3, 6, 7, 11, 4, 5]
+after = ["2.6", "2.8", "3.7", "3.12", "4.1", "4.2", "5.3", "5.4", "6.4", "6.6", 1, 2, 3, 6, 7, 11, 4, 5, 12, 13, 14]
 hitl = true
 risk = "high"
 refine = true
