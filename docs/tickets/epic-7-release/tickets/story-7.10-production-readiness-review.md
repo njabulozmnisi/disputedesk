@@ -4,7 +4,7 @@ type: story
 title: "Production readiness review"
 parent: epic-7-release
 covers: [R9, R11, R28, R30, R31, R32, R34, R35, R36]
-after: [2.6, 2.8, 3.7, 3.12, 4.1, 4.2, 5.3, 5.4, 6.4, 6.6, 1, 2, 3, 6, 7, 11, 4, 5]
+after: [2.6, 2.8, 3.7, 3.12, 4.1, 4.2, 5.3, 5.4, 6.4, 6.6, 1, 2, 3, 6, 7, 11, 4, 5, 12, 13, 14]
 hitl: true
 risk: high
 refined: false
@@ -110,3 +110,4 @@ Inputs: none at runtime. Bounds: the commit is one SHA on main, recorded before 
 - Decision: 2026-10-30 (Sofia, epic 6 parallel re-slice) — waits on 6.6 as well as 6.4: forwarded-header trust moved from 6.3 to the new story 6.6, which 6.4 does not wait on.
 - Decision: 2026-10-30 (human, 7.10 challenge) — 7.10 moves to run last, after 7.1 to 7.7, 7.4 and 7.5 (and 7.11, split from 7.4), so the final verdict covers every component it claims to assess. The 2026-10-29 order (7.10 first) is replaced; the epic's build order and `docs/tickets/README.md` are fixed to match.
 - Decision: 2026-10-30 (Sofia, refine) — the reviewer's findings and a person's disposition are two steps (criterion 8); "not yet assessable" names its closing gate (criterion 2); the security denominator is every ASVS 5.0.0 Level 1 and Level 2 requirement (criterion 2); the race scenarios are enumerated (criterion 4); the evidence stack is a fresh throwaway copy in one locked session (criterion 3).
+- Decision: 2026-10-31 (human, 7.10 disposition) — the findings disposed as "fix" run as stories 7.12 (gateway and edge: A-F4, A-F5, A-F6, B-F1, B-F2, F-F3, F-F4, F-F21, F-F22), 7.13 (backend: A-F3, C-F8, E-F12, F-F5, F-F8, F-F9, F-F11) and 7.14 (frontend and docs: E-F8, F-F20, F-F6, F-F12); 7.10 closes once all three have merged, so it now waits on 12, 13 and 14.
