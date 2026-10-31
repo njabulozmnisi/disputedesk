@@ -194,8 +194,9 @@ services:
       core-banking: { condition: service_healthy }
       # The issuer's auth.localhost must reach the gateway's alias from the api's first lookup. Before the alias
       # exists, Docker's DNS passes the name to the host's resolver, which may answer loopback for *.localhost
-      # (RFC 6761), and the api would fetch the discovery document from itself.
-      gateway: { condition: service_healthy }
+      # (RFC 6761), and the api would fetch the discovery document from itself. The alias exists once the gateway
+      # has started; waiting for healthy would deadlock, because the gateway is healthy only once it reaches the api.
+      gateway: { condition: service_started }
     # Longer than the host's 30-second ShutdownTimeout, so an in-flight request or linking job can finish (AD-25).
     stop_grace_period: 35s
     mem_limit: 512m
@@ -264,8 +265,11 @@ services:
     networks:
       default:
         aliases: ["auth.localhost"]                # containers reach the issuer at the same URL as browsers
+    # Healthy only when all three routes answer: the identity origin, the SPA and the api. nginx looks the api up again
+    # only after a failed lookup's retry delay (10 s for "no such name", 30 s for a resolver error such as CI's), so
+    # /api/ can answer 502 for that long after the api starts; `up --wait` returns only once /api/ works.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- --header 'Host: auth.localhost:8080' http://127.0.0.1:8080/debug/healthz >/dev/null && wget -qO- http://127.0.0.1:8080/ >/dev/null"]
+      test: ["CMD-SHELL", "wget -qO- --header 'Host: auth.localhost:8080' http://127.0.0.1:8080/debug/healthz >/dev/null && wget -qO- http://127.0.0.1:8080/ >/dev/null && wget -qO- http://127.0.0.1:8080/api/health/live >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 20

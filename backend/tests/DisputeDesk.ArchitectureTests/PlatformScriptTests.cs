@@ -259,9 +259,18 @@ public partial class PlatformScriptTests
         // Before the gateway's auth.localhost alias exists, Docker's DNS passes the name to the host's resolver, which may
         // answer loopback for *.localhost (RFC 6761): the api then fetches the issuer's discovery document from itself.
         // So the api waits for the gateway, and the gateway, which cannot wait for the api too, finds it at run time.
-        Assert.Contains("      gateway: { condition: service_healthy }\n", ComposeService("api"), StringComparison.Ordinal);
+        // The api waits only for the gateway to start: the gateway's health includes the api (below), so healthy would deadlock.
+        Assert.Contains("      gateway: { condition: service_started }\n", ComposeService("api"), StringComparison.Ordinal);
         Assert.DoesNotContain("      api: {", ComposeService("gateway"), StringComparison.Ordinal);
         Assert.Contains("server api:8080 resolve;", GatewayTemplate(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Compose_GatewayHealth_WaitsUntilItReachesTheApi()
+    {
+        // nginx retries a failed lookup of the api only after a delay (30 s for a resolver error), and `up --wait` trusts
+        // health alone, so the gateway is healthy only once /api/ answers through it (CI e2e, UJ-1 on a cold stack).
+        Assert.Matches(new Regex(@"^      test: \[.*&& wget -qO- http://127\.0\.0\.1:8080/api/health/live >/dev/null""\]$", RegexOptions.Multiline, TimeSpan.FromSeconds(1)), ComposeService("gateway"));
     }
 
     [Fact]
