@@ -28,11 +28,13 @@ then a table of criterion | test | proved (yes/no), then failures with evidence,
 PROMPT
 )
 
+# The whole run holds the testcontainers lock, so the verifier runs dotnet test directly. scripts/test-lock.sh is not
+# allowed: a nested `test-lock.sh run testcontainers` would wait on this run's own lock until it timed out.
 run() {
   "$root/scripts/test-lock.sh" run testcontainers "verify-$story" -- \
     copilot -p "$prompt" --model "$1" -s --no-ask-user --add-dir "$(cd "$(dirname "$story_file")" && pwd)" \
-      --allow-tool 'shell(dotnet:*)' 'shell(npm:*)' 'shell(npx:*)' 'shell(git diff:*)' 'shell(git log:*)' 'shell(git show:*)' 'shell(ls:*)' 'shell(cat:*)' 'shell(head:*)' 'shell(grep:*)' 'shell(find:*)' 'shell(docker compose config:*)' 'shell(gitleaks:*)' 'shell(scripts/floor-guard.sh)' 'shell(actionlint:*)' 'shell(trivy:*)' 'read' \
-      --deny-tool 'write' 'shell(git commit:*)' 'shell(git push:*)' 'shell(rm:*)'
+      --allow-tool 'shell(dotnet:*)' 'shell(npm:*)' 'shell(npx:*)' 'shell(git diff:*)' 'shell(git log:*)' 'shell(git show:*)' 'shell(ls:*)' 'shell(cat:*)' 'shell(head:*)' 'shell(grep:*)' 'shell(find:*)' 'shell(docker compose config:*)' 'shell(gitleaks:*)' 'shell(scripts/floor-guard.sh)' 'shell(actionlint:*)' 'shell(trivy:*)' 'shell(terraform:*)' 'read' \
+      --deny-tool 'write' 'shell(git commit:*)' 'shell(git push:*)' 'shell(rm:*)' 'shell(terraform apply:*)' 'shell(terraform destroy:*)'
 }
 
 for model in "${models[@]}"; do
