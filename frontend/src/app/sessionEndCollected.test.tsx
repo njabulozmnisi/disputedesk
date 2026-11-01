@@ -22,13 +22,20 @@ import { endSession } from './sessionEnd';
 setFlagsFromString('--expose_gc');
 const collectGarbage = runInNewContext('gc') as () => void;
 
-async function collect() {
-  // Node's fetch keeps the AbortSignal of the last request it made, and that signal's listener keeps the query that made
-  // it, until another request is made (observed with undici under Vitest); one more request lets the query go.
-  await fetch('/api/v1/antiforgery');
-  for (let pass = 0; pass < 5; pass++) {
+/**
+ * Forces garbage collection until every reference is empty, for at most 10 rounds, and stops as soon as they are.
+ * One collection or one extra request is not always enough (CI run 41286282818; about 1 run in 10 here). A heap
+ * snapshot of a failing run showed why: a keep-alive socket that Node's fetch (undici) opened for the query's request
+ * keeps the async context of that request, so it keeps the Request, its AbortSignal and, through the signal's
+ * listener, the query. Collecting again cannot free it. Three requests at once did in 100 of 100 runs (observed with
+ * undici under Vitest; why they do is not verified).
+ */
+async function collectUntilGone(...refs: WeakRef<object>[]) {
+  for (let round = 0; round < 10; round++) {
+    await Promise.all([1, 2, 3].map(() => fetch('/api/v1/antiforgery')));
     collectGarbage();
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    if (refs.every((ref) => ref.deref() === undefined)) return;
   }
 }
 
@@ -53,7 +60,7 @@ async function openTransactions() {
 
 async function expectCollected(queryRef: WeakRef<Query>) {
   cleanup(); // unmounts every screen
-  await collect();
+  await collectUntilGone(queryRef);
   expect(queryRef.deref()).toBeUndefined();
 }
 
@@ -114,7 +121,7 @@ describe('the first screen of the page load after the session ends and the scree
     await letRequestsFinish();
 
     // The shell stays mounted, as in the browser: only the first screen is gone.
-    await collect();
+    await collectUntilGone(headingRef, rowRef);
     expect(headingRef.deref()).toBeUndefined();
     expect(rowRef.deref()).toBeUndefined();
   });
