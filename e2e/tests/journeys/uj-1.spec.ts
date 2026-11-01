@@ -145,8 +145,12 @@ test('UJ-1: sign up, link to D, raise on TXN-D-0030, sign out, traced to the dat
   const sessionCookie = (await login.context.cookies(origin)).find((cookie) => cookie.name === sessionCookieName)?.value;
   expect(sessionCookie, 'session cookie before sign-out').toBeTruthy();
 
+  // Story 7.14: Sign out shows the SPA's start page at once, before the logout form is posted, so the URL alone no longer says the
+  // round trip is done. Wait for the page load that follows the sign-out callback.
+  const startPageAfterSignOut = page.waitForResponse((response) => response.url() === `${origin}/` && response.request().isNavigationRequest());
   await page.getByRole('button', { name: 'Sign out' }).click();
-  await page.waitForURL(`${origin}/`);
+  await startPageAfterSignOut;
+  await page.waitForLoadState('load');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await expectAccessibleAtBothWidths(page, 'start page after sign-out');
   await expect.poll(() => rows<{ Action: string }>(`select "Action" from "AuditLogEntries" where "ActorId" = '${login.sub}'`).map((row) => row.Action).sort(), { timeout: 30_000 }).toEqual(expect.arrayContaining(['SignIn', 'SignOut']));

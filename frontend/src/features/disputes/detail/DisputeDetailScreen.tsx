@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useParams } from '@tanstack/react-router';
 import { useRef, useState, type ReactNode, type RefObject } from 'react';
 
@@ -5,6 +6,7 @@ import { useGetApiV1DisputesDisputeId } from '@/api/generated/disputedesk';
 import type { DisputeResponse } from '@/api/generated/model';
 import { ApiError } from '@/api/mutator';
 import { traceIdOf } from '@/api/problems';
+import { isSignedIn } from '@/app/sessionEnd';
 import { usePageHeading } from '@/app/usePageHeading';
 import { Page } from '@/components/Page';
 import { ProblemNotice } from '@/components/ProblemNotice';
@@ -175,7 +177,12 @@ function LoadedCard({
  */
 export function DisputeDetailScreen() {
   const { disputeId } = useParams({ from: '/disputes/$disputeId' });
-  const query = useGetApiV1DisputesDisputeId(disputeId);
+  const queryClient = useQueryClient();
+  // The generated hook sets its own `enabled`, which replaces the client's default, so the same rule is given here:
+  // no customer query runs once the session is ending (see createQueryClient).
+  const query = useGetApiV1DisputesDisputeId(disputeId, {
+    query: { enabled: () => isSignedIn(queryClient) },
+  });
   // Set when a withdraw is answered 404: the dispute is gone, whatever the cache still holds.
   const [goneDisputeId, setGoneDisputeId] = useState<string>();
   const justSubmitted = useLocation({

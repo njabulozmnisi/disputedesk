@@ -1,9 +1,10 @@
-import { QueryClientProvider } from '@tanstack/react-query';
+import { hashKey, QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { http, HttpResponse } from 'msw';
 import { StrictMode } from 'react';
+import { afterEach } from 'vitest';
 
 import type {
   DisputeResponse,
@@ -11,9 +12,10 @@ import type {
   SessionState,
   TransactionResponse,
 } from '@/api/generated/model';
+import { getGetSessionQueryKey } from '@/api/generated/disputedesk';
 import { problemType, type ProblemSlug } from '@/api/problems';
 import { createQueryClient } from '@/api/queryClient';
-import { createAppRouter } from '@/app/router';
+import { createAppRouter, type AppRouter } from '@/app/router';
 
 import { server } from './server';
 
@@ -46,8 +48,68 @@ export function renderApp({
       <RouterProvider router={router} />
     </QueryClientProvider>
   );
-  render(strictMode ? <StrictMode>{app}</StrictMode> : app);
-  return { router, queryClient, user };
+  const { unmount } = render(strictMode ? <StrictMode>{app}</StrictMode> : app);
+  return { router, queryClient, user, unmount };
+}
+
+/** Every cached query but the session's, with or without data. */
+export function customerQueries(queryClient: QueryClient) {
+  return queryClient
+    .getQueryCache()
+    .getAll()
+    .filter((query) => query.queryHash !== hashKey(getGetSessionQueryKey()));
+}
+
+/**
+ * The hash of every cached query but the session's that holds data. A screen still mounted for a moment after a
+ * clean-up may leave an empty query behind; it holds no customer data and is collected once nothing observes it.
+ */
+export function cachedCustomerData(queryClient: QueryClient): string[] {
+  return queryClient
+    .getQueryCache()
+    .getAll()
+    .filter((query) => query.queryHash !== hashKey(getGetSessionQueryKey()))
+    .filter((query) => query.state.data !== undefined)
+    .map((query) => query.queryHash);
+}
+
+/**
+ * A tab of the test's own on the session channel. It records what the app instances post. `flush` posts a message
+ * no instance knows and waits for it to come back: channel messages arrive in order, so everything posted before it
+ * has arrived by then.
+ */
+export function listenToTabs() {
+  const listener = new BroadcastChannel('disputedesk-session');
+  const sender = new BroadcastChannel('disputedesk-session');
+  const messages: unknown[] = [];
+  let seenFlush: () => void = () => undefined;
+  listener.onmessage = (event: MessageEvent) => {
+    if (event.data === 'flush') seenFlush();
+    else messages.push(event.data);
+  };
+  async function flush() {
+    const arrived = new Promise<void>((resolve) => {
+      seenFlush = resolve;
+    });
+    sender.postMessage('flush');
+    await arrived;
+  }
+  return {
+    messages,
+    post: (message: unknown) => {
+      sender.postMessage(message);
+    },
+    flush,
+    /** Waits for what was posted so far, then forgets it: page loads post activity. */
+    settle: async () => {
+      await flush();
+      messages.length = 0;
+    },
+    close: () => {
+      listener.close();
+      sender.close();
+    },
+  };
 }
 
 /** The session endpoint answers with `state`. */
@@ -220,4 +282,39 @@ export function rateLimited(retryAfter?: string) {
   const response = problemResponse('rate-limited', 429);
   if (retryAfter !== undefined) response.headers.set('Retry-After', retryAfter);
   return response;
+}
+
+// Puts back every session-ended route held by a test, so one that fails before it lets the route finish cannot leave it
+// held for the next test: the route tree is shared by every app instance in the run.
+const restoreHeldRoutes: (() => void)[] = [];
+afterEach(() => {
+  restoreHeldRoutes.splice(0).forEach((restore) => {
+    restore();
+  });
+});
+
+/**
+ * Holds the session-ended route's `beforeLoad`, so a navigation to it stays pending as a real one does while the
+ * screens still mounted re-render. Returns the function that lets it finish; the route is restored then, or after the
+ * test at the latest.
+ */
+export function holdSessionEndedRoute(router: AppRouter): () => void {
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const options = router.routesByPath['/signed-out'].options;
+  const beforeLoad = options.beforeLoad;
+  // The route's own `beforeLoad` is typed to return nothing, but the router awaits whatever it returns.
+  const holdingBeforeLoad = async (context: Parameters<NonNullable<typeof beforeLoad>>[0]) => {
+    await held;
+    beforeLoad?.(context);
+  };
+  Object.defineProperty(options, 'beforeLoad', { value: holdingBeforeLoad, configurable: true });
+  const restore = () => {
+    release();
+    Object.defineProperty(options, 'beforeLoad', { value: beforeLoad, configurable: true });
+  };
+  restoreHeldRoutes.push(restore);
+  return restore;
 }

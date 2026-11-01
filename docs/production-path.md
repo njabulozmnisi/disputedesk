@@ -119,6 +119,7 @@ Every PRD §6.2 bullet, every "Operations features" sub-bullet, every row of the
 | Input (7.10 PRR F-F10, human decision): observability scope | P42 | No browser telemetry in AWS |
 | Input (7.10 PRR F-F23, human decision): stack lock scope | P72 | The lock is held per command, not per session |
 | Input (7.12 refine, F-F4): no-store on gateway errors before a location | P73 | nginx 400, 414, 494 and the AWS origin-verify 403 on `/api` keep their headers |
+| Input (7.14 QA): browser memory after the session ends | P74 | A dispute ID can stay in the router's match cache until a reload |
 | Input (7.4 pre-build security S7.4-1, human decision): three distributions | P47 | Mailpit has its own distribution; all three disable caching |
 | Decision 2026-10-27 (standards audit): migrations; deferred operations stories | P28 | No operations story is deferred: 5.3 and 5.4 are in v1's scope (initiative scope decision 2026-10-27) |
 | Decision 2026-10-27 (2.7 security review): problem `type` URLs | P39 | Accepted risk under the GitHub namespace |
@@ -431,4 +432,8 @@ Audit records go only to the application database; the collector receives the Ap
 ### P73. `no-store` on gateway errors raised before a location
 
 Story 7.12 adds `Cache-Control: no-store` to the `/api` responses nginx generates in a location (429, 413, 500, 502, 504; AD-23 as amended 2026-10-31). nginx produces 400, 414 and 494, and the AWS template its origin-verify 403, before it selects a location, so a rule scoped to `/api` cannot reach them (7.10 finding F-F4). Production adds the header to those responses with a server-level rule keyed on the request path (nginx `map`), or confirms each body holds no customer data. *Why it waits:* these bodies are nginx's fixed error pages with no customer data, and the demo holds only synthetic data (story 7.12 refine, 2026-10-31).
+
+### P74. Browser memory after the session ends
+
+Story 7.14 clears customer data from the SPA's memory when the session ends: the query and mutation caches, the raise draft, and every detached screen (a `WeakRef` and forced-GC test, and QA's CDP heap snapshots on five paths). Two things remain. TanStack Router's match cache and URL map keep the ID of a dispute the person opened (an ID only, no description, amount or card); and on the person's own sign-out the old document keeps its data for under a second, until the logout form post replaces the page. Production can clear the router's cache on session end (or reload the page to a fixed start URL), and keeps sign-out as a full-page navigation. *Why it waits:* an ID alone identifies nothing without a session, the window on sign-out ends with the navigation, and the demo holds only synthetic data (story 7.14 QA, 2026-11-01).
 

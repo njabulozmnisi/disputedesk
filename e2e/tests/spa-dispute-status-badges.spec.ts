@@ -47,7 +47,7 @@ async function axeViolations(page: Page) {
 }
 
 const bodyText = async (page: Page) => (await page.locator('body').innerText()).replace(/\s+/g, ' ');
-const hintPhrases = /Pending\. |Money in\. |Transfer between|Not a card payment|Older than 90 days|Not disputable|Contact the bank/;
+const hintPhrases = /Pending\. |Money in\. |Transfer between|Not a card transaction|Older than 90 days|Not disputable|Contact the bank/;
 
 function trackConsoleErrors(page: Page): string[] {
   const errors: string[] = [];

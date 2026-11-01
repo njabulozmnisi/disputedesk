@@ -93,6 +93,10 @@ dev-only fixture values. Sign in with the username. The ID and account numbers a
 To link a new login, sign up at <http://localhost:8080>, then enter D's ID number and one of D's account numbers; the
 OTP arrives in Mailpit.
 
+Mailpit stands in for SMS in this demo: `ISmsSender` writes the OTP there. A real deployment sends the OTP by SMS to the
+cellphone number on the bank's record. In an AWS deployment Mailpit's web UI sits behind basic auth, because it shows
+OTPs ([infra/terraform/README.md](infra/terraform/README.md), post-deploy check 3).
+
 The SLA demo dispute is customer A's on `TXN-A-0011`. It is seeded Under review and falls due 5 minutes after start-up,
 so the SLA sweep escalates it a few minutes after `docker compose up --wait` returns.
 
@@ -158,7 +162,7 @@ curl -sS -w '\n%{http_code}\n' -X POST -H "Authorization: Bearer $(scripts/opera
 ## Runbook
 
 [docs/runbook.md](docs/runbook.md) has the operator procedures for the local stack: releasing a `Failed` outbox row,
-core banking unavailable, and resetting the stack.
+core banking unavailable, resetting the stack, and a transient Kafka outage.
 
 ## Onboarding
 

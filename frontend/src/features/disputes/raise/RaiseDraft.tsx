@@ -35,12 +35,31 @@ const newKey = () => `"${crypto.randomUUID()}"`;
 /**
  * The draft lives only in this component's state (EXPERIENCE.md, Back and forward): not in the URL, router state,
  * storage or a query key. It sits above both raise routes so Change keeps the values, and above `/disputes/...` so a
- * submitted draft is remembered when the person presses Back.
+ * submitted draft is remembered when the person presses Back. When `signedIn` turns false the draft, the submitted
+ * IDs and the server errors are cleared during render, so a draft never outlives its session (react.dev, You Might
+ * Not Need an Effect: adjusting some state when a prop changes). A late response cannot refill it, because the
+ * screens that would write it ignore a response that arrives after the session ended.
  */
-export function RaiseDraftProvider({ children }: { children: ReactNode }) {
+export function RaiseDraftProvider({
+  signedIn,
+  children,
+}: {
+  signedIn: boolean;
+  children: ReactNode;
+}) {
   const [draft, setDraft] = useState<Draft>();
   const [submittedIds, setSubmittedIds] = useState<ReadonlySet<string>>(new Set());
   const [serverErrors, setServerErrors] = useState<ServerErrors>();
+  const [wasSignedIn, setWasSignedIn] = useState(signedIn);
+
+  if (wasSignedIn !== signedIn) {
+    setWasSignedIn(signedIn);
+    if (!signedIn) {
+      setDraft(undefined);
+      setSubmittedIds(new Set());
+      setServerErrors(undefined);
+    }
+  }
 
   const state: RaiseDraftState = {
     draftFor: (transactionId) => (draft?.transactionId === transactionId ? draft : undefined),

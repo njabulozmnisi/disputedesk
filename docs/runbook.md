@@ -125,3 +125,26 @@ docker compose up --wait
 ```
 
 The stack comes back with fresh credentials and the seed written again, its dates relative to the new start-up.
+
+## 4. Transient Kafka outage
+
+While Redpanda is down the relay keeps each new event `Pending` and counts no attempt (AD-17). Raising still answers
+201, and `/health/ready` stays healthy, because readiness does not check Kafka (AD-25).
+
+1. **Where it shows.** The Worker logs `Outbox relay cannot reach kafka (…)` and `Outbox relay could not send an event
+   (…); it stays Pending and is retried` (`docker compose logs --no-color worker`); the Aspire Dashboard shows failed
+   `send disputedesk.disputes` spans under the Worker's traces.
+2. **Count the rows not yet `Sent`** in procedure 1's read-only session (`psql -U qa_readonly`). In a drill, take this
+   count before stopping Redpanda as the baseline. `"DisputeId"` of the `Pending` rows names the affected disputes.
+
+   ```sql
+   SELECT "Status", "Attempts", count(*) FROM "OutboxMessages" WHERE "Status" <> 'Sent' GROUP BY 1, 2 ORDER BY 1, 2;
+   ```
+
+   `Pending` rows with 0 attempts are the transient backlog, which the relay sends by itself. `Pending` rows with 1 to 4
+   attempts are a permanent refusal in backoff and turn `Failed` at 5. A `Failed` row needs procedure 1; procedure 1 is
+   never used for a `Pending` row.
+3. **Recover** with `docker compose start redpanda`. No row is updated and the stack is not reset (no `down -v`).
+4. **Drain check**, repeated for at most 5 minutes: step 2's count is back to the baseline, and procedure 1's step 4
+   `rpk topic consume` shows each affected dispute's events in the order they were written (offsets rise with
+   `disputeVersion`). This holds for one relay's recovery; delivery stays at least once (AD-17).

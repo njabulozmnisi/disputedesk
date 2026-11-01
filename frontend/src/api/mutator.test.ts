@@ -108,6 +108,12 @@ describe('the Orval mutator', () => {
     expect(without).toMatchObject({ status: 503, retryAfter: null });
   });
 
+  it('answers a session request that has no JSON body without throwing', async () => {
+    server.use(http.get('*/api/v1/authentication/session', () => new HttpResponse(null, { status: 200 })));
+
+    await expect(getSession()).resolves.toBeUndefined();
+  });
+
   it('tells listeners the status of every response, success or failure', async () => {
     const statuses: number[] = [];
     const stopListening = onApiResponse((status) => statuses.push(status));

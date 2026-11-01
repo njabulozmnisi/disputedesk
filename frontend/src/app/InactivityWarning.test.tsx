@@ -1,11 +1,17 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
-import { getApiV1Transactions } from '@/api/generated/disputedesk';
+import {
+  getApiV1Transactions,
+  getGetSessionQueryKey,
+  getGetApiV1TransactionsInfiniteQueryKey,
+} from '@/api/generated/disputedesk';
 import { server } from '@/test/server';
 import {
+  cachedCustomerData,
   failWith,
+  listenToTabs,
   makeRow,
   renderApp,
   serveAntiforgeryToken,
@@ -30,8 +36,8 @@ async function openTransactions() {
 }
 
 beforeEach(() => {
-  // Only the timers are faked; the clock still ticks so promises and MSW keep moving.
-  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout', 'clearTimeout'] });
+  // The timers and the wall clock are faked; the clock still ticks so promises and MSW keep moving.
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   signInAs('linked');
   serveTransactions([makeRow()]);
 });
@@ -298,16 +304,172 @@ describe('Sign out in the warning', () => {
     });
   });
 
-  it('shows the unexpected-error message in the dialog when the token cannot be fetched', async () => {
+  it('clears and shows the start page with the sign-out notice when the token cannot be fetched', async () => {
     failWith('/api/v1/antiforgery', 'core-banking-unavailable', 503);
-    const { user } = await openTransactions();
+    const { user, router, queryClient } = await openTransactions();
     await passMinutes(13);
-    const dialog = await screen.findByRole('alertdialog');
+    await screen.findByRole('alertdialog');
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
 
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      'Something went wrong on our side. Try again.',
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "We couldn't finish signing you out.",
     );
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/');
+    expect(queryClient.getQueryData(getGetApiV1TransactionsInfiniteQueryKey())).toBeUndefined();
+  });
+});
+
+// Criterion 2: the idle limit ends the session in the browser, without the network, shared across tabs.
+describe('the idle limit in the browser', () => {
+  let tabs: ReturnType<typeof listenToTabs>;
+  beforeEach(() => {
+    tabs = listenToTabs();
+  });
+  afterEach(() => {
+    tabs.close();
+  });
+
+  function networkDown() {
+    server.use(http.all('*', () => HttpResponse.error()));
+    const requests: string[] = [];
+    server.events.on('request:start', ({ request }) => {
+      requests.push(new URL(request.url).pathname);
+    });
+    return requests;
+  }
+
+  async function expectSessionEnded(app: Awaited<ReturnType<typeof openTransactions>>) {
+    await waitFor(() => {
+      expect(app.router.state.location.pathname).toBe('/signed-out');
+    });
+    expect(cachedCustomerData(app.queryClient)).toEqual([]);
+    expect(
+      screen.getByRole('heading', { level: 1, name: "You've been signed out" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  }
+
+  it('ends the session when the timer fires at 15 minutes: no request, nothing posted', async () => {
+    const app = await openTransactions();
+    await tabs.settle();
+    const requests = networkDown();
+
+    await passMinutes(14, 59);
+    expect(app.router.state.location.pathname).toBe('/transactions');
+    await passMinutes(0, 1);
+
+    await expectSessionEnded(app);
+    await tabs.flush();
+    expect(requests).toEqual([]);
+    expect(tabs.messages).toEqual([]);
+  });
+
+  it('ends the session when the page becomes visible after the clock passed the deadline', async () => {
+    const app = await openTransactions();
+    const requests = networkDown();
+
+    vi.setSystemTime(Date.now() + 16 * minute); // asleep: the timer did not fire
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await expectSessionEnded(app);
+    expect(requests).toEqual([]);
+  });
+
+  it('ends the session when the window gains focus after the clock passed the deadline', async () => {
+    const app = await openTransactions();
+    const requests = networkDown();
+
+    vi.setSystemTime(Date.now() + 16 * minute);
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    await expectSessionEnded(app);
+    expect(requests).toEqual([]);
+  });
+
+  it('posts activity for each response except a 401 or an anonymous session', async () => {
+    const { queryClient } = await openTransactions();
+    await tabs.settle();
+
+    await act(() => queryClient.invalidateQueries());
+    await tabs.flush();
+    expect(new Set(tabs.messages)).toEqual(new Set(['activity'])); // one for each response
+
+    tabs.messages.length = 0;
+    failWith('/api/v1/transactions', 'unauthorized', 401);
+    await act(() => getApiV1Transactions().catch(() => undefined));
+    await tabs.flush();
+    expect(tabs.messages).toEqual([]);
+  });
+
+  it('does not count an anonymous session answer as activity: it clears, posts expired and nothing else', async () => {
+    const app = await openTransactions();
+    await passMinutes(13);
+    await screen.findByRole('alertdialog');
+    await tabs.settle();
+    signInAs('anonymous');
+
+    await app.user.click(screen.getByRole('button', { name: 'Stay signed in' }));
+
+    await expectSessionEnded(app);
+    await tabs.flush();
+    expect(tabs.messages).toEqual(['expired']);
+  });
+
+  it('restores nothing and posts nothing when the renewal in flight answers after another tab signed out', async () => {
+    const app = await openTransactions();
+    await passMinutes(13);
+    await screen.findByRole('alertdialog');
+    await tabs.settle();
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get('*/api/v1/authentication/session', async () => {
+        await held;
+        return HttpResponse.json({ state: 'linked' });
+      }),
+    );
+    await app.user.click(screen.getByRole('button', { name: 'Stay signed in' }));
+    tabs.post('signed-out');
+    await waitFor(() => {
+      expect(app.router.state.location.pathname).toBe('/');
+    });
+
+    release();
+    await passMinutes(0, 1);
+    await tabs.flush();
+
+    expect(app.queryClient.getQueryData(getGetSessionQueryKey())).toEqual({
+      state: 'anonymous',
+    });
+    expect(tabs.messages).toEqual(['signed-out']); // only the test's own post
+  });
+
+  it('moves the deadline and closes the warning when another tab posts activity', async () => {
+    const app = await openTransactions();
+    await passMinutes(13);
+    await screen.findByRole('alertdialog');
+
+    tabs.post('activity');
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+    await passMinutes(3); // 16 minutes after the last response here, 3 after the other tab's
+    expect(app.router.state.location.pathname).toBe('/transactions');
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+
+    await passMinutes(9, 59); // 12:59 after the other tab's activity: still before the warning
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    await passMinutes(0, 1);
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    await passMinutes(2);
+    await expectSessionEnded(app);
   });
 });

@@ -294,7 +294,11 @@ describe('errors handled once in the QueryCache and MutationCache (criterion 2)'
     failWith('/api/v1/transactions', 'unauthorized', 401);
     const { router, wrapper } = setUp('anonymous');
 
-    const { result } = renderHook(() => useGetApiV1Transactions(), { wrapper });
+    // A customer query is disabled while nobody is signed in, so this one is switched on to send the request anyway.
+    const { result } = renderHook(
+      () => useGetApiV1Transactions(undefined, { query: { enabled: true } }),
+      { wrapper },
+    );
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);

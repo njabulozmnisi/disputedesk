@@ -12,6 +12,7 @@ import type { TransactionResponse } from '@/api/generated/model';
 import { ApiError } from '@/api/mutator';
 import { isProblem } from '@/api/problems';
 import { useAnnounce } from '@/app/LiveRegion';
+import { isSignedIn } from '@/app/sessionEnd';
 import { usePageHeading } from '@/app/usePageHeading';
 import { Page } from '@/components/Page';
 import { Button } from '@/components/ui/button';
@@ -103,6 +104,8 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
         failureCount < maxResends && isProblem(error, 'idempotency-in-progress'),
       retryDelay: resendDelayMs,
       onSuccess: (dispute) => {
+        // The session ended while the request was in flight: nothing from this response comes back into memory.
+        if (!isSignedIn(queryClient)) return;
         void invalidateTransactions();
         void queryClient.invalidateQueries({ predicate: isDisputesQuery });
         announce('Dispute submitted');
@@ -128,6 +131,8 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
           });
       },
       onError: (error) => {
+        // The session ended while the request was in flight: nothing from this response comes back into memory.
+        if (!isSignedIn(queryClient)) return;
         if (isProblem(error, 'already-disputed') || isProblem(error, 'not-disputable')) {
           void invalidateTransactions();
         }
