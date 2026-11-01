@@ -24,6 +24,10 @@ public sealed class ApiFactory(
     public const string SessionCookieName = "disputedesk-session";
     public const string AntiforgeryCookieName = "disputedesk-antiforgery";
 
+    /// <summary>The OpenID Connect handler's correlation and nonce cookie names; the handler appends an ID to each.</summary>
+    public const string CorrelationCookieName = "disputedesk-correlation.";
+    public const string NonceCookieName = "disputedesk-nonce.";
+
     /// <summary>The OTP HMAC key every test Api uses: 32 bytes of 0x01, base64.</summary>
     public const string TestOtpHmacKey = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
 
@@ -37,6 +41,8 @@ public sealed class ApiFactory(
         [$"Operations:Actors:{FakeZitadel.OperationsSub}"] = "operations",
         ["Bff:SessionCookie:Name"] = SessionCookieName,
         ["Bff:AntiforgeryCookie:Name"] = AntiforgeryCookieName,
+        ["Bff:CorrelationCookie:Name"] = CorrelationCookieName,
+        ["Bff:NonceCookie:Name"] = NonceCookieName,
         ["Bff:Cookie:SecurePolicy"] = "SameAsRequest",
         // Nothing listens on port 1. Tests that reach core banking or send an SMS set their own address.
         ["CoreBanking:BaseUrl"] = "http://127.0.0.1:1",

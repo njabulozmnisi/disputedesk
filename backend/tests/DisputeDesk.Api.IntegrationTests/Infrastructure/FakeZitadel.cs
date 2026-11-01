@@ -47,6 +47,12 @@ public sealed class FakeZitadel
     /// <summary>The form of the last token request the Api sent.</summary>
     public IReadOnlyDictionary<string, string> LastTokenRequest { get; private set; } = new Dictionary<string, string>();
 
+    /// <summary>
+    /// How the next ID tokens are signed: <c>RS256</c> (Zitadel's default), another algorithm with the same RSA key
+    /// (<c>RS384</c>, <c>PS256</c>), <c>HS256</c> with the client secret as the key, or <c>none</c>, unsigned.
+    /// </summary>
+    public string IdTokenAlgorithm { get; set; } = SecurityAlgorithms.RsaSha256;
+
     /// <summary>The ID token the last successful token request received.</summary>
     public string? LastIdToken { get; private set; }
 
@@ -145,7 +151,7 @@ public sealed class FakeZitadel
     private string CreateIdToken(PendingCode pending)
     {
         DateTime now = TimeProvider.System.GetUtcNow().UtcDateTime;
-        return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+        var descriptor = new SecurityTokenDescriptor
         {
             Issuer = Issuer,
             Audience = ClientId,
@@ -159,8 +165,23 @@ public sealed class FakeZitadel
                 ["email"] = $"{pending.Sub}@disputedesk.test",
                 ["email_verified"] = pending.EmailVerified,
             },
-            SigningCredentials = new SigningCredentials(_signingKey, SecurityAlgorithms.RsaSha256),
-        });
+        };
+
+        // Without signing credentials the handler writes an unsigned token: "alg":"none" and an empty signature.
+        string unsigned = new JsonWebTokenHandler().CreateToken(descriptor);
+        switch (IdTokenAlgorithm)
+        {
+            case "none":
+                return unsigned;
+            case SecurityAlgorithms.HmacSha256:
+                // Signed by hand (RFC 7515, section 5.1): the library refuses an HMAC key as short as the client secret.
+                string signingInput = $"{Base64UrlEncoder.Encode("""{"alg":"HS256","typ":"JWT"}""")}.{unsigned.Split('.')[1]}";
+                byte[] signature = HMACSHA256.HashData(Encoding.UTF8.GetBytes(ClientSecret), Encoding.ASCII.GetBytes(signingInput));
+                return $"{signingInput}.{Base64UrlEncoder.Encode(signature)}";
+            default:
+                descriptor.SigningCredentials = new SigningCredentials(_signingKey, IdTokenAlgorithm);
+                return new JsonWebTokenHandler().CreateToken(descriptor);
+        }
     }
 
     private sealed record PendingCode(string Sub, bool EmailVerified, string Nonce, string CodeChallenge);
@@ -199,8 +220,9 @@ public sealed class FakeZitadel
                 return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("""{"error":"invalid_grant"}""", Encoding.UTF8, "application/json") };
             }
 
-            zitadel.LastIdToken = zitadel.CreateIdToken(pending);
-            string json = $$"""{"id_token":"{{zitadel.LastIdToken}}","access_token":"opaque-access-token","token_type":"Bearer","expires_in":300}""";
+            string idToken = zitadel.CreateIdToken(pending);
+            zitadel.LastIdToken = idToken;
+            string json = $$"""{"id_token":"{{idToken}}","access_token":"opaque-access-token","token_type":"Bearer","expires_in":300}""";
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
         }
 

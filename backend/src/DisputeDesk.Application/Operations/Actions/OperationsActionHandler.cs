@@ -46,12 +46,13 @@ public sealed class OperationsActionHandler(IAppDbContext db, CurrentOperationsA
         }
 
         // A second clash: one read of the read model and no further decision (AD-15). A change committed after this read
-        // is not reflected.
+        // is not reflected. The refusal is decided, so, as for its audit save below, not the request's token: a client
+        // that disconnects cannot cancel the record of its refusal (NFR-SEC-10).
         DisputeStatus lastRead = await db.Entities<Dispute>().IgnoreQueryFilters(["Ownership"]).AsNoTracking()
             .Where(dispute => dispute.Id == disputeId)
             .Select(dispute => dispute.Status)
-            .SingleAsync(cancellationToken);
-        return await RefuseAsync(NotAllowedIn(lastRead), action, disputeId, now, cancellationToken);
+            .SingleAsync(CancellationToken.None);
+        return await RefuseAsync(NotAllowedIn(lastRead), action, disputeId, now);
     }
 
     /// <summary>
@@ -71,7 +72,7 @@ public sealed class OperationsActionHandler(IAppDbContext db, CurrentOperationsA
             .ToListAsync(cancellationToken);
         if (rows.Count == 0)
         {
-            return await RefuseAsync(NotFound, action, disputeId, now, cancellationToken);
+            return await RefuseAsync(NotFound, action, disputeId, now);
         }
 
         List<StoredEvent> stream = [.. rows.Select(row => row.ToStoredEvent())];
@@ -80,7 +81,7 @@ public sealed class OperationsActionHandler(IAppDbContext db, CurrentOperationsA
         Result decided = Decide(dispute, action, resolve, instant);
         if (decided.Error == DisputeErrors.ActionNotAllowed)
         {
-            return await RefuseAsync(NotAllowedIn(dispute.Status), action, dispute.Id, now, cancellationToken);
+            return await RefuseAsync(NotAllowedIn(dispute.Status), action, dispute.Id, now);
         }
 
         if (decided.IsFailure)
@@ -134,10 +135,12 @@ public sealed class OperationsActionHandler(IAppDbContext db, CurrentOperationsA
     /// customer ID and no outcome: FR-25 names the actor, the action and the result.
     /// </summary>
     private async Task<Result<OperationsActionResult>> RefuseAsync(
-        Error error, DisputeAction action, Guid disputeId, DateTimeOffset now, CancellationToken cancellationToken)
+        Error error, DisputeAction action, Guid disputeId, DateTimeOffset now)
     {
         AuditLog.Record(db, ToAuditAction(action), AuditResult.Rejected, operationsActor.Actor, now, disputeId: disputeId);
-        await db.SaveChangesAsync(cancellationToken);
+        // Not the request's token, as linking saves its audit entries: a client that disconnects cannot cancel the record
+        // of its refusal (NFR-SEC-10). The database command timeout still bounds the save.
+        await db.SaveChangesAsync(CancellationToken.None);
         return error;
     }
 

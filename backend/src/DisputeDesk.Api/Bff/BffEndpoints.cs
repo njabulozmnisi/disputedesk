@@ -39,7 +39,7 @@ public static partial class BffEndpoints
         if (loginSub is not null)
         {
             await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            await RecordSignOutAsync(db, time, loggers, loginSub, http.RequestAborted);
+            await RecordSignOutAsync(db, time, loggers, loginSub);
         }
 
         string redirectUri = returnUrl is not null && RedirectHttpResult.IsLocalUrl(returnUrl) ? returnUrl : "/";
@@ -91,7 +91,7 @@ public static partial class BffEndpoints
 
         if (loginSub is not null)
         {
-            await RecordSignOutAsync(db, time, loggers, loginSub, http.RequestAborted);
+            await RecordSignOutAsync(db, time, loggers, loginSub);
         }
 
         // The handler attaches the session's ID token as id_token_hint, read through this request's cookie authentication.
@@ -99,11 +99,14 @@ public static partial class BffEndpoints
     }
 
     /// <summary>Records <c>SignOut</c> for a session that has just ended. A failed save is logged, not thrown: the session stays ended (AD-7; OWASP Session Management Cheat Sheet).</summary>
-    private static async Task RecordSignOutAsync(AppDbContext db, TimeProvider time, ILoggerFactory loggers, string loginSub, CancellationToken cancellationToken)
+    private static async Task RecordSignOutAsync(AppDbContext db, TimeProvider time, ILoggerFactory loggers, string loginSub)
     {
         try
         {
-            await BffAuthentication.RecordSignInOrOutAsync(db, time, AuditAction.SignOut, loginSub, cancellationToken);
+            // Not the request's token, as linking saves its audit entries: a client that disconnects cannot cancel the
+            // record of its sign-out (NFR-SEC-10). The database command timeout still bounds the save, and its failure
+            // is an NpgsqlException, which the catch below logs.
+            await BffAuthentication.RecordSignInOrOutAsync(db, time, AuditAction.SignOut, loginSub, CancellationToken.None);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

@@ -32,7 +32,10 @@ public sealed class ReadDisputeHandler(IAppDbContext db, CurrentOperationsActor 
         if (dispute is null)
         {
             AuditLog.Record(db, AuditAction.DisputeRead, AuditResult.Rejected, operationsActor.Actor, now, disputeId: disputeId);
-            await db.SaveChangesAsync(cancellationToken);
+            // Not the request's token, as linking saves its audit entries: a client that disconnects cannot cancel the
+            // record of its refusal (NFR-SEC-10). The database command timeout still bounds the save. A successful read
+            // below keeps the request's token: a cancelled read returns nothing.
+            await db.SaveChangesAsync(CancellationToken.None);
             return NotFound;
         }
 

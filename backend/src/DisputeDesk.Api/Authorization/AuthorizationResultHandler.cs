@@ -71,6 +71,8 @@ public sealed class AuthorizationResultHandler : IAuthorizationMiddlewareResultH
         Guid? disputeId = Guid.TryParse(context.Request.RouteValues["disputeId"] as string, out Guid parsed) ? parsed : null;
 
         AuditLog.Record(db, action, AuditResult.Denied, new Actor(ActorType.Operations, sub), time.GetUtcNow(), disputeId: disputeId);
-        await db.SaveChangesAsync(context.RequestAborted);
+        // Not the request's token, as linking saves its audit entries: a client that disconnects cannot cancel the record
+        // of its refusal (NFR-SEC-10). The database command timeout still bounds the save.
+        await db.SaveChangesAsync(CancellationToken.None);
     }
 }

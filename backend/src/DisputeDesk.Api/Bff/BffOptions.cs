@@ -19,6 +19,16 @@ public sealed class BffOptions
     [ValidateObjectMembers]
     public CookieNameOptions AntiforgeryCookie { get; set; } = new();
 
+    /// <summary>The OpenID Connect handler's correlation cookie; the handler appends the correlation ID to the name.</summary>
+    [Required]
+    [ValidateObjectMembers]
+    public CookieNameOptions CorrelationCookie { get; set; } = new();
+
+    /// <summary>The OpenID Connect handler's nonce cookie; the handler appends the protected nonce to the name.</summary>
+    [Required]
+    [ValidateObjectMembers]
+    public CookieNameOptions NonceCookie { get; set; } = new();
+
     [Required]
     [ValidateObjectMembers]
     public CookieSecurityOptions Cookie { get; set; } = new();

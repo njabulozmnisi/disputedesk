@@ -239,6 +239,8 @@ services:
       # Local plain-http values (AD-24); appsettings.json holds the AWS ones (__Host- names, Secure always).
       Bff__SessionCookie__Name: disputedesk-session
       Bff__AntiforgeryCookie__Name: disputedesk-antiforgery
+      Bff__CorrelationCookie__Name: disputedesk-correlation.
+      Bff__NonceCookie__Name: disputedesk-nonce.
       Bff__Cookie__SecurePolicy: SameAsRequest
       Zitadel__RequireHttpsMetadata: "false"       # the local issuer is http://auth.localhost:8080
       CoreBanking__BaseUrl: http://core-banking:8080

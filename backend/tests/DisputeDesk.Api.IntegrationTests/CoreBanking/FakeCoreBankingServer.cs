@@ -74,6 +74,14 @@ public sealed class FakeCoreBankingServer : IAsyncDisposable
         }
     });
 
+    /// <summary>Answers every request with <paramref name="status"/> and a <c>Location</c> of the same path and query on <paramref name="target"/>.</summary>
+    public static Task<FakeCoreBankingServer> RedirectingAsync(int status, Uri target) => StartAsync(context =>
+    {
+        context.Response.StatusCode = status;
+        context.Response.Headers.Location = new Uri(target, $"{context.Request.Path}{context.Request.QueryString}").ToString();
+        return Task.CompletedTask;
+    });
+
     public async ValueTask DisposeAsync() => await _app.DisposeAsync();
 
     public static async Task<FakeCoreBankingServer> StartAsync(RequestDelegate answer)

@@ -27,6 +27,7 @@ public sealed class IdempotencyFilter(
     CurrentCustomer currentCustomer,
     ClaimedIdempotencyKey claimed,
     TimeProvider time,
+    RaiseMetrics metrics,
     IOptions<JsonOptions> jsonOptions) : IEndpointFilter
 {
     private static readonly Error InProgress = Error.Conflict(
@@ -91,20 +92,31 @@ public sealed class IdempotencyFilter(
         // Released by its holder between the claim and this read: the client's retry will claim it.
         if (existing is null)
         {
-            return InProgress.ToProblem();
+            return Refuse(InProgress);
         }
 
         if (!existing.RequestHash.AsSpan().SequenceEqual(requestHash))
         {
-            return Mismatch.ToProblem();
+            return Refuse(Mismatch);
         }
 
         if (existing.Status != IdempotencyKeyStatus.Completed)
         {
-            return InProgress.ToProblem();
+            return Refuse(InProgress);
         }
 
+        // A replayed 409 or 422 is not counted again: its rejection was counted when it was first answered.
         return StoredResponse.From(existing, http.Response);
+    }
+
+    /// <summary>
+    /// A mismatch or in-progress answer is never stored, so each one is a new rejection the customer receives, counted
+    /// by its status like the handler's refusals (NFR-OBS-3).
+    /// </summary>
+    private ProblemHttpResult Refuse(Error error)
+    {
+        metrics.RecordRefusal(ErrorResults.StatusCodeFor(error.Kind));
+        return error.ToProblem();
     }
 
     /// <summary>

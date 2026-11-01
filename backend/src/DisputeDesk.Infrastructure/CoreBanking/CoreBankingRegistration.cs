@@ -18,9 +18,13 @@ public static class CoreBankingRegistration
             .Validate(options => options.BaseUrl is not null, "CoreBanking:BaseUrl is required.")
             .ValidateOnStart();
 
+        // Neither client follows a redirect: it would carry the customer ID header, the account reference or the request
+        // body to wherever it points (ASVS 5.0.0 V15.3.2). A 3xx reaches the client as any other non-success answer.
         services.AddHttpClient<ICoreBankingClient, CoreBankingClient>(UseCoreBankingBaseUrl)
+            .UseSocketsHttpHandler((handler, _) => handler.AllowAutoRedirect = false)
             .AddStandardResilienceHandler(TuneResilience);
         services.AddHttpClient<ISimSwapCheck, SimSwapCheck>(UseCoreBankingBaseUrl)
+            .UseSocketsHttpHandler((handler, _) => handler.AllowAutoRedirect = false)
             .AddStandardResilienceHandler(TuneResilience);
 
         return services;

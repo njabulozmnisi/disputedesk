@@ -24,7 +24,10 @@ public sealed class RaiseMetrics
     public void RecordRaised(Reason reason) =>
         _raised.Add(1, new KeyValuePair<string, object?>("reason", JsonNamingPolicy.CamelCase.ConvertName(reason.ToString())));
 
-    /// <summary>Counts a refused raise when it is a 409 (already disputed) or a 422 (not disputable); other statuses are not rejections.</summary>
+    /// <summary>
+    /// Counts a refused raise when it is a 409 (already disputed, or the key in progress) or a 422 (not disputable, or the
+    /// key used with a different request); other statuses are not rejections.
+    /// </summary>
     public void RecordRefusal(int status)
     {
         if (status is StatusCodes.Status409Conflict or StatusCodes.Status422UnprocessableEntity)
