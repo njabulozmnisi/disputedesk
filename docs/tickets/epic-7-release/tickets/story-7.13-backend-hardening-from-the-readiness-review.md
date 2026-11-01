@@ -54,7 +54,7 @@ Inputs (configuration, not request inputs):
    **And** in the second case the session row is still gone, the response is the sign-out redirect to the identity provider's end-session endpoint with the session and antiforgery cookie deletions, and the existing error log line is written with its trace ID and no login sub, email or token (OWASP Session Management Cheat Sheet: logout invalidates the session; NFR-OBS-2)
 
 6. **The Api finishes an in-flight request when it shuts down** (R27; NFR-RES-5, 7.10 criterion 4 shutdown row)
-   **Given** a named test hosting the Api on Kestrel with `WebApplicationFactory<TEntryPoint>.UseKestrel()` (Microsoft Learn, `WebApplicationFactory<TEntryPoint>.UseKestrel`, .NET 10; not the in-memory test server, so the host's graceful shutdown applies; Microsoft Learn, *.NET Generic Host*, host shutdown and `HostOptions.ShutdownTimeout`, default 30 seconds), on the same database and key store as an in-memory `ApiFactory` instance through which a seeded linked customer signs in over `https://localhost`; the test sends that browser's session and antiforgery cookies and antiforgery header to the Kestrel Api over plain http; the fake core-banking server holds the raise's transaction read for 2 seconds
+   **Given** a named test hosting the Api on Kestrel with `WebApplicationFactory<TEntryPoint>.UseKestrel()` (Microsoft Learn, `WebApplicationFactory<TEntryPoint>.UseKestrel`, .NET 10; not the in-memory test server, so the host's graceful shutdown applies; Microsoft Learn, *.NET Generic Host*, host shutdown and `HostOptions.ShutdownTimeout`, default 30 seconds), on the same database and key store as an in-memory `ApiFactory` instance through which a seeded linked customer signs in over `https://localhost`; the test sends that browser's session and antiforgery cookies and antiforgery header to the Kestrel Api over plain http; the fake core-banking server holds the raise's transaction read for 1.5 seconds (longer than the 1-second break below, shorter than the core-banking client's 2-second attempt timeout, AD-21, which would otherwise retry the read)
    **When** the Kestrel host is stopped (`IHost.StopAsync` or disposing the factory) while that raise is in flight
    **Then** the raise answers 201, its `Disputes` row, stored event and outbox row are committed, and the stop completes within 30 seconds
 
@@ -87,7 +87,7 @@ Deliberate-break proofs, run by the supervisor in a throwaway copy, not by the v
 - Remove `AllowAutoRedirect = false` from the SIM-swap client: criterion 3's test fails.
 - Pass `RequestAborted` to the operations authorisation refusal save again: criterion 4's test fails.
 - Pass `RequestAborted` to the `SignOut` save again: criterion 5's disconnect case fails.
-- Set `HostOptions.ShutdownTimeout` to 1 second in the Kestrel test: criterion 6's held 2-second raise fails.
+- Set `HostOptions.ShutdownTimeout` to 1 second in the Kestrel test: criterion 6's held 1.5-second raise fails.
 - Give the second instance a different Data Protection application name: criterion 7's test fails.
 - Count rejections in the handler path only, as before: criterion 8's mismatch and in-progress cases fail.
 
@@ -128,3 +128,4 @@ Deliberate-break proofs, run by the supervisor in a throwaway copy, not by the v
 - Decision: 2026-10-31 (Sofia, 7.13 write) — a failed sign-out audit keeps today's strategy (the session ends, the failure is logged with its trace ID and exported through the log pipeline); the fix is that a disconnect can no longer cancel the save.
 - Collision: touches `docker-compose.yml` (two local cookie-name lines) and backend code only; it does not touch `PlatformScriptTests.cs`, `docker-compose.aws.yml` or anything under `infra/`, so it may build beside 7.12 and 7.14.
 - Production path: the docs-only production-path change drops P38's audit-cancellation sentence once this story merges.
+- Decision: 2026-10-31 (supervisor ruling on the verifier's criterion 6 failure) — the hold is 1.5 seconds, not 2: a 2-second hold equals the core-banking resilience attempt timeout (AD-21), so the read would time out and retry instead of being answered; 1.5 seconds still exceeds the 1-second `ShutdownTimeout` break, which fails the test (builder-verified).

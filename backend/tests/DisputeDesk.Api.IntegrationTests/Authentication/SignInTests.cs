@@ -18,6 +18,8 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Primitives;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.Net.Http.Headers;
 using OpenTelemetry.Logs;
 
 namespace DisputeDesk.Api.IntegrationTests.Authentication;
@@ -385,16 +387,20 @@ public class SignInTests(PostgresFixture postgres)
         return ((long)bytes[0] << 40) | ((long)bytes[1] << 32) | ((long)bytes[2] << 24) | ((long)bytes[3] << 16) | ((long)bytes[4] << 8) | bytes[5];
     }
 
+    /// <summary>The AWS values from appsettings.json (AD-24): __Host- names and SecurePolicy Always.</summary>
+    private static readonly Dictionary<string, string?> AwsCookieSettings = new()
+    {
+        ["Authentication:SessionCookie:Name"] = "__Host-disputedesk-session",
+        ["Authentication:AntiforgeryCookie:Name"] = "__Host-disputedesk-antiforgery",
+        ["Authentication:CorrelationCookie:Name"] = "__Host-disputedesk-correlation.",
+        ["Authentication:NonceCookie:Name"] = "__Host-disputedesk-nonce.",
+        ["Authentication:Cookie:SecurePolicy"] = "Always",
+    };
+
     [Fact]
     public async Task Callback_AwsCookieSettingsOverHttps_SetsASecureHostPrefixedCookie()
     {
-        // The AWS values from appsettings.json (AD-24): __Host- names and SecurePolicy Always.
-        await using var factory = new ApiFactory(postgres.ConnectionString, settings: new Dictionary<string, string?>
-        {
-            ["Authentication:SessionCookie:Name"] = "__Host-disputedesk-session",
-            ["Authentication:AntiforgeryCookie:Name"] = "__Host-disputedesk-antiforgery",
-            ["Authentication:Cookie:SecurePolicy"] = "Always",
-        });
+        await using var factory = new ApiFactory(postgres.ConnectionString, settings: AwsCookieSettings);
         using HttpClient browser = factory.CreateBrowser(new CookieContainer());
 
         HttpResponseMessage callback = await browser.SignInAsync(factory.Zitadel);
@@ -403,5 +409,158 @@ public class SignInTests(PostgresFixture postgres)
         Assert.Contains("secure", setCookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("path=/", setCookie, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("domain=", setCookie, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task LoginAndCallback_AwsCookieSettingsOverHttps_SetAndDeleteHostPrefixedSecureSameSiteNoneTransientCookiesAtTheRoot()
+    {
+        // 7.13 AC1 (AD-24 as amended; RFC 6265bis, cookie name prefixes).
+        await using var factory = new ApiFactory(postgres.ConnectionString, settings: AwsCookieSettings);
+        using HttpClient browser = factory.CreateBrowser(new CookieContainer());
+
+        (HttpResponseMessage login, HttpResponseMessage callback) = await LoginThenCallbackAsync(browser, factory.Zitadel);
+
+        Assert.Equal("/", callback.Headers.Location?.ToString());
+        Assert.Contains(callback.Headers.GetValues("Set-Cookie"), value => value.StartsWith("__Host-disputedesk-session=", StringComparison.Ordinal));
+        foreach (SetCookieHeaderValue cookie in TransientCookies(login, callback, "__Host-disputedesk-correlation.", "__Host-disputedesk-nonce."))
+        {
+            Assert.StartsWith("__Host-", cookie.Name.Value, StringComparison.Ordinal);
+            AssertSecureSameSiteNoneAtTheRoot(cookie);
+        }
+    }
+
+    [Fact]
+    public async Task LoginAndCallback_TestDefaults_SetAndDeleteUnprefixedSecureSameSiteNoneTransientCookiesAtTheRoot()
+    {
+        // 7.13 AC1: the local names carry no prefix, and the cookies stay Secure and SameSite=None.
+        await using var factory = new ApiFactory(postgres.ConnectionString);
+        using HttpClient browser = factory.CreateBrowser(new CookieContainer());
+
+        (HttpResponseMessage login, HttpResponseMessage callback) = await LoginThenCallbackAsync(browser, factory.Zitadel);
+
+        Assert.Equal("/", callback.Headers.Location?.ToString());
+        Assert.Equal("unlinked", await browser.SessionStateAsync());
+        foreach (SetCookieHeaderValue cookie in TransientCookies(login, callback, ApiFactory.CorrelationCookieName, ApiFactory.NonceCookieName))
+        {
+            AssertSecureSameSiteNoneAtTheRoot(cookie);
+        }
+    }
+
+    [Theory]
+    [InlineData("Authentication:CorrelationCookie:Name")]
+    [InlineData("Authentication:NonceCookie:Name")]
+    public async Task ApiStart_TransientCookieNameEmpty_StopsTheApiWithAnErrorNamingTheKey(string key)
+    {
+        // An empty environment value overrides appsettings.json's name, as a missing one would leave the key unset.
+        (int exitCode, string output) = await ApiProcess.RunUntilExitAsync(
+            new Dictionary<string, string?> { [key] = "" }, TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("OptionsValidationException", output, StringComparison.Ordinal);
+        Assert.Contains(key.Split(':')[1], output, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The login's correlation and nonce cookies and the callback's deletions of them: exactly one of each on each response.
+    /// </summary>
+    private static List<SetCookieHeaderValue> TransientCookies(
+        HttpResponseMessage login, HttpResponseMessage callback, string correlationName, string nonceName)
+    {
+        var transient = new List<SetCookieHeaderValue>();
+        foreach (HttpResponseMessage response in new[] { login, callback })
+        {
+            IList<SetCookieHeaderValue> cookies = SetCookieHeaderValue.ParseList([.. response.Headers.GetValues("Set-Cookie")]);
+            transient.Add(Assert.Single(cookies, cookie => cookie.Name.StartsWith(correlationName, StringComparison.Ordinal)));
+            transient.Add(Assert.Single(cookies, cookie => cookie.Name.StartsWith(nonceName, StringComparison.Ordinal)));
+        }
+
+        // The callback's two are deletions, which ASP.NET Core writes as expiring at the Unix epoch.
+        Assert.All(transient[2..], cookie => Assert.Equal(DateTimeOffset.UnixEpoch, cookie.Expires));
+        return transient;
+    }
+
+    private static void AssertSecureSameSiteNoneAtTheRoot(SetCookieHeaderValue cookie)
+    {
+        Assert.True(cookie.Secure, $"{cookie.Name} is not Secure.");
+        Assert.True(cookie.HttpOnly, $"{cookie.Name} is not HttpOnly.");
+        Assert.Equal(SameSiteMode.None, cookie.SameSite);
+        // The attribute's exact value: the handler's default path, /api/signin-oidc, also starts with /.
+        Assert.Equal("/", cookie.Path.Value);
+        Assert.Null(cookie.Domain.Value);
+    }
+
+    /// <summary>The sign-in of <see cref="Browser.SignInAsync"/>, returning the login's response as well as the callback's.</summary>
+    private static async Task<(HttpResponseMessage Login, HttpResponseMessage Callback)> LoginThenCallbackAsync(HttpClient browser, FakeZitadel zitadel)
+    {
+        HttpResponseMessage login = await browser.GetPathAsync("/api/v1/authentication/login");
+        Uri authorize = login.Headers.Location ?? throw new InvalidOperationException($"Login answered {login.StatusCode} without a redirect.");
+        string code = zitadel.IssueCode(authorize, $"transient-{Guid.NewGuid():N}");
+        using var form = new FormUrlEncodedContent(new Dictionary<string, string> { ["code"] = code, ["state"] = QueryHelpers.ParseQuery(authorize.Query)["state"].ToString() });
+        HttpResponseMessage callback = await browser.PostAsync(new Uri("/api/signin-oidc", UriKind.Relative), form, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        return (login, callback);
+    }
+
+    [Theory]
+    [InlineData("none")]
+    [InlineData(SecurityAlgorithms.HmacSha256)]
+    [InlineData(SecurityAlgorithms.RsaSha384)]
+    [InlineData(SecurityAlgorithms.RsaSsaPssSha256)]
+    public async Task Callback_IdTokenNotSignedWithRs256_RedirectsToSignInFailedWithNoSessionAndNoAudit(string algorithm)
+    {
+        // 7.13 AC2: RS384 and PS256 are signed with Zitadel's own published key, so only the algorithm allowlist refuses them.
+        // RS256 is the fake's default, so every other sign-in test is its success case.
+        await using var factory = new ApiFactory(postgres.ConnectionString);
+        factory.Zitadel.IdTokenAlgorithm = algorithm;
+        var cookies = new CookieContainer();
+        using HttpClient browser = factory.CreateBrowser(cookies);
+        string sub = $"alg-{Guid.NewGuid():N}";
+
+        HttpResponseMessage callback = await browser.SignInAsync(factory.Zitadel, sub);
+
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        Assert.Equal("/?signIn=failed", callback.Headers.Location?.ToString());
+        Assert.DoesNotContain(cookies.GetAllCookies(), cookie => cookie.Name == ApiFactory.SessionCookieName);
+        await using AppDbContext db = postgres.CreateDbContext();
+        Assert.False(await db.Set<Session>().AnyAsync(row => row.LoginSub == sub, TestContext.Current.CancellationToken));
+        Assert.False(await db.Set<AuditLogEntry>().AnyAsync(entry => entry.ActorId == sub, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Session_TwoInstancesStartingTogetherOnAnEmptyKeyStore_AcceptEachOthersCookie()
+    {
+        // 7.13 AC7 (Microsoft Learn, Data Protection key management): two hosts start at once on an empty key ring, so both
+        // may create a key; each must still read a cookie the other protected. Each run is a new database.
+        for (int run = 1; run <= 5; run++)
+        {
+            string connectionString = await postgres.CreateMigratedDatabaseAsync();
+            Assert.Equal(0, await KeyCountAsync(connectionString));
+            await using var first = new ApiFactory(connectionString);
+            await using var second = new ApiFactory(connectionString);
+
+            // Starting a host reads the key ring (DataProtectionHostedService), which creates a key when it is empty.
+            await Task.WhenAll(
+                Task.Run(first.StartServer, TestContext.Current.CancellationToken),
+                Task.Run(second.StartServer, TestContext.Current.CancellationToken));
+            TestContext.Current.TestOutputHelper?.WriteLine($"Run {run}: {await KeyCountAsync(connectionString)} key(s) after start");
+
+            var firstBrowserCookies = new CookieContainer();
+            var secondBrowserCookies = new CookieContainer();
+            using HttpClient firstBrowserOnFirst = first.CreateBrowser(firstBrowserCookies);
+            using HttpClient firstBrowserOnSecond = second.CreateBrowser(firstBrowserCookies);
+            using HttpClient secondBrowserOnSecond = second.CreateBrowser(secondBrowserCookies);
+            using HttpClient secondBrowserOnFirst = first.CreateBrowser(secondBrowserCookies);
+            await firstBrowserOnFirst.SignInAsync(first.Zitadel, $"first-{run}");
+            await secondBrowserOnSecond.SignInAsync(second.Zitadel, $"second-{run}");
+
+            Assert.Equal("unlinked", await firstBrowserOnSecond.SessionStateAsync());
+            Assert.Equal("unlinked", await secondBrowserOnFirst.SessionStateAsync());
+        }
+    }
+
+    private static async Task<int> KeyCountAsync(string connectionString)
+    {
+        await using AppDbContext db = CreateDbContext(connectionString);
+        return await db.DataProtectionKeys.CountAsync(TestContext.Current.CancellationToken);
     }
 }

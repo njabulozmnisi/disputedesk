@@ -43,12 +43,13 @@ public sealed class WithdrawDisputeHandler(IAppDbContext db, CurrentCustomer cur
         }
 
         // A second clash: one read of the read model and no further decision (AD-15, decided 2026-10-30). A change
-        // committed after this read is not reflected.
+        // committed after this read is not reflected. The refusal is decided, so, as for its audit save below, not the
+        // request's token: a client that disconnects cannot cancel the record of its refusal (NFR-SEC-10).
         DisputeStatus lastRead = await db.Entities<Dispute>().AsNoTracking()
             .Where(dispute => dispute.Id == disputeId)
             .Select(dispute => dispute.Status)
-            .SingleAsync(cancellationToken);
-        return await RefuseAsync(DisputeErrors.ActionNotAllowedAs(DisputeWire.ToCustomerStatus(lastRead)), disputeId, now, cancellationToken);
+            .SingleAsync(CancellationToken.None);
+        return await RefuseAsync(DisputeErrors.ActionNotAllowedAs(DisputeWire.ToCustomerStatus(lastRead)), disputeId, now);
     }
 
     /// <summary>
@@ -62,14 +63,14 @@ public sealed class WithdrawDisputeHandler(IAppDbContext db, CurrentCustomer cur
         Dispute? dispute = await db.LoadDisputeAsync(disputeId, cancellationToken);
         if (dispute is null)
         {
-            return await RefuseAsync(NotFound, disputeId: null, now, cancellationToken);
+            return await RefuseAsync(NotFound, disputeId: null, now);
         }
 
         DateTimeOffset instant = isRetry ? Later(now, await LatestOccurredAtAsync(disputeId, cancellationToken)) : now;
         Result withdrawn = dispute.Withdraw(note, Customer, instant);
         if (withdrawn.Error == DisputeErrors.ActionNotAllowed)
         {
-            return await RefuseAsync(DisputeErrors.ActionNotAllowedAs(DisputeWire.ToCustomerStatus(dispute.Status)), dispute.Id, now, cancellationToken);
+            return await RefuseAsync(DisputeErrors.ActionNotAllowedAs(DisputeWire.ToCustomerStatus(dispute.Status)), dispute.Id, now);
         }
 
         if (withdrawn.IsFailure)
@@ -95,10 +96,12 @@ public sealed class WithdrawDisputeHandler(IAppDbContext db, CurrentCustomer cur
     }
 
     /// <summary>Audits the refusal as <c>Rejected</c> through <see cref="AuditLog.Record"/> (AD-14a), saves it and returns it.</summary>
-    private async Task<Result<Contracts.Disputes.DisputeResponse>> RefuseAsync(Error error, Guid? disputeId, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task<Result<Contracts.Disputes.DisputeResponse>> RefuseAsync(Error error, Guid? disputeId, DateTimeOffset now)
     {
         AuditLog.Record(db, AuditAction.Withdraw, AuditResult.Rejected, Customer, now, currentCustomer.CustomerId, disputeId);
-        await db.SaveChangesAsync(cancellationToken);
+        // Not the request's token, as linking saves its audit entries: a client that disconnects cannot cancel the record
+        // of its refusal (NFR-SEC-10). The database command timeout still bounds the save.
+        await db.SaveChangesAsync(CancellationToken.None);
         return error;
     }
 

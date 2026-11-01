@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
+using Microsoft.Net.Http.Headers;
 using OpenTelemetry.Logs;
 
 namespace DisputeDesk.Api.IntegrationTests.Authentication;
@@ -149,16 +150,46 @@ public class SignOutTests(PostgresFixture postgres)
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.StartsWith(factory.Zitadel.Configuration.EndSessionEndpoint, response.Headers.Location?.ToString(), StringComparison.Ordinal);
         Assert.Equal(1, failAudit.Failed);
+        // 7.13 AC5: the response itself deletes both cookies (OWASP Session Management Cheat Sheet).
+        IList<SetCookieHeaderValue> setCookies = SetCookieHeaderValue.ParseList([.. response.Headers.GetValues("Set-Cookie")]);
+        Assert.Equal(DateTimeOffset.UnixEpoch, Assert.Single(setCookies, cookie => cookie.Name == ApiFactory.SessionCookieName).Expires);
+        Assert.Equal(DateTimeOffset.UnixEpoch, Assert.Single(setCookies, cookie => cookie.Name == ApiFactory.AntiforgeryCookieName).Expires);
         Assert.DoesNotContain(cookies.GetAllCookies(), cookie => cookie.Name == ApiFactory.SessionCookieName);
         Assert.DoesNotContain(cookies.GetAllCookies(), cookie => cookie.Name == ApiFactory.AntiforgeryCookieName);
         Assert.Empty(await SessionRowsAsync(factory));
         Assert.DoesNotContain(await AuditEntriesAsync(factory), entry => entry.Action == AuditAction.SignOut);
 
         LogRecord error = Assert.Single(telemetry.Logs, log => log.LogLevel == LogLevel.Error && log.CategoryName == "DisputeDesk.Api.Authentication.AuthenticationEndpoints");
-        string[] secrets = [idToken, "opaque-access-token", "login-audit-fails@disputedesk.test"];
+        Assert.NotEqual(default, error.TraceId);
+        string[] secrets = [idToken, "opaque-access-token", "login-audit-fails", "login-audit-fails@disputedesk.test"];
         string logged = string.Join('\n', new[] { error.FormattedMessage, error.Body, error.Exception?.ToString() }
             .Concat((error.Attributes ?? []).Select(attribute => attribute.Value?.ToString())));
         Assert.DoesNotContain(secrets, secret => logged.Contains(secret, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Logout_ClientDisconnectsDuringTheSignOutAuditSave_EndsTheSessionAndCommitsTheSignOutEntry()
+    {
+        // 7.13 AC5: the client has gone, so only the session row and the entry are checked.
+        var clock = new TestClock();
+        var hold = new HoldAuditSaveInterceptor(AuditAction.SignOut);
+        await using var factory = new ApiFactory(await postgres.CreateMigratedDatabaseAsync(), configureServices: hold.AddTo, clock: clock);
+        using HttpClient browser = factory.CreateBrowser(new CookieContainer());
+        await browser.SignInAsync(factory.Zitadel, "login-disconnects");
+        using var logout = new HttpRequestMessage(HttpMethod.Post, new Uri("/api/v1/authentication/logout", UriKind.Relative))
+        {
+            Content = new FormUrlEncodedContent([]),
+        };
+        logout.Headers.Add("X-XSRF-TOKEN", await browser.AntiforgeryTokenAsync());
+
+        Assert.True(await hold.SendAndDisconnectAsync(browser, logout));
+
+        Assert.Empty(await SessionRowsAsync(factory));
+        AuditLogEntry signOut = Assert.Single(await AuditEntriesAsync(factory), entry => entry.Action == AuditAction.SignOut);
+        Assert.Equal(AuditResult.Succeeded, signOut.Result);
+        Assert.Equal(ActorType.Customer, signOut.ActorType);
+        Assert.Equal("login-disconnects", signOut.ActorId);
+        Assert.Equal(clock.NowAsStored, signOut.OccurredAtUtc);
     }
 
     [Fact]

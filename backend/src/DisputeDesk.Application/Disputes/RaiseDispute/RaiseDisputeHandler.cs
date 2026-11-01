@@ -37,7 +37,7 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
         if (found.IsFailure)
         {
             return found.Error == CoreBankingErrors.NotFound
-                ? await RefuseAsync(found.Error, disputeId: null, now, cancellationToken)
+                ? await RefuseAsync(found.Error, disputeId: null, now)
                 : found.Error;
         }
 
@@ -57,12 +57,12 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
         {
             if (earlier is not null && raised.Error == DisputeErrors.AlreadyDisputed)
             {
-                return await RefuseAsync(AlreadyDisputed(earlier), earlier.Id, now, cancellationToken);
+                return await RefuseAsync(AlreadyDisputed(earlier), earlier.Id, now);
             }
 
             // 422 not-disputable is a refusal; the expected amount's 400s are validation errors.
             return raised.Error.Kind == ErrorKind.BusinessRule
-                ? await RefuseAsync(raised.Error, disputeId: null, now, cancellationToken)
+                ? await RefuseAsync(raised.Error, disputeId: null, now)
                 : raised.Error;
         }
 
@@ -78,10 +78,12 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
         {
             // Another raise for the same transaction committed between the read above and this commit. It is this
             // customer's own: core banking returned the transaction only to them, and accountRef is stable (AD-21).
-            // Nothing of the lost save committed, the completed key included, and the context no longer tracks it.
-            Dispute winner = await FindDisputeAsync(transaction, cancellationToken)
+            // Nothing of the lost save committed, the completed key included, and the context no longer tracks it. The
+            // refusal is decided, so, as for its audit save, not the request's token: a client that disconnects cannot
+            // cancel the record of its refusal (NFR-SEC-10).
+            Dispute winner = await FindDisputeAsync(transaction, CancellationToken.None)
                 ?? throw new InvalidOperationException("The unique index reported a dispute the ownership filter does not show.");
-            return await RefuseAsync(AlreadyDisputed(winner), winner.Id, now, cancellationToken);
+            return await RefuseAsync(AlreadyDisputed(winner), winner.Id, now);
         }
 
         return response;
@@ -91,11 +93,13 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
     /// Audits the refusal as <c>Rejected</c> through <see cref="AuditLog.Record"/> (AD-14a), saves it and returns it.
     /// The Api's idempotency filter then stores the 4xx on the key in its own commit (AD-16).
     /// </summary>
-    private async Task<Result<Contracts.Disputes.DisputeResponse>> RefuseAsync(Error error, Guid? disputeId, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task<Result<Contracts.Disputes.DisputeResponse>> RefuseAsync(Error error, Guid? disputeId, DateTimeOffset now)
     {
         AuditLog.Record(
             db, AuditAction.Raise, AuditResult.Rejected, new Actor(ActorType.Customer, currentCustomer.LoginSub), now, currentCustomer.CustomerId, disputeId);
-        await db.SaveChangesAsync(cancellationToken);
+        // Not the request's token, as linking saves its audit entries: a client that disconnects cannot cancel the record
+        // of its refusal (NFR-SEC-10). The database command timeout still bounds the save.
+        await db.SaveChangesAsync(CancellationToken.None);
         return error;
     }
 

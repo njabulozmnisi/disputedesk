@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 
 namespace DisputeDesk.Api.Authentication;
 
@@ -75,7 +76,7 @@ public static partial class WebAppAuthentication
         services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
             .Configure<IOptions<BrowserCookieOptions>, SessionTicketStore>(ConfigureCookie);
         services.AddOptions<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme)
-            .Configure<IOptions<ZitadelOptions>>(ConfigureOpenIdConnect);
+            .Configure<IOptions<ZitadelOptions>, IOptions<BrowserCookieOptions>>(ConfigureOpenIdConnect);
         // Deny by default (AD-10): an endpoint that names no policy, and a request that matches no endpoint, need a
         // signed-in user. Public endpoints opt out with AllowAnonymous().
         services.AddAuthorizationBuilder()
@@ -122,7 +123,15 @@ public static partial class WebAppAuthentication
         };
     }
 
-    private static void ConfigureOpenIdConnect(OpenIdConnectOptions oidc, IOptions<ZitadelOptions> zitadel)
+    private static void ConfigureTransientCookie(CookieBuilder cookie, string name)
+    {
+        cookie.Name = name;
+        cookie.Path = "/";
+        cookie.SecurePolicy = CookieSecurePolicy.Always;
+        cookie.SameSite = SameSiteMode.None;
+    }
+
+    private static void ConfigureOpenIdConnect(OpenIdConnectOptions oidc, IOptions<ZitadelOptions> zitadel, IOptions<BrowserCookieOptions> browserCookies)
     {
         oidc.Authority = zitadel.Value.Issuer;
         oidc.MetadataAddress = zitadel.Value.MetadataAddress;
@@ -138,11 +147,28 @@ public static partial class WebAppAuthentication
         oidc.SignedOutCallbackPath = "/api/signout-callback-oidc";
         // SaveTokens would also keep the access token; OnTokenValidated below keeps only the ID token.
         oidc.SaveTokens = false;
-        // The correlation and nonce cookies keep the handler defaults (AD-24): SameSite=None and Secure, which
-        // browsers accept on http://localhost too.
+        // Zitadel signs ID tokens with RS256, the OpenID Connect default (Core 1.0, section 3.1.3.7); no other algorithm
+        // is accepted, as for operations bearer tokens (ASVS 5.0.0 V9.1.2).
+        oidc.TokenValidationParameters.ValidAlgorithms = [SecurityAlgorithms.RsaSha256];
+
+        // The correlation and nonce cookies are named from configuration (AD-24): __Host- names in AWS, so Path must be /
+        // (RFC 6265bis, cookie name prefixes). They stay Secure and SameSite=None in every environment, whatever
+        // Authentication:Cookie:SecurePolicy says, because Zitadel's form_post to the callback is a cross-site request; browsers
+        // accept Secure cookies on http://localhost too.
+        ConfigureTransientCookie(oidc.CorrelationCookie, browserCookies.Value.CorrelationCookie.Name);
+        ConfigureTransientCookie(oidc.NonceCookie, browserCookies.Value.NonceCookie.Name);
 
         oidc.Events.OnTokenValidated = context =>
         {
+            // The handler does not require a signature on an ID token it redeemed from the token endpoint itself, trusting
+            // TLS instead (OpenID Connect Core 1.0, section 3.1.3.7, step 6), so ValidAlgorithms never sees an unsigned
+            // token. Zitadel always signs, so an unsigned one is refused here (ASVS 5.0.0 V9.1.2).
+            if (string.IsNullOrEmpty(context.SecurityToken.RawSignature))
+            {
+                context.Fail("The ID token is not signed.");
+                return Task.CompletedTask;
+            }
+
             // Zitadel's login already requires a verified email; the API checks again (AD-6).
             if (context.Principal?.FindFirst("email_verified")?.Value is not "true")
             {
