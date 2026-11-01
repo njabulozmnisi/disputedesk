@@ -60,13 +60,32 @@ resource "aws_cloudfront_distribution" "this" {
     }
   }
 
+  # With https-only, CloudFront answers plain HTTP with 403 instead of a redirect (CloudFront, "Require HTTPS for
+  # communication between viewers and CloudFront"; ASVS 5.0 V4.1.2), so a request sent over HTTP never reaches an API.
+  # The identity origin is https-only throughout: its OAuth and OIDC endpoints are not under /api/, and it serves no
+  # navigation that needs the redirect. The app and Mailpit keep the redirect for a browser's navigation.
   default_cache_behavior {
     target_origin_id         = "gateway"
-    viewer_protocol_policy   = "redirect-to-https"
+    viewer_protocol_policy   = each.key == "auth" ? "https-only" : "redirect-to-https"
     allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods           = ["GET", "HEAD"]
     cache_policy_id          = local.caching_disabled_policy_id
     origin_request_policy_id = local.all_viewer_and_cloudfront_headers_policy_id
+  }
+
+  # The app's and Mailpit's APIs: the default behaviour's settings, https-only. /api without the slash is a client route.
+  dynamic "ordered_cache_behavior" {
+    for_each = each.key == "auth" ? [] : ["/api/*"]
+
+    content {
+      path_pattern             = ordered_cache_behavior.value
+      target_origin_id         = "gateway"
+      viewer_protocol_policy   = "https-only"
+      allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+      cached_methods           = ["GET", "HEAD"]
+      cache_policy_id          = local.caching_disabled_policy_id
+      origin_request_policy_id = local.all_viewer_and_cloudfront_headers_policy_id
+    }
   }
 
   restrictions {

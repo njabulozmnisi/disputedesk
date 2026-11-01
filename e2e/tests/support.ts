@@ -37,7 +37,7 @@ export function expectProblemShape(body: Record<string, unknown>, slug: string, 
 
 /** The CSP the gateway sends with the SPA (infra/nginx). `vite preview` sends none, so SPA tests add it to the document. */
 export const gatewayContentSecurityPolicy =
-  "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' http://auth.localhost:8080";
+  "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' http://auth.localhost:8080";
 
 /** The records on the dispute topic, read with the broker's own consumer (rpk in the redpanda container) from the start to the current end. */
 export type TopicRecord = { key: string; value: string; headers: { key: string; value: string }[]; partition: number; offset: number };

@@ -1,0 +1,18 @@
+# The identity origin's browser security headers, on every response: Zitadel's and the login's, and the gateway's own
+# 302, 403 and 404 (OWASP HTTP Headers Cheat Sheet; ASVS 5.0 V3.4). Included at server level in both gateways, and again
+# in the Login v2 location, which adds a header of its own and so inherits none of these (nginx ngx_http_headers_module,
+# ngx_http_proxy_module: add_header and proxy_hide_header inherit only into a level that sets none).
+# Not the app's CSP: Zitadel and the login send their own, which pass through, and this second policy forbids framing;
+# a browser enforces both (CSP Level 3, multiple policies). The upstreams' own HSTS and nosniff are hidden, so each is
+# sent once with the gateway's value.
+add_header Content-Security-Policy "frame-ancestors 'none'" always;
+add_header X-Content-Type-Options "nosniff" always;
+# HSTS only where the public origin is HTTPS (AWS); locally GATEWAY_HSTS is empty, and nginx sends no empty header.
+add_header Strict-Transport-Security "${GATEWAY_HSTS}" always;
+proxy_hide_header Strict-Transport-Security;
+proxy_hide_header X-Content-Type-Options;
+# The gateway's strict-origin-when-cross-origin only where the upstream sent no Referrer-Policy: the gateway's own 302,
+# 403 and 404, and discovery. Where the upstream sent one, the nginx.conf map gives an empty value and nginx sends no
+# header, so Zitadel's stricter same-origin on its v1 login and console passes through alone (nginx ngx_http_map_module,
+# ngx_http_upstream_module $upstream_http_*). The Login v2 location replaces the login's weaker value itself.
+add_header Referrer-Policy $identity_referrer_policy always;

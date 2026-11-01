@@ -99,7 +99,7 @@ Needs: epic 2 (the themed hosted login for UJ-1); epic 3 (dispute screens for UJ
 | 7.11 | [SPA skips browser tracing when built without it](epic-7-release/tickets/story-7.11-spa-skips-browser-tracing-when-built-without-it.md) | frontend | done |
 | 7.4 | [AWS Compose override and OpenTelemetry collector](epic-7-release/tickets/story-7.4-aws-compose-override-and-opentelemetry-collector.md) | backend | done |
 | 7.5 | [Terraform dev environment and OIDC deploy](epic-7-release/tickets/story-7.5-terraform-dev-environment-and-oidc-deploy.md) | backend | done |
-| 7.12 | [Gateway and edge hardening](epic-7-release/tickets/story-7.12-gateway-and-edge-hardening.md) | backend | planned |
+| 7.12 | [Gateway and edge hardening](epic-7-release/tickets/story-7.12-gateway-and-edge-hardening.md) | backend | done |
 | 7.13 | [Backend hardening from the readiness review](epic-7-release/tickets/story-7.13-backend-hardening-from-the-readiness-review.md) | backend | planned |
 | 7.14 | [Customer data cleared at session end, copy and operations docs](epic-7-release/tickets/story-7.14-customer-data-cleared-at-session-end-copy-and-operations-docs.md) | frontend | planned |
 | 7.10 | [Production readiness review](epic-7-release/tickets/story-7.10-production-readiness-review.md) | supervisor | planned |

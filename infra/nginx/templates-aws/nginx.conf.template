@@ -6,8 +6,8 @@
 #
 # docker-compose.aws.yml selects this directory with NGINX_ENVSUBST_TEMPLATE_DIR, and the image's entrypoint renders it
 # with envsubst into /etc/nginx, filling in the GATEWAY_* variables (nginx official image, "Using environment variables
-# in nginx configuration"). The Dockerfile copies security-headers.conf.template and scalar-headers.conf.template in
-# from infra/nginx/templates/, so both gateways send the same app headers.
+# in nginx configuration"). The Dockerfile copies security-headers.conf.template, scalar-headers.conf.template and
+# identity-headers.conf.template in from infra/nginx/templates/, so both gateways send the same app and identity headers.
 #
 # Differences from the local edge:
 #   - Only CloudFront reaches this origin. Every server block answers 403 unless the request carries the origin-verify
@@ -28,12 +28,13 @@ http {
   default_type  application/octet-stream;
   sendfile      on;
   server_tokens off;
-  access_log    /var/log/nginx/access.log;
 
-  # As locally: on the identity origin the path ($uri) in place of the request line, and no Referer, so the end-session
-  # GET's id_token_hint is never logged (AD-20, ASVS 5.0 V14.2.1). No format logs the origin-verify header.
-  log_format    identity '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" '
-                         '$status $body_bytes_sent "$http_user_agent"';
+  # As locally, one format for every origin: the path ($uri) in place of the request line, and no Referer, so no query
+  # (the sign-in callback's code, the end-session id_token_hint, a Mailpit search) is ever logged (NFR-SEC-5, AD-20,
+  # ASVS 5.0 V14.2.1). Named on every log line. No format logs the origin-verify header.
+  log_format    path_only '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" '
+                          '$status $body_bytes_sent "$http_user_agent"';
+  access_log    /var/log/nginx/access.log path_only;
 
   # The image runs as a non-root user, which can write only under /tmp (the image's own defaults).
   client_body_temp_path /tmp/client_temp;
@@ -57,7 +58,7 @@ http {
   real_ip_header CloudFront-Viewer-Address;
   real_ip_recursive off;
 
-  # The viewer's scheme. The distributions redirect HTTP to HTTPS, so a request without the header is HTTPS too; any
+  # The viewer's scheme. The distributions redirect or refuse HTTP, so a request without the header is HTTPS too; any
   # value but http is https, so upstreams never get an empty or unexpected scheme.
   map $http_cloudfront_forwarded_proto $forwarded_proto {
     default https;
@@ -68,6 +69,13 @@ http {
   map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      close;
+  }
+
+  # As locally, the identity origin's Referrer-Policy (identity-headers.conf): the gateway's value where the upstream
+  # sent none, the 403 and 404 nginx makes itself included; empty (no header) where it sent its own.
+  map $upstream_http_referrer_policy $identity_referrer_policy {
+    default "";
+    ""      "strict-origin-when-cross-origin";
   }
 
   # The coarse per-client limit (AD-23), on the client address realip sets: 10 requests per second, with bursts of up
@@ -86,26 +94,42 @@ http {
 
     include /etc/nginx/security-headers.conf;
 
-    # The gateway's own 429 as RFC 9457 problem details, as locally (AD-3).
+    # The gateway's own 429 as RFC 9457 problem details, with no-store, as locally (AD-3, AD-23).
     error_page 429 @rate_limited;
     location @rate_limited {
       include /etc/nginx/security-headers.conf;
       add_header Retry-After "1" always;
+      add_header Cache-Control "no-store" always;
       types { }
       default_type application/problem+json;
       return 429 '{"type":"https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/rate-limited.md","title":"Too many requests","status":429}';
     }
 
-    # The SPA, with the same cache headers as locally (RFC 9111 5.2.2.4, RFC 8246); each location repeats the headers.
+    # The gateway's own 413, 500, 502 and 504 on /api, as locally: the original status (error_page without "="), this
+    # fixed text, no-store and the security headers; the 200 below is never sent (AD-23 as amended 2026-10-31).
+    location @gateway_error {
+      include /etc/nginx/security-headers.conf;
+      add_header Cache-Control "no-store" always;
+      types { }
+      default_type text/plain;
+      return 200 "The gateway could not complete the request.\n";
+    }
+
+    # The SPA, with the same cache headers and charset as locally (RFC 9111 5.2.2.4, RFC 8246; ASVS 5.0 V4.1.1); each
+    # location repeats the headers.
     root /usr/share/nginx/html;
     location / {
       include /etc/nginx/security-headers.conf;
       add_header Cache-Control "no-cache";
+      charset utf-8;
+      charset_types text/html text/css application/javascript;
       try_files $uri /index.html;
     }
     location /assets/ {
       include /etc/nginx/security-headers.conf;
       add_header Cache-Control "public, max-age=31536000, immutable";
+      charset utf-8;
+      charset_types text/html text/css application/javascript;
       try_files $uri =404;
     }
 
@@ -113,8 +137,11 @@ http {
     location /otlp/ { return 404; }
     location /mailpit/ { return 404; }
 
+    # As locally, each /api location repeats the 429 line beside its own error_page.
     location /api/health/ {
       limit_req zone=coarse burst=20 nodelay;
+      error_page 429 @rate_limited;
+      error_page 413 500 502 504 @gateway_error;
       proxy_pass http://api/health/;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
@@ -128,6 +155,8 @@ http {
 
     location /api/ {
       limit_req zone=coarse burst=20 nodelay;
+      error_page 429 @rate_limited;
+      error_page 413 500 502 504 @gateway_error;
       proxy_pass http://api;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
@@ -189,17 +218,23 @@ http {
   server {
     listen 8080;
     server_name ${GATEWAY_AUTH_HOST};
-    access_log /var/log/nginx/access.log identity;
 
     if ($http_x_origin_verify != "${GATEWAY_ORIGIN_VERIFY}") { return 403; }
 
-    add_header Strict-Transport-Security "${GATEWAY_HSTS}" always;
+    # As locally: the identity baseline on every response, the 403 above and the console's 404 included, each header
+    # once, with the upstreams' own copies hidden; Referrer-Policy is Zitadel's own where it sends one, and the
+    # gateway's strict-origin-when-cross-origin on the 403, the 404, the 302 and discovery.
+    include /etc/nginx/identity-headers.conf;
 
     # The console is an admin interface behind a password-only admin; provisioning uses the API instead (ASVS 5.0
     # V13.4). The prefix match covers /ui/console, /ui/console/ and everything below.
     location ^~ /ui/console { return 404; }
 
+    # As locally, the login's weaker Referrer-Policy is hidden and replaced here, with the identity set repeated.
     location /ui/v2/login {
+      include /etc/nginx/identity-headers.conf;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      proxy_hide_header Referrer-Policy;
       proxy_pass http://zitadel_login;
       proxy_http_version 1.1;
       proxy_set_header Connection "";

@@ -11,7 +11,8 @@ namespace DisputeDesk.ArchitectureTests;
 
 /// <summary>
 /// AC11 and AC12: what the Zitadel provisioner creates and the headless sign-in script, read from the files. 5.1 AC7: the
-/// operations actor mapping it writes, and the operations token script.
+/// operations actor mapping it writes, and the operations token script. 7.12 AC6 and AC7: the gateway templates' access
+/// log format and their /api error pages.
 /// </summary>
 public partial class PlatformScriptTests
 {
@@ -273,25 +274,55 @@ public partial class PlatformScriptTests
         Assert.Matches(new Regex(@"^      test: \[.*&& wget -qO- http://127\.0\.0\.1:8080/api/health/live >/dev/null""\]$", RegexOptions.Multiline, TimeSpan.FromSeconds(1)), ComposeService("gateway"));
     }
 
-    [Fact]
-    public void GatewayTemplate_IdentityOriginAccessLog_RecordsThePathWithoutTheQuery()
+    [Theory]
+    [InlineData("infra/nginx/templates/nginx.conf.template")]
+    [InlineData("infra/nginx/templates-aws/nginx.conf.template")]
+    public void GatewayTemplate_EveryAccessLog_RecordsThePathWithoutTheQueryOrTheReferer(string templatePath)
     {
-        // 6.6 AC2 (AD-20, ASVS 5.0 V14.2.1): the end-session GET carries the ID token as id_token_hint in its query.
-        string template = GatewayTemplate();
-        int serverName = template.IndexOf("server_name ${GATEWAY_AUTH_SERVER_NAME};", StringComparison.Ordinal);
-        // The identity server block, from its `server {` to its closing brace (two-space indent), its locations included.
-        int start = template.LastIndexOf("\n  server {", serverName, StringComparison.Ordinal);
-        string identityServer = template[start..template.IndexOf("\n  }\n", serverName, StringComparison.Ordinal)];
+        // 7.12 AC6 (NFR-SEC-5, NFR-OBS-2; replaces 6.6 AC2's identity-only test, AD-20, ASVS 5.0 V14.2.1): a query can
+        // carry the sign-in callback's code, the end-session id_token_hint or a Mailpit search, and a Referer can carry a
+        // URL with its query, so every origin logs with one path-only format.
+        string template = File.ReadAllText(Path.Combine(SourceRoots.Repo, templatePath));
+        string[] formats = [.. AccessLog().Matches(template).Select(match => match.Groups["format"].Value)];
+        string definition = LogFormat("path_only").Match(template).Groups["definition"].Value;
 
-        // Every access_log in the block, at server or location level, so a location cannot log with another format.
-        string[] formats = [.. AccessLog().Matches(identityServer).Select(match => match.Groups["format"].Value)];
-        string definition = LogFormat("identity").Match(template).Groups["definition"].Value;
-
-        // The server-level line (four-space indent) covers every location, so one location's own line is not enough.
-        Assert.Matches(ServerLevelIdentityAccessLog(), identityServer);
-        Assert.All(formats, format => Assert.Equal("identity", format));
-        Assert.Contains("$uri", definition, StringComparison.Ordinal);
+        // The http-level line (two-space indent) covers every server block; a line without a format name logs nginx's
+        // combined format, so every line at http, server or location level must name this one.
+        Assert.Matches(HttpLevelPathOnlyAccessLog(), template);
+        Assert.All(formats, format => Assert.Equal("path_only", format));
+        Assert.Contains("\"$request_method $uri $server_protocol\"", definition, StringComparison.Ordinal);
         Assert.DoesNotMatch(QueryVariables(), definition);
+    }
+
+    [Theory]
+    [InlineData("infra/nginx/templates/nginx.conf.template")]
+    [InlineData("infra/nginx/templates-aws/nginx.conf.template")]
+    public void GatewayTemplate_ApiLocations_SendTheGatewaysOwnErrorsWithNoStore(string templatePath)
+    {
+        // 7.12 AC7 (AD-23 as amended 2026-10-31): the Api sets Cache-Control: no-store on what it produces, nginx on the
+        // /api responses it generates itself. A location that sets error_page inherits none from its server (nginx,
+        // error_page), so each /api location repeats the 429 line.
+        string template = File.ReadAllText(Path.Combine(SourceRoots.Repo, templatePath));
+        string[] locations = [.. MultiLineLocation().Matches(template).Select(match => match.Value)];
+        string[] apiLocations = [.. locations.Where(block => block.StartsWith("    location /api/", StringComparison.Ordinal))];
+
+        // /api/ and /api/health/.
+        Assert.Equal(2, apiLocations.Length);
+        Assert.All(apiLocations, block =>
+        {
+            Assert.Contains("\n      error_page 429 @rate_limited;\n", block, StringComparison.Ordinal);
+            Assert.Contains("\n      error_page 413 500 502 504 @gateway_error;\n", block, StringComparison.Ordinal);
+            // The Api's own responses pass through untouched: the gateway neither adds nor hides their Cache-Control,
+            // and proxy_intercept_errors stays off, so an upstream error never reaches error_page.
+            Assert.DoesNotContain("Cache-Control", block, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("proxy_intercept_errors", block, StringComparison.Ordinal);
+        });
+        foreach (string name in new[] { "@rate_limited", "@gateway_error" })
+        {
+            string named = Assert.Single(locations, block => block.StartsWith($"    location {name} {{\n", StringComparison.Ordinal));
+            Assert.Contains("\n      include /etc/nginx/security-headers.conf;\n", named, StringComparison.Ordinal);
+            Assert.Contains("\n      add_header Cache-Control \"no-store\" always;\n", named, StringComparison.Ordinal);
+        }
     }
 
     [Theory]
@@ -445,9 +476,9 @@ public partial class PlatformScriptTests
     [GeneratedRegex(@"\baccess_log\s+(?<path>[^\s;]+)\s*(?<format>[^\s;]*)[^;]*;")]
     private static partial Regex AccessLog();
 
-    /// <summary>A server-level access_log (four-space indent) with the identity format.</summary>
-    [GeneratedRegex(@"\n    access_log\s+[^\s;]+\s+identity\s*;")]
-    private static partial Regex ServerLevelIdentityAccessLog();
+    /// <summary>An http-level access_log (two-space indent) with the path_only format.</summary>
+    [GeneratedRegex(@"\n  access_log\s+[^\s;]+\s+path_only\s*;")]
+    private static partial Regex HttpLevelPathOnlyAccessLog();
 
     /// <summary>A location written over several lines: from its opening line to its closing brace (four-space indent).</summary>
     [GeneratedRegex(@"^    location [^\n]*\{\n.*?^    \}$", RegexOptions.Multiline | RegexOptions.Singleline)]

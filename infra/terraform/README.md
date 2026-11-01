@@ -307,6 +307,19 @@ Run each once after the first deploy, and after any change to the Terraform or t
      --query Quota.Value --output text
    ```
 10. The budget alert email arrives once a threshold is crossed (or check the recipient as in step 6).
+11. Plain HTTP is refused, not redirected, on the APIs and on the whole identity origin, and still redirected for the
+    app's pages. The first three print `403` and an empty `Location`; the last two print `301` and an `https://`
+    `Location`. `/api` without a trailing slash is a client route the SPA serves, not an Api path, so it redirects:
+
+    ```sh
+    for url in "http://<APP_HOST>/api/health/live" "http://<MAILPIT_HOST>/api/v1/messages" \
+               "http://<AUTH_HOST>/oauth/v2/token" "http://<APP_HOST>/" "http://<APP_HOST>/api"; do
+      curl -sS -m 10 -o /dev/null -w "%{http_code} Location: %header{location} $url\n" "$url"
+    done
+    ```
+
+    The three host names are CloudFront default domains, under which DisputeDesk serves no other name, so the gateway's
+    `Strict-Transport-Security: max-age=63072000; includeSubDomains` reaches only HTTPS hosts.
 
 ## Rollback
 

@@ -32,9 +32,10 @@ ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx \
     NGINX_ENVSUBST_FILTER=^GATEWAY_
 COPY infra/nginx/templates/ /etc/nginx/templates/
 # The AWS edge (docker-compose.aws.yml selects it with NGINX_ENVSUBST_TEMPLATE_DIR), with the app's security and Scalar
-# headers copied from the one source above.
+# headers and the identity origin's headers copied from the one source above.
 COPY infra/nginx/templates-aws/ /etc/nginx/templates-aws/
-COPY infra/nginx/templates/security-headers.conf.template infra/nginx/templates/scalar-headers.conf.template /etc/nginx/templates-aws/
+COPY infra/nginx/templates/security-headers.conf.template infra/nginx/templates/scalar-headers.conf.template \
+     infra/nginx/templates/identity-headers.conf.template /etc/nginx/templates-aws/
 COPY --from=spa /src/frontend/dist/ /usr/share/nginx/html/
 # The base image already runs as its non-root nginx user (UID 101); restated so the Dockerfile says so (Trivy DS-0002).
 USER 101
