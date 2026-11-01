@@ -80,9 +80,13 @@ sequenceDiagram
     S->>S: Commit, merge to main (CI must be green)
 ```
 
+Before dispatch the supervisor runs `scripts/check-ready.sh <story>`, which fails while a `[story]` point has no Sofia disposition, a `[decision]` point has no recorded human decision, or a story in the `after` list is not done.
+
 A failed stage sends the story back to its builder with the findings. After two failed attempts the builder returns `blocked` and the supervisor escalates for a decision.
 
 A fix round goes to one fresh builder, whose isolated worktree starts at the base commit, not at the story's uncommitted change. The supervisor runs `scripts/story-patch.sh <story-worktree> <base> <patch>`, which writes the change as one binary patch and fails unless the patch reproduces the worktree; the fix brief starts with `git apply --binary --exclude='docs/*' <patch>`, and the builder's worktree becomes the story worktree.
+
+A fix item that moves a header, or the component that owns a behaviour, lists every response or path the criterion names, each with its expected value.
 
 A lane on a worker machine runs through `scripts/lane.sh start|wait|collect <host> <story> ...`: it starts a headless builder in a tmux session, waits for its exit file, and brings back the report and a verified patch.
 

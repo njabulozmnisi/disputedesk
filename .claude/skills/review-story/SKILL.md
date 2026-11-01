@@ -41,6 +41,8 @@ On a re-review, review only the delta since the approved version and say for eac
 - For every bound a criterion names (a range, a casing, an order, a count), a test sits on each side of the bound; values only inside the range prove nothing.
 - A parallel or race test asserts what the design guarantees (at most N, exactly one winner), never an exact count that depends on timing.
 - For a focus or timing fix, every path through the changed code is checked (success, each error status, a direct load, a route change), not only the path the fix list named.
+- A mechanism that wraps `<Outlet/>` (a layout, a key, a focus or skip-link handler) is checked on every route with every session state, as the skip-link test in `frontend/src/app/routing.test.tsx` does (7.14).
+- A test stand-in for a pinned upstream image sends that image's real headers and behaviour, read from the image itself (for example a Next.js `routes-manifest.json`), never assumed (7.12).
 
 Rank findings by severity with file and line.
 

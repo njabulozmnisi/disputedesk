@@ -26,6 +26,12 @@ The input is a story file, `docs/tickets/epic-<epic>-<slug>/tickets/story-<epic>
    - **Any container the builder starts directly** (a throwaway Postgres, a dashboard, the Compose stack) runs under `scripts/test-lock.sh run stack <story> -- ...`, because the stack binds host ports (8080, 8025, 18888, 4317, 4318, 5433, 19092) and other lanes share the Docker daemon. Every port but the gateway's 8080 can be moved with the variables in the `docker-compose.yml` header when another process holds it; never with a throwaway override file. Testcontainers in tests use the `testcontainers` lock instead.
 7. **Stop rules.** After two failed attempts at the same problem, return `blocked`. Never weaken, skip or delete a test to make it pass. Never commit, push, or mark the story done.
 
+## Known pitfalls
+
+- A change that adds or changes infrastructure files (Terraform, Dockerfiles, Compose) runs `scripts/security-local.sh`, the Security workflow's Trivy filesystem and config scan, before reporting (7.5).
+- Frontend: a cleared cache is not freed memory. A change that clears customer data adds a `WeakRef` plus forced-GC test that proves the data is collected (`frontend/src/app/sessionEndCollected.test.tsx`; 7.14).
+- Platform: a health check covers every route the service fronts, and no test relies on a stopped container refusing connections, which hangs on CI's network; use an upstream that closes the connection (7.3, 7.12).
+
 ## Report
 
 End with the status contract:
