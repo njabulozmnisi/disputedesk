@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 const copiedConfirmationMs = 2000;
 
@@ -9,10 +9,12 @@ type ProblemNoticeProps = {
   nextStep?: string;
   /** The reference to quote to the bank: the problem's `traceId`, when the response had one. */
   traceId?: string;
+  /** An action the person can take about the problem, such as a retry button. */
+  action?: ReactNode;
 };
 
 /** EXPERIENCE.md, Component Patterns: a danger-tone notice with the reference and a Copy button. */
-export function ProblemNotice({ message, nextStep, traceId }: ProblemNoticeProps) {
+export function ProblemNotice({ message, nextStep, traceId, action }: ProblemNoticeProps) {
   const [copied, setCopied] = useState(false);
 
   async function copyReference() {
@@ -49,6 +51,7 @@ export function ProblemNotice({ message, nextStep, traceId }: ProblemNoticeProps
           </button>
         </p>
       ) : null}
+      {action ? <div>{action}</div> : null}
     </div>
   );
 }

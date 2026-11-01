@@ -11,6 +11,7 @@ import { CustomerStatus } from '@/api/generated/model';
 import { ApiError } from '@/api/mutator';
 import { isProblem, problemExtension, traceIdOf } from '@/api/problems';
 import { useAnnounce } from '@/app/LiveRegion';
+import { isSignedIn } from '@/app/sessionEnd';
 import { ProblemNotice } from '@/components/ProblemNotice';
 import {
   AlertDialog,
@@ -162,6 +163,8 @@ function WithdrawForm({
         disputeId,
         data: trimmed === '' ? {} : { note: trimmed },
       });
+      // The session may have ended while the request was in flight: then nothing comes back into memory.
+      if (!isSignedIn(queryClient)) return;
       queryClient.setQueryData(getGetApiV1DisputesDisputeIdQueryKey(disputeId), dispute);
       finishWithdrawn();
     } catch (error) {

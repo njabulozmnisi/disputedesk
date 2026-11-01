@@ -24,7 +24,7 @@ The SPA never decides who may see what. Every rule here (which rows show Dispute
 
 | # | Surface | Route | Reached from | Authorisation state | Purpose |
 |---|---|---|---|---|---|
-| 0 | Start page | `/` | Direct visit, sign-out | anonymous | One sentence on what DisputeDesk does; Sign in and Create a login; a sample dispute card; How it works in three steps |
+| 0 | Start page | `/` | Direct visit, sign-out (this tab or another) | anonymous | One sentence on what DisputeDesk does; Sign in and Create a login; a sample dispute card; How it works in three steps |
 | 1 | Sign in / sign up | identity provider | Start page buttons; session expired | anonymous | Hosted, themed; email verification happens here |
 | 2a | Link your login: details | `/link` | First return from sign-in while unlinked; any 403 "linking required" | unlinked | ID number and account number |
 | 2b | Link your login: OTP | `/link/otp` | After 2a | unlinked | Enter the 6-digit OTP |
@@ -33,7 +33,7 @@ The SPA never decides who may see what. Every rule here (which rows show Dispute
 | 4b | Review and submit | `/transactions/:transactionId/dispute/review` | Continue on 4a | linked | Read back, then Submit dispute |
 | 5 | Disputes | `/disputes` | Nav | linked | Open and closed disputes, newest first |
 | 6 | Dispute detail | `/disputes/:disputeId` | A dispute row; a status badge on a transaction row; after submit | linked | Summary, timeline, Withdraw where allowed, guidance after Rejected |
-| — | Session ended | `/signed-out?reason=expired` | Any 401 while signed in | anonymous | Explain, Sign in again |
+| — | Session ended | `/signed-out?reason=expired` | Any 401 or `anonymous` session answer while signed in; the 15-minute idle limit, reached in any tab; another tab's 401 | anonymous | Explain, Sign in again |
 | — | Not found | any unknown route; 404 on a dispute | — | any | Same screen for unknown and another customer's |
 
 Navigation: two destinations only, **Transactions** and **Disputes**, plus **Sign out**. Phone: bottom tab bar. From 768px: top bar. The linking screens show the wordmark and Sign out only, because nothing else is reachable while unlinked.
@@ -96,7 +96,9 @@ On a transaction row the badge for a resolved dispute reads plain **Resolved**; 
 | Already disputed | The dispute's status badge, linking to the dispute |
 | Credit | "Money in. Not disputable." |
 | Transfer between own accounts | "Transfer between your accounts. Not disputable." |
-| Settled debit that is not a card payment (fee, payment to someone else) | "Not a card payment. Contact the bank about this transaction." |
+| Settled debit that is not a card transaction (fee, payment to someone else) | "Not a card transaction. Contact the bank about this transaction." |
+
+**Sign-out failed** (problem notice on the start page): message "We couldn't finish signing you out.", next step "Try again.", and a "Sign out" button that tries again.
 
 **After a Rejected outcome** (static, FR-17): "If you disagree with this outcome, you can complain to the bank first. If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers." [ASSUMPTION: no bank complaint contact details or ombud contact details are shown; static text only.]
 
@@ -136,8 +138,9 @@ Behavioural rules. Visual specs are in DESIGN.md, *Components*.
 | Unexpected error (5xx, network) | Any | Problem notice with "Try again" and the reference to quote to the bank. |
 | Rate limited (429) | 2a, 2b | "Too many attempts. Try again in {n} minutes." from `Retry-After`, rounded up. Form disabled until then. |
 | Linking lockout | 2b | See *Linking without disclosure*. |
-| Session about to end | Any | 2 minutes before the 15-minute idle sign-out, a dialog: "You'll be signed out soon. For your security, we sign you out after 15 minutes without activity." Buttons "Stay signed in" (calls `GET /api/v1/bff/session`, which renews the idle limit, and closes the dialog) and "Sign out". Gives well over the 20 seconds WCAG 2.2 SC 2.2.1 requires (decided 2026-10-27). |
-| Session ended (401) | Any | Full screen: "You've been signed out. For your security, we sign you out after 15 minutes without activity." Button "Sign in again" returns to the same route afterwards, except that a raise or dispute detail route returns to its list (`/transactions`, `/disputes`), so no ID reaches the sign-in URL (AD-31). A half-filled dispute is not kept; the screen says "Anything you hadn't submitted wasn't saved." [ASSUMPTION: no draft persistence in v1.] |
+| Session about to end | Any | 2 minutes before the 15-minute idle sign-out, a dialog: "You'll be signed out soon. For your security, we sign you out after 15 minutes without activity." Buttons "Stay signed in" (calls `GET /api/v1/bff/session`, which renews the idle limit, and closes the dialog) and "Sign out". Gives well over the 20 seconds WCAG 2.2 SC 2.2.1 requires (decided 2026-10-27). Activity in another tab of the same session moves the limit and closes the dialog. |
+| Sign-out failed (no response or 5xx) | Start page | Customer data is already cleared from memory before the request. Problem notice above the page: "We couldn't finish signing you out." "Try again." with a "Sign out" button that tries again. Other tabs keep their session until it succeeds. A 401 means the session is already over: the start page with no notice (decided 2026-10-31, story 7.14). |
+| Session ended (401, `anonymous` session answer, idle limit, another tab's 401) | Any | Customer data is cleared from memory and the screen shows without a request, so it also shows offline. The idle limit is a deadline 15 minutes after the last API response in any tab of the session; each tab reaches it by itself. After a sign-out, in this tab or another, the start page shows instead. Full screen: "You've been signed out. For your security, we sign you out after 15 minutes without activity." Button "Sign in again" returns to the same route afterwards, except that a raise or dispute detail route returns to its list (`/transactions`, `/disputes`), so no ID reaches the sign-in URL (AD-31). A half-filled dispute is not kept; the screen says "Anything you hadn't submitted wasn't saved." [ASSUMPTION: no draft persistence in v1.] |
 | Withdraw retried, 409 with status Withdrawn | 6 | Treated as success (FR-18). |
 | Just submitted | 6 | Static success banner "Dispute submitted" above the summary (the raise screen has already announced it); the timeline shows one entry, Submitted, "You". |
 
@@ -162,7 +165,7 @@ TanStack Query: no automatic retry on 4xx; one retry on 503 and network errors f
 
 **Idempotent submit.** When the review screen opens, the SPA creates one `Idempotency-Key` (a random UUID) for that draft. Every attempt to submit that draft sends the same key; changing the draft (via Change) creates a new key. While the request is in flight, Submit shows "Submitting…" and ignores further presses. If the network drops before a response, the notice says: "We couldn't confirm your dispute was received. Try again; you won't create a second dispute." The retry reuses the key, so a replay returns the original 201.
 
-**Back and forward.** Browser Back from 4b returns to 4a with values kept (held in memory for the session, not in storage). After a successful submit, Back from the detail goes to Transactions, not to the review screen.
+**Back and forward.** Browser Back from 4b returns to 4a with values kept (held in memory for the session, not in storage). After a successful submit, Back from the detail goes to Transactions, not to the review screen. A page the browser restores from its back/forward cache reloads, so nothing from memory shows and a half-filled dispute is not kept (decided 2026-10-31, story 7.14).
 
 **Keyboard.** Every action is reachable by Tab in reading order. Enter submits forms. Esc closes the withdraw dialog (Radix). No custom shortcuts.
 

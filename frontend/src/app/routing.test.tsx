@@ -2,7 +2,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
-import type { SessionState } from '@/api/generated/model';
+import { getGetApiV1BffSessionQueryKey } from '@/api/generated/disputedesk';
+import type { SessionResponse, SessionState } from '@/api/generated/model';
 import { server } from '@/test/server';
 import {
   disputeGuid,
@@ -631,4 +632,31 @@ describe('the skip link', () => {
     expect(screen.getByRole('link', { name: 'Skip to main content' })).not.toHaveFocus();
     expect(screen.getByRole('main').contains(document.activeElement)).toBe(true);
   });
+
+  // A session answer that lands after the first paint must not remount the page: a remount drops the Tab position.
+  it.each([
+    ['an unknown path', '/no/such/page'],
+    ['the session-ended screen with a reason', '/signed-out?reason=expired'],
+    ['the signed-out screen', '/signed-out'],
+    ['a dispute with a malformed ID', '/disputes/not-a-guid'],
+  ])(
+    'reaches the skip link with the first Tab on a direct load of %s, whatever the session',
+    async (_name, path) => {
+      for (const state of ['anonymous', 'unlinked', 'linked'] as const) {
+        signInAs(state);
+        const { user, queryClient, unmount } = renderApp({ path });
+        await screen.findByRole('heading', { level: 1 });
+        await waitFor(() => {
+          expect(
+            queryClient.getQueryData<SessionResponse>(getGetApiV1BffSessionQueryKey())?.state,
+          ).toBe(state);
+        });
+
+        await user.tab();
+
+        expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveFocus();
+        unmount();
+      }
+    },
+  );
 });

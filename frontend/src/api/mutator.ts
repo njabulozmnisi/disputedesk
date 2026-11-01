@@ -1,6 +1,6 @@
 import { context, type Context } from '@opentelemetry/api';
 
-import type { ProblemDetails } from './generated/model';
+import type { ProblemDetails, SessionResponse } from './generated/model';
 
 /** A problem body (RFC 9457). `traceId` is the extension member every DisputeDesk problem carries (AD-3). */
 export type Problem = ProblemDetails & { traceId?: string };
@@ -28,6 +28,7 @@ export class ApiError extends Error {
 export type ErrorType<_ErrorData> = ApiError | TypeError;
 
 const antiforgeryUrl = '/api/v1/bff/antiforgery';
+const sessionUrl = '/api/v1/bff/session';
 
 // Safe methods never change state, so they need no antiforgery token (RFC 9110 section 9.2.1).
 const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
@@ -35,10 +36,19 @@ const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
 type ResponseListener = (status: number) => void;
 const responseListeners = new Set<ResponseListener>();
 
-/** Calls `listener` with the status of every API response that arrives. Returns the unsubscribe function. */
+/**
+ * Calls `listener` with the status of every API response that arrives, except a session answered `anonymous`: that
+ * answer says the session is over, so it is not activity. Returns the unsubscribe function.
+ */
 export function onApiResponse(listener: ResponseListener): () => void {
   responseListeners.add(listener);
   return () => responseListeners.delete(listener);
+}
+
+function tellListeners(status: number) {
+  responseListeners.forEach((listener) => {
+    listener(status);
+  });
 }
 
 async function readProblem(response: Response): Promise<Problem | undefined> {
@@ -53,10 +63,8 @@ async function send(url: string, options: RequestInit, callerContext: Context): 
   const response = await context.with(callerContext, () =>
     fetch(url, { ...options, credentials: 'same-origin' }),
   );
-  responseListeners.forEach((listener) => {
-    listener(response.status);
-  });
   if (!response.ok) {
+    tellListeners(response.status);
     const problem = await readProblem(response);
     throw new ApiError(response.status, problem, response.headers.get('Retry-After'));
   }
@@ -70,10 +78,15 @@ export const customFetch = async <T>(url: string, options: RequestInit): Promise
   if (!safeMethods.has((options.method ?? 'GET').toUpperCase())) {
     const tokenResponse = await send(antiforgeryUrl, {}, callerContext);
     const { requestToken } = (await tokenResponse.json()) as { requestToken: string };
+    tellListeners(tokenResponse.status);
     headers.set('X-XSRF-TOKEN', requestToken);
   }
 
   const response = await send(url, { ...options, headers }, callerContext);
   const hasJsonBody = response.headers.get('content-type')?.includes('json') ?? false;
-  return (hasJsonBody ? await response.json() : undefined) as T;
+  const body = (hasJsonBody ? await response.json() : undefined) as T;
+  const sessionEnded =
+    url === sessionUrl && (body as SessionResponse | undefined)?.state === 'anonymous';
+  if (!sessionEnded) tellListeners(response.status);
+  return body;
 };

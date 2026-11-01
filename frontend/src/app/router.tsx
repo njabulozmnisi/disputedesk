@@ -13,7 +13,6 @@ import { DisputeDetailScreen } from '@/features/disputes/detail/DisputeDetailScr
 import { DisputesScreen } from '@/features/disputes/history/DisputesScreen';
 import { DetailsScreen } from '@/features/linking/DetailsScreen';
 import { OtpScreen } from '@/features/linking/OtpScreen';
-import { RaiseDraftProvider } from '@/features/disputes/raise/RaiseDraft';
 import { RaiseLayout } from '@/features/disputes/raise/RaiseLayout';
 import { RaiseScreen } from '@/features/disputes/raise/RaiseScreen';
 import { ReviewScreen } from '@/features/disputes/raise/ReviewScreen';
@@ -23,13 +22,10 @@ import { RootLayout } from './RootLayout';
 import { SessionGate } from './SessionGate';
 
 // Routes are defined with TanStack Router (AD-31). `/`, `/signed-out` and the not-found route are public.
-// The raise draft lives above every route, so Change keeps its values and Back after a submit finds it submitted.
+// The raise draft lives in RootLayout around every route, so Change keeps its values and Back after a submit finds it
+// submitted.
 const rootRoute = createRootRoute({
-  component: () => (
-    <RaiseDraftProvider>
-      <RootLayout />
-    </RaiseDraftProvider>
-  ),
+  component: RootLayout,
   notFoundComponent: NotFoundPage,
 });
 

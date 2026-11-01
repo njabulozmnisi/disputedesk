@@ -5,7 +5,7 @@ function notEligibleHint(row: TransactionResponse): string {
   if (row.direction === 'credit') return 'Money in. Not disputable.';
   if (row.kind === 'ownAccountTransfer') return 'Transfer between your accounts. Not disputable.';
   if (row.state === 'pending') return 'Pending. You can dispute it once it has settled.';
-  return 'Not a card payment. Contact the bank about this transaction.';
+  return 'Not a card transaction. Contact the bank about this transaction.';
 }
 
 /**

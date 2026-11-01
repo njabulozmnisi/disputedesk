@@ -337,9 +337,9 @@ describe('disputability', () => {
       'Transfer between your accounts. Not disputable.',
     ],
     [
-      'a settled debit that is not a card payment',
+      'a settled debit that is not a card transaction',
       { kind: 'transfer' as const, notDisputableReason: 'notEligible' as const },
-      'Not a card payment. Contact the bank about this transaction.',
+      'Not a card transaction. Contact the bank about this transaction.',
     ],
   ])('says why a row is not disputable when it is %s', async (_name, overrides, hint) => {
     serveTransactions([makeRow({ description: 'Why not', disputable: false, ...overrides })]);
@@ -387,7 +387,7 @@ describe('dispute status badge on a row', () => {
       expect(links[0]).toHaveAttribute('href', `/disputes/${disputeId}`);
       expect(within(row).queryByText(/Dispute this transaction/)).not.toBeInTheDocument();
       expect(
-        within(row).queryByText(/Not a card payment|Contact the bank|Not disputable/),
+        within(row).queryByText(/Not a card transaction|Contact the bank|Not disputable/),
       ).toBeNull();
       expect(within(row).queryByText('ⓘ', { exact: false })).not.toBeInTheDocument();
     },
@@ -450,7 +450,7 @@ describe('dispute status badge on a row', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(5);
     expect(within(screen.getByRole('list')).queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByText(/escalated/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Not a card payment|Contact the bank|Not disputable/)).toBeNull();
+    expect(screen.queryByText(/Not a card transaction|Contact the bank|Not disputable/)).toBeNull();
   });
 
   // Criterion 4: rows without a dispute are unchanged.

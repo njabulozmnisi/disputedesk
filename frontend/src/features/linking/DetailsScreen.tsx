@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -6,6 +7,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { usePostApiV1LinkingStart } from '@/api/generated/disputedesk';
 import { ApiError } from '@/api/mutator';
 import { isProblem, traceIdOf, validationFields } from '@/api/problems';
+import { isSignedIn } from '@/app/sessionEnd';
 import { usePageHeading } from '@/app/usePageHeading';
 import { ErrorSummary } from '@/components/ErrorSummary';
 import { Page } from '@/components/Page';
@@ -26,6 +28,7 @@ export function DetailsScreen() {
   const headingRef = usePageHeading('Link your login');
   const navigate = useNavigate();
   const goToTransactions = useGoToTransactions();
+  const queryClient = useQueryClient();
   const rateLimit = useRateLimit();
   // Set synchronously on submit, because isPending only changes on the next render (as in ReviewScreen).
   const attemptInFlight = useRef(false);
@@ -49,6 +52,8 @@ export function DetailsScreen() {
     mutation: {
       gcTime: 0,
       onSuccess: () => {
+        // The session ended while the request was in flight: stay on the screen the person was sent to.
+        if (!isSignedIn(queryClient)) return;
         void navigate({ to: '/link/otp' });
       },
       onError: (error) => {

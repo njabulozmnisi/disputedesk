@@ -1,8 +1,9 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
-import { useGetApiV1BffSession } from '@/api/generated/disputedesk';
-import { onApiResponse } from '@/api/mutator';
+import { getApiV1BffSession, getGetApiV1BffSessionQueryKey } from '@/api/generated/disputedesk';
+import { ApiError } from '@/api/mutator';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,70 +15,45 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 
-// The server signs a person out after 15 minutes without an authenticated request (AD-7). The warning appears after
-// 13, which leaves 2 minutes: well over the 20 seconds WCAG 2.2 SC 2.2.1 (Timing Adjustable) asks for.
-const warnAfterIdleMs = 13 * 60 * 1000;
+import { expireSession, isSignedIn } from './sessionEnd';
 
 const unexpectedErrorMessage = 'Something went wrong on our side. Try again.';
 
 type InactivityWarningProps = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
   onSignOut: () => void;
-  signOutFailed: boolean;
 };
 
 /**
- * Mounted while a person is signed in. It only presents the warning: the server enforces the idle limit
- * (OWASP Session Management, idle timeout).
+ * Mounted while a person is signed in. It presents the warning that `useSessionTabs` opens, 2 minutes before the idle
+ * limit (OWASP Session Management, idle timeout).
  */
-export function InactivityWarning({ onSignOut, signOutFailed }: InactivityWarningProps) {
+export function InactivityWarning({ open, setOpen, onSignOut }: InactivityWarningProps) {
   const router = useRouter();
-  const session = useGetApiV1BffSession();
-  const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
   const [renewFailed, setRenewFailed] = useState(false);
 
-  // The server renews the idle limit on every authenticated request, so every API response except a 401 restarts the
-  // timer. A 401 means the session already ended: the QueryClient sends the person to the session-ended screen.
-  // shortcut: per-tab idle timer, another tab's activity can only make the warning early, never late; share it with BroadcastChannel if early warnings confuse people
-  useEffect(() => {
-    let timer = setTimeout(() => {
-      setOpen(true);
-    }, warnAfterIdleMs);
-
-    const stopListening = onApiResponse((status) => {
-      if (status === 401) return;
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        setOpen(true);
-      }, warnAfterIdleMs);
-    });
-
-    return () => {
-      clearTimeout(timer);
-      stopListening();
-    };
-  }, []);
-
+  // The session is asked for outside the query cache, so that an `anonymous` answer reaches the cache only through
+  // `expireSession`, after the session-ended screen is shown (see endSession).
   async function staySignedIn() {
     setRenewFailed(false);
-    // A 401 reaches the success branch below: the QueryClient's 401 handler writes `anonymous` into the session
-    // cache before `refetch()` resolves, so the result is a success whose data says `anonymous`.
-    const result = await session.refetch();
-    if (!result.isSuccess) {
-      setRenewFailed(true);
-      return;
+    try {
+      const renewed = await getApiV1BffSession();
+      // The session ended while the renewal was in flight: its late answer restores nothing.
+      if (!isSignedIn(queryClient)) return;
+      if (renewed.state === 'anonymous') {
+        // The session had already ended: the server answers the session request as anonymous, not with a 401.
+        expireSession(queryClient, router);
+        return;
+      }
+      queryClient.setQueryData(getGetApiV1BffSessionQueryKey(), renewed);
+      setOpen(false);
+    } catch (error) {
+      if (!isSignedIn(queryClient)) return;
+      if (error instanceof ApiError && error.status === 401) expireSession(queryClient, router);
+      else setRenewFailed(true);
     }
-    if (result.data.state === 'anonymous') {
-      // The session had already ended: the server answers the session request as anonymous, not with a 401. After a
-      // 401 the QueryClient has already sent the person there (and set the cache to anonymous), so this must not
-      // replace the route it carried.
-      if (router.state.location.pathname === '/signed-out') return;
-      void router.navigate({
-        to: '/signed-out',
-        search: { reason: 'expired', returnUrl: router.state.location.href },
-      });
-      return;
-    }
-    setOpen(false);
   }
 
   return (
@@ -96,7 +72,7 @@ export function InactivityWarning({ onSignOut, signOutFailed }: InactivityWarnin
             For your security, we sign you out after 15 minutes without activity.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        {renewFailed || signOutFailed ? (
+        {renewFailed ? (
           <p role="alert" className="text-destructive font-strong">
             {unexpectedErrorMessage}
           </p>

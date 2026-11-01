@@ -225,7 +225,7 @@ test.describe('linked customer A', () => {
 
     // Row rule (stories 3.6, 3.10): a "Dispute this transaction" link exactly when disputable; a "Dispute status: ..."
     // link exactly when disputeId is set, to /disputes/<encoded id>; no hint on alreadyDisputed rows (hint phrases only).
-    const hintPhrases = /Pending\. |Money in\. |Transfer between|Not a card payment|Older than 90 days|Not disputable|Contact the bank/;
+    const hintPhrases = /Pending\. |Money in\. |Transfer between|Not a card transaction|Older than 90 days|Not disputable|Contact the bank/;
     for (const [index, row] of body.items.entries()) {
       const li = rows.nth(index);
       await expect(li.getByRole('link', { name: 'Dispute this transaction' }), `${row.transactionId} dispute control`).toHaveCount(row.disputable ? 1 : 0);
@@ -246,7 +246,7 @@ test.describe('linked customer A', () => {
     expect(allText).toContain('Pending. You can dispute it once it has settled.');
     expect(allText).toContain('Money in. Not disputable.');
     expect(allText).toContain('Transfer between your accounts. Not disputable.');
-    expect(allText).toContain('Not a card payment. Contact the bank about this transaction.');
+    expect(allText).toContain('Not a card transaction. Contact the bank about this transaction.');
 
     // The SPA sends cookies only: no Authorization header, no antiforgery header on a GET.
     for (const request of requests) {
@@ -371,7 +371,7 @@ test.describe('linked customer A', () => {
     await signOutContext.close();
   });
 
-  test('a failed antiforgery fetch shows the unexpected-error alert and submits nothing', async ({ browser }) => {
+  test('a failed antiforgery fetch clears the data, shows the start page with the sign-out notice and submits nothing', async ({ browser }) => {
     const { context: failContext, page: failPage } = await signIn(browser, 'customer-a');
     await failPage.goto(`${spa}/transactions`);
     await expect(failPage.getByRole('button', { name: 'Sign out' })).toBeVisible();
@@ -381,7 +381,14 @@ test.describe('linked customer A', () => {
       if (request.url().endsWith('/bff/logout')) logoutPosts += 1;
     });
     await failPage.getByRole('button', { name: 'Sign out' }).click();
-    await expect(failPage.getByRole('alert')).toHaveText('Something went wrong on our side. Try again.');
+    // Story 7.14 criterion 3: the data is cleared first, so the start page shows, with the notice and a retry button inside it.
+    await expect(failPage).toHaveURL(`${spa}/`);
+    const notice = failPage.getByRole('alert');
+    await expect(notice).toContainText("We couldn't finish signing you out.");
+    await expect(notice).toContainText('Try again.');
+    await expect(notice.getByRole('button', { name: 'Sign out' })).toBeVisible();
+    await expect(failPage.getByRole('link', { name: 'Sign in' }).first()).toBeVisible();
+    expect(await pageText(failPage)).not.toMatch(/Dispute this transaction|Load more/);
     expect(logoutPosts).toBe(0);
     await failContext.close();
   });
