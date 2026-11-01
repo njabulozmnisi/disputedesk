@@ -4,6 +4,8 @@
 # that stands in for the api, Zitadel and the login and answers with the headers it received. Clients run on the same
 # network at fixed addresses, one inside test-realip.conf's range (as CloudFront would be) and one outside it.
 # It also starts the image with the local templates, for their cache headers (criterion 7).
+# Story 7.12's edge hardening (criteria 1 to 4, 6 and 7) runs on both gateways; its criterion 7 stops the echo server,
+# so it runs last.
 #   scripts/test-lock.sh run stack <owner> -- infra/deploy/aws/gateway.test.sh
 # Needs docker (with Compose v2) and jq; binds no host port. Every check fails the run; everything it starts is removed.
 set -euo pipefail
@@ -64,12 +66,32 @@ http {
   uwsgi_temp_path /tmp/echo_uwsgi;
   scgi_temp_path /tmp/echo_scgi;
   access_log /dev/stdout;
+  # The api and Zitadel (8080) and the dashboard (18890): Cache-Control: no-store, as the Api sends on every response.
   server {
     listen 8080;
-    listen 3000;
     listen 18890;
     location / {
       default_type text/plain;
+      add_header Cache-Control "no-store";
+      return 200 "port=$server_port host=$host fhost=$http_x_forwarded_host xff=$http_x_forwarded_for proto=$http_x_forwarded_proto verify=$http_x_origin_verify forwarded=$http_forwarded\n";
+    }
+    # Zitadel's v1 login sends its own Referrer-Policy, which the identity origin passes through.
+    location /ui/login/ {
+      default_type text/plain;
+      add_header Referrer-Policy "same-origin";
+      return 200 "port=$server_port\n";
+    }
+  }
+  # The login (3000): the headers zitadel:v4.20.0 sends on /ui/login/* (its routes-manifest.json).
+  server {
+    listen 3000;
+    location / {
+      default_type text/plain;
+      add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload";
+      add_header Referrer-Policy "origin-when-cross-origin";
+      add_header X-Content-Type-Options "nosniff";
+      add_header X-Frame-Options "deny";
+      add_header X-XSS-Protection "1; mode=block";
       return 200 "port=$server_port host=$host fhost=$http_x_forwarded_host xff=$http_x_forwarded_for proto=$http_x_forwarded_proto verify=$http_x_origin_verify forwarded=$http_forwarded\n";
     }
   }
@@ -103,6 +125,21 @@ headers(){ local host=$1 path=$2; shift 2; from trusted -o /dev/null -D - -H "Ho
 # Read whole before grep -q, which exits at the first match and would otherwise end docker logs with SIGPIPE.
 upstream_saw(){ grep -qF "$1" <<< "$(docker logs "$run-echo" 2>&1)"; }
 once(){ [ "$(grep -ic "^$1:" <<< "$2")" = 1 ] || fail "$3: $1 is not sent exactly once"; }
+# exactly NAME VALUE RESPONSE LABEL: the header is sent once, with exactly this value
+exactly(){ once "$1" "$3" "$4"; grep -qixF "$1: $2" <<< "$3" || fail "$4: $1 is not: $2"; }
+# status_is STATUS RESPONSE LABEL
+status_is(){ head -1 <<< "$2" | grep -q " $1 " || fail "$3: not $1: $(head -1 <<< "$2")"; }
+# response_headers BASE HOST PATH [curl options...]: the status line and headers (CR stripped) of one request, sent
+# with no origin-verify header unless the options add it
+response_headers(){ local base=$1 host=$2 path=$3; shift 3; from trusted -o /dev/null -D - -H "Host: $host" "$@" "$base$path" | tr -d '\r'; }
+# app_headers_once LABEL HSTS-COUNT RESPONSE: each of the app's security headers once, and HSTS the given number of times
+app_headers_once(){
+  local label=$1 hsts=$2 response=$3 header
+  for header in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
+    once "$header" "$response" "$label"
+  done
+  [ "$(grep -ic '^strict-transport-security:' <<< "$response")" = "$hsts" ] || fail "$label: Strict-Transport-Security not sent $hsts time(s)"
+}
 
 for _ in $(seq 60); do
   [ "$(status trusted "$APP" / -H "X-Origin-Verify: $VERIFY")" = 200 ] \
@@ -181,13 +218,28 @@ grep -qF 'X-Origin-Verify: $GATEWAY_ORIGIN_VERIFY' <<< "$healthcheck" || fail "t
 docker exec "$run-gateway" sh -c "$healthcheck" || fail "the gateway's health check fails: $healthcheck"
 ok "the gateway's health check sends the origin-verify header and passes"
 
+section "7.12 criterion 1: HSTS with includeSubDomains on every response nginx sends in AWS, none locally"
+HSTS='max-age=63072000; includeSubDomains'   # two years, as long as the login's own value (RFC 6797 6.1.1, 6.1.2)
+LOCAL_APP=$(grep '^GATEWAY_APP_HOST=' "$work/local-gateway.env" | cut -d= -f2-)
+LOCAL_AUTH=$(grep '^GATEWAY_AUTH_HOST=' "$work/local-gateway.env" | cut -d= -f2-)
 for host_path in "$APP /" "$AUTH /.well-known/openid-configuration" "$MAIL /"; do
   read -r host path <<< "$host_path"
-  response=$(headers "$host" "$path")
-  once strict-transport-security "$response" "$host$path"
-  grep -qix 'strict-transport-security: max-age=31536000' <<< "$response" || fail "$host$path: HSTS is not max-age=31536000"
+  exactly strict-transport-security "$HSTS" "$(headers "$host" "$path")" "$host$path"
+  response=$(response_headers "$GW" "$host" "$path")
+  status_is 403 "$response" "$host$path without X-Origin-Verify"
+  exactly strict-transport-security "$HSTS" "$response" "$host$path 403"
 done
-ok "Strict-Transport-Security: max-age=31536000 on all three hosts"
+for host_path in "$APP /otlp/v1/traces" "$AUTH /ui/console"; do
+  read -r host path <<< "$host_path"
+  response=$(headers "$host" "$path")
+  status_is 404 "$response" "$host$path"
+  exactly strict-transport-security "$HSTS" "$response" "$host$path 404"
+done
+for host_path in "$LOCAL_APP /" "$LOCAL_AUTH /.well-known/openid-configuration"; do
+  read -r host path <<< "$host_path"
+  ! grep -qi '^strict-transport-security:' <<< "$(response_headers "$LOCAL" "$host" "$path")" || fail "local $host$path: HSTS sent over plain HTTP"
+done
+ok "AWS: Strict-Transport-Security: $HSTS once on a page, the gateway's own 403 on all three hosts and its own 404 on the app and identity hosts; local: none"
 
 section "criterion 3: the identity host keeps the console closed"
 for path in /ui/console /ui/console/ /ui/console/assets/probe.js; do
@@ -199,6 +251,33 @@ for path_port in "/.well-known/openid-configuration 8080" "/oauth/v2/authorize 8
   grep -qF "port=$port " <<< "$(echoed trusted "$AUTH" "$path")" || fail "$path does not reach the upstream on $port"
 done
 ok "/ui/console and /ui/console/ answer 404 without reaching Zitadel; discovery, /oauth/v2/* and /ui/login still do"
+
+section "7.12 criterion 3: the identity origin's browser-security baseline, each header once"
+# identity_check LABEL STATUS HSTS-COUNT REFERRER-POLICY RESPONSE. The echo on port 3000 sends the login's own HSTS,
+# Referrer-Policy and nosniff, which the gateway hides, so each appears once with the gateway's value; on port 8080 it
+# sends Zitadel's v1 login's same-origin, which passes through alone, and no Referrer-Policy on discovery, where the
+# gateway adds its own, as on the responses it makes itself.
+identity_check(){
+  local label=$1 status=$2 hsts=$3 referrer=$4 response=$5
+  status_is "$status" "$response" "$label"
+  exactly x-content-type-options nosniff "$response" "$label"
+  exactly referrer-policy "$referrer" "$response" "$label"
+  [ "$(grep -icxF "content-security-policy: frame-ancestors 'none'" <<< "$response")" = 1 ] || fail "$label: not exactly one frame-ancestors 'none' policy"
+  [ "$(grep -ic '^strict-transport-security:' <<< "$response")" = "$hsts" ] || fail "$label: Strict-Transport-Security not sent $hsts time(s)"
+  [ "$hsts" = 0 ] || exactly strict-transport-security "$HSTS" "$response" "$label"
+}
+identity_check "AWS $AUTH/ without X-Origin-Verify" 403 1 strict-origin-when-cross-origin "$(response_headers "$GW" "$AUTH" /)"
+identity_check "AWS $AUTH/ui/console" 404 1 strict-origin-when-cross-origin "$(headers "$AUTH" /ui/console)"
+for label_base in "AWS $GW $AUTH 1" "local $LOCAL $LOCAL_AUTH 0"; do
+  read -r label base host hsts <<< "$label_base"
+  identity_check "$label $host/" 302 "$hsts" strict-origin-when-cross-origin "$(response_headers "$base" "$host" / -H "X-Origin-Verify: $VERIFY")"
+  identity_check "$label $host discovery" 200 "$hsts" strict-origin-when-cross-origin "$(response_headers "$base" "$host" /.well-known/openid-configuration -H "X-Origin-Verify: $VERIFY")"
+  identity_check "$label $host/ui/login/loginname" 200 "$hsts" same-origin "$(response_headers "$base" "$host" /ui/login/loginname -H "X-Origin-Verify: $VERIFY")"
+  response=$(response_headers "$base" "$host" /ui/login/loginname -H "X-Origin-Verify: $VERIFY")
+  identity_check "$label $host/ui/login/loginname" 200 "$hsts" strict-origin-when-cross-origin "$response"
+  exactly x-frame-options deny "$response" "$label $host/ui/login/loginname"
+done
+ok "identity origin (AWS 403, console 404, both gateways' 302, discovery, v1 and v2 login): nosniff and frame-ancestors 'none' once each, the gateway's HSTS once in AWS and none locally; Referrer-Policy once: the gateway's strict-origin-when-cross-origin on the 403, 404, 302, discovery and the hosted login, Zitadel's same-origin alone on its v1 login; the login's X-Frame-Options: deny passes through once"
 
 section "criterion 4: Mailpit on its own origin, behind basic auth"
 for path in / /api/v1/messages; do
@@ -254,15 +333,12 @@ ok "the SPA built with BROWSER_TELEMETRY=off holds no trace export; the default 
 
 section "criterion 7: cache headers, with the security headers repeated, on both gateways"
 check_cache(){ # label base-url host expected-hsts-count path expected-cache-control
-  local label=$1 base=$2 host=$3 hsts=$4 path=$5 expected=$6 response header
+  local label=$1 base=$2 host=$3 hsts=$4 path=$5 expected=$6 response
   response=$(from trusted -o /dev/null -D - -H "Host: $host" -H "X-Origin-Verify: $VERIFY" "$base$path" | tr -d '\r')
   head -1 <<< "$response" | grep -q ' 200' || fail "$label $path: $(head -1 <<< "$response")"
   once cache-control "$response" "$label $path"
   grep -qix "cache-control: $expected" <<< "$response" || fail "$label $path: Cache-Control is not $expected"
-  for header in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
-    once "$header" "$response" "$label $path"
-  done
-  [ "$(grep -ic '^strict-transport-security:' <<< "$response")" = "$hsts" ] || fail "$label $path: Strict-Transport-Security not sent $hsts time(s)"
+  app_headers_once "$label $path" "$hsts" "$response"
 }
 for label_base in "AWS $GW $APP 1" "local $LOCAL localhost:8080 0"; do
   read -r label base host hsts <<< "$label_base"
@@ -276,6 +352,127 @@ for label_base in "AWS $GW $APP 1" "local $LOCAL localhost:8080 0"; do
   head -1 <<< "$missing" | grep -q ' 404' || fail "$label: a missing asset is not 404"
   ! grep -qi '^cache-control:' <<< "$missing" || fail "$label: a missing asset's 404 is cacheable"
   ok "$label: / and a client route no-cache, $asset immutable for a year, each with the security headers once; a missing asset's 404 carries no Cache-Control"
+done
+
+section "7.12 criteria 2 and 4: base-uri 'none' in both CSPs, and the SPA's charset, on both gateways"
+scalar_hash=$(grep -o "'sha256-[^']*'" infra/images/gateway/templates/scalar-headers.conf.template)
+scalar_csp="default-src 'self'; script-src 'self' $scalar_hash; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+for label_base in "AWS $GW $APP $work/gateway.env" "local $LOCAL $LOCAL_APP $work/local-gateway.env"; do
+  read -r label base host env_file <<< "$label_base"
+  auth_origin=$(grep '^GATEWAY_AUTH_ORIGIN=' "$env_file" | cut -d= -f2-)
+  app_csp="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' $auth_origin"
+  for path in / /disputes; do
+    exactly content-security-policy "$app_csp" "$(response_headers "$base" "$host" "$path" -H "X-Origin-Verify: $VERIFY")" "$label $path"
+  done
+  exactly content-security-policy "$scalar_csp" "$(response_headers "$base" "$host" /scalar/ -H "X-Origin-Verify: $VERIFY")" "$label /scalar/"
+  ok "$label: / and a client route send the app CSP, /scalar/ the Scalar CSP, each with base-uri 'none' and every other directive unchanged"
+
+  index=$(from trusted -H "Host: $host" -H "X-Origin-Verify: $VERIFY" "$base/")
+  css=$(grep -oE '/assets/[^"]+\.css' <<< "$index" | sed -n 1p)
+  js=$(grep -oE '/assets/[^"]+\.js' <<< "$index" | sed -n 1p)
+  [ -n "$css" ] && [ -n "$js" ] || fail "$label: index.html names no /assets/ stylesheet or script"
+  for path_type in "/ text/html" "$css text/css" "$js application/javascript" "/assets/missing-probe.css text/html"; do
+    read -r path type <<< "$path_type"
+    exactly content-type "$type; charset=utf-8" "$(response_headers "$base" "$host" "$path" -H "X-Origin-Verify: $VERIFY")" "$label $path"
+  done
+  ok "$label: index.html, $css, $js and a missing asset's 404 name charset=utf-8 once"
+done
+# Proxied responses keep their upstream's Content-Type: the charset is set only in the SPA's own locations.
+content_type(){ grep -i '^content-type:' <<< "$1" || echo "(no content-type)"; }
+direct=$(content_type "$(from trusted -o /dev/null -D - -u "$MAILPIT_CREDENTIALS" "http://$run-mailpit:8025/" | tr -d '\r')")
+[ "$(content_type "$(headers "$MAIL" / -u "$MAILPIT_CREDENTIALS")")" = "$direct" ] || fail "the Mailpit page's Content-Type is not Mailpit's own: $direct"
+direct=$(content_type "$(from trusted -o /dev/null -D - "http://$run-echo:8080/.well-known/openid-configuration" | tr -d '\r')")
+[ "$(content_type "$(headers "$AUTH" /.well-known/openid-configuration)")" = "$direct" ] || fail "discovery's Content-Type is not the upstream's: $direct"
+ok "AWS: the Mailpit page and discovery keep their upstream's Content-Type"
+
+section "7.12 criterion 6: the access logs record the path, never the query string or the Referer"
+marker=LogMarker712x$$
+referer=(-H "Referer: https://example.test/?ref=$marker")
+# A viewer address no earlier check has limited, so no request here is refused (AWS); locally the client's own address.
+log_viewer=(-H "CloudFront-Viewer-Address: 198.51.100.66:1")
+# The access log is the container's standard output; standard error (the error log) stays P43. Earlier checks logged
+# some of the same paths, so the paths must be in the lines after these counts.
+access_log_of(){ docker logs "$1" 2>/dev/null; }
+gateway_log_start=$(( $(access_log_of "$run-gateway" | wc -l) ))
+local_log_start=$(( $(access_log_of "$run-local" | wc -l) ))
+for host_path in "$APP /api/signin-oidc?code=$marker" "$APP /?state=$marker" "$AUTH /oidc/v1/end_session?id_token_hint=$marker" \
+                 "$MAIL /api/v1/messages?query=$marker"; do
+  read -r host path <<< "$host_path"
+  response_headers "$GW" "$host" "$path" -H "X-Origin-Verify: $VERIFY" "${log_viewer[@]}" "${referer[@]}" >/dev/null
+done
+for host_path in "$LOCAL_APP /api/signin-oidc?code=$marker" "$LOCAL_APP /?state=$marker" "$LOCAL_AUTH /oidc/v1/end_session?id_token_hint=$marker"; do
+  read -r host path <<< "$host_path"
+  response_headers "$LOCAL" "$host" "$path" "${referer[@]}" >/dev/null
+done
+# new_log_lines CONTAINER START: the access log's lines after its first START
+new_log_lines(){ access_log_of "$1" | tail -n "+$(( $2 + 1 ))"; }
+for container_paths in "$run-gateway $gateway_log_start /api/signin-oidc /index.html /oidc/v1/end_session /api/v1/messages" \
+                       "$run-local $local_log_start /api/signin-oidc /index.html /oidc/v1/end_session"; do
+  read -r container start paths <<< "$container_paths"
+  for path in $paths; do
+    for _ in $(seq 5); do grep -qF "\"GET $path HTTP/1.1\"" <<< "$(new_log_lines "$container" "$start")" && break; sleep 1; done
+    grep -qF "\"GET $path HTTP/1.1\"" <<< "$(new_log_lines "$container" "$start")" || fail "$container's access log has no new GET $path"
+  done
+  ! grep -qF "$marker" <<< "$(access_log_of "$container")" || fail "$container's access log holds a query string or a Referer: $(grep -F "$marker" <<< "$(access_log_of "$container")")"
+  ok "$container's access log: $paths, with no query string and no Referer"
+done
+
+section "7.12 criterion 7: Cache-Control: no-store on the /api responses each gateway generates itself"
+# generated_check LABEL STATUS HSTS-COUNT RESPONSE: the gateway's own response, with its status, no-store and the app's
+# security headers once each
+generated_check(){
+  local label=$1 status=$2 hsts=$3 response=$4
+  status_is "$status" "$response" "$label"
+  exactly cache-control no-store "$response" "$label"
+  app_headers_once "$label" "$hsts" "$response"
+}
+# gateway_error_check LABEL STATUS HSTS-COUNT RESPONSE-WITH-BODY: as generated_check, and the body is @gateway_error's
+# fixed text, so nothing from the request or the upstream is echoed back
+gateway_error_check(){
+  generated_check "$@"
+  [ "$(tail -1 <<< "$4")" = "The gateway could not complete the request." ] || fail "$1: not the fixed body: $(tail -1 <<< "$4")"
+}
+# first_429 CLIENT [curl options...] URL: the status line and headers of the first 429 in up to 60 rapid requests
+first_429(){
+  local client=$1; shift
+  docker exec "$run-$client" sh -c 'for _ in $(seq 60); do
+      response=$(curl -sS -o /dev/null -D - --max-time 5 "$@" | tr -d "\r")
+      case "$response" in "HTTP/1.1 429 "*) printf "%s\n" "$response"; exit 0 ;; esac
+    done
+    exit 1' sh "$@" || fail "60 rapid requests from $client got no 429: $*"
+}
+# Each gateway is limited per client: in AWS per viewer address (one per check), locally per container address.
+for label_base in "AWS $GW $APP 1 trusted" "local $LOCAL $LOCAL_APP 0 untrusted"; do
+  read -r label base host hsts limited_client <<< "$label_base"
+  response=$(first_429 "$limited_client" -H "Host: $host" -H "X-Origin-Verify: $VERIFY" -H "CloudFront-Viewer-Address: 198.51.100.70:1" "$base/api/limit-probe")
+  generated_check "$label /api/ 429" 429 "$hsts" "$response"
+  # RFC 8259 11: application/json-based types have no charset parameter. Retry-After in seconds (RFC 9110 10.2.3).
+  exactly content-type application/problem+json "$response" "$label /api/ 429"
+  exactly retry-after 1 "$response" "$label /api/ 429"
+  # 2 MB, above nginx's default client_max_body_size of 1 MB. With its body, for @gateway_error's fixed text.
+  response=$(docker exec "$run-trusted" sh -c 'head -c 2097152 /dev/zero | curl -sS -D - --max-time 5 -X POST --data-binary @- "$@"' \
+    sh -H "Host: $host" -H "X-Origin-Verify: $VERIFY" -H "CloudFront-Viewer-Address: 198.51.100.71:1" "$base/api/v1/disputes" | tr -d '\r')
+  gateway_error_check "$label /api/v1/disputes 413" 413 "$hsts" "$response"
+  # The upstream's answer passes through with its own Cache-Control only (the echo sends no-store, as the Api does).
+  response=$(response_headers "$base" "$host" /api/v1/disputes -H "X-Origin-Verify: $VERIFY" -H "CloudFront-Viewer-Address: 198.51.100.72:1")
+  status_is 200 "$response" "$label /api/v1/disputes from the upstream"
+  exactly cache-control no-store "$response" "$label /api/v1/disputes from the upstream"
+  ok "$label: the gateway's 429 (application/problem+json, Retry-After: 1) and 413 (the fixed body) carry Cache-Control: no-store and the security headers once; a proxied answer keeps one Cache-Control, the upstream's"
+done
+docker rm -f "$run-echo" >/dev/null
+for label_base in "AWS $GW $APP 1" "local $LOCAL $LOCAL_APP 0"; do
+  read -r label base host hsts <<< "$label_base"
+  for path in /api/v1/disputes /api/health/live; do
+    # nginx looks the api up again every 10 seconds, so the 502 can take a while; until then a request may time out,
+    # which is not a failure here (each try is bounded by curl's --max-time 5). The response holds the body too.
+    response="" deadline=$((SECONDS + 30))
+    until head -1 <<< "$response" | grep -q ' 502 ' || (( SECONDS >= deadline )); do
+      response=$(from trusted -D - -H "Host: $host" -H "X-Origin-Verify: $VERIFY" -H "CloudFront-Viewer-Address: 198.51.100.73:1" "$base$path" | tr -d '\r') || true
+      head -1 <<< "$response" | grep -q ' 502 ' || sleep 1
+    done
+    gateway_error_check "$label $path 502" 502 "$hsts" "$response"
+  done
+  ok "$label: with the upstream gone, /api/v1/disputes and /api/health/live answer 502 with the fixed body, Cache-Control: no-store and the security headers once"
 done
 
 echo; echo "GATEWAY TEST OK"

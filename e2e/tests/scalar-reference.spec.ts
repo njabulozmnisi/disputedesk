@@ -9,7 +9,7 @@ import { fixtureLogin, ownDisputable } from './support';
 const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const repoRoot = new URL('../..', import.meta.url).pathname;
 const scalarCsp =
-  "default-src 'self'; script-src 'self' 'sha256-HASH'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+  "default-src 'self'; script-src 'self' 'sha256-HASH'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 const nonCspHeaders = ['x-content-type-options', 'x-frame-options', 'referrer-policy', 'permissions-policy', 'cross-origin-opener-policy'];
 
 test('the Scalar page headers: the Scalar CSP with one script hash that matches the inline script, every other header equal to those on /', async ({ request }) => {

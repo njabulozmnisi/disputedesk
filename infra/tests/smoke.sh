@@ -75,6 +75,9 @@ index=$(curl -fsS "$GW/")
 # grep finds nothing in a broken build; || true lets the line below say so instead of set -e ending the run silently.
 asset=$(grep -oE '/assets/[^"]+\.js' <<< "$index" | sed -n 1p) || true
 [ -n "$asset" ] || fail "index.html names no /assets/ script"
+# The CSP's base-uri 'none' would block a base element, so the page must hold none (CSP Level 3, base-uri).
+! grep -qi '<base' <<< "$index" || fail "index.html holds a <base> element"
+ok "index.html holds no <base> element"
 for path_cache in "/|no-cache" "/disputes|no-cache" "$asset|public, max-age=31536000, immutable"; do
   path=${path_cache%%|*} expected=${path_cache#*|}
   headers=$(curl -fsSI "$GW$path" | tr -d '\r')
@@ -85,8 +88,10 @@ for path_cache in "/|no-cache" "/disputes|no-cache" "$asset|public, max-age=3153
   done
   ok "$path cache-control: $expected, with each security header once"
 done
-# The Api owns Cache-Control on its responses; the gateway adds none of its own.
-cache_control=$(curl -fsSI "$GW/api/health/live" | grep -i '^cache-control:' | tr -d '\r')
+# The Api owns Cache-Control on its responses; the gateway adds none of its own. A transport error and a missing header
+# each fail with their own message (a grep inside the request's pipeline would end the run silently under set -e).
+live_headers=$(curl -fsSI "$GW/api/health/live" | tr -d '\r') || fail "/api/health/live: request failed"
+cache_control=$(grep -i '^cache-control:' <<< "$live_headers") || fail "/api/health/live: no cache-control"
 [ "$(grep -c . <<< "$cache_control")" = 1 ] || fail "/api/health/live: not exactly one cache-control: $cache_control"
 grep -qi 'no-store' <<< "$cache_control" || fail "/api/health/live: cache-control without no-store: $cache_control"
 ok "/api/health/live $cache_control"
@@ -95,7 +100,7 @@ section "gateway: Scalar and the runtime document (AD-26)"
 header_value(){ grep -i "^$1:" | cut -d' ' -f2-; }   # header name, response headers on stdin (CR stripped)
 spa_headers=$(curl -fsSI "$GW/" | tr -d '\r')
 scalar_hash=$(grep -o "'sha256-[^']*'" infra/images/gateway/templates/scalar-headers.conf.template)
-scalar_csp="default-src 'self'; script-src 'self' $scalar_hash; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+scalar_csp="default-src 'self'; script-src 'self' $scalar_hash; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 redirect=$(curl -sS -D - -o /dev/null "$GW/scalar" | tr -d '\r')
 head -1 <<< "$redirect" | grep -q ' 302' || fail "/scalar is not a 302: $redirect"
 [ "$(header_value location <<< "$redirect")" = scalar/ ] || fail "/scalar does not redirect to scalar/: $redirect"
@@ -120,24 +125,42 @@ for h in content-security-policy x-content-type-options x-frame-options referrer
 done
 ! grep -qi '^strict-transport-security:' <<< "$headers" || fail "/scalar/: HSTS sent over plain HTTP"
 ok "/scalar/ no strict-transport-security"
+! grep -qi '<base' <<< "$(curl -fsS "$GW/scalar/")" || fail "the Scalar page holds a <base> element"
+ok "the Scalar page holds no <base> element"
 
 section "gateway: the coarse limit's 429"
-# Rapid requests exceed 10 r/s with burst 20. The 429 is @rate_limited's on every location, with the SPA's CSP.
+# The limit is 10 r/s with burst 20. Each burst sends 60 requests at once (curl --parallel), at most 3 bursts, and the
+# probe stops at the first burst that gets a 429 and says what it took, so a failure shows what this host managed.
+# The 429 is @rate_limited's on every location, with the SPA's CSP and Cache-Control: no-store (AD-23).
 expect_429(){ # path
-  local limited="" response
-  for _ in $(seq 40); do
-    response=$(curl -sS -D - -o /dev/null "$GW$1" | tr -d '\r')
-    if head -1 <<< "$response" | grep -q ' 429'; then limited=$response; break; fi
+  local burst results tally limited=""
+  for burst in 1 2 3; do
+    # One JSON object per request, its status and its headers (curl --write-out %{header_json}: lower-case names, each
+    # value in an array).
+    results=$(curl -sS --parallel --parallel-max 60 -o /dev/null -w '{"status":%{http_code},"headers":%{header_json}}\n' \
+      "$GW$1?burst=$burst&request=[1-60]") || fail "$1: a request in burst $burst failed"
+    limited=$(jq -rn 'first(inputs | select(.status == 429)) | .headers | to_entries[] | "\(.key): \(.value[])"' <<< "$results")
+    [ -z "$limited" ] || break
   done
-  [ -n "$limited" ] || fail "40 rapid requests to $1 got no 429"
-  grep -qi '^content-type: application/problem+json$' <<< "$limited" || fail "$1 429 content type: $limited"
-  grep -qi '^retry-after: 1$' <<< "$limited" || fail "$1 429 has no Retry-After: 1: $limited"
+  if [ -z "$limited" ]; then
+    # The statuses of the last burst, as "200 x60", so the failure shows what this host managed.
+    tally=$(jq -rn '[inputs.status] | group_by(.) | map("\(.[0]) x\(length)") | join(", ")' <<< "$results")
+    fail "$1: no 429 in 3 bursts of 60 concurrent requests (180 requests); the last burst got $tally"
+  fi
+  echo "$1: a 429 after $burst burst(s) of 60 concurrent requests ($((burst * 60)) requests; $(jq -n '[inputs | select(.status == 429)] | length' <<< "$results") limited in the last burst)"
+  if ! { [ "$(grep -ic '^content-type:' <<< "$limited")" = 1 ] && grep -qix 'content-type: application/problem+json' <<< "$limited"; }; then
+    fail "$1 429 content type: $limited"
+  fi
+  grep -qix 'retry-after: 1' <<< "$limited" || fail "$1 429 has no Retry-After: 1: $limited"
+  if ! { [ "$(grep -ic '^cache-control:' <<< "$limited")" = 1 ] && grep -qix 'cache-control: no-store' <<< "$limited"; }; then
+    fail "$1 429: not exactly one Cache-Control: no-store: $limited"
+  fi
   for h in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
     [ "$(grep -ic "^$h:" <<< "$limited")" = 1 ] || fail "$1 429: header $h is not sent exactly once"
   done
   [ "$(header_value content-security-policy <<< "$limited")" = "$(header_value content-security-policy <<< "$spa_headers")" ] \
     || fail "$1 429 does not carry the SPA's CSP: $limited"
-  ok "$1 429 with application/problem+json, Retry-After: 1, the SPA's CSP and each security header once"
+  ok "$1 429 with application/problem+json, Retry-After: 1, Cache-Control: no-store, the SPA's CSP and each security header once"
 }
 # The path ends in .json, so the 429 proves its Content-Type does not come from the extension.
 expect_429 /api/limit-probe.json
@@ -152,8 +175,27 @@ curl -fsS -o /dev/null "$AUTH/ui/login/loginname" && ok "GET $AUTH/ui/login/logi
 login_headers=$(curl -fsS -D - -o /dev/null "$AUTH/ui/login/loginname" | tr -d '\r')
 grep -i '^content-security-policy:' <<< "$login_headers" | grep -q "frame-ancestors 'none'" \
   || fail "hosted login: no frame-ancestors 'none' in its Content-Security-Policy"
-grep -qix 'x-frame-options: deny' <<< "$login_headers" || fail "hosted login: no X-Frame-Options: deny"
-ok "hosted login: frame-ancestors 'none' and X-Frame-Options: deny"
+if ! { [ "$(grep -ic '^x-frame-options:' <<< "$login_headers")" = 1 ] && grep -qix 'x-frame-options: deny' <<< "$login_headers"; }; then
+  fail "hosted login: not exactly one X-Frame-Options: deny"
+fi
+ok "hosted login: frame-ancestors 'none' and X-Frame-Options: deny once"
+# The identity origin's baseline from the gateway, once each: the upstreams' own HSTS and nosniff are hidden, and locally
+# GATEWAY_HSTS is empty, so no HSTS at all; frame-ancestors 'none' is a policy of its own beside Zitadel's (CSP Level 3,
+# multiple policies). Referrer-Policy once: the gateway's replaces the login's weaker origin-when-cross-origin on Login
+# v2 and fills in for discovery, which sends none; Zitadel's own same-origin passes through alone on its v1 login.
+for path_referrer in "/.well-known/openid-configuration strict-origin-when-cross-origin" "/ui/login/loginname same-origin" \
+                     "/ui/login/loginname strict-origin-when-cross-origin"; do
+  read -r path referrer <<< "$path_referrer"
+  headers=$(curl -fsS -D - -o /dev/null "$AUTH$path" | tr -d '\r')
+  [ "$(header_value x-content-type-options <<< "$headers")" = nosniff ] || fail "$AUTH$path: not exactly one X-Content-Type-Options: nosniff"
+  # Two headers give two lines, so this also proves the policy is sent at most once.
+  policy=$(header_value referrer-policy <<< "$headers") || policy=none
+  [ "$policy" = "$referrer" ] || fail "$AUTH$path: Referrer-Policy is not exactly one $referrer: $policy"
+  [ "$(grep -icxF "content-security-policy: frame-ancestors 'none'" <<< "$headers")" = 1 ] \
+    || fail "$AUTH$path: not exactly one Content-Security-Policy: frame-ancestors 'none'"
+  ! grep -qi '^strict-transport-security:' <<< "$headers" || fail "$AUTH$path: HSTS sent over plain HTTP"
+  ok "$AUTH$path: nosniff and frame-ancestors 'none' once each, Referrer-Policy $referrer; no HSTS"
+done
 
 clients=$(in_provisioner cat /out/zitadel-clients.json)
 project=$(jq -r .Zitadel.ProjectId <<< "$clients")

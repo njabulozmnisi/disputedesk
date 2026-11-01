@@ -22,13 +22,14 @@ http {
   default_type  application/octet-stream;
   sendfile      on;
   server_tokens off;
-  access_log    /var/log/nginx/access.log;
 
-  # The identity origin's format: the combined format with the path ($uri) in place of the request line, and no
-  # Referer. The end-session GET carries the ID token as id_token_hint in its query, and a page on that origin sends
-  # its own URL as the Referer, so neither the query nor the Referer is logged there (AD-20, ASVS 5.0 V14.2.1).
-  log_format    identity '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" '
-                         '$status $body_bytes_sent "$http_user_agent"';
+  # Every origin's one log format: the combined format with the path ($uri) in place of the request line, and no
+  # Referer. A query can carry the sign-in callback's code or the end-session id_token_hint, and a Referer can carry a
+  # URL with its query, so neither is logged (NFR-SEC-5, AD-20, ASVS 5.0 V14.2.1; nginx ngx_http_log_module). Defined
+  # before its first use, and named on every log line: a line without a name logs the combined format.
+  log_format    path_only '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" '
+                          '$status $body_bytes_sent "$http_user_agent"';
+  access_log    /var/log/nginx/access.log path_only;
 
   # The image runs as a non-root user, which can write only under /tmp (the image's own defaults).
   client_body_temp_path /tmp/client_temp;
@@ -49,6 +50,14 @@ http {
   limit_req_zone $binary_remote_addr zone=coarse:10m rate=10r/s;
   limit_req_status 429;
 
+  # The identity origin's Referrer-Policy (identity-headers.conf): the gateway's value where the upstream sent none,
+  # empty (no header) where it sent its own (nginx ngx_http_map_module). On a response nginx makes itself there is no
+  # upstream, so the variable is empty too.
+  map $upstream_http_referrer_policy $identity_referrer_policy {
+    default "";
+    ""      "strict-origin-when-cross-origin";
+  }
+
   # ---------------------------------------------------------------------------------------------
   # App origin: every host that is not the identity origin.
   # ---------------------------------------------------------------------------------------------
@@ -60,34 +69,56 @@ http {
     # The gateway's own 429 as RFC 9457 problem details. No traceId: nginx has no trace context (AD-3).
     # Retry-After in seconds (RFC 9110 10.2.3), matching the 10r/s limit. This block adds a header, so it repeats the
     # rest. The empty types block stops nginx picking a Content-Type from the request's extension (a limited .json).
+    # no-store, because the Api never sees this response and so cannot add its own (RFC 9111 5.2.2.5; AD-23).
     error_page 429 @rate_limited;
     location @rate_limited {
       include /etc/nginx/security-headers.conf;
       add_header Retry-After "1" always;
+      add_header Cache-Control "no-store" always;
       types { }
       default_type application/problem+json;
       return 429 '{"type":"https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/rate-limited.md","title":"Too many requests","status":429}';
     }
 
+    # The gateway's own 413, 500, 502 and 504 on /api (AD-23 as amended 2026-10-31): no-store and the security headers,
+    # since the Api never sees these responses. error_page without "=" keeps the original status (nginx, error_page),
+    # so the client gets that status with this fixed text; the 200 below is never sent. The /api locations send here.
+    location @gateway_error {
+      include /etc/nginx/security-headers.conf;
+      add_header Cache-Control "no-store" always;
+      types { }
+      default_type text/plain;
+      return 200 "The gateway could not complete the request.\n";
+    }
+
     # The SPA: client-side routes fall back to index.html, but a missing build file is a plain 404. index.html is
     # revalidated on every load, so a release reaches the browser at once; the hashed build files never change, so they
     # are cached for a year (RFC 9111 5.2.2.4, RFC 8246). Without "always", a 404 is never cached. Each location adds a
-    # header, so it repeats the rest.
+    # header, so it repeats the rest. Both name the charset of their text files (.html, .css, .js) in Content-Type
+    # (ASVS 5.0 V4.1.1; nginx ngx_http_charset_module): here only, so no proxied response is relabelled.
     root /usr/share/nginx/html;
     location / {
       include /etc/nginx/security-headers.conf;
       add_header Cache-Control "no-cache";
+      charset utf-8;
+      charset_types text/html text/css application/javascript;
       try_files $uri /index.html;
     }
     location /assets/ {
       include /etc/nginx/security-headers.conf;
       add_header Cache-Control "public, max-age=31536000, immutable";
+      charset utf-8;
+      charset_types text/html text/css application/javascript;
       try_files $uri =404;
     }
 
-    # The api keeps its health endpoints at the root (/health/*); expose them under /api/health/*.
+    # The api keeps its health endpoints at the root (/health/*); expose them under /api/health/*. Each /api location
+    # sends the gateway's own errors to @gateway_error and repeats the 429 line, because a location that sets error_page
+    # inherits none from its server. The Api's own responses pass through untouched (proxy_intercept_errors is off).
     location /api/health/ {
       limit_req zone=coarse burst=20 nodelay;
+      error_page 429 @rate_limited;
+      error_page 413 500 502 504 @gateway_error;
       proxy_pass http://api/health/;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
@@ -101,6 +132,8 @@ http {
     # Everything else under /api/ keeps its path: the api serves /api/v1/... itself.
     location /api/ {
       limit_req zone=coarse burst=20 nodelay;
+      error_page 429 @rate_limited;
+      error_page 413 500 502 504 @gateway_error;
       proxy_pass http://api;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
@@ -186,7 +219,11 @@ http {
   server {
     listen 8080;
     server_name ${GATEWAY_AUTH_SERVER_NAME};
-    access_log /var/log/nginx/access.log identity;
+
+    # The identity baseline on every response (identity-headers.conf), each header once, the upstreams' own copies
+    # hidden. Referrer-Policy once: Zitadel's own same-origin on its console and v1 login, the gateway's
+    # strict-origin-when-cross-origin wherever the upstream sends none (the 302 below, discovery).
+    include /etc/nginx/identity-headers.conf;
 
 
     location = / { return 302 /ui/login/; }

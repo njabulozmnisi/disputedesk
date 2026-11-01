@@ -45,3 +45,21 @@ The supervisor accepted a verifier finding (keep the loaded card and dialog on a
 **Category.** Spec gap (a pre-build fold skipped), then a story amended mid-round.
 
 **Countermeasure (proposed for the epic 7 retrospective).** A deterministic readiness check: a script fails a story whose `<story>-prebuild-review.md` or `-challenge.md` has `[story]` points but no "Sofia, <date>." resolution, run by the supervisor before dispatch. Until then, the supervisor greps for the resolution line before dispatching. A story amended during a fix round goes back through the delta review against the amended text before the re-verify, so a criterion-level gap is fixed in the same round rather than logged as a low.
+
+## 7.14 fix round 2 (2026-10-31)
+
+**What happened.** Round 1 replaced the builder's in-render draft reset with `key={state}`, as the reviewer's R1 and the story asked. The delta review found that the key changes from `undefined` to `anonymous` on the first session answer, remounting screens that have no session gate; `usePageHeading` then moves focus to the new heading on a direct page load, so the first Tab no longer reaches the skip link (story 3.7 criterion 6). A medium finding after a round opens a second round. Security's re-run added one low item (a 401 on the sign-out token fetch does not tell other tabs), present since round 0.
+
+**Why.** The story named a key "by the session state" without saying which part of the state; the pre-build review and the first review checked the clean-up paths but not the direct-load focus path, which the reviewer's own known pitfall ("a direct load") covers. The builder's original objection to the key was a real signal, read as an unreproduced claim.
+
+**Countermeasures (proposed for the epic 7 retrospective).** (1) A routing test that every top-level route, loaded directly, leaves the first Tab on the skip link: a deterministic check that catches any remount around `<Outlet/>`. (2) When a builder reports a conflict with the story's mechanism, the reviewer reproduces the builder's failure path, not only the full suite, before ruling. Escapes are recorded in `7.14-review.md`.
+
+## 7.12 fix round 2 (2026-10-31)
+
+**What happened.** The build hid Zitadel's `Referrer-Policy` at server level, which weakened Zitadel's own `same-origin`; the supervisor's ruling (narrow the hide to the hosted login) went into fix round 1 with the item "exactly one `Referrer-Policy` everywhere" and "no server-level `add_header Referrer-Policy`". Those two cannot both hold for responses with no upstream (the gateway's own 403, 404 and 302, and Zitadel's discovery, which sends none); the builder chose "none", and both the delta review and the security re-run held that against criterion 3, A-F6 and ASVS V3.4.5.
+
+**Why.** The supervisor wrote a fix item from the security constraint without walking each response criterion 3 names; the pre-build reviews did not test the upstream header values per location (only the hosted login's were read from the image).
+
+**Countermeasures (proposed for the epic 7 retrospective).** (1) A supervisor fix-list check: every fix item that changes which component sets a header lists each response the criterion names and the expected value, before dispatch. (2) The gateway test models every upstream's real header set per location (taken once from the pinned images), so a header gap shows in the build, not in review.
+
+**7.14 round 3 (2026-11-01, human gate: two failed fix attempts).** Round 2's `key={isSignedIn ? ...}` fixed anonymous direct loads only; a signed-in direct load of a public route still remounted. Any key around `<Outlet/>` remounts on the first session answer, so the story's named mechanism could not meet story 3.7 criterion 6. The human chose the reviewer's fix (the builder's original in-render reset); criterion 1 amended. The countermeasure above (a skip-link test over every route and every session state) would have caught both rounds.

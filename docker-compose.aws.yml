@@ -164,7 +164,9 @@ services:
       GATEWAY_AUTH_HOST: ${AUTH_HOST:?AUTH_HOST is required}
       GATEWAY_MAILPIT_HOST: ${MAILPIT_HOST:?MAILPIT_HOST, the Mailpit distribution's host name, is required}
       GATEWAY_AUTH_ORIGIN: https://${AUTH_HOST:?AUTH_HOST is required}
-      GATEWAY_HSTS: max-age=31536000
+      # Two years with subdomains (RFC 6797 6.1.1, 6.1.2; OWASP HTTP Headers Cheat Sheet), as long as the login's own
+      # value, which the gateway hides. No preload: CloudFront default domains cannot join a preload list.
+      GATEWAY_HSTS: "max-age=63072000; includeSubDomains"
       GATEWAY_ORIGIN_VERIFY: ${GATEWAY_ORIGIN_VERIFY:?GATEWAY_ORIGIN_VERIFY, the origin-verify header value, is required}
     volumes:
       # The set_real_ip_from lines for CloudFront's origin-facing ranges, written by the deploy script.
