@@ -4,8 +4,7 @@
 # that stands in for the api, Zitadel and the login and answers with the headers it received. Clients run on the same
 # network at fixed addresses, one inside test-realip.conf's range (as CloudFront would be) and one outside it.
 # It also starts the image with the local templates, for their cache headers (criterion 7).
-# Story 7.12's edge hardening (criteria 1 to 4, 6 and 7) runs on both gateways; its criterion 7 stops the echo server,
-# so it runs last.
+# Story 7.12's edge hardening (criteria 1 to 4, 6 and 7) runs on both gateways.
 #   scripts/test-lock.sh run stack <owner> -- infra/deploy/aws/gateway.test.sh
 # Needs docker (with Compose v2) and jq; binds no host port. Every check fails the run; everything it starts is removed.
 set -euo pipefail
@@ -75,6 +74,11 @@ http {
       add_header Cache-Control "no-store";
       return 200 "port=$server_port host=$host fhost=$http_x_forwarded_host xff=$http_x_forwarded_for proto=$http_x_forwarded_proto verify=$http_x_origin_verify forwarded=$http_forwarded\n";
     }
+    # A failing api for the gateway's own 502 (7.12 criterion 7): the connection is closed without a response (nginx's
+    # non-standard code 444, ngx_http_rewrite_module), which the gateway reports at once as 502. /api/health/* arrives
+    # here as /health/*.
+    location = /api/upstream-closes    { return 444; }
+    location = /health/upstream-closes { return 444; }
     # Zitadel's v1 login sends its own Referrer-Policy, which the identity origin passes through.
     location /ui/login/ {
       default_type text/plain;
@@ -459,20 +463,15 @@ for label_base in "AWS $GW $APP 1 trusted" "local $LOCAL $LOCAL_APP 0 untrusted"
   exactly cache-control no-store "$response" "$label /api/v1/disputes from the upstream"
   ok "$label: the gateway's 429 (application/problem+json, Retry-After: 1) and 413 (the fixed body) carry Cache-Control: no-store and the security headers once; a proxied answer keeps one Cache-Control, the upstream's"
 done
-docker rm -f "$run-echo" >/dev/null
+# The echo closes the connection on these paths, one through each /api location, so the gateway answers 502 itself.
 for label_base in "AWS $GW $APP 1" "local $LOCAL $LOCAL_APP 0"; do
   read -r label base host hsts <<< "$label_base"
-  for path in /api/v1/disputes /api/health/live; do
-    # nginx looks the api up again every 10 seconds, so the 502 can take a while; until then a request may time out,
-    # which is not a failure here (each try is bounded by curl's --max-time 5). The response holds the body too.
-    response="" deadline=$((SECONDS + 30))
-    until head -1 <<< "$response" | grep -q ' 502 ' || (( SECONDS >= deadline )); do
-      response=$(from trusted -D - -H "Host: $host" -H "X-Origin-Verify: $VERIFY" -H "CloudFront-Viewer-Address: 198.51.100.73:1" "$base$path" | tr -d '\r') || true
-      head -1 <<< "$response" | grep -q ' 502 ' || sleep 1
-    done
+  for path in /api/upstream-closes /api/health/upstream-closes; do
+    # With the body, for @gateway_error's fixed text.
+    response=$(from trusted -D - -H "Host: $host" -H "X-Origin-Verify: $VERIFY" -H "CloudFront-Viewer-Address: 198.51.100.73:1" "$base$path" | tr -d '\r')
     gateway_error_check "$label $path 502" 502 "$hsts" "$response"
   done
-  ok "$label: with the upstream gone, /api/v1/disputes and /api/health/live answer 502 with the fixed body, Cache-Control: no-store and the security headers once"
+  ok "$label: when the upstream closes the connection without a response, /api/ and /api/health/ answer 502 with the fixed body, Cache-Control: no-store and the security headers once"
 done
 
 echo; echo "GATEWAY TEST OK"
