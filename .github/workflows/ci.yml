@@ -129,6 +129,11 @@ jobs:
       - name: AWS deploy script
         run: infra/deploy/aws/deploy.test.sh
 
+      # Story 7.17: the unchanged deploy script's verify-full connection and database init against a throwaway
+      # PostgreSQL 18 with TLS and a non-superuser master, on an internal Docker network.
+      - name: RDS database init
+        run: infra/deploy/aws/rds-init.test.sh
+
       # Story 2.6. The expected values are DESIGN.md's (Theme file and hosted-login theming), written here rather than
       # re-read from tokens.css, so a changed token fails until DESIGN.md and this list agree. Case is ignored.
       - name: Hosted-login label policy is generated from tokens.css
