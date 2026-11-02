@@ -18,7 +18,7 @@ Act as an independent verifier that did not write this code. Check code only.
 The work is deliberately uncommitted: treat every file in this worktree, including untracked ones, as the change under review.
 Story file: $story_file. Read it, then:
 1. Build: dotnet build backend (warnings are errors) and/or npm run build in frontend, whichever the diff touches.
-2. Run the tests: unit, integration (Testcontainers) and architecture tests; Vitest, type check and lint for the frontend.
+2. Run the tests: unit, integration (Testcontainers) and architecture tests; Vitest, type check and lint for the frontend; shellcheck and any infra/ test script the story names, run by its path (for example infra/aws/rds-init.test.sh, not bash infra/aws/rds-init.test.sh).
 3. Check OpenAPI drift: the committed backend openapi.json matches the build output.
 4. Compare the diff (git diff main...HEAD plus uncommitted changes) against each acceptance criterion. For each, name the test that proves it, or say it is unproved.
 5. Standards: list any mechanism in the diff that replaces the documented framework approach or an established industry standard (Microsoft Learn, RFCs, OWASP), with the standard it should use. Report these under "Standards"; they do not change the verdict.
@@ -33,7 +33,9 @@ PROMPT
 run() {
   "$root/scripts/test-lock.sh" run testcontainers "verify-$story" -- \
     copilot -p "$prompt" --model "$1" -s --no-ask-user --add-dir "$(cd "$(dirname "$story_file")" && pwd)" \
-      --allow-tool 'shell(dotnet:*)' 'shell(npm:*)' 'shell(npx:*)' 'shell(git diff:*)' 'shell(git log:*)' 'shell(git show:*)' 'shell(ls:*)' 'shell(cat:*)' 'shell(head:*)' 'shell(grep:*)' 'shell(find:*)' 'shell(docker compose config:*)' 'shell(gitleaks:*)' 'shell(scripts/floor-guard.sh)' 'shell(actionlint:*)' 'shell(trivy:*)' 'shell(terraform:*)' 'read' \
+      --allow-tool 'shell(dotnet:*)' 'shell(npm:*)' 'shell(npx:*)' 'shell(git diff:*)' 'shell(git log:*)' 'shell(git show:*)' 'shell(ls:*)' 'shell(cat:*)' 'shell(head:*)' 'shell(grep:*)' 'shell(find:*)' 'shell(docker compose config:*)' 'shell(gitleaks:*)' 'shell(scripts/floor-guard.sh)' 'shell(actionlint:*)' 'shell(trivy:*)' 'shell(terraform:*)' \
+        'shell(shellcheck:*)' 'shell(infra/aws/check-compose.sh)' 'shell(infra/aws/deploy.test.sh)' 'shell(infra/aws/gateway.test.sh)' \
+        'shell(infra/aws/rds-init.test.sh)' 'shell(infra/terraform/iam-names.test.sh)' 'read' \
       --deny-tool 'write' 'shell(git commit:*)' 'shell(git push:*)' 'shell(rm:*)' 'shell(terraform apply:*)' 'shell(terraform destroy:*)'
 }
 
