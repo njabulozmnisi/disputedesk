@@ -74,10 +74,12 @@ override_resource {
 }
 
 variables {
-  aws_region         = "eu-west-1"
-  github_repository  = "example-owner/disputedesk"
-  budget_limit_usd   = 10
-  budget_alert_email = "budget@example.com"
+  aws_region                 = "eu-west-1"
+  github_repository          = "example-owner/disputedesk"
+  github_repository_owner_id = "123456"
+  github_repository_id       = "456789"
+  budget_limit_usd           = 10
+  budget_alert_email         = "budget@example.com"
 }
 
 run "criterion_4_terraform_writes_the_deploy_values_under_ssm_path" {
@@ -173,6 +175,161 @@ run "github_repository_with_a_quote_is_rejected" {
   }
 
   expect_failures = [var.github_repository]
+}
+
+# Story 7.15, criterion 2: each GitHub ID is 1 to 19 digits with no leading zero, so the subject renders it digit for
+# digit.
+
+run "github_repository_owner_id_empty_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_owner_id = ""
+  }
+
+  expect_failures = [var.github_repository_owner_id]
+}
+
+run "github_repository_owner_id_of_0_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_owner_id = "0"
+  }
+
+  expect_failures = [var.github_repository_owner_id]
+}
+
+run "github_repository_owner_id_with_a_leading_zero_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_owner_id = "0123"
+  }
+
+  expect_failures = [var.github_repository_owner_id]
+}
+
+run "github_repository_owner_id_with_a_letter_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_owner_id = "12a"
+  }
+
+  expect_failures = [var.github_repository_owner_id]
+}
+
+run "github_repository_owner_id_negative_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_owner_id = "-1"
+  }
+
+  expect_failures = [var.github_repository_owner_id]
+}
+
+run "github_repository_owner_id_of_20_digits_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_owner_id = "12345678901234567890"
+  }
+
+  expect_failures = [var.github_repository_owner_id]
+}
+
+run "github_repository_owner_id_of_1_is_accepted" {
+  command = plan
+
+  variables {
+    github_repository_owner_id = "1"
+  }
+}
+
+run "github_repository_owner_id_of_19_digits_is_accepted" {
+  command = plan
+
+  variables {
+    github_repository_owner_id = "1234567890123456789"
+  }
+}
+
+run "github_repository_id_empty_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_id = ""
+  }
+
+  expect_failures = [var.github_repository_id]
+}
+
+run "github_repository_id_of_0_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_id = "0"
+  }
+
+  expect_failures = [var.github_repository_id]
+}
+
+run "github_repository_id_with_a_leading_zero_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_id = "0123"
+  }
+
+  expect_failures = [var.github_repository_id]
+}
+
+run "github_repository_id_with_a_letter_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_id = "12a"
+  }
+
+  expect_failures = [var.github_repository_id]
+}
+
+run "github_repository_id_negative_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_id = "-1"
+  }
+
+  expect_failures = [var.github_repository_id]
+}
+
+run "github_repository_id_of_20_digits_is_rejected" {
+  command = plan
+
+  variables {
+    github_repository_id = "12345678901234567890"
+  }
+
+  expect_failures = [var.github_repository_id]
+}
+
+run "github_repository_id_of_1_is_accepted" {
+  command = plan
+
+  variables {
+    github_repository_id = "1"
+  }
+}
+
+run "github_repository_id_of_19_digits_is_accepted" {
+  command = plan
+
+  variables {
+    github_repository_id = "1234567890123456789"
+  }
 }
 
 run "budget_limit_of_0_is_rejected" {
