@@ -1,6 +1,6 @@
 # Journeys proven on the stack, deployed and documented: stories in build order. Extra keys (owner, lane, high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
 
-next_id = 15
+next_id = 18
 
 [[entry]]
 id = 1
@@ -217,3 +217,57 @@ high_stakes = true
 migration = false
 touches = ["docs/verification/7.10-prr.md"]
 supervisor_checks = ["Re-run three met rows' evidence at the recorded SHA."]
+
+[[entry]]
+id = 15
+type = "story"
+title = "Deploy role trusts GitHub's immutable OIDC subject"
+description = "Fixes the live deploy-role defect (human decision 2026-11-01): the trust policy's subject becomes GitHub's immutable repo:<owner>@<owner-id>/<name>@<repo-id>:ref:refs/heads/main, built by Terraform from github_repository and two new numeric ID variables (1 to 19 digits, no leading zero); the mocked test asserts the exact string. Two main-only CI jobs check the format (human decision 2026-11-01, replacing the sts.amazonaws.com audience): oidc-token (id-token: write only, one bash step with curl and jq) requests the non-STS audience disputedesk-oidc-subject-check, masks the token, checks aud and outputs only sub; oidc-subject (contents: read) passes sub to a terraform test of the deploy-role module fed the github context's IDs; neither gates publish. One throwaway-branch run proves both jobs before merge. The README sets the repository and two IDs from gh api; P55 records the remaining exposure. Proves the subject format and IDs, not an end-to-end deploy. No AWS call."
+verify = "terraform fmt, validate and test pass in envs/dev locally and in the terraform job; terraform test -test-directory=tests-oidc passes with matching values and fails with the old format; actionlint, secret-scan.sh and security-local.sh pass; before merge, a throwaway-branch run shows oidc-token green with the branch sub, aud disputedesk-oidc-subject-check and no token, and oidc-subject failing only at the terraform comparison, then the branch is deleted."
+covers = ["R38", "R33"]
+after = [5]
+hitl = false
+risk = "high"
+refine = true
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = false
+touches = ["infra/terraform/modules/deploy-role/main.tf", "infra/terraform/envs/dev/variables.tf and main.tf (two ID variables)", "infra/terraform/envs/dev/tests/deploy_role.tftest.hcl and dev.tftest.hcl", "infra/terraform/envs/dev/tests-oidc/subject.tftest.hcl (new)", ".github/workflows/ci.yml (new oidc-token and oidc-subject jobs only)", "infra/terraform/README.md (step 4, Destroy, deploy-role line)", "docs/production-path.md (one P55 sentence)"]
+supervisor_checks = ["Throwaway copy: put the old subject format back in the module; criterion 1 fails.", "Throwaway copy: run terraform test -test-directory=tests-oidc with an old-format expected_subject; it fails showing the built subject, and passes with the immutable format.", "Throwaway copy: swap the owner and repository IDs in the subject local; criterion 1 fails.", "Throwaway copy: drop the leading-zero rule from the ID validation; criterion 2's 0123 run fails.", "Read the builder's criterion 5 record and confirm the throwaway branch is deleted.", "Post-merge: the first main run's oidc-token and oidc-subject jobs are green, sub is the immutable main subject, aud disputedesk-oidc-subject-check, and no eyJ string appears."]
+
+[[entry]]
+id = 16
+type = "story"
+title = "IAM action and condition-key names checked against AWS's service reference"
+description = "Adds infra/terraform/iam-names.test.sh to the terraform CI job (human decision 2026-11-01): line rules read every Action and condition key from every *.tf under infra/terraform, one output line per name and file, and any shape they cannot read fails (unreadable or leftover Action text, aws_iam_policy_document, a heredoc or file-read policy, a non-map Condition, a name outside its bound). Actions match their service's reference; condition keys match one set of the global keys and the fetched services' keys (a ${...} segment is any text without a colon), with exactly token.actions.githubusercontent.com:aud and :sub accepted on the IAM User Guide and labelled not verified. Matching is bash [[ == ]] with nocasematch. Each file is fetched once with curl -q, no redirects and a 60-second retry budget, shape-checked with jq -e; the step has a 5-minute timeout. Three built-in breaks reuse the fetched files. publish.needs is unchanged and the publish comment is corrected. No credentials, no AWS call."
+verify = "iam-names.test.sh exits 0 locally and in the terraform job, printing each name with its file and a names-only line, with its three deliberate breaks passing; actionlint and shellcheck pass; no Terraform file changes."
+covers = ["R38", "R33"]
+after = [5, 15]
+hitl = false
+risk = "low"
+refine = true
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["infra/terraform/iam-names.test.sh (new)", ".github/workflows/ci.yml (one terraform job step and the comment above publish)"]
+supervisor_checks = ["Throwaway copy: xray:PutSpans to xray:PutSpan; fails naming it.", "Throwaway copy: logs:PutLogEvents to cloudwatchlogs:PutLogEvents; fails naming the unknown service.", "Throwaway copy: token.actions.githubusercontent.com:sub to :subject; fails naming the key.", "Throwaway copy: token.actions.githubusercontent.com:aud to token.actions.githubusercontnet.com:aud; fails naming the key.", "Throwaway copy: an Action with ${local.verb}; fails naming the file and line.", "Throwaway copy: an Action list with local.extra after a literal; fails naming the file and line.", "Throwaway copy: a data aws_iam_policy_document added; fails.", "Throwaway copy: a policy = file(\"policy.json\"); fails.", "Throwaway copy: Condition = local.conditions; fails.", "Throwaway copy: every scanned file emptied; fails on no names.", "Throwaway copy: the index URL at a missing file; fails naming the URL.", "Throwaway copy: kms built as v1/kms/kmsx.json (403); fails naming the URL.", "Throwaway copy: one in-script break expected to pass; the script fails."]
+
+[[entry]]
+id = 17
+type = "story"
+title = "Deploy database setup proved against PostgreSQL 18 with TLS"
+description = "Adds infra/aws/rds-init.test.sh (human decision 2026-11-01): one throwaway PostgreSQL 18 server from deploy.sh's pinned image on an internal network, with a per-run CA and a server certificate for an RDS-style host name (LibreSSL and OpenSSL 3.0 and 4.1 commands), the key installed as root to a postgres-owned 0600 file, a hostssl-only pg_hba.conf and a NOSUPERUSER CREATEDB CREATEROLE dbmaster, after a bounded pg_isready wait. On that server, in order: sslmode=disable is refused by pg_hba, a wrong CA or host name fails verify-full with the named libpq message before the init, the unchanged deploy.sh (aws, curl, iptables, systemctl and docker compose stubbed; every docker run real with only --network inserted) creates the roles and databases with no WARNING and the expected privileges, and a second run skips the init. TestOnly passwords, no secret in any captured output, bash 3.2-safe. Under the stack lock locally and in the platform CI job; blocked, not patched, if the init fails as non-superuser."
+verify = "scripts/test-lock.sh run stack <owner> -- infra/aws/rds-init.test.sh passes locally and in the platform job, leaving no container, network or file; deploy.test.sh still passes; shellcheck and actionlint pass; deploy.sh, input-bounds.sh and the init script are unchanged."
+covers = ["R38", "R33"]
+after = [5]
+hitl = false
+risk = "medium"
+refine = true
+owner = "backend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["infra/aws/rds-init.test.sh (new)", ".github/workflows/ci.yml (one platform job step)"]
+supervisor_checks = ["Throwaway copy: add a host (non-TLS) line to the test's pg_hba.conf; criterion 2 fails.", "Throwaway copy: PGSSLMODE=require in the copied deploy.sh; only the wrong-name run succeeds, criterion 3 fails.", "Throwaway copy: PGSSLMODE=verify-ca in the copied deploy.sh; the wrong-name run succeeds, criterion 3 fails.", "Throwaway copy: createrole_self_grant=set (no inherit) in the copied deploy.sh; the init warns, criterion 4 fails.", "Interrupt the script after the server starts; no container or network from the run remains."]
