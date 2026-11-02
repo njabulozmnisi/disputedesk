@@ -120,6 +120,7 @@ Every PRD §6.2 bullet, every "Operations features" sub-bullet, every row of the
 | Input (7.10 PRR F-F23, human decision): stack lock scope | P72 | The lock is held per command, not per session |
 | Input (7.12 refine, F-F4): no-store on gateway errors before a location | P73 | nginx 400, 414, 494 and the AWS origin-verify 403 on `/api` keep their headers |
 | Input (7.14 QA): browser memory after the session ends | P74 | A dispute ID can stay in the router's match cache until a reload |
+| Input (Redpanda vs Kafka research, human decision 2026-11-02): broker durability | P75 | The broker runs in development mode with one replica |
 | Input (7.4 pre-build security S7.4-1, human decision): three distributions | P47 | Mailpit has its own distribution; all three disable caching |
 | Decision 2026-10-27 (standards audit): migrations; deferred operations stories | P28 | No operations story is deferred: 5.3 and 5.4 are in v1's scope (initiative scope decision 2026-10-27) |
 | Decision 2026-10-27 (2.7 security review): problem `type` URLs | P39 | Accepted risk under the GitHub namespace |
@@ -214,6 +215,10 @@ After five permanent rejections a row is `Failed`, and later events for that dis
 ### P21. Kafka transport security
 
 The broker runs plaintext with no client authentication on the private Compose network in v1 (a `// shortcut:` in the relay's producer configuration; AD-26). Before a shared network, enable TLS plus SASL/SCRAM or mTLS on the broker, with topic ACLs so only the relay principal writes `disputedesk.disputes` (story 4.1 security S4, human decision 2026-10-29). The 7.10 PRR (C-F6) adds negative tests that an unauthorised principal can neither publish, consume nor administer topics (ASVS 5.0 V8.2.1, V8.2.2). *Why it waits:* the broker is on the private Compose network only (AD-26).
+
+### P75. Broker durability
+
+The broker runs `--mode=dev-container` with one replica (AD-27; ad-010). That mode bypasses fsync, enables write caching and lets producers create topics, so an `acks=all` acknowledgement is not yet on disk; the relay marks a row `Sent` on that acknowledgement, so a broker crash before the flush can lose an event the outbox never resends ([`rpk redpanda start`](https://docs.redpanda.com/current/reference/rpk/rpk-redpanda/rpk-redpanda-start/); [Manage topics, write caching](https://docs.redpanda.com/current/develop/config-topics/)). Production runs Redpanda in production mode (fsync before each `acks=all` acknowledgement, write caching off) on at least three brokers with replication factor 3, and disables topic auto-creation (`auto_create_topics_enabled`), so only the topic `redpanda-topics` creates exists. *Why it waits:* v1 holds only synthetic data on one node, and the memory budget of the AWS dev instance has no room for a second broker (ad-010).
 
 ### P22. Error-rate alerts on expected unique violations
 

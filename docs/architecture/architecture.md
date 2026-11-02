@@ -339,7 +339,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
 
 - **Binds:** R26, R37
 - **Prevents:** stories adding containers; a second public entry point
-- **Rule:** The P0-2 platform stays as built: gateway (nginx, the only public entry), api, worker, postgres (databases `disputedesk` and `zitadel`, role `qa_readonly`), redpanda and `redpanda-topics` (`disputedesk.disputes`, 3 partitions), zitadel, zitadel-login, `provision`, mailpit and aspire-dashboard. This spine adds `core-banking` (AD-21), the SPA built in a Node stage of the gateway image in place of the `infra/nginx/html` placeholder [ASSUMPTION], the worker's heartbeat health check, and `depends_on: api (healthy)` for the worker. Images are multi-stage, non-root, and pinned by tag and digest.
+- **Rule:** The P0-2 platform stays as built: gateway (nginx, the only public entry), api, worker, postgres (databases `disputedesk` and `zitadel`, role `qa_readonly`), redpanda and `redpanda-topics` (`disputedesk.disputes`, 3 partitions), zitadel, zitadel-login, `provision`, mailpit and aspire-dashboard. This spine adds `core-banking` (AD-21), the SPA built in a Node stage of the gateway image in place of the `infra/nginx/html` placeholder [ASSUMPTION], the worker's heartbeat health check, and `depends_on: api (healthy)` for the worker. Images are multi-stage, non-root, and pinned by tag and digest. One opt-in exception: `redpanda-console` under the Compose profile `console`, local only, off by default, never started in AWS, published only on `127.0.0.1` (amended 2026-11-02; ad-010).
 - **Rejected:** a separate SPA container; Kubernetes locally.
 
 ### AD-28 - AWS dev environment [ADOPTED]
