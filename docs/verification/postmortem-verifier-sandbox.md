@@ -17,3 +17,7 @@ Each time the verifier agent and the supervisor ran the missing checks directly 
 ## Proposed countermeasure (a deterministic check, needs human approval: it changes what the verifier may run)
 
 Add to the allow list: `'shell(shellcheck:*)'`, `'shell(infra/deploy/aws/check-compose.sh)'`, `'shell(infra/deploy/aws/deploy.test.sh)'`, `'shell(infra/deploy/aws/gateway.test.sh)'`, `'shell(infra/deploy/aws/rds-init.test.sh)'` and `'shell(infra/terraform/iam-names.test.sh)'`: named paths, not a `bash` wildcard, so the deny list still holds. The Docker-based tests (`gateway.test.sh`, `rds-init.test.sh`) start throwaway containers; the script already holds the testcontainers lock, and these use their own networks, so they do not collide with a Compose stack, but they would still need the `stack` lock if a stack is running (unverified whether the verifier's sandbox has Docker access).
+
+## Applied (human approval 2026-11-02)
+
+`scripts/verify-with-copilot.sh` now allows `shellcheck` and the five named scripts, and its prompt tells the verifier to run a story's infra test script by its path. Whether the sandbox can reach Docker for `gateway.test.sh` and `rds-init.test.sh` is still unverified; the next infra story's verify run shows it.
