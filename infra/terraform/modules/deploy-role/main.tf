@@ -15,6 +15,16 @@ variable "github_repository" {
   type        = string
 }
 
+variable "github_repository_owner_id" {
+  description = "The numeric ID of the repository's owner, as digits."
+  type        = string
+}
+
+variable "github_repository_id" {
+  description = "The repository's numeric ID, as digits."
+  type        = string
+}
+
 variable "instance_arn" {
   type = string
 }
@@ -28,6 +38,14 @@ variable "ssm_path" {
 }
 
 locals {
+  # GitHub's immutable subject of a job on this repository's main branch with no environment,
+  # repo:<owner>@<owner-id>/<name>@<repo-id>:ref:refs/heads/main (GitHub, "OpenID Connect reference", immutable subject
+  # claims). The owner and name keep GitHub's case: StringEquals is case-sensitive.
+  oidc_subject = format("repo:%s@%s/%s@%s:ref:refs/heads/main",
+    split("/", var.github_repository)[0], var.github_repository_owner_id,
+    split("/", var.github_repository)[1], var.github_repository_id,
+  )
+
   # A published GHCR image by digest (AD-32), the shape infra/aws/input-bounds.sh checks, narrowed to this repository's
   # owner. GHCR names are lower case; the owner's characters ([A-Za-z0-9-], envs/dev's validation) need no escaping.
   image_owner   = lower(split("/", var.github_repository)[0])
@@ -56,7 +74,7 @@ resource "aws_iam_role" "deploy" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub" = local.oidc_subject
         }
       }
     }]

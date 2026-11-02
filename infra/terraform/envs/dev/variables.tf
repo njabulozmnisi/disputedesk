@@ -19,6 +19,28 @@ variable "github_repository" {
   }
 }
 
+# The two IDs are public identifiers in the deploy role's OIDC subject. Strings, not numbers, so Terraform renders them
+# digit for digit; 19 digits is a sanity bound, not GitHub's range.
+variable "github_repository_owner_id" {
+  description = "The numeric ID of the repository's owner: gh api repos/<owner>/<name> --jq .owner.id."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]{0,18}$", var.github_repository_owner_id))
+    error_message = "github_repository_owner_id must be 1 to 19 digits with no leading zero."
+  }
+}
+
+variable "github_repository_id" {
+  description = "The repository's numeric ID: gh api repos/<owner>/<name> --jq .id."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]{0,18}$", var.github_repository_id))
+    error_message = "github_repository_id must be 1 to 19 digits with no leading zero."
+  }
+}
+
 variable "budget_limit_usd" {
   description = "The monthly cost budget in US dollars, a whole number from 1 to 100."
   type        = number

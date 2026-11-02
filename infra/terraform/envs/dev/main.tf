@@ -66,12 +66,14 @@ module "edge" {
 module "deploy_role" {
   source = "../../modules/deploy-role"
 
-  name              = local.name
-  aws_region        = var.aws_region
-  github_repository = var.github_repository
-  instance_arn      = module.compute.instance_arn
-  clone_directory   = local.clone_directory
-  ssm_path          = var.ssm_path
+  name                       = local.name
+  aws_region                 = var.aws_region
+  github_repository          = var.github_repository
+  github_repository_owner_id = var.github_repository_owner_id
+  github_repository_id       = var.github_repository_id
+  instance_arn               = module.compute.instance_arn
+  clone_directory            = local.clone_directory
+  ssm_path                   = var.ssm_path
 }
 
 module "observability" {

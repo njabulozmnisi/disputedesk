@@ -17,7 +17,7 @@ are the only public entry. GitHub Actions deploys a commit through SSM Run Comma
 | `modules/compute` | The c7i-flex.large instance (AL2023, IMDSv2, no SSH), its Elastic IP, security group, role and user data. |
 | `modules/database` | RDS PostgreSQL 18 on db.t4g.micro, private, TLS required; the master password through write-only arguments. |
 | `modules/edge` | The three CloudFront distributions and the origin-verify value. |
-| `modules/deploy-role` | GitHub's OIDC provider, the deploy role, and the Run Command document it may send. |
+| `modules/deploy-role` | GitHub's OIDC provider, the deploy role, and the Run Command document it may send. The role trusts GitHub's immutable subject for `main`, `repo:<owner>@<owner-id>/<name>@<repo-id>:ref:refs/heads/main`; CI's `oidc-token` and `oidc-subject` jobs check its format on every push to `main`. |
 | `modules/observability` | The collector's log group and stream, and X-Ray Transaction Search. |
 | `modules/budget` | The monthly cost budget and its two email alerts. |
 
@@ -120,13 +120,17 @@ aws rds describe-orderable-db-instance-options --region "$REGION" --engine postg
   --db-instance-class db.t4g.micro --query 'OrderableDBInstanceOptions[0].EngineVersion'
 ```
 
-The budget's address is personal data: pass it through the environment, never in a committed file.
+The budget's address is personal data: pass it through the environment, never in a committed file. The repository's
+name, in GitHub's exact case, and its two numeric IDs come from GitHub's API: the deploy role's subject is built from
+them and compared case-sensitively.
 
 ```sh
 cd infra/terraform/envs/dev
 terraform init -backend-config="bucket=disputedesk-tfstate-<something unique>" -backend-config="region=$REGION"
 export TF_VAR_aws_region=$REGION
-export TF_VAR_github_repository=<owner>/<name>
+export TF_VAR_github_repository=$(gh api repos/<owner>/<name> --jq .full_name)
+export TF_VAR_github_repository_owner_id=$(gh api repos/<owner>/<name> --jq .owner.id)
+export TF_VAR_github_repository_id=$(gh api repos/<owner>/<name> --jq .id)
 export TF_VAR_budget_limit_usd=10
 export TF_VAR_budget_alert_email=<an address you read>
 plan_file=$(mktemp -d)/dev.tfplan
@@ -342,7 +346,9 @@ aws ssm get-parameters-by-path --path /disputedesk-dataprotection/dev --recursiv
 cd infra/terraform/envs/dev
 # The same variables as step 4, or destroy prompts for each.
 export TF_VAR_aws_region=$REGION
-export TF_VAR_github_repository=<owner>/<name>
+export TF_VAR_github_repository=$(gh api repos/<owner>/<name> --jq .full_name)
+export TF_VAR_github_repository_owner_id=$(gh api repos/<owner>/<name> --jq .owner.id)
+export TF_VAR_github_repository_id=$(gh api repos/<owner>/<name> --jq .id)
 export TF_VAR_budget_limit_usd=10
 export TF_VAR_budget_alert_email=<the same address>
 terraform destroy
