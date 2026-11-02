@@ -3,11 +3,14 @@
 #   http://auth.localhost:8080            gateway: Zitadel API, console and Login v2
 #   http://localhost:8025                 Mailpit (verification and reset emails)
 #   http://localhost:18888                Aspire dashboard (traces, metrics, logs)
+#   http://localhost:8081                 Redpanda Console, only when asked (profile `console`, local only):
+#                                         docker compose --profile console up -d --wait redpanda-console
 #   127.0.0.1:5433 / :19092 / :4317       Postgres, Redpanda and OTLP for apps run on the host
 #
 # Host ports that clash with a process already listening can be moved, from the shell or an untracked .env:
 #   POSTGRES_HOST_PORT (5433), DISPUTEDESK_REDPANDA_PORT (19092), DISPUTEDESK_MAILPIT_PORT (8025),
-#   DISPUTEDESK_DASHBOARD_PORT (18888), DISPUTEDESK_OTLP_GRPC_PORT (4317), DISPUTEDESK_OTLP_HTTP_PORT (4318).
+#   DISPUTEDESK_DASHBOARD_PORT (18888), DISPUTEDESK_OTLP_GRPC_PORT (4317), DISPUTEDESK_OTLP_HTTP_PORT (4318),
+#   DISPUTEDESK_CONSOLE_PORT (8081).
 # The default network's subnet moves the same way when a second stack runs beside this one (another worktree or
 # a throwaway copy): DISPUTEDESK_SUBNET (10.201.89.0/24), for example 10.201.90.0/24. The api trusts forwarded
 # headers from that same subnet.
@@ -49,7 +52,7 @@ services:
     mem_limit: 512m
 
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v26.2.2@sha256:468bd13a9f2bd24794cb7fddc867c767fb1008b9a07b297b89fde48c564d7d96
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce
     restart: unless-stopped
     command:
       - redpanda
@@ -73,7 +76,7 @@ services:
     mem_limit: 1536m                               # --memory=1G for Seastar plus process overhead
 
   redpanda-topics:   # one-shot: the dispute events topic (keyed by dispute ID)
-    image: docker.redpanda.com/redpandadata/redpanda:v26.2.2@sha256:468bd13a9f2bd24794cb7fddc867c767fb1008b9a07b297b89fde48c564d7d96
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce
     restart: "no"
     environment:
       TOPIC: disputedesk.disputes
@@ -84,6 +87,25 @@ services:
     depends_on:
       redpanda: { condition: service_healthy }
     mem_limit: 256m
+
+  # Optional and local only: started only with the `console` profile, so a plain `up` and the AWS deploy never run it
+  # (infra/aws/check-compose.sh). No sign-in: it is published on loopback only.
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v3.13.1@sha256:d72608f64c65a5631adca6c99b44d157cefb9edb0473ed58451f91affcfcfa1b
+    profiles: [console]
+    restart: unless-stopped                        # runs as the image's non-root user (redpandaconsole)
+    environment:
+      KAFKA_BROKERS: redpanda:9092                 # Console's kafka.brokers setting
+    ports: ["127.0.0.1:${DISPUTEDESK_CONSOLE_PORT:-8081}:8080"]
+    healthcheck:
+      # The probe Redpanda's own Console Helm chart uses.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/admin/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      redpanda: { condition: service_healthy }
+    mem_limit: 128m                                # idle near 50 MiB (docker stats, 2026-11-02)
 
   zitadel:
     image: ghcr.io/zitadel/zitadel:v4.20.0@sha256:9ea0e9ecfdc43115da871242e40a0320f2ece864c7cd8b5d41a863a7f4902499

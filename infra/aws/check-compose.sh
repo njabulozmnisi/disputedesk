@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Render checks of docker-compose.aws.yml merged with docker-compose.yml (story 7.4, criteria 1, 2 and 5), offline:
+# Render checks of docker-compose.aws.yml merged with docker-compose.yml (story 7.4, criteria 1, 2 and 5), and of
+# Redpanda Console staying behind its profile, offline:
 # Compose renders the merged file with the dummy inputs in compose.test.env, and jq reads the JSON render. The last
 # section validates the collector config with the pinned collector image.
 #   infra/aws/check-compose.sh
@@ -141,6 +142,18 @@ done
 dependents=$(q '.services | to_entries[] | select((.value.depends_on // {}) | has("postgres") or has("aspire-dashboard")) | .key')
 [ -z "$dependents" ] || fail "started services depend on a local-only one: $dependents"
 ok "postgres and aspire-dashboard carry profiles: [local], and no started service depends on them"
+
+# Redpanda Console is a local tool, started only on request (docker compose --profile console ...).
+[ "$(q '.services | has("redpanda-console")')" = false ] || fail "the AWS render starts redpanda-console without a profile"
+[ "$(jq '.services | has("redpanda-console")' "$work/local.json")" = false ] \
+  || fail "the AWS render starts redpanda-console under the local profile"
+ok "the AWS render starts no redpanda-console, without a profile or under the local profile"
+local_services=$(env "${unset_inputs[@]}" docker compose -f docker-compose.yml config --services)
+! grep -qx redpanda-console <<< "$local_services" || fail "docker compose up starts redpanda-console without its profile"
+console=$(env "${unset_inputs[@]}" docker compose -f docker-compose.yml --profile console config --format json \
+  | jq -c '.services["redpanda-console"] // {} | [.profiles, ([(.ports // [])[].host_ip] | unique), has("user")]')
+[ "$console" = '[["console"],["127.0.0.1"],false]' ] || fail "redpanda-console's profiles, host addresses and user: $console"
+ok "locally, redpanda-console starts only under profiles: [console], publishes on 127.0.0.1 only and keeps the image's user"
 
 # Compose merges maps and appends sequences, so a service the base file defines must replace these whole.
 base_services=$(env "${unset_inputs[@]}" docker compose -f docker-compose.yml config --services | tr '\n' ' ')

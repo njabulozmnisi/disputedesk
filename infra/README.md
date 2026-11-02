@@ -19,7 +19,22 @@ stack, whichever worktree started it. Run it only under the `stack` lock.
 | Identity origin (Zitadel API, console, Login v2 at `/ui/v2/login`) | <http://auth.localhost:8080> |
 | Mailpit | <http://localhost:8025> |
 | Aspire dashboard (anonymous, loopback only) | <http://localhost:18888> |
+| Redpanda Console (optional, `console` profile, anonymous, loopback only; below) | <http://localhost:8081> |
 | Postgres / Redpanda / OTLP for apps run on the host | `127.0.0.1:5433` / `localhost:19092` / `127.0.0.1:4317` (gRPC), `:4318` (HTTP) |
+
+Redpanda Console (topics, messages and consumer groups in a browser) is optional and local only. It sits in the
+`console` Compose profile, so it adds a container only when asked: a plain `docker compose up` never starts it, and
+the AWS deploy never enables the profile (`infra/aws/check-compose.sh` and `infra/aws/deploy.test.sh` fail if either
+would). It has no sign-in and listens on loopback only.
+
+```sh
+docker compose --profile console up -d --wait redpanda-console   # http://localhost:8081 (DISPUTEDESK_CONSOLE_PORT)
+docker compose stop redpanda-console                              # stop it; the rest of the stack keeps running
+docker compose --profile console down -v                          # down -v for the whole stack, the console included
+```
+
+Compose acts only on the services of the active profiles, so a plain `docker compose stop` or `down` leaves a running
+console up; name it, or pass `--profile console`, as above.
 
 Every host port except the gateway's 8080 can be moved when another process holds it, for example
 `DISPUTEDESK_OTLP_HTTP_PORT=14318 docker compose up --wait`; the header of `docker-compose.yml` lists the variables.
