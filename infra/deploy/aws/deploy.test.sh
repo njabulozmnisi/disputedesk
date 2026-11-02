@@ -72,7 +72,9 @@ case $tool in
     case "$*" in
       *" psql "*) echo "$STUB_ROLES_AND_DATABASES" ;;
       *10-roles-and-databases.sh) exit "${STUB_INIT_EXIT:-0}" ;;
-      compose*) exit "${STUB_COMPOSE_EXIT:-0}" ;;
+      compose*)
+        echo "COMPOSE_PROFILES=${COMPOSE_PROFILES:-}" >> "$STUB_COMPOSE_PROFILES"
+        exit "${STUB_COMPOSE_EXIT:-0}" ;;
     esac ;;
   iptables)
     # -C answers whether the rule exists: 1 (absent) unless the case says otherwise.
@@ -142,10 +144,12 @@ run_deploy(){
   ln "$repo/.env" "$work/stale.env"
   : > "$work/calls"
   : > "$work/docker-environment"
+  : > "$work/compose-profiles"
   status=0
-  env PATH="$work/bin:$PATH" AWS_REGION=eu-west-1 SSM_PATH="$SSM_PATH" STUB_CALLS="$work/calls" \
-    STUB_DOCKER_ENVIRONMENT="$work/docker-environment" STUB_PARAMETERS="$work/parameters.json" \
-    STUB_RANGES="$work/ranges.json" STUB_ROLES_AND_DATABASES="0 0" "$@" \
+  # A developer's own COMPOSE_PROFILES never reaches the script: the check below sees only what the script sets.
+  env -u COMPOSE_PROFILES PATH="$work/bin:$PATH" AWS_REGION=eu-west-1 SSM_PATH="$SSM_PATH" STUB_CALLS="$work/calls" \
+    STUB_DOCKER_ENVIRONMENT="$work/docker-environment" STUB_COMPOSE_PROFILES="$work/compose-profiles" \
+    STUB_PARAMETERS="$work/parameters.json" STUB_RANGES="$work/ranges.json" STUB_ROLES_AND_DATABASES="0 0" "$@" \
     "$repo/infra/deploy/aws/deploy.sh" "${arguments[@]}" > "$work/output" 2>&1 || status=$?
 }
 
@@ -258,6 +262,9 @@ ok "  and saves them to /etc/sysconfig/iptables with the iptables service enable
 order=$(cut -d' ' -f1 "$work/calls" | uniq | tr '\n' ' ')
 [ "$order" = "aws curl docker iptables iptables-save systemctl docker " ] || fail "the calls run in the wrong order: $order"
 ok "reads SSM, fetches, inits, sets the rules, then runs docker compose up -d --wait with the AWS override, last"
+# No --profile above, and no COMPOSE_PROFILES here: Redpanda Console (profile console) never starts in AWS.
+[ "$(cat "$work/compose-profiles")" = COMPOSE_PROFILES= ] || fail "Compose runs with $(cat "$work/compose-profiles")"
+ok "Compose runs with no profile enabled, so the console profile never starts"
 no_secret_shown "a first deploy"
 ok "no secret in standard output, standard error or any command's arguments"
 

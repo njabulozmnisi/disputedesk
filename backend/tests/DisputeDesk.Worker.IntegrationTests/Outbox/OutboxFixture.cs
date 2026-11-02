@@ -24,7 +24,7 @@ public sealed class OutboxFixture : IAsyncLifetime
 {
     // The Compose image, pinned by tag and digest (AD-27), not the module's default tag.
     private const string RedpandaImage =
-        "docker.redpanda.com/redpandadata/redpanda:v26.2.2@sha256:468bd13a9f2bd24794cb7fddc867c767fb1008b9a07b297b89fde48c564d7d96";
+        "docker.redpanda.com/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce";
 
     /// <summary>Marker text for a hand-built row of the marker dispute (<see cref="CommitMarkerDisputeAsync"/>).</summary>
     public const string MarkerText = "Shop PMARK description, note PMARK text, customer-pmark-1, ACC-PMARK-2, TXN-PMARK-3, QZXW";

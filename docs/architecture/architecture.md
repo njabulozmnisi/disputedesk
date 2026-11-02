@@ -420,7 +420,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
 | Scalar.AspNetCore | 2.18.3 |
 | xunit.v3 / Testcontainers.PostgreSql | 4.0.2 / 4.16.0 |
 | PostgreSQL (container) | 18.6 |
-| Redpanda | v26.2.2 |
+| Redpanda / Redpanda Console | v26.2.6 / v3.13.1 (Console under the opt-in `console` profile, AD-27) |
 | Zitadel / Zitadel Login | v4.20.0 |
 | nginx (`nginxinc/nginx-unprivileged`) | 1.31.7 (1.31.8 has no unprivileged build yet and no security fixes) |
 | Mailpit | v1.32.0 |
