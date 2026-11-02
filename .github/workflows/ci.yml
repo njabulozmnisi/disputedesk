@@ -221,6 +221,12 @@ jobs:
             terraform -chdir="$root" test
           done
 
+      # Story 7.16: every IAM action and condition key in the policies exists in AWS's public service reference, fetched
+      # over HTTPS with no credentials (no AWS API call). The step timeout bounds the whole run, retries included.
+      - name: IAM names exist in AWS's service reference
+        timeout-minutes: 5
+        run: infra/terraform/iam-names.test.sh
+
       # What a plan cannot show, or the dev environment rules out (AD-28): prevent_destroy, deletion protection turned
       # on, a NAT gateway, a load balancer, an IAM user or access key.
       - name: Nothing that blocks destroy or that AD-28 rules out
@@ -331,7 +337,8 @@ jobs:
         if: always()
         run: docker compose down -v
 
-  # Story 7.3 (AD-32): the only job that can write packages, on main only and only after every other CI job passes.
+  # Story 7.3 (AD-32): the only job that can write packages, on main only and only after the jobs in its needs pass;
+  # terraform and the OIDC subject check (oidc-token, oidc-subject) are not among them (story 7.16).
   # Each image is built, scanned and only then pushed, so the pushed bytes are the scanned bytes.
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
