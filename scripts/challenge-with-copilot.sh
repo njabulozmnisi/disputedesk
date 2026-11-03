@@ -23,7 +23,7 @@ case "$mode" in
     gaps="Gaps: criteria that cannot be tested as written, inputs without bounds, missing error cases." ;;
   decision)
     subject="The decision document below has not been turned into stories yet. Read $file, docs/prd/prd.md, docs/initiative-disputedesk.md, docs/architecture/architecture.md, docs/glossary.md, AGENTS.md and the code it would change."
-    gaps="Conflicts and gaps: every PRD requirement, initiative requirement (R-number) or architecture decision (AD-number) the document contradicts or changes without saying so, and anything it leaves undecided." ;;
+    gaps="Conflicts and gaps: every PRD requirement, initiative requirement (R-number) or architecture decision (AD-number) the document contradicts or changes without saying so, and anything it leaves undecided. Then judge every architecture decision it adds or amends on four tests: explainable to an engineer new to the repo in one or two sentences, by the book (the framework's documented way or an industry standard), proportionate to the requirement it serves, and necessary (a requirement forces it)." ;;
   *) echo "challenge: mode must be story or decision, got $mode" >&2; exit 2 ;;
 esac
 

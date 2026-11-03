@@ -43,6 +43,7 @@ On a re-review, review only the delta since the approved version and say for eac
 - For a focus or timing fix, every path through the changed code is checked (success, each error status, a direct load, a route change), not only the path the fix list named.
 - A mechanism that wraps `<Outlet/>` (a layout, a key, a focus or skip-link handler) is checked on every route with every session state, as the skip-link test in `frontend/src/app/routing.test.tsx` does (7.14).
 - A test stand-in for a pinned upstream image sends that image's real headers and behaviour, read from the image itself (for example a Next.js `routes-manifest.json`), never assumed (7.12).
+- A criterion that forces code around the framework (a disabled validator, a routing workaround, a copy of framework behaviour) is a `[decision]` finding against the criterion, not an accepted diff (simplicity audit 2026-11-03).
 
 Rank findings by severity with file and line.
 
