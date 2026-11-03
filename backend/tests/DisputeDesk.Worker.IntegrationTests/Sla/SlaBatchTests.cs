@@ -198,7 +198,11 @@ public class SlaBatchTests(SlaFixture fixture)
         // Both listeners see both sweeps' spans: the claims of the two sweeps add up to 120, so no row was claimed twice.
         IReadOnlyList<Activity> overdue = first.BatchSpans("overdue");
         Assert.Equal(120, overdue.Sum(span => (int?)span.GetTagItem("disputedesk.sla_sweep.claimed")));
-        Assert.Equal([50, 50], overdue.Take(2).Select(span => (int?)span.GetTagItem("disputedesk.sla_sweep.claimed")));
+        // Each batch span starts before its claim, and the rendezvous holds both first claims until both have returned, so
+        // the two first-started spans are the two sweeps' first batches. Spans end in no fixed order: one sweep's short
+        // second batch can end before the other's first.
+        IEnumerable<Activity> firstBatches = overdue.OrderBy(span => span.StartTimeUtc).Take(2);
+        Assert.Equal([50, 50], firstBatches.Select(span => (int?)span.GetTagItem("disputedesk.sla_sweep.claimed")));
     }
 
     [Fact]
