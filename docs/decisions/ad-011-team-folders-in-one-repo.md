@@ -1,6 +1,8 @@
 # ad-011: Team folders inside one repository
 
-**Status:** accepted (2026-11-03)
+**Status:** accepted (2026-11-03); complete. Changes 1 to 4 landed by `1ba4379` and change 5 in `8dc541d`; the human decided on 2026-11-03 to finish the record as written, with no further moves and no `CODEOWNERS` file (simplicity audit D12).
+
+**Decision-time challenge.** The challenge (`docs/verification/ad-011-challenge.md`, a different model family) answered SIMPLIFY. Its simplest design kept the root Compose file with the AWS file as an override, built the SPA in `frontend/Dockerfile` and passed only its built files to the gateway through a named build context, and moved only the tests that read `infra/`. This record answers its points: CI keeps every job, the branding files stay in `frontend/src/theme/` so AD-31 is unchanged, the SPA service is build-only, and every move is proved by an old-path search and both Compose renders. The move went ahead because the record already was that simpler design. The later simplicity audit (DES-11) found the rule has no requirement behind it and proposed `CODEOWNERS` instead; the human kept the moves, since undoing changes 3 and 4 would cost more than it saves.
 
 **Context.** The repository stays one git repository, but its top-level folders model how separate team repositories would be laid out: `backend/` for backend engineering, `frontend/` for the frontend team, `infra/` for DevOps. The repository root holds what an organisation shares across teams. Today some folders read another team's source files directly, so the folder a file sits in does not say which team owns it, and a change in one team's source can break another team's build.
 

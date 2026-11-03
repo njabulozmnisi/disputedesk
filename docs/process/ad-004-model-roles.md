@@ -1,6 +1,6 @@
 # ad-004: Model roles per agent
 
-**Status:** accepted
+**Status:** accepted (a delivery-process record: it decides tooling, not the solution, so it lives in `docs/process/`, moved from `docs/decisions/` on 2026-11-04)
 
 **Decision.** Each pipeline agent runs a model chosen for its area, set in its own agent file:
 

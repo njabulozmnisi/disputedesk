@@ -2,133 +2,11 @@
 
 Context: a large retail bank with tens of millions of clients. That count is an estimate, and every other scale figure in this document is an estimate labelled as one (architecture, Deferred; story 7.6 Notes, decision 2026-10-29).
 
-This document records what DisputeDesk v1 defers and why (NFR-DOC-2). It designs none of the deferred mechanisms: each entry says what v1 does, what production does instead, and why it can wait, in a few sentences. Entries are grouped by theme; numbers stay stable, so they are not in order. Decision records are in `docs/decisions/`; the architecture spine is `docs/architecture/architecture.md`.
+This document records what DisputeDesk v1 defers and why (NFR-DOC-2). It designs none of the deferred mechanisms: each entry says what v1 does, what production does instead, and why it can wait, in a few sentences. Decision records are in `docs/decisions/`; the architecture spine is `docs/architecture/architecture.md`.
 
-## Source-to-entry mapping
+Entries are in two sections. *Deferred scope* holds what v1 leaves out: the PRD §6.2 items, the architecture's Deferred rows and the production steps v1 does not take. *Accepted risks* holds known limits of mechanisms v1 built, each with the control in place and the upgrade. Entry numbers are stable and appear in number order within each section. The source-to-entry mapping that checked this document's completeness when it was written is in [the 7.6 check](verification/7.6-check.md#source-to-entry-mapping).
 
-Every PRD §6.2 bullet, every "Operations features" sub-bullet, every row of the architecture's Deferred table, and every `Input` line and production-path `Decision` line in the Notes of story 7.6 is one row below. One entry may cite several sources; no source maps to two entries. A Deferred row that v1 already settles is marked "settled in v1" with the story that settles it.
-
-| Source | Entry | One-line reason |
-| --- | --- | --- |
-| PRD §6.2: Provisional credit | P1 | A US Regulation E norm with no documented South African equivalent |
-| PRD §6.2: Attachments | P2 | Out of scope for v1 |
-| PRD §6.2: Customer notifications on status changes | P3 | Mailpit carries only verification, password reset and the OTP in v1 |
-| PRD §6.2: Customer self-unlink, and lost-login recovery | P4 | Both are bank-assisted in production |
-| PRD §6.2: Partial disputes other than wrong amount | P5 | Out of scope for v1; wrong amount is the one partial case |
-| PRD §6.2: Scheme-specific windows per reason | P6 | v1 uses one 90-day window from the transaction date |
-| PRD §6.2: A separate fraud route for unrecognised transactions | P7 | Out of scope for v1, though common in South African practice |
-| PRD §6.2: A schema registry | P15 | Committed JSON Schemas and a contract test cover v1's two types |
-| PRD §6.2: An event consumer in this repo | P16 | The contract already requires consumers to dedupe |
-| PRD §6.2: Operations features | P34 | Operations work happens in another team's tool |
-| PRD §6.2, Operations features: a dead-letter topic | P20 | A `Failed` row stops its dispute until an operator releases it |
-| PRD §6.2, Operations features: outbox cleanup | P23 | Nothing is deleted in v1 |
-| PRD §6.2, Operations features: topic retention tuned to POPIA | P23 | Retention is one decision across tables and the topic |
-| PRD §6.2, Operations features: listing and search for operations tools | P34 | v1 offers read by ID only (FR-30) |
-| PRD §6.2: A general support platform for several departments, and a UI for AI agents | P8 | DisputeDesk is not a case-management system |
-| PRD §6.2: Follow-up messages from the customer after raising a dispute | P9 | Out of scope for v1 |
-| PRD §6.2: Retention and de-identification jobs | P23 | v1 deletes nothing; the five-year FIC Act period has not run |
-| PRD §6.2: Crypto-shredding of personal data in stored events | P24 | Stored events are kept under NFR-DATA-7 with the same access as `Disputes` |
-| PRD §6.2: Event order across disputes | P17 | Nothing reads across streams in v1 |
-| PRD §6.2: Scale-out | P33 | v1 runs one Api and one Worker instance |
-| PRD §6.2: Filters and search on transactions | P10 | Out of scope for v1; the list is keyset-paged |
-| PRD §6.2: Languages other than English, and currencies other than ZAR | P11 | v1 serves one language and one currency |
-| PRD §6.2: The bank-scale end state | P13 | Depends on the bank's identity platform and downstream systems |
-| Deferred: Copy for each linking state | settled in v1 | Story 6.4 writes the copy; AD-3 and AD-12 fix the wire contract |
-| Deferred: Exact relay batch size and backoff curve | P19 | Tuning; AD-17 fixes the behaviour |
-| Deferred: CloudFront caching for static assets | P47 | Performance only; caching stays disabled |
-| Deferred: Database-level append-only `AuditLogEntries` and `StoredEvents` | P27 | AD-14 enforces insert only in the application |
-| Deferred: Order across disputes | P17 | Order is per dispute by `Version` (AD-17, ad-009) |
-| Deferred: Crypto-shredding of personal data in stored events | P24 | ad-009 defers it |
-| Deferred: Stored event schema evolution beyond additive changes | P25 | AD-14a allows only additive changes; a new shape is a new type |
-| Deferred: Snapshots at intervals to shorten replay | P26 | Streams are short in v1 |
-| Deferred: Operations tool credentials (stories 5.1, 5.5) | P35 | Scalar holds no credential; a person pastes the token |
-| Deferred: Shared rate-limit state, several Api and Worker instances | P33 | Out of scope (PRD §6.2) |
-| Deferred: An event consumer and its inbox table | P16 | Out of scope; the contract requires dedupe |
-| Deferred: Fencing a relay leader with Kafka transactions | P18 | v1 is at-least-once with per-dispute order by `disputeVersion` |
-| Deferred: Kafka broker authentication and TLS | P21 | Plaintext on the private Compose network, a `// shortcut:` |
-| Deferred: Outbox cleanup, topic retention, retention and de-identification jobs | P23 | Nothing is deleted in v1 |
-| Deferred: Seeded snapshots after a day boundary without `down -v` | P40 | Demo limitation; the README says to reset |
-| Deferred: CloudFront prefix-list weight against security-group quotas | P46 | Checked once the AWS account exists |
-| Deferred: Node 26 LTS move | P48 | `.nvmrc` stays on 24 until a story bumps it |
-| Deferred: README runbook for failed outbox rows; the decision records | settled in v1 | Stories 7.7 (runbook) and 7.6 (decision records); the release is AD-22's operator exception |
-| Deferred: Browser telemetry intake in AWS | P42 | Browser spans are local only (AD-29) |
-| Input (3.1): currency | P11 | Core banking is assumed to return ZAR |
-| Input (3.1 security S3): trace context; joint accounts | P41 | Trace context is caller-chosen; its joint-accounts sentence is written in P12 |
-| Input (2.5 security F4): gateway filesystem | P44 | The base image renders templates into `/etc/nginx` |
-| Input (2.5 review L1): gateway base image | P44 | The pinned base lags the Alpine fixes |
-| Input (3.2 security S2): `IdempotencyKeys.ResponseBody` retention | P23 | Expired keys are never deleted in v1 |
-| Input (4.1 security S4): Kafka transport | P21 | Private Compose network in v1 |
-| Input (3.4 pre-build review): error-rate alerts | P22 | EF Core logs expected unique violations at Error |
-| Input (3.4 security S9): customer route rate limit | P37 | Only linking routes have a limiter in v1 |
-| Input (5.1 pre-build review and security): operations tool credentials | P35 | v1 uses a shared secret through a script |
-| Input (5.1 security S3): API viewer origin | P36 | Scalar shares the app origin in v1 |
-| Input (5.1 decision): operations secret placement | P35 | The Api container mounts a file it never reads |
-| Input (5.1 security F1): the Api loads all of `zitadel-clients.json` | P35 | Least privilege for tool credentials |
-| Input (5.2 pre-build review): operations route rate limit | P37 | Only linking routes have a limiter in v1 |
-| Input (5.4 security S4): seeding in a real deployment | P40 | Nothing refuses `Seed:Enabled` at start-up |
-| Input (4.2 review): librdkafka error logging and head-row stalls | P19 | Relay tuning and alerting |
-| Input (3.11 security T7): inbound trace context | P41 | The default sampler follows an untrusted parent |
-| Input (3.11 security T8): browser telemetry intake | P42 | `/otlp/` is an anonymous write path locally |
-| Input (2.6 QA): hosted login branding | P14 | Polish item |
-| Input (6.5 refine): send cap and delivery | P31 | Every claimed send counts, delivered or not |
-| Input (6.3 refine): in-memory linking rate limits; forwarded-header trust | P33 | One Api instance in v1 |
-| Input (6.2 decision): session key at linking | P32 | The built-in handler cannot re-key within one request |
-| Input (5.2 review and security): operations fallback; audit cancellation | P38 | Fails closed today; production tidies both edges |
-| Input (6.6 security): request lines in nginx logs; forwarded-header trust | P43 | Local and dev edge only in v1 |
-| Input (start-up exit fix): init process as PID 1 | P45 | Compose sets it; other runtimes need the same |
-| Input (7.4 refine): browser telemetry in a deployed environment | P42 | No intake in AWS in v1 |
-| Input (7.5 refine): the AWS dev environment never applied | P46 | The account does not exist |
-| Input (7.7 refine): releasing a `Failed` outbox row | P20 | A refused payload cannot be released |
-| Input (6.3 security): IPv6 /64 rotation | P33 | Limits are in memory and the gateway keys on the full address |
-| Input (5.3 security L4): SLA sweep head-of-line failures | P49 | 50 or more failing disputes stall later escalations |
-| Input (7.4 and 7.5 pre-build security, human decision): edge transport | P52 | Plain HTTP origin, TLS 1.0 minimum and no WAF, accepted for the demo |
-| Input (7.4 pre-build security S7.4-11, human decision): demo logins in AWS | P50 | Fixture logins are live on a demo holding only synthetic data |
-| Input (7.7 pre-build security S7.7-2, human decision): outbox release role | P51 | The release runs as the owner role and writes no audit record |
-| Input (7.3 pre-build review 3): build once, promote by digest | P53 | `publish` rebuilds the images on main |
-| Input (7.3 pre-build security S7.3-2): build provenance | P54 | Images carry OCI labels only; attestations need a new action |
-| Input (7.5 pre-build security S7.5-7): deploy role subject | P55 | The OIDC trust pins the branch, not the workflow |
-| Input (7.5 pre-build security S7.5-9): instance role | P56 | Broad AWS managed policies on a dedicated demo account |
-| Decision 2026-10-30 (human, 7.4 build): published api and worker images | P57 | They carry a busybox probe for the Compose health checks |
-| Input (7.4 security F1): collector image CVE | P58 | Not reachable in this configuration; no fixed release yet |
-| Input (7.4 security re-run I1): layer-2 spoofing on the Compose network | P59 | Only the per-IP linking limit is at stake; the per-login limit holds |
-| Input (7.3 security F1): COOP not checked in CI | P60 | ZAP's 90004 line also hides a dropped Cross-Origin-Opener-Policy; `infra/smoke.sh` checks it outside CI |
-| Input (7.5 security S7.5-L1): deploy secrets readable by the containers | P61 | The Api and the collector hold the instance role, which can decrypt every deploy secret |
-| Input (7.5 Security workflow, Trivy AWS-0104, human decision): instance egress | P62 | HTTPS out to any address; no NAT gateway, proxy or VPC endpoints |
-| Input (7.5 Security workflow, Trivy AWS-0132, human decision): state bucket encryption | P63 | S3-managed keys, not a customer-managed KMS key |
-| Input (7.10 PRR A-F1, human decision): monetary bounds from core banking | P11 | Amounts are not checked against a documented range and precision |
-| Input (7.10 PRR A-F2, human decision): actor-bound limits | P37 | Operations reads and refusals also write audit rows without a limit |
-| Input (7.10 PRR A-F8, human decision): API viewer origin | P36 | Scalar still shares the customer origin |
-| Input (7.10 PRR B-F3, D-F5, human decision): edge transport | P52 | Mailpit's WebSocket crosses the plain HTTP origin; TLS 1.0 minimum |
-| Input (7.10 PRR B-F4, B-F5, B-F6, B-F7, B-F9, human decision): identity-provider password, MFA and upload policy | P64 | MFA is optional and the provider's default password policy applies |
-| Input (7.10 PRR B-F8, E-F11, human decision): bootstrap administrator and production configuration | P50 | The bootstrap administrator keeps its first password; demo tooling is deployed |
-| Input (7.10 PRR C-F1, C-F3, C-F4, C-F5, human decision): identity-provider sessions | P65 | No joint session policy, freshness check or session revocation |
-| Input (7.10 PRR C-F2, human decision): session key at linking | P32 | The pre-link session key stays valid after linking |
-| Input (7.10 PRR C-F6, human decision): broker authorisation | P21 | No client authentication or topic ACLs on the broker |
-| Input (7.10 PRR C-F7, D-F6, E-F1, human decision): service identity and internal transport | P67 | Services trust the private Compose network |
-| Input (7.10 PRR C-F9, human decision): access-token purpose | P66 | Bearer validation does not check the token type |
-| Input (7.10 PRR D-F1, D-F2, human decision): key inventory and rotation | P68 | No key inventory; the OTP HMAC key is unversioned |
-| Input (7.10 PRR E-F2, human decision): database ownership | P27 | The runtime account owns the database |
-| Input (7.10 PRR E-F3, human decision): secrets apart from runtime identities | P61 | The Api loads operations credentials; instance permissions are broad |
-| Input (7.10 PRR E-F4, human decision): outbound destinations | P62 | HTTPS out to any address |
-| Input (7.10 PRR E-F5, human decision): sensitive-data classification | P69 | Rules exist one by one, not as one matrix |
-| Input (7.10 PRR E-F6, human decision): token-bearing logout URL | P43 | `id_token_hint` travels in the query string |
-| Input (7.10 PRR E-F7, human decision): sensitive response copies | P23 | Expired idempotency responses are cleared only on key reuse |
-| Input (7.10 PRR E-F9, E-F10, human decision): dependency inventory and remediation deadlines | P70 | Scans run, but no deadlines and no complete inventory |
-| Input (7.10 PRR E-F13, E-F14, E-F15, human decision): security logging and audit collection | P71 | Audit records stay in the application database |
-| Input (7.10 PRR F-F7, human decision): arrival order across a relay handover | P18 | Per-dispute order by `disputeVersion`, not strict arrival order |
-| Input (7.10 PRR F-F10, human decision): observability scope | P42 | No browser telemetry in AWS |
-| Input (7.10 PRR F-F23, human decision): stack lock scope | P72 | The lock is held per command, not per session |
-| Input (7.12 refine, F-F4): no-store on gateway errors before a location | P73 | nginx 400, 414, 494 and the AWS origin-verify 403 on `/api` keep their headers |
-| Input (7.14 QA): browser memory after the session ends | P74 | A dispute ID can stay in the router's match cache until a reload |
-| Input (Redpanda vs Kafka research, human decision 2026-11-02): broker durability | P75 | The broker runs in development mode with one replica |
-| Input (7.4 pre-build security S7.4-1, human decision): three distributions | P47 | Mailpit has its own distribution; all three disable caching |
-| Decision 2026-10-27 (standards audit): migrations; deferred operations stories | P28 | No operations story is deferred: 5.3 and 5.4 are in v1's scope (initiative scope decision 2026-10-27) |
-| Decision 2026-10-27 (2.7 security review): problem `type` URLs | P39 | Accepted risk under the GitHub namespace |
-| Decision 2026-10-29: bank context; EF-only idempotency claim | P29 | Its context half is this document's opening line |
-| Decision 2026-10-30 (human, 7.6 challenge): OTP guess bound | P30 | No control change in v1 |
-| Decision 2026-10-30 (Sofia, refine): completeness through a mapping | this table | The mapping is the completeness check |
-
-## Product scope
+## Deferred scope
 
 ### P1. Provisional credit
 
@@ -186,8 +64,6 @@ Linking moves into the bank's identity platform, downstream services consume the
 
 The hosted login has no favicon (404) and shows Zitadel's default copy ("Create your Zitadel account.", "Welcome back!") instead of the mockups' "Sign in to DisputeDesk" (story 2.6 QA). *Why it waits:* Login v2 text customisation is a later polish item (story 2.6 QA).
 
-## Events and the outbox
-
 ### P15. A schema registry
 
 There is no schema registry: the two event types have committed JSON Schemas under `contracts/events/` and a contract test (AD-19). Redpanda's built-in registry is the upgrade path (PRD §6.2). *Why it waits:* AD-19 rejects a registry for v1; the committed schemas and the contract test check both types.
@@ -200,10 +76,6 @@ No consumer lives in this repo. A consumer would dedupe with an inbox table, key
 
 Order is defined only within one dispute, by `Version`; there is no global position and no index by event type (NFR-DATA-5; AD-17; ad-009). A PostgreSQL sequence is not a commit-order checkpoint, because sequence values are not rolled back and transactions commit out of allocation order (ad-009). If a reader across streams appears, the options are Kafka offsets, a high-water mark with `pg_snapshot_xmin`, or change data capture (PRD §6.2; architecture, Deferred). *Why it waits:* nothing reads across streams in v1.
 
-### P18. Fencing the relay leader with Kafka transactions
-
-The relay's advisory lock cannot fence a Kafka send already in flight when a leader loses its connection, so across a handover an earlier event of a dispute can arrive late or twice (AD-17). Fencing with Kafka transactions (a fixed `transactional.id`, KIP-98) is the stronger option. The 7.10 PRR (F-F7) adds that the PRD's ordering promise (NFR-DATA-5) needs either that fencing before strict arrival order is promised, or a recorded human decision that reconciles the PRD with per-dispute order by `disputeVersion`. *Why it waits:* v1 is at-least-once and consumers keep per-dispute order by `disputeVersion` (AD-17, decided 2026-10-29).
-
 ### P19. Relay tuning and error handling
 
 The exact relay batch size and backoff curve are tuning; AD-17 fixes the behaviour (architecture, Deferred). librdkafka error events are logged per occurrence, about 62 warnings per 30-second outage (story 4.2 review); production logs on state change or rate-limits per code. An unlisted error code on one dispute's head row stalls the whole relay; production defers per row and alerts on the deferred-warning rate (story 4.2 review). *Why it waits:* tuning; AD-17 fixes the behaviour (architecture, Deferred).
@@ -212,23 +84,9 @@ The exact relay batch size and backoff curve are tuning; AD-17 fixes the behavio
 
 After five permanent rejections a row is `Failed`, and later events for that dispute wait (AD-17). An operator releases a `Failed` row with a targeted `UPDATE` (the runbook, AD-22's one operator exception). A row whose payload itself is refused cannot be released, because the payload is never edited; production adds a reviewed repair path or a dead-letter topic with an audited replay (story 7.7 refine; PRD §6.2, Operations features). *Why it waits:* AD-17 rejects a dead-letter topic for v1, and an operator release covers a fixed cause (AD-22).
 
-### P21. Kafka transport security
-
-The broker runs plaintext with no client authentication on the private Compose network in v1 (a `// shortcut:` in the relay's producer configuration; AD-26). Before a shared network, enable TLS plus SASL/SCRAM or mTLS on the broker, with topic ACLs so only the relay principal writes `disputedesk.disputes` (story 4.1 security S4, human decision 2026-10-29). The 7.10 PRR (C-F6) adds negative tests that an unauthorised principal can neither publish, consume nor administer topics (ASVS 5.0 V8.2.1, V8.2.2). *Why it waits:* the broker is on the private Compose network only (AD-26).
-
-### P75. Broker durability
-
-The broker runs `--mode=dev-container` with one replica (AD-27; ad-010). That mode bypasses fsync, enables write caching and lets producers create topics, so an `acks=all` acknowledgement is not yet on disk; the relay marks a row `Sent` on that acknowledgement, so a broker crash before the flush can lose an event the outbox never resends ([`rpk redpanda start`](https://docs.redpanda.com/current/reference/rpk/rpk-redpanda/rpk-redpanda-start/); [Manage topics, write caching](https://docs.redpanda.com/current/develop/config-topics/)). Production runs Redpanda in production mode (fsync before each `acks=all` acknowledgement, write caching off) on at least three brokers with replication factor 3, and disables topic auto-creation (`auto_create_topics_enabled`), so only the topic `redpanda-topics` creates exists. *Why it waits:* v1 holds only synthetic data on one node, and the memory budget of the AWS dev instance has no room for a second broker (ad-010).
-
 ### P22. Error-rate alerts on expected unique violations
 
 EF Core logs a unique violation (SQL state 23505) at Error even when the application expects and answers it. Alerting excludes 23505 on `UQ_Disputes_AccountRef_TransactionId` (a lost raise race, 409 `already-disputed`) and `UQ_StoredEvents_DisputeId_Version` (a version clash, AD-15). The logs are not filtered, because an EF Core filter would hide every failed save (story 3.4 pre-build review). *Why it waits:* it is an alerting rule for production, recorded by the story 3.4 pre-build review; v1 changes no logging.
-
-### P51. Outbox release role
-
-The runbook's release of a `Failed` row runs as the owner role `disputedesk`, which has full DML, and writes no audit record (story 7.7 pre-build security S7.7-2, human decision 2026-10-30). Production gives operators a dedicated role with only column-level `GRANT UPDATE ("Status", "Attempts", "NextAttemptAtUtc") ON "OutboxMessages"` and records each release in the audit log (ASVS 5.0 V8, V16.3; see also P20). *Why it waits:* a release is a manual step from the runbook (AD-22's one operator exception), and v1 environments hold only synthetic data.
-
-## Data
 
 ### P23. Retention, cleanup and de-identification
 
@@ -246,10 +104,6 @@ Changes within a stored event type are additive; a new shape is a new type name 
 
 A handler loads a dispute by replaying its whole stream (AD-13). Snapshots at intervals would shorten replay (architecture, Deferred). *Why it waits:* streams hold a handful of stored events in v1 (estimate: 15 to 100 per stream once internal work is recorded).
 
-### P27. Database-level append-only grant on `AuditLogEntries` and `StoredEvents`
-
-The AD-14 guard refuses a Modified or Deleted audit row or stored event, and a source-rules test fails on bulk updates or raw SQL against either table (AD-14). Production also grants the application role insert and select only on both tables, with a separate migration role (architecture, Deferred; OWASP Logging Cheat Sheet). The 7.10 PRR (E-F2) adds that the runtime account owns the database today (`infra/db/10-roles-and-databases.sh`), so production gives migrations their own owner role, grants the Api and the Worker only the operations each uses, and keeps maintenance access separate (ASVS 5.0 V13.2.2, V16.4.2; see P28). *Why it waits:* the application enforces insert only in v1.
-
 ### P28. Migrations as a bundle run as a one-off job
 
 The Api applies EF Core migrations at start-up, under EF Core's migration lock, before it reports ready (AD-22). Production builds a migration bundle and runs it once as a one-off job before the new release starts, instead of every replica migrating at start-up ([EF Core, *Applying migrations*](https://learn.microsoft.com/ef/core/managing-schemas/migrations/applying); standards audit, 2026-10-27). *Why it waits:* v1 runs one Api instance.
@@ -260,41 +114,63 @@ The Api applies EF Core migrations at start-up, under EF Core's migration lock, 
 
 **Proposed future change, not built.** Claim with EF Core alone, through the unique constraint `UQ_IdempotencyKeys_CustomerId_Key` plus EF Core's documented optimistic concurrency on `LeaseId` ([EF Core, *Handling concurrency conflicts*](https://learn.microsoft.com/ef/core/saving/concurrency)), with explicit handling of the insert conflict (a `DbUpdateException` on the unique index) and of the lease and the stored response, as `docs/research/ef-core-upsert/ef-core-upsert.md` recommends. This is not an EF Core upsert, which EF Core does not have, and it is not an established guarantee until it is built and tested. AD-16 changes only when it is built. *Why it waits:* the current claim is correct as built (the research), and switching costs a contained rework with another fix round (the research, *Cost of switching now*); the initiative decision of 2026-10-29 makes it a production-path item.
 
-### P69. Sensitive-data classification
-
-The PRD and the architecture give individual rules (dispute events carry no personal data; stored events are never logged or traced), but no one matrix classifies each sensitive field and each copy of it: token claims, sessions, linking challenges, audit records, idempotency responses, telemetry and backups. Production keeps that matrix, with encryption, integrity, retention, access and privacy requirements for each protection level (ASVS 5.0 V14.1.1, V14.1.2, V14.2.4; POPIA; 7.10 PRR E-F5). *Why it waits:* the demo holds only synthetic data, on a dedicated account, and the AWS environment is never applied in this project (P46; human decision 2026-10-31).
-
-## Linking and sessions
-
-### P30. OTP guess bound
-
-The controls bound OTP guesses per challenge (lockout after three wrong codes, FR-7) and per login window (the in-memory per-login and per-IP limits, FR-8); the send cap (FR-4) limits codes issued, not verification attempts (ad-008). This is not the account-wide limit on failed attempts that [NIST SP 800-63B-4, *Rate Limiting (Throttling)*](https://pages.nist.gov/800-63-4/sp800-63b.html) describes, because restarting linking creates a fresh challenge with 0 attempts. The upgrade is a persistent per-customer failure counter that survives restarts and new challenges (human decision, 2026-10-30, 7.6 challenge). *Why it waits:* no control changes in v1, by that decision.
-
 ### P31. Linking send cap and delivery
 
 Every claimed OTP send counts toward the three-per-hour cap, delivered or not, so a customer hit by SMS delivery failures waits for the window. Production reads the SMS provider's delivery receipts to tell a failed delivery from an uncertain one. The cap count has no index on (`CustomerId`, `OtpSentAtUtc`); production adds one once `LinkingChallenges` outgrows a sequential scan (story 6.5 refine; AD-12). *Why it waits:* `ISmsSender` writes to Mailpit in v1 (AD-21), not to an SMS provider.
-
-### P32. Session key renewal at a privilege change
-
-Linking keeps the session key minted at sign-in, since the built-in cookie handler with a server-side ticket store cannot change the key within one request (ad-007; story 6.2 decision, 2026-10-30). Production renews the key at every privilege change ([OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)) once the handler supports it, or moves to a session store that re-keys. The 7.10 PRR (C-F2) adds a test that the pre-link session cookie, replayed after linking, reaches no customer resource once the key is renewed (ASVS 5.0 V7.2.4). *Why it waits:* fixation is already blocked, because the store rejects any key it did not mint (AD-7).
 
 ### P33. Scale-out and shared limit state
 
 v1 runs one Api and one Worker instance (NFR-ARC-3). Production runs several of each, with shared rate-limit state and latency targets under load (PRD §6.2). Linking rate limits are held in memory on the single Api instance, so they reset on restart and do not add up across instances; scale-out needs a shared limiter store. The Api trusts forwarded headers from every container on the Compose network; production trusts only the load balancer's or gateway's own addresses (story 6.3 refine; see also P43). One over-limit login rotating IPv6 /64 prefixes writes one audit row per rejection, and the gateway's `limit_req` keys on the full address; production keeps limits in a shared store and keys the gateway on the /64 (story 6.3 security). *Why it waits:* sessions, idempotency keys and the audit log are already in PostgreSQL; in-memory limits are the one exception (NFR-ARC-3).
 
-### P64. Identity-provider password, MFA and upload policy
-
-The hosted login runs the policies Zitadel is provisioned with: multi-factor authentication is optional (`infra/zitadel/provision/verify.sh`), so a password alone regains a linked customer's access; the password policy keeps the provider's default symbol requirement; no context-specific password blocklist is defined; and no document lists every authentication and recovery path with its strength, throttling and lockout-abuse controls. The provisioning script's asset uploads have no documented formats, decompressed limits or malicious-file handling. Production requires multi-factor authentication for customer access on every sign-in and recovery path, replaces composition rules with length plus breached and context-specific password screening through the provider's supported password policy, keeps one authentication-path inventory checked against the pinned provider, and documents each upload surface (ASVS 5.0 V5.1.1, V6.1.1 to V6.1.3, V6.2.5, V6.2.11, V6.3.3; NIST SP 800-63B-4; 7.10 PRR B-F4, B-F5, B-F6, B-F7, B-F9). *Why it waits:* the demo holds only synthetic data, on a dedicated account, and the AWS environment is never applied in this project (P46; human decision 2026-10-31).
-
-### P65. Identity-provider sessions
-
-The BFF's own session deadlines are explicit (`SessionTicketStore.cs`), but the joint BFF and identity-provider session policy is not. After local expiry the BFF sends an ordinary OIDC challenge, which an active identity-provider session can satisfy without new credentials; disabling a login or changing its factors does not end its BFF sessions; and there is no session list for a customer and no per-login termination for an administrator. Production documents the full session policy (concurrency, lifetimes, re-authentication bounds), enforces authentication freshness with the OIDC `max_age` parameter and a checked `auth_time` claim (OpenID Connect Core 1.0), ends dependent BFF sessions on the provider's lifecycle and revocation events, and offers audited session lists and termination (ASVS 5.0 V7.1.1 to V7.1.3, V7.3.1, V7.3.2, V7.4.2, V7.4.3, V7.4.5, V7.5.2, V7.6.1; 7.10 PRR C-F1, C-F3, C-F4, C-F5). *Why it waits:* the demo holds only synthetic data, on a dedicated account, and the AWS environment is never applied in this project (P46; human decision 2026-10-31).
-
-## Operations and the API surface
-
 ### P34. Operations features: listing and search
 
 Operations tools read one dispute by ID (FR-30) and act on it; there is no listing or search for them (PRD §6.2, Operations features). The other operations features are P20 (dead-letter topic) and P23 (outbox cleanup, topic retention). No operations story is deferred: 5.3 and 5.4 are in v1's scope (`docs/tickets/README.md`; initiative scope decision, 2026-10-27). *Why it waits:* operations work happens in another team's tool, which calls the API (PRD §7).
+
+### P42. Browser telemetry
+
+Locally, `/otlp/` is an anonymous write path: any client can post forged spans under any `service.name`, up to 1 MB per request within the coarse rate-limit zone, to the Dashboard (story 3.11 security T8). In a deployed environment the AWS gateway routes no `/otlp/` and the SPA built for AWS exports nothing, so browser spans are a local-stack feature (AD-29; story 7.4 refine). Before switching it on, add an authenticated or sampled intake (for example behind the BFF session with per-session limits) and filter browser spans at the collector by `service.name` (`disputedesk-web`) and an attribute allow-list. The 7.10 PRR (F-F10) adds a scope decision before production: either privacy-safe browser signals with the trace continuation the PRD specifies (P16 records the missing event consumer), or NFR-OBS-1 and NFR-OBS-3 revised to the narrower architecture. *Why it waits:* no deployed environment takes browser spans in v1.
+
+### P45. Init process as PID 1
+
+Containers run an init process as PID 1 (Compose `init: true`), because the kernel drops signals PID 1 has no handler for, so a .NET process that fails to start would spin instead of exiting (pid_namespaces(7)). Any deployment outside Compose needs the same: ECS `linuxParameters.initProcessEnabled`, or an init in the image (start-up exit fix, 2026-10-30). *Why it waits:* v1 deploys only through Compose (AD-27, AD-28).
+
+### P46. AWS dev environment, never applied
+
+The AWS dev environment is written and checked with `terraform fmt`, `validate` and plans against mocked providers only, and has never been applied, because the account does not exist (AD-28; story 7.5 refine). Before any real use, run `infra/terraform/README.md`'s apply, deploy, check and destroy procedure, check the CloudFront prefix-list weight against security-group quotas (architecture, Deferred), and move Terraform's two state-held secrets (the origin-verify value and the RDS master password) to write-only arguments or ephemeral resources. *Why it waits:* the account does not exist.
+
+### P47. CloudFront caching for static assets
+
+All three distributions (app, auth and mail) use `CachingDisabled` (AD-28; story 7.4 pre-build security S7.4-1, human decision 2026-10-30). Caching static assets is a performance change (architecture, Deferred). *Why it waits:* performance only; caching stays disabled until then.
+
+### P48. Node 26 LTS move
+
+`.nvmrc` stays on Node 24 until a story bumps it (architecture, Deferred). *Why it waits:* the architecture revisits the move after 2026-10-28 (architecture, Deferred).
+
+### P57. Probes in the published images
+
+The published api and worker images are the `api-local` and `worker-local` targets: the chiseled .NET images plus a static busybox (named `wget` in the api, full busybox in the worker), because AWS runs Compose on one instance and Compose health checks run inside the container (human decision 2026-10-30, story 7.4 build; AD-22, AD-25). Production runs the shell-free `api` and `worker` targets under an orchestrator whose probes call `/health/live` and `/health/ready` over the network (Kubernetes liveness and readiness probes, or an ECS target group's health check). *Why it waits:* v1 has no orchestrator or load balancer to probe, and the health checks keep AD-22's "the Worker never runs on an old schema" and AD-25's restarts.
+
+## Accepted risks
+
+### P18. Fencing the relay leader with Kafka transactions
+
+The relay's advisory lock cannot fence a Kafka send already in flight when a leader loses its connection, so across a handover an earlier event of a dispute can arrive late or twice (AD-17). Fencing with Kafka transactions (a fixed `transactional.id`, KIP-98) is the stronger option. The 7.10 PRR (F-F7) adds that the PRD's ordering promise (NFR-DATA-5) needs either that fencing before strict arrival order is promised, or a recorded human decision that reconciles the PRD with per-dispute order by `disputeVersion`. *Why it waits:* v1 is at-least-once and consumers keep per-dispute order by `disputeVersion` (AD-17, decided 2026-10-29).
+
+### P21. Kafka transport security
+
+The broker runs plaintext with no client authentication on the private Compose network in v1 (a `// shortcut:` in the relay's producer configuration; AD-26). Before a shared network, enable TLS plus SASL/SCRAM or mTLS on the broker, with topic ACLs so only the relay principal writes `disputedesk.disputes` (story 4.1 security S4, human decision 2026-10-29). The 7.10 PRR (C-F6) adds negative tests that an unauthorised principal can neither publish, consume nor administer topics (ASVS 5.0 V8.2.1, V8.2.2). *Why it waits:* the broker is on the private Compose network only (AD-26).
+
+### P27. Database-level append-only grant on `AuditLogEntries` and `StoredEvents`
+
+The AD-14 guard refuses a Modified or Deleted audit row or stored event, and a source-rules test fails on bulk updates or raw SQL against either table (AD-14). Production also grants the application role insert and select only on both tables, with a separate migration role (architecture, Deferred; OWASP Logging Cheat Sheet). The 7.10 PRR (E-F2) adds that the runtime account owns the database today (`infra/db/10-roles-and-databases.sh`), so production gives migrations their own owner role, grants the Api and the Worker only the operations each uses, and keeps maintenance access separate (ASVS 5.0 V13.2.2, V16.4.2; see P28). *Why it waits:* the application enforces insert only in v1.
+
+### P30. OTP guess bound
+
+The controls bound OTP guesses per challenge (lockout after three wrong codes, FR-7) and per login window (the in-memory per-login and per-IP limits, FR-8); the send cap (FR-4) limits codes issued, not verification attempts (ad-008). This is not the account-wide limit on failed attempts that [NIST SP 800-63B-4, *Rate Limiting (Throttling)*](https://pages.nist.gov/800-63-4/sp800-63b.html) describes, because restarting linking creates a fresh challenge with 0 attempts. The upgrade is a persistent per-customer failure counter that survives restarts and new challenges (human decision, 2026-10-30, 7.6 challenge). *Why it waits:* no control changes in v1, by that decision.
+
+### P32. Session key renewal at a privilege change
+
+Linking keeps the session key minted at sign-in, since the built-in cookie handler with a server-side ticket store cannot change the key within one request (ad-007; story 6.2 decision, 2026-10-30). Production renews the key at every privilege change ([OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)) once the handler supports it, or moves to a session store that re-keys. The 7.10 PRR (C-F2) adds a test that the pre-link session cookie, replayed after linking, reaches no customer resource once the key is renewed (ASVS 5.0 V7.2.4). *Why it waits:* fixation is already blocked, because the store rejects any key it did not mint (AD-7).
 
 ### P35. Operations tool credentials and secret placement
 
@@ -320,27 +196,9 @@ Problem `type` URLs live under the GitHub namespace (AD-3), an accepted risk: a 
 
 `Seed:Enabled` defaults to off and is set only in Compose and the AWS demo (AD-26), but nothing refuses it at start-up. A real deployment refuses `Seed:Enabled` at start-up, so seeded events are never published for fixture customer IDs (story 5.4 security S4; ASVS 5.0 V13, configuration). Seeded snapshots on a stack kept across a day boundary without `docker compose down -v` are a demo limitation; the README says to reset (architecture, Deferred; AD-30). *Why it waits:* v1 has only local and demo environments.
 
-### P49. SLA sweep failures
-
-The SLA sweep claims the 50 earliest-due disputes each loop (AD-18); if 50 or more keep failing (for example a stream that will not replay), later disputes are never escalated (FR-26), although each failure is logged at Error (story 5.3 security L4). Production alerts on repeated sweep failures and parks a dispute that fails a set number of times. *Why it waits:* every failure is already logged at Error, so a stall shows in the logs; alerting rules are a production concern, as in P22.
-
-### P50. Demo logins in AWS
-
-The fixture logins of customers A, B and C, whose passwords are published in `backend/fixtures/local.json`, are live on the AWS demo, and self-registration lets anyone link to customer D (story 7.4 pre-build security S7.4-11, human decision 2026-10-30). A real environment has no fixture logins and refuses the seeder at start-up (P40). The 7.10 PRR (B-F8) adds a lifecycle for the bootstrap administrator: short-lived activation, a required change of the initial password, and removing or disabling bootstrap access (ASVS 5.0 V6.3.2, V6.4.1). It also adds (E-F11) a production configuration that refuses fixture provisioning and seeding, replaces the core-banking and SMS stand-ins, and leaves out demo tooling such as Scalar (ASVS 5.0 V15.2.3). *Why it waits:* the demo holds only synthetic data, so a fixture login reaches no real customer.
-
-### P66. Access-token purpose
-
-The operations bearer validation accepts RS256 signatures only and restricts subjects, and project roles add a further check, but nothing establishes that the token is an access token rather than an ID token or another token from the same issuer (`OperationsAuthentication.cs`). Production validates the token's purpose with explicit typing (`typ` `at+jwt`, RFC 9068; RFC 8725, *Use Explicit Typing*) where the issuer supports it, or with mutually exclusive validation rules, and tests that ID tokens and other same-issuer tokens are refused (ASVS 5.0 V9.2.2; 7.10 PRR C-F9). *Why it waits:* no customer-to-operations escalation was shown, the demo holds only synthetic data, on a dedicated account, and the AWS environment is never applied in this project (P46; human decision 2026-10-31).
-
-## Edge, telemetry and platform
-
 ### P41. Trace context trust
 
 The browser's `traceparent` and `tracestate` are accepted as the request's parent, so the audit `TraceId` and the outbox trace columns are caller-chosen (story 3.1 security S3). The Api trusts any caller's `traceparent` under OpenTelemetry .NET's default ParentBased(AlwaysOn) sampler (no sampler is set; unverified on the stack), so a caller can send flags `00` to suppress the Api's spans for its own requests and choose the trace ID stored in `StoredEvents.TraceId` and the outbox (story 3.11 security T7). Production restarts or validates trace context at the gateway, the trust boundary, or sets a sampler that does not follow an untrusted parent's sampled flag at the edge ([W3C Trace Context](https://www.w3.org/TR/trace-context/), security considerations). *Why it waits:* one trace from browser to Worker is a v1 requirement (AD-20).
-
-### P42. Browser telemetry
-
-Locally, `/otlp/` is an anonymous write path: any client can post forged spans under any `service.name`, up to 1 MB per request within the coarse rate-limit zone, to the Dashboard (story 3.11 security T8). In a deployed environment the AWS gateway routes no `/otlp/` and the SPA built for AWS exports nothing, so browser spans are a local-stack feature (AD-29; story 7.4 refine). Before switching it on, add an authenticated or sampled intake (for example behind the BFF session with per-session limits) and filter browser spans at the collector by `service.name` (`disputedesk-web`) and an attribute allow-list. The 7.10 PRR (F-F10) adds a scope decision before production: either privacy-safe browser signals with the trace continuation the PRD specifies (P16 records the missing event consumer), or NFR-OBS-1 and NFR-OBS-3 revised to the narrower architecture. *Why it waits:* no deployed environment takes browser spans in v1.
 
 ### P43. Gateway edge: request logs and trusted proxies
 
@@ -350,21 +208,17 @@ Since story 7.12 every origin's access log records the method, path and protocol
 
 `/etc/nginx` is writable by the nginx user, because `nginx-unprivileged` renders its templates there at start; production runs the gateway with a read-only root filesystem and a tmpfs render directory (story 2.5 security F4; CIS Docker 5.12). `infra/nginx/Dockerfile` runs an unpinned `apk upgrade` of brotli-libs, curl and libcurl (a `// shortcut:`), because the pinned base lags the Alpine fixes; drop it when a newer pinned base ships them, and consider removing curl (unused at runtime) or the `-alpine-slim` variant (story 2.5 review L1). *Why it waits:* the gateway already runs non-root from a pinned image (AD-27).
 
-### P45. Init process as PID 1
+### P49. SLA sweep failures
 
-Containers run an init process as PID 1 (Compose `init: true`), because the kernel drops signals PID 1 has no handler for, so a .NET process that fails to start would spin instead of exiting (pid_namespaces(7)). Any deployment outside Compose needs the same: ECS `linuxParameters.initProcessEnabled`, or an init in the image (start-up exit fix, 2026-10-30). *Why it waits:* v1 deploys only through Compose (AD-27, AD-28).
+The SLA sweep claims the 50 earliest-due disputes each loop (AD-18); if 50 or more keep failing (for example a stream that will not replay), later disputes are never escalated (FR-26), although each failure is logged at Error (story 5.3 security L4). Production alerts on repeated sweep failures and parks a dispute that fails a set number of times. *Why it waits:* every failure is already logged at Error, so a stall shows in the logs; alerting rules are a production concern, as in P22.
 
-### P46. AWS dev environment, never applied
+### P50. Demo logins in AWS
 
-The AWS dev environment is written and checked with `terraform fmt`, `validate` and plans against mocked providers only, and has never been applied, because the account does not exist (AD-28; story 7.5 refine). Before any real use, run `infra/terraform/README.md`'s apply, deploy, check and destroy procedure, check the CloudFront prefix-list weight against security-group quotas (architecture, Deferred), and move Terraform's two state-held secrets (the origin-verify value and the RDS master password) to write-only arguments or ephemeral resources. *Why it waits:* the account does not exist.
+The fixture logins of customers A, B and C, whose passwords are published in `backend/fixtures/local.json`, are live on the AWS demo, and self-registration lets anyone link to customer D (story 7.4 pre-build security S7.4-11, human decision 2026-10-30). A real environment has no fixture logins and refuses the seeder at start-up (P40). The 7.10 PRR (B-F8) adds a lifecycle for the bootstrap administrator: short-lived activation, a required change of the initial password, and removing or disabling bootstrap access (ASVS 5.0 V6.3.2, V6.4.1). It also adds (E-F11) a production configuration that refuses fixture provisioning and seeding, replaces the core-banking and SMS stand-ins, and leaves out demo tooling such as Scalar (ASVS 5.0 V15.2.3). *Why it waits:* the demo holds only synthetic data, so a fixture login reaches no real customer.
 
-### P47. CloudFront caching for static assets
+### P51. Outbox release role
 
-All three distributions (app, auth and mail) use `CachingDisabled` (AD-28; story 7.4 pre-build security S7.4-1, human decision 2026-10-30). Caching static assets is a performance change (architecture, Deferred). *Why it waits:* performance only; caching stays disabled until then.
-
-### P48. Node 26 LTS move
-
-`.nvmrc` stays on Node 24 until a story bumps it (architecture, Deferred). *Why it waits:* the architecture revisits the move after 2026-10-28 (architecture, Deferred).
+The runbook's release of a `Failed` row runs as the owner role `disputedesk`, which has full DML, and writes no audit record (story 7.7 pre-build security S7.7-2, human decision 2026-10-30). Production gives operators a dedicated role with only column-level `GRANT UPDATE ("Status", "Attempts", "NextAttemptAtUtc") ON "OutboxMessages"` and records each release in the audit log (ASVS 5.0 V8, V16.3; see also P20). *Why it waits:* a release is a manual step from the runbook (AD-22's one operator exception), and v1 environments hold only synthetic data.
 
 ### P52. Edge transport
 
@@ -385,10 +239,6 @@ The OIDC trust pins the repository's main branch, not the workflow (AD-28; story
 ### P56. Instance role
 
 `AmazonSSMManagedInstanceCore` can read every parameter in the account and `CloudWatchAgentServerPolicy` can write to any log group (AD-28, AD-29; story 7.5 pre-build security S7.5-9). Production replaces them with AWS's documented minimal Session Manager instance policy and a policy scoped to the one log group and X-Ray (AWS IAM, least privilege). *Why it waits:* the demo account is dedicated, so the account holds nothing else to read or write.
-
-### P57. Probes in the published images
-
-The published api and worker images are the `api-local` and `worker-local` targets: the chiseled .NET images plus a static busybox (named `wget` in the api, full busybox in the worker), because AWS runs Compose on one instance and Compose health checks run inside the container (human decision 2026-10-30, story 7.4 build; AD-22, AD-25). Production runs the shell-free `api` and `worker` targets under an orchestrator whose probes call `/health/live` and `/health/ready` over the network (Kubernetes liveness and readiness probes, or an ECS target group's health check). *Why it waits:* v1 has no orchestrator or load balancer to probe, and the health checks keep AD-22's "the Worker never runs on an old schema" and AD-25's restarts.
 
 ### P58. Third-party image scanning
 
@@ -414,6 +264,18 @@ The AWS instance's security group allows HTTPS out to any address (Trivy AWS-010
 
 The Terraform state bucket uses S3-managed encryption (SSE-S3; Trivy AWS-0132), which meets story 7.5's "default encryption" but gives no key policy and no CloudTrail record of each decrypt. The state holds the origin-verify secret and the values Terraform writes to SSM. Production uses SSE-KMS with a customer-managed key whose policy admits only the deploy and operator roles. *Why it waits:* access to the bucket is already limited by IAM, public access is blocked and TLS is required, on a dedicated demo account (human decision, 2026-10-31).
 
+### P64. Identity-provider password, MFA and upload policy
+
+The hosted login runs the policies Zitadel is provisioned with: multi-factor authentication is optional (`infra/zitadel/provision/verify.sh`), so a password alone regains a linked customer's access; the password policy keeps the provider's default symbol requirement; no context-specific password blocklist is defined; and no document lists every authentication and recovery path with its strength, throttling and lockout-abuse controls. The provisioning script's asset uploads have no documented formats, decompressed limits or malicious-file handling. Production requires multi-factor authentication for customer access on every sign-in and recovery path, replaces composition rules with length plus breached and context-specific password screening through the provider's supported password policy, keeps one authentication-path inventory checked against the pinned provider, and documents each upload surface (ASVS 5.0 V5.1.1, V6.1.1 to V6.1.3, V6.2.5, V6.2.11, V6.3.3; NIST SP 800-63B-4; 7.10 PRR B-F4, B-F5, B-F6, B-F7, B-F9). *Why it waits:* the demo holds only synthetic data, on a dedicated account, and the AWS environment is never applied in this project (P46; human decision 2026-10-31).
+
+### P65. Identity-provider sessions
+
+The BFF's own session deadlines are explicit (`SessionTicketStore.cs`), but the joint BFF and identity-provider session policy is not. After local expiry the BFF sends an ordinary OIDC challenge, which an active identity-provider session can satisfy without new credentials; disabling a login or changing its factors does not end its BFF sessions; and there is no session list for a customer and no per-login termination for an administrator. Production documents the full session policy (concurrency, lifetimes, re-authentication bounds), enforces authentication freshness with the OIDC `max_age` parameter and a checked `auth_time` claim (OpenID Connect Core 1.0), ends dependent BFF sessions on the provider's lifecycle and revocation events, and offers audited session lists and termination (ASVS 5.0 V7.1.1 to V7.1.3, V7.3.1, V7.3.2, V7.4.2, V7.4.3, V7.4.5, V7.5.2, V7.6.1; 7.10 PRR C-F1, C-F3, C-F4, C-F5). *Why it waits:* the demo holds only synthetic data, on a dedicated account, and the AWS environment is never applied in this project (P46; human decision 2026-10-31).
+
+### P66. Access-token purpose
+
+The operations bearer validation accepts RS256 signatures only and restricts subjects, and project roles add a further check, but nothing establishes that the token is an access token rather than an ID token or another token from the same issuer (`OperationsAuthentication.cs`). Production validates the token's purpose with explicit typing (`typ` `at+jwt`, RFC 9068; RFC 8725, *Use Explicit Typing*) where the issuer supports it, or with mutually exclusive validation rules, and tests that ID tokens and other same-issuer tokens are refused (ASVS 5.0 V9.2.2; 7.10 PRR C-F9). *Why it waits:* no customer-to-operations escalation was shown, the demo holds only synthetic data, on a dedicated account, and the AWS environment is never applied in this project (P46; human decision 2026-10-31).
+
 ### P67. Service identity and internal transport
 
 Behind the gateway, services trust the private Compose network. The core-banking stub has no authentication and accepts `X-Customer-Id` and resource IDs from any caller that reaches it; the Api's connections to the stub, to Mailpit's SMTP and to the collector are plaintext with long-lived shared credentials or none; and the broker has no client authentication (P21). Production gives each service its own identity with short-lived or certificate-based credentials (for example mutual TLS), encrypts every service-to-service hop, and passes the customer context to core banking in a form the bank's service can verify, with explicit permissions per caller (ASVS 5.0 V8.2.1, V8.2.2, V8.3.1, V12.2.1, V12.3.1, V12.3.3, V13.2.1; 7.10 PRR C-F7, D-F6, E-F1). The CloudFront-to-origin hop is P52. *Why it waits:* the stub serves only fixture customers, the demo holds only synthetic data, on a dedicated account, and the AWS environment is never applied in this project (P46; human decision 2026-10-31).
@@ -421,6 +283,10 @@ Behind the gateway, services trust the private Compose network. The core-banking
 ### P68. Key inventory and rotation
 
 No inventory lists the keys and secrets v1 uses (the Data Protection key ring, the OTP HMAC key, the deploy-time secrets) with owner, permitted use, rotation and retirement, and the OTP HMAC key is a single unversioned value, so rotating it breaks live linking challenges (`LinkingOptions.cs`, `Otp.cs`). Production keeps that inventory and lifecycle policy (NIST SP 800-57 Part 1) and versions the OTP HMAC key so a rotation does not break live challenges (ASVS 5.0 V11.1.1, V11.1.2, V11.2.2; 7.10 PRR D-F1, D-F2). *Why it waits:* an OTP lives five minutes, so a rotation costs at most a restarted linking, the demo holds only synthetic data, on a dedicated account, and the AWS environment is never applied in this project (P46; human decision 2026-10-31).
+
+### P69. Sensitive-data classification
+
+The PRD and the architecture give individual rules (dispute events carry no personal data; stored events are never logged or traced), but no one matrix classifies each sensitive field and each copy of it: token claims, sessions, linking challenges, audit records, idempotency responses, telemetry and backups. Production keeps that matrix, with encryption, integrity, retention, access and privacy requirements for each protection level (ASVS 5.0 V14.1.1, V14.1.2, V14.2.4; POPIA; 7.10 PRR E-F5). *Why it waits:* the demo holds only synthetic data, on a dedicated account, and the AWS environment is never applied in this project (P46; human decision 2026-10-31).
 
 ### P70. Dependency inventory and remediation deadlines
 
@@ -442,3 +308,6 @@ Story 7.12 adds `Cache-Control: no-store` to the `/api` responses nginx generate
 
 Story 7.14 clears customer data from the SPA's memory when the session ends: the query and mutation caches, the raise draft, and every detached screen (a `WeakRef` and forced-GC test, and QA's CDP heap snapshots on five paths). Two things remain. TanStack Router's match cache and URL map keep the ID of a dispute the person opened (an ID only, no description, amount or card); and on the person's own sign-out the old document keeps its data for under a second, until the logout form post replaces the page. Production can clear the router's cache on session end (or reload the page to a fixed start URL), and keeps sign-out as a full-page navigation. *Why it waits:* an ID alone identifies nothing without a session, the window on sign-out ends with the navigation, and the demo holds only synthetic data (story 7.14 QA, 2026-11-01).
 
+### P75. Broker durability
+
+The broker runs `--mode=dev-container` with one replica (AD-27; ad-010). That mode bypasses fsync, enables write caching and lets producers create topics, so an `acks=all` acknowledgement is not yet on disk; the relay marks a row `Sent` on that acknowledgement, so a broker crash before the flush can lose an event the outbox never resends ([`rpk redpanda start`](https://docs.redpanda.com/current/reference/rpk/rpk-redpanda/rpk-redpanda-start/); [Manage topics, write caching](https://docs.redpanda.com/current/develop/config-topics/)). Production runs Redpanda in production mode (fsync before each `acks=all` acknowledgement, write caching off) on at least three brokers with replication factor 3, and disables topic auto-creation (`auto_create_topics_enabled`), so only the topic `redpanda-topics` creates exists. *Why it waits:* v1 holds only synthetic data on one node, and the memory budget of the AWS dev instance has no room for a second broker (ad-010).
