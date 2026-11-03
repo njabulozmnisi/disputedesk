@@ -1,7 +1,7 @@
 # Runbook
 
 These procedures are for the local Compose stack only. An AWS deployment's database is private and is not reached
-this way ([infra/terraform/README.md](../infra/terraform/README.md) covers the AWS environment). Run every command
+this way ([infra/terraform/README.md](terraform/README.md) covers the AWS environment). Run every command
 from the repo root, with the stack up (`docker compose up --wait`).
 
 ## 1. Release a `Failed` outbox row
@@ -13,7 +13,7 @@ The outbox relay sets a row `Failed` after 5 permanent refusals by Kafka (AD-17)
 This procedure is AD-22's one operator exception to "`OutboxMessages` is updated only by the relay". It never sets a
 row to `Sent` and never deletes a row. The Worker needs no restart: the relay picks the row up on its next loop. It runs
 as the owner role `disputedesk` and writes no audit record, which is accepted for the local stack; a dedicated operator
-role and an audited release are in [the production path](production-path.md) (P51).
+role and an audited release are in [the production path](../docs/production-path.md) (P51).
 
 1. **Find the row and its blocked successors**, with the read-only role:
 
@@ -50,7 +50,7 @@ role and an audited release are in [the production path](production-path.md) (P5
    - A payload at or near 1,000,000 bytes hits the relay's own client limit (librdkafka's `message.max.bytes`
      default), which no topic change fixes. Do not release it.
 
-   A row whose payload itself is the cause stays `Failed`; it is not released ([production path](production-path.md),
+   A row whose payload itself is the cause stays `Failed`; it is not released ([production path](../docs/production-path.md),
    P20).
 
 3. **Release the row**, as the `disputedesk` role, in an interactive session (no password on the command line):

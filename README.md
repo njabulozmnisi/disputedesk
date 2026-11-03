@@ -101,7 +101,7 @@ The SLA demo dispute is customer A's on `TXN-A-0011`. It is seeded Under review 
 so the SLA sweep escalates it a few minutes after `docker compose up --wait` returns.
 
 The seed's dates are relative to start-up. After a day boundary, or to start again from the seed, reset with
-`docker compose down -v` (it deletes every volume; see the [runbook](docs/runbook.md)).
+`docker compose down -v` (it deletes every volume; see the [runbook](infra/deploy/runbook.md)).
 
 An AWS deployment from `infra/terraform/` ([its README](infra/terraform/README.md)) uses the same fixture logins and
 published passwords, and holds only synthetic data.
@@ -161,7 +161,7 @@ curl -sS -w '\n%{http_code}\n' -X POST -H "Authorization: Bearer $(scripts/opera
 
 ## Runbook
 
-[docs/runbook.md](docs/runbook.md) has the operator procedures for the local stack: releasing a `Failed` outbox row,
+[infra/deploy/runbook.md](infra/deploy/runbook.md) has the operator procedures for the local stack: releasing a `Failed` outbox row,
 core banking unavailable, resetting the stack, and a transient Kafka outage.
 
 ## Onboarding
@@ -191,7 +191,7 @@ Everything deferred is in [docs/production-path.md](docs/production-path.md).
 | Quality area | Where it is met |
 |---|---|
 | 5.1 Architecture and scalability | [architecture](docs/architecture/architecture.md), [layer tests](backend/tests/DisputeDesk.ArchitectureTests/LayerTests.cs) |
-| 5.2 Resilience and operational readiness | [outbox relay](backend/src/DisputeDesk.Infrastructure/Outbox/OutboxRelay.cs), [Compose health checks](docker-compose.yml), [runbook](docs/runbook.md) |
+| 5.2 Resilience and operational readiness | [outbox relay](backend/src/DisputeDesk.Infrastructure/Outbox/OutboxRelay.cs), [Compose health checks](docker-compose.yml), [runbook](infra/deploy/runbook.md) |
 | 5.3 Data and domain modelling | [ad-009 stored events](docs/decisions/ad-009-stored-events.md), [domain tests](backend/tests/DisputeDesk.Domain.Tests/) |
 | 5.4 API design | [openapi.json](backend/openapi.json), [problem types](docs/problems/) |
 | 5.5 Security (primary) | [ad-007 browser session](docs/decisions/ad-007-browser-session.md), [ad-008 linking](docs/decisions/ad-008-linking.md), [gateway](infra/images/gateway/) |
