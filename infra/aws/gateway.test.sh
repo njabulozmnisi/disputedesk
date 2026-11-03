@@ -13,10 +13,8 @@ cd "$(dirname "$0")/../.."
 . infra/aws/input-bounds.sh
 
 ENV_FILE=infra/aws/compose.test.env
-SPA_IMAGE=disputedesk-spa:aws-test            # built with BROWSER_TELEMETRY=off, as the publish job builds it
-LOCAL_SPA_IMAGE=disputedesk-spa:local-test    # the default build, as docker-compose.yml builds it
-IMAGE=disputedesk-gateway:aws-test            # with the SPA from SPA_IMAGE
-LOCAL_IMAGE=disputedesk-gateway:local-test    # with the SPA from LOCAL_SPA_IMAGE
+IMAGE=disputedesk-gateway:aws-test            # built with BROWSER_TELEMETRY=off, as the publish job builds it
+LOCAL_IMAGE=disputedesk-gateway:local-test    # the default build, as docker-compose.yml builds it
 run=disputedesk-gateway-test-$$
 SUBNET=192.0.2.0/24                           # a documentation range (RFC 5737), so it clashes with no real network
 TRUSTED_IP=192.0.2.20                         # inside test-realip.conf's 192.0.2.16/28
@@ -42,12 +40,9 @@ cleanup(){
 trap cleanup EXIT
 
 section "the gateway image, and the AWS render"
-# Each gateway takes its SPA files from the SPA image through the named context spa, as CI and Compose pass it.
-docker build -q --build-arg BROWSER_TELEMETRY=off -t "$SPA_IMAGE" frontend >/dev/null
-docker build -q -t "$LOCAL_SPA_IMAGE" frontend >/dev/null
-docker build -q --build-context "spa=docker-image://$SPA_IMAGE" -t "$IMAGE" infra/nginx >/dev/null
-docker build -q --build-context "spa=docker-image://$LOCAL_SPA_IMAGE" -t "$LOCAL_IMAGE" infra/nginx >/dev/null
-ok "built $IMAGE (its SPA built with BROWSER_TELEMETRY=off) and $LOCAL_IMAGE (the default)"
+docker build -q -f infra/nginx/Dockerfile --build-arg BROWSER_TELEMETRY=off -t "$IMAGE" . >/dev/null
+docker build -q -f infra/nginx/Dockerfile -t "$LOCAL_IMAGE" . >/dev/null
+ok "built $IMAGE (BROWSER_TELEMETRY=off) and $LOCAL_IMAGE (the default)"
 unset_inputs=()
 for name in "${AWS_INPUTS[@]}"; do unset_inputs+=(-u "$name"); done
 env "${unset_inputs[@]}" docker compose -f docker-compose.yml -f infra/aws/compose.yml --env-file "$ENV_FILE" config --format json > "$work/aws.json"
