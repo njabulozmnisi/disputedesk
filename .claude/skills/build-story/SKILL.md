@@ -31,6 +31,10 @@ The input is a story file, `docs/tickets/epic-<epic>-<slug>/tickets/story-<epic>
 - A change that adds or changes infrastructure files (Terraform, Dockerfiles, Compose) runs `scripts/security-local.sh`, the Security workflow's Trivy filesystem and config scan, before reporting (7.5).
 - Frontend: a cleared cache is not freed memory. A change that clears customer data adds a `WeakRef` plus forced-GC test that proves the data is collected (`frontend/src/app/sessionEndCollected.test.tsx`; 7.14).
 - Platform: a health check covers every route the service fronts, and no test relies on a stopped container refusing connections, which hangs on CI's network; use an upstream that closes the connection (7.3, 7.12).
+- Run the full suite with a results file (`--report-xunit-trx`), never through `tail`, so a failure can be named (tf-aws-override).
+- Tag throwaway comparison images `disputedesk-*` and remove them before reporting; the Docker daemon and disk are shared (tf-gateway-spa).
+- `infra/tests/smoke.sh` runs `docker compose down -v` and wipes the shared stack's volumes: run it only under the `stack` lock and say so in the report (tf-gateway-spa).
+- A change that relies on a tool behaviour (Compose, Docker, curl) checks it on the oldest version any environment runs: local, the CI runner, AWS (tf-gateway-spa: CI's Compose 2.38.2).
 
 ## Report
 
