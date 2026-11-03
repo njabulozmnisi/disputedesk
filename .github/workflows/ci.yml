@@ -72,7 +72,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # The same Node version as local development and the gateway image's build stage.
+      # The same Node version as local development and the SPA image's build stage (frontend/Dockerfile).
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
@@ -106,7 +106,7 @@ jobs:
 
   platform:
     runs-on: ubuntu-24.04
-    # The AWS gateway test builds the gateway image twice (with and without browser telemetry).
+    # The AWS gateway test builds the SPA image twice (with and without browser telemetry) and a gateway on each.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -393,8 +393,13 @@ jobs:
           publish api          backend --target api-local
           publish worker       backend --target worker-local
           publish core-banking backend --target core-banking
-          # The AWS gateway takes in no browser telemetry (AD-29), so the published UI sends none.
-          publish gateway      .       -f infra/images/gateway/Dockerfile --build-arg BROWSER_TELEMETRY=off
+          # The gateway takes the built SPA files from the SPA image through the named context spa (ad-011). The SPA
+          # image is never pushed: its files ship inside the gateway, and the gateway's scan covers them. The AWS
+          # gateway takes in no browser telemetry (AD-29), so the published UI sends none. docker-image:// of this local,
+          # never-pushed tag works because the default docker driver reads the daemon's image store; a docker-container
+          # builder (for example from setup-buildx-action) would try a registry pull instead.
+          docker build -t disputedesk-spa:publish --build-arg BROWSER_TELEMETRY=off frontend
+          publish gateway      infra/images/gateway --build-context spa=docker-image://disputedesk-spa:publish
           publish zitadel      infra/images/zitadel
 
       - name: Log out of GHCR

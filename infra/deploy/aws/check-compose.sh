@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Render checks of infra/deploy/aws/compose.yml merged with docker-compose.yml (story 7.4, criteria 1, 2 and 5), and of
-# Redpanda Console staying behind its profile, offline:
+# Redpanda Console and the build-only spa service staying behind their profiles, offline:
 # Compose renders the merged file with the dummy inputs in compose.test.env, and jq reads the JSON render. The last
 # section validates the collector config with the pinned collector image.
 #   infra/deploy/aws/check-compose.sh
@@ -154,6 +154,14 @@ console=$(env "${unset_inputs[@]}" docker compose -f docker-compose.yml --profil
   | jq -c '.services["redpanda-console"] // {} | [.profiles, ([(.ports // [])[].host_ip] | unique), has("user")]')
 [ "$console" = '[["console"],["127.0.0.1"],false]' ] || fail "redpanda-console's profiles, host addresses and user: $console"
 ok "locally, redpanda-console starts only under profiles: [console], publishes on 127.0.0.1 only and keeps the image's user"
+
+# The SPA service is build-only (ad-011): the gateway's build names it, and its profile keeps it from getting a container.
+! grep -qx spa <<< "$local_services" || fail "docker compose up starts spa without its profile"
+[ "$(q '.services | has("spa")')" = false ] || fail "the AWS render holds spa"
+spa=$(env "${unset_inputs[@]}" docker compose -f docker-compose.yml --profile build config --format json \
+  | jq -c '[.services.spa.profiles, .services.gateway.build.additional_contexts]')
+[ "$spa" = '[["build"],{"spa":"service:spa"}]' ] || fail "spa's profiles and the gateway's named contexts: $spa"
+ok "locally, spa sits under profiles: [build] and the gateway builds with spa: service:spa; the AWS render holds no spa"
 
 # Compose merges maps and appends sequences, so a service the base file defines must replace these whole.
 base_services=$(env "${unset_inputs[@]}" docker compose -f docker-compose.yml config --services | tr '\n' ' ')

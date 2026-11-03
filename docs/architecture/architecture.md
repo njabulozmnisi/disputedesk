@@ -339,7 +339,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. `Lay
 
 - **Binds:** R26, R37
 - **Prevents:** stories adding containers; a second public entry point
-- **Rule:** The P0-2 platform stays as built: gateway (nginx, the only public entry), api, worker, postgres (databases `disputedesk` and `zitadel`, role `qa_readonly`), redpanda (the relay's host creates `disputedesk.disputes` with 3 partitions at start-up), zitadel, mailpit and aspire-dashboard. This spine adds `core-banking` (AD-21), the SPA built in a Node stage of the gateway image in place of the `infra/images/gateway/html` placeholder [ASSUMPTION], the worker's heartbeat health check, and `depends_on: api (healthy)` for the worker. Images are multi-stage, non-root, and pinned by tag and digest. One opt-in exception: `redpanda-console` under the Compose profile `console`, local only, off by default, never started in AWS, published only on `127.0.0.1` (amended 2026-11-02; ad-010).
+- **Rule:** The P0-2 platform stays as built: gateway (nginx, the only public entry), api, worker, postgres (databases `disputedesk` and `zitadel`, role `qa_readonly`), redpanda (the relay's host creates `disputedesk.disputes` with 3 partitions at start-up), zitadel, mailpit and aspire-dashboard. This spine adds `core-banking` (AD-21), the SPA, built by `frontend/Dockerfile` (a build-only `spa` service under the Compose profile `build`, never started) and copied into the gateway image through a named build context (ad-011), in place of the `infra/images/gateway/html` placeholder [ASSUMPTION], the worker's heartbeat health check, and `depends_on: api (healthy)` for the worker. Images are multi-stage, non-root, and pinned by tag and digest. One opt-in exception: `redpanda-console` under the Compose profile `console`, local only, off by default, never started in AWS, published only on `127.0.0.1` (amended 2026-11-02; ad-010).
 - **Rejected:** a separate SPA container; Kubernetes locally.
 
 ### AD-28 - AWS dev environment [ADOPTED]
@@ -655,7 +655,7 @@ backend/
   src/DisputeDesk.*/<Feature>/...        # AD-1 feature folders
   stubs/DisputeDesk.CoreBankingStub/     # AD-21, no project references
   fixtures/local.json                    # AD-30 single seed source (ad-011)
-frontend/                                # AD-31, built into the gateway image
+frontend/                                # AD-31; Dockerfile builds the SPA the gateway image copies (ad-011)
 contracts/events/                        # AD-19 JSON Schemas and v1 samples
 infra/terraform/modules/, envs/dev/      # AD-28
 infra/deploy/aws/compose.yml                    # AD-26 production overrides (ad-011)

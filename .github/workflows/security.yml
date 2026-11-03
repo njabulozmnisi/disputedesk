@@ -125,14 +125,18 @@ jobs:
       - name: Filesystem and config scan
         run: trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 1 --ignorefile .github/trivyignore.yaml .
 
-      # The gateway builds from the repository root, so its one build reads frontend/ and infra/images/gateway/.
       # The five images ci.yml's publish job pushes, from the same targets (api-local and worker-local, P57).
+      # The gateway takes the built SPA files from the SPA image through the named context spa (ad-011); the SPA
+      # image is not scanned on its own, its files are scanned inside the gateway. docker-image:// of the local,
+      # never-pushed tag works because the default docker driver reads the daemon's image store; a docker-container
+      # builder (for example from setup-buildx-action) would try a registry pull instead.
       - name: Build the api, worker, core-banking, gateway and provision images
         run: |
           docker build -t disputedesk-api:ci --target api-local backend
           docker build -t disputedesk-worker:ci --target worker-local backend
           docker build -t disputedesk-core-banking:ci --target core-banking backend
-          docker build -t disputedesk-gateway:ci -f infra/images/gateway/Dockerfile .
+          docker build -t disputedesk-spa:ci frontend
+          docker build -t disputedesk-gateway:ci --build-context spa=docker-image://disputedesk-spa:ci infra/images/gateway
           docker build -t disputedesk-zitadel:ci infra/images/zitadel
 
       - name: Image scan
