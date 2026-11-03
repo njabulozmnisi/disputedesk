@@ -4,7 +4,7 @@ How to start working on DisputeDesk. To run it, see the [README](../README.md).
 
 ## Prerequisites
 
-- Docker with Compose v2 (`docker compose`). The backend tests start Postgres through Testcontainers, so Docker must be
+- Docker with Compose v5.6.0 or later (`docker compose version`). The backend tests start Postgres through Testcontainers, so Docker must be
   running for them too.
 - The .NET SDK named in [backend/global.json](../backend/global.json).
 - Node, at the version in [.nvmrc](../.nvmrc).
