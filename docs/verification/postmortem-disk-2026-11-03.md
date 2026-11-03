@@ -16,3 +16,8 @@
 2. Builders tag throwaway comparison images with a DisputeDesk label or prefix and remove them before reporting. This is a build-story pitfall line, so it needs approval (skill change).
 
 **Related.** `infra/smoke.sh` runs `docker compose down -v`, so a builder running it wipes the shared local stack's volumes. The data is synthetic and reseeds on the next `up`, so nothing was lost that matters, but a builder should say so before running it. This is a candidate pitfall line for the same batch.
+
+## Decisions (human, 2026-11-04)
+
+- `docker builder prune --filter until=72h` run once: 5.0 GB reclaimed; host free 14 GiB.
+- Approved: the four build-story pitfall lines (suite results file, throwaway images, `smoke.sh` wipes volumes, oldest tool version) and the removal of the dead guard and agent-file paths (`fixtures/`, `docker-compose.aws.yml`, root `.dockerignore`).
