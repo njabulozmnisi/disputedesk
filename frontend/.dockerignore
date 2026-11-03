@@ -1,0 +1,11 @@
+# The build reads only these files (npm ci, tsc and vite build). Everything else stays out of the context:
+# node_modules, dist, .env files, test output and coverage included.
+# A new build input (for example public/) must be added to the allowlist below; the allowlist drops it silently otherwise.
+*
+!package.json
+!package-lock.json
+!index.html
+!tsconfig.json
+!vite.config.ts
+!orval.config.ts
+!src/
