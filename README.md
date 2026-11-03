@@ -10,7 +10,7 @@ with synthetic data only.
 
 ## Prerequisites
 
-- Docker running, with Compose v2 (`docker compose`).
+- Docker running, with Compose v5.6.0 or later (`docker compose version`): the gateway build reads the SPA from a build-only service, which older Compose rejects.
 - Port 8080 free: the gateway's port is fixed. The other host ports can be moved, as [infra/README.md](infra/README.md)
   says.
 - `curl` and `jq`, for the Operations section.

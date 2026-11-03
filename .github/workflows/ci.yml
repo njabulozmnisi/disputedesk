@@ -15,6 +15,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+# The Compose plugin every job that runs docker compose installs: the same version and SHA-256 as the AWS instance
+# (infra/terraform/modules/compute/main.tf, compose_version and compose_sha256); change them together. The runner
+# image's preinstalled Compose is older and rejects the gateway's service:spa build context (fixed in v5.6.0).
+env:
+  COMPOSE_VERSION: 5.6.1
+  COMPOSE_SHA256: 47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0
+
 jobs:
   backend:
     runs-on: ubuntu-24.04
@@ -72,7 +79,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # The same Node version as local development and the gateway image's build stage.
+      # The same Node version as local development and the SPA image's build stage (frontend/Dockerfile).
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
@@ -106,12 +113,28 @@ jobs:
 
   platform:
     runs-on: ubuntu-24.04
-    # The AWS gateway test builds the gateway image twice (with and without browser telemetry).
+    # The AWS gateway test builds the SPA image twice (with and without browser telemetry) and a gateway on each.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # Docker, "Install the plugin manually", for the active user: the CLI searches ~/.docker/cli-plugins before the
+      # system plugin directories, so this plugin shadows the preinstalled one.
+      - name: Install Compose
+        run: |
+          plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
+          mkdir -p "$plugins"
+          curl -fsSL --max-time 300 -o "$RUNNER_TEMP/docker-compose" \
+            "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-x86_64"
+          echo "${COMPOSE_SHA256}  $RUNNER_TEMP/docker-compose" | sha256sum --check --strict
+          install -m 0755 "$RUNNER_TEMP/docker-compose" "$plugins/docker-compose"
+          docker compose version
+          if [ "$(docker compose version --short)" != "$COMPOSE_VERSION" ]; then
+            echo "::error::docker compose is not v$COMPOSE_VERSION"
+            exit 1
+          fi
 
       - name: Compose file is valid
         run: docker compose config --quiet
@@ -294,6 +317,22 @@ jobs:
         with:
           persist-credentials: false
 
+      # Docker, "Install the plugin manually", for the active user: the CLI searches ~/.docker/cli-plugins before the
+      # system plugin directories, so this plugin shadows the preinstalled one.
+      - name: Install Compose
+        run: |
+          plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
+          mkdir -p "$plugins"
+          curl -fsSL --max-time 300 -o "$RUNNER_TEMP/docker-compose" \
+            "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-x86_64"
+          echo "${COMPOSE_SHA256}  $RUNNER_TEMP/docker-compose" | sha256sum --check --strict
+          install -m 0755 "$RUNNER_TEMP/docker-compose" "$plugins/docker-compose"
+          docker compose version
+          if [ "$(docker compose version --short)" != "$COMPOSE_VERSION" ]; then
+            echo "::error::docker compose is not v$COMPOSE_VERSION"
+            exit 1
+          fi
+
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
@@ -393,8 +432,13 @@ jobs:
           publish api          backend --target api-local
           publish worker       backend --target worker-local
           publish core-banking backend --target core-banking
-          # The AWS gateway takes in no browser telemetry (AD-29), so the published UI sends none.
-          publish gateway      .       -f infra/nginx/Dockerfile --build-arg BROWSER_TELEMETRY=off
+          # The gateway takes the built SPA files from the SPA image through the named context spa (ad-011). The SPA
+          # image is never pushed: its files ship inside the gateway, and the gateway's scan covers them. The AWS
+          # gateway takes in no browser telemetry (AD-29), so the published UI sends none. docker-image:// of this local,
+          # never-pushed tag works because the default docker driver reads the daemon's image store; a docker-container
+          # builder (for example from setup-buildx-action) would try a registry pull instead.
+          docker build -t disputedesk-spa:publish --build-arg BROWSER_TELEMETRY=off frontend
+          publish gateway      infra/nginx --build-context spa=docker-image://disputedesk-spa:publish
           publish provision    infra/zitadel/provision
 
       - name: Log out of GHCR

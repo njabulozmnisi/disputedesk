@@ -47,7 +47,7 @@ A second stack beside this one (another worktree or a throwaway copy) sets anoth
 | Folder | Purpose |
 |---|---|
 | `db/` | Postgres init: `disputedesk` (app, owns its database), `zitadel` (non-superuser, own database), `qa_readonly` (SELECT on the app schema through default privileges, read-only sessions). |
-| `nginx/` | The gateway image: the SPA built in a Node stage, served by unprivileged nginx. `templates/` holds the config, rendered from the `GATEWAY_*` variables in `docker-compose.yml` at start: two server blocks, fixed upstream Host per origin, security headers and CSP on the app origin, the coarse rate limit and the `/otlp/` proxy. |
+| `nginx/` | The gateway image: the built SPA files, taken from the SPA image (`frontend/Dockerfile`) through the named build context `spa` (the build-only `spa` service in `docker-compose.yml`, `--build-context` in CI), served by unprivileged nginx. `templates/` holds the config, rendered from the `GATEWAY_*` variables in `docker-compose.yml` at start: two server blocks, fixed upstream Host per origin, security headers and CSP on the app origin, the coarse rate limit and the `/otlp/` proxy. |
 | `zitadel/provision/` | One-shot, idempotent provisioner (`provision.sh`: project, roles, BFF app, operations machine user, fixture logins) and its read-only check of facts invisible from outside (`verify.sh`). |
 | `probe/` | The Aspire dashboard image plus a static `wget` so Compose can healthcheck it (the api gets the same probe from the `api-local` stage in `backend/Dockerfile`). |
 | `smoke.sh` | The black-box smoke check through the gateway; every check fails the run. |
