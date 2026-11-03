@@ -511,7 +511,7 @@ Every successful action, including withdrawal and SLA escalation, publishes `dis
 
 #### FR-29: Seeded customers
 
-`fixtures/` seeds four customers on the stubbed core-banking source. Each has about 90 days of transactions on one or two accounts, including one pending transaction and one older than 90 days. All dates are relative to start-up, so the data never goes stale.
+`backend/fixtures/` seeds four customers on the stubbed core-banking source. Each has about 90 days of transactions on one or two accounts, including one pending transaction and one older than 90 days. All dates are relative to start-up, so the data never goes stale.
 
 **Consequences (testable):**
 

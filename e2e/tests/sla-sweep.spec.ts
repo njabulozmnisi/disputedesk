@@ -13,7 +13,7 @@ import { expectProblemShape, fixtureLogin, queryDatabase, topicRecords } from '.
 
 const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const root = new URL('../..', import.meta.url).pathname;
-const fixtures = JSON.parse(readFileSync(fileURLToPath(new URL('../../fixtures/local.json', import.meta.url)), 'utf8'));
+const fixtures = JSON.parse(readFileSync(fileURLToPath(new URL('../../backend/fixtures/local.json', import.meta.url)), 'utf8'));
 const demo = fixtures.disputes.find((entry: { slaDemo?: boolean }) => entry.slaDemo) as { accountRef: string; transactionId: string };
 const worker = 'disputedesk-worker-1';
 

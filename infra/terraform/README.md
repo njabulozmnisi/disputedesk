@@ -24,7 +24,7 @@ are the only public entry. GitHub Actions deploys a commit through SSM Run Comma
 What to know before applying it:
 
 - **The fixture logins are live.** The customer and operations logins whose passwords are published in
-  [`fixtures/local.json`](../../fixtures/local.json) work on the AWS demo. It holds only synthetic data.
+  [`backend/fixtures/local.json`](../../backend/fixtures/local.json) work on the AWS demo. It holds only synthetic data.
 - **CloudFront reaches the origin over plain HTTP**, and the default `*.cloudfront.net` certificate allows TLS 1.0
   viewers. There is no WAF. An HTTPS or VPC origin, a domain with an ACM certificate (TLS 1.2 minimum) and WAF come
   before any real data (production path).

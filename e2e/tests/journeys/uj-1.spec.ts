@@ -11,9 +11,9 @@ import { axeTags, expectAccessibleAtBothWidths } from './screens';
 // The ID number, account number, OTP and cookies are used but never printed.
 
 const startedAt = new Date().toISOString();
-const fixture = JSON.parse(readFileSync(fileURLToPath(new URL('../../../fixtures/local.json', import.meta.url)), 'utf8'));
+const fixture = JSON.parse(readFileSync(fileURLToPath(new URL('../../../backend/fixtures/local.json', import.meta.url)), 'utf8'));
 const customerD = (fixture.customers as { key: string; customerId: string; idNumber: string; cellphone: string; accounts: { accountNumber: string }[] }[]).find((entry) => entry.key === 'D');
-if (!customerD) throw new Error('fixtures/local.json has no customer D');
+if (!customerD) throw new Error('backend/fixtures/local.json has no customer D');
 const disputesPath = '/api/v1/disputes';
 const note = "I don't recognise this merchant.";
 

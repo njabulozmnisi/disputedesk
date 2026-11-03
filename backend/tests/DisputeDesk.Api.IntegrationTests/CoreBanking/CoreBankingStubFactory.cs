@@ -14,7 +14,7 @@ using Microsoft.Extensions.Logging;
 namespace DisputeDesk.Api.IntegrationTests.CoreBanking;
 
 /// <summary>
-/// The real core-banking stub on a loopback port, reading the real <c>fixtures/local.json</c>, with its clock fixed at
+/// The real core-banking stub on a loopback port, reading the real <c>backend/fixtures/local.json</c>, with its clock fixed at
 /// <see cref="ClockNow"/>. Everything it logs is captured in <see cref="Logs"/>.
 /// </summary>
 public class CoreBankingStubFactory : WebApplicationFactory<Bank>

@@ -11,7 +11,7 @@ namespace DisputeDesk.Api.IntegrationTests.Linking;
 /// </summary>
 public static class LinkingFakes
 {
-    /// <summary>A fixture customer's details as <c>fixtures/local.json</c> holds them.</summary>
+    /// <summary>A fixture customer's details as <c>backend/fixtures/local.json</c> holds them.</summary>
     public sealed record Customer(string IdNumber, string AccountNumber, string CustomerId, string Cellphone)
     {
         // The details are personal data even in a test: never printed by an assertion message.

@@ -6,7 +6,7 @@ using DisputeDesk.Infrastructure.Seeding;
 
 namespace DisputeDesk.Api.IntegrationTests.Seeding;
 
-/// <summary>Story 5.4, criterion 7: the seeded disputes in <c>fixtures/local.json</c> are synthetic and stay clear of the tests.</summary>
+/// <summary>Story 5.4, criterion 7: the seeded disputes in <c>backend/fixtures/local.json</c> are synthetic and stay clear of the tests.</summary>
 public sealed partial class SeedFixtureTests
 {
     // Named by a backend test or an E2E spec on a fresh stack, which a seeded dispute would make not disputable.

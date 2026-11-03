@@ -1,5 +1,5 @@
 using System.Text.Json;
-using DisputeDesk.Api.IntegrationTests.CoreBanking;
+using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Contracts.Events;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Domain.Transactions;
@@ -206,12 +206,8 @@ public class PublishMappingTests
             document.RootElement, new EvaluationOptions { RequireFormatValidation = true, OutputFormat = OutputFormat.List });
     }
 
-    /// <summary>A file under the repository root, found from <c>fixtures/local.json</c>.</summary>
-    private static string RepoFile(string relativePath)
-    {
-        string repo = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(FixturesFile.FindPath()) ?? "", ".."));
-        return Path.Combine(repo, relativePath);
-    }
+    /// <summary>A file under the repository root.</summary>
+    private static string RepoFile(string relativePath) => Path.Combine(RepoRoot.Repo, relativePath);
 
     /// <summary>A stored event type the publish mapping does not name.</summary>
     private sealed record UnmappedStoredEvent : StoredEvent;

@@ -19,7 +19,7 @@ const dashboard = process.env.ASPIRE_URL ?? `http://localhost:${process.env.DISP
 const problemType = (slug: string) => `https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/${slug}.md`;
 
 type FixtureCustomer = { key: string; customerId: string; idNumber: string; cellphone: string; accounts: { accountNumber: string }[] };
-const fixture = JSON.parse(readFileSync(fileURLToPath(new URL('../../fixtures/local.json', import.meta.url)), 'utf8'));
+const fixture = JSON.parse(readFileSync(fileURLToPath(new URL('../../backend/fixtures/local.json', import.meta.url)), 'utf8'));
 const customer = (key: string) => {
   const found = (fixture.customers as FixtureCustomer[]).find((entry) => entry.key === key)!;
   return { customerId: found.customerId, idNumber: found.idNumber, cellphone: found.cellphone, accountNumber: found.accounts[0].accountNumber, accounts: found.accounts.map((a) => a.accountNumber) };

@@ -29,7 +29,7 @@ const sql = (statement: string) => queryDatabase(statement);
 const pause = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 type FixtureCustomer = { key: string; customerId: string; idNumber: string; cellphone: string; accounts: { accountNumber: string }[] };
-const fixture = JSON.parse(readFileSync(fileURLToPath(new URL('../../fixtures/local.json', import.meta.url)), 'utf8'));
+const fixture = JSON.parse(readFileSync(fileURLToPath(new URL('../../backend/fixtures/local.json', import.meta.url)), 'utf8'));
 const dFixture = (fixture.customers as FixtureCustomer[]).find((entry) => entry.key === 'D')!;
 const customerD = { customerId: dFixture.customerId, idNumber: dFixture.idNumber, cellphone: dFixture.cellphone, accountNumber: dFixture.accounts[0].accountNumber };
 const noMatchAccount = '1000000049'; // a valid-format account number that no customer holds

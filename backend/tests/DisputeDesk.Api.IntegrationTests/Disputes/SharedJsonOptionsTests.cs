@@ -1,5 +1,4 @@
 using System.Text.Json;
-using DisputeDesk.Api.IntegrationTests.CoreBanking;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Contracts.Json;
@@ -39,7 +38,7 @@ public class SharedJsonOptionsTests(PostgresFixture postgres)
     public void ProductionSource_NewJsonSerializerOptions_OnlyInDisputeDeskJson()
     {
         // One instance, defined once: no other production file builds its own options for these bodies.
-        string src = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(FixturesFile.FindPath()) ?? "", "..", "backend", "src"));
+        string src = Path.Combine(RepoRoot.Backend, "src");
 
         List<string> builders = [.. Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
             .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))

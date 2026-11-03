@@ -80,7 +80,7 @@ On Linux, `npx playwright install --with-deps chromium` also installs the browse
 
 ## Seed identities
 
-Every value comes from [fixtures/local.json](fixtures/local.json) (FR-29). All data is synthetic, and the passwords are
+Every value comes from [backend/fixtures/local.json](backend/fixtures/local.json) (FR-29). All data is synthetic, and the passwords are
 dev-only fixture values. Sign in with the username. The ID and account numbers are what linking asks for.
 
 | Customer | Login (username / password) | ID number | Account numbers | What it shows |

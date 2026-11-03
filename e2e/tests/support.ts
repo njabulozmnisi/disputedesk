@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
-const fixturePath = fileURLToPath(new URL('../../fixtures/local.json', import.meta.url));
+const fixturePath = fileURLToPath(new URL('../../backend/fixtures/local.json', import.meta.url));
 
 export const sessionCookieName = 'disputedesk-session';
 export const antiforgeryCookieName = 'disputedesk-antiforgery';
@@ -54,7 +54,7 @@ export function topicRecords(): TopicRecord[] {
 /**
  * The e2e data budget. A transaction can be disputed once and the data is not reset between specs, so each spec that
  * raises a dispute takes its transactions from its own reserved list here, never "the first disputable row". Lists never
- * overlap and never hold a transaction that fixtures/local.json disputes at seed time (story 5.4: seven on ACC-A-1, one
+ * overlap and never hold a transaction that backend/fixtures/local.json disputes at seed time (story 5.4: seven on ACC-A-1, one
  * on ACC-B-1). A spec raises on the first still-disputable transaction of its list, in list order.
  * TXN-A-0031 to TXN-A-0048 are the card debits the fixture
  * must add to ACC-A-1 (see docs/verification/e2e-data-budget.md).

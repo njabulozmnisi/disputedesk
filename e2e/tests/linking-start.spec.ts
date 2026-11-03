@@ -7,7 +7,7 @@ import { fixtureLogin, holdsCode, otpCodesSentTo, queryDatabase, telemetryValues
 
 // Story 6.1: POST /api/v1/linking/start, through the real gateway, BFF, API, job, database (qa_readonly) and Mailpit.
 // Signed in as customer C's login, the one fixture login with no link; customer A's login is linked (the 403 case).
-// The bank-record details of customers A, C and D come from fixtures/local.json at run time and are never printed:
+// The bank-record details of customers A, C and D come from backend/fixtures/local.json at run time and are never printed:
 // assertions compare, they do not echo. The OTP is read from the Mailpit message only to check its shape.
 // Only one unlinked login exists, so the "three logins" of criterion 1 are three starts by that login in turn, each
 // waited out until its job has audited its stop (a start supersedes the login's previous challenge).
@@ -20,7 +20,7 @@ const problemType = (slug: string) => `https://github.com/njabulozmnisi/disputed
 
 type FixtureCustomer = { key: string; customerId: string; idNumber: string; cellphone: string; accounts: { accountNumber: string }[] };
 type FixtureLogin = { key: string; userId: string };
-const fixture = JSON.parse(readFileSync(fileURLToPath(new URL('../../fixtures/local.json', import.meta.url)), 'utf8'));
+const fixture = JSON.parse(readFileSync(fileURLToPath(new URL('../../backend/fixtures/local.json', import.meta.url)), 'utf8'));
 const customer = (key: string) => {
   const found = (fixture.customers as FixtureCustomer[]).find((entry) => entry.key === key)!;
   return { customerId: found.customerId, idNumber: found.idNumber, cellphone: found.cellphone, accountNumber: found.accounts[0].accountNumber };

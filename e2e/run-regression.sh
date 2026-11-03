@@ -27,7 +27,7 @@ cd "$(dirname "$0")/.."
 export E2E_LINKING_QUEUE_CAPACITY=2
 small_queue=(-f docker-compose.yml -f e2e/small-queue.compose.yml)
 raised_limits=(-f docker-compose.yml -f e2e/small-queue.compose.yml -f e2e/raised-limits.compose.yml)
-customer_d=$(node -p "JSON.parse(require('fs').readFileSync('fixtures/local.json', 'utf8')).customers.find((c) => c.key === 'D').customerId")
+customer_d=$(node -p "JSON.parse(require('fs').readFileSync('backend/fixtures/local.json', 'utf8')).customers.find((c) => c.key === 'D').customerId")
 
 # Records, and returns 1 when it is over three (the app's cap did not hold), the OTP sends claimed for customer D on the running stack (read-only role).
 check_d_sends() {

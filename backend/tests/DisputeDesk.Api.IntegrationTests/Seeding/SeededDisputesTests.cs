@@ -300,7 +300,7 @@ public class SeededDisputesTests(PostgresFixture postgres)
     }
 
     /// <summary>
-    /// The instant of each action of a fixture entry, worked out from the rules in <c>fixtures/README.md</c>: days ago
+    /// The instant of each action of a fixture entry, worked out from the rules in <c>backend/fixtures/README.md</c>: days ago
     /// from the anchor at a South African time, hours after the raise, or for the SLA demo raise the instant that makes
     /// it due 5 minutes after <paramref name="seedingInstant"/>.
     /// </summary>

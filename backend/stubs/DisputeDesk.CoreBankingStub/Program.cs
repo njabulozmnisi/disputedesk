@@ -2,7 +2,7 @@ using DisputeDesk.CoreBankingStub;
 using Microsoft.AspNetCore.Mvc;
 
 // A stand-in for the bank's core banking system and the mobile network's SIM-swap check (architecture AD-21).
-// It reads fixtures/local.json once at start-up. Customer and account identifiers arrive only in headers or
+// It reads backend/fixtures/local.json once at start-up. Customer and account identifiers arrive only in headers or
 // request bodies, never in the path or query, so they never appear in a URL or an access log.
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 

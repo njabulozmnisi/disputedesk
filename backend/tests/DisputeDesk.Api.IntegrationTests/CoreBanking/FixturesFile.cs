@@ -1,25 +1,14 @@
 using System.Text.Json;
+using DisputeDesk.Api.IntegrationTests.Infrastructure;
 
 namespace DisputeDesk.Api.IntegrationTests.CoreBanking;
 
-/// <summary>The repository's <c>fixtures/local.json</c>, the same file the stub reads.</summary>
+/// <summary>The repository's <c>backend/fixtures/local.json</c>, the same file the stub reads.</summary>
 public static class FixturesFile
 {
     public static JsonDocument Read() => JsonDocument.Parse(ReadText());
 
     public static string ReadText() => File.ReadAllText(FindPath());
 
-    public static string FindPath()
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-        {
-            string candidate = Path.Combine(directory.FullName, "fixtures", "local.json");
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        throw new InvalidOperationException("Could not find fixtures/local.json above the test output directory.");
-    }
+    public static string FindPath() => Path.Combine(RepoRoot.Backend, "fixtures", "local.json");
 }

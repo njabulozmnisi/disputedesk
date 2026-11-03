@@ -5,13 +5,13 @@ import { expect, test, type Browser, type BrowserContext } from '@playwright/tes
 import { expectProblemShape, fixtureLogin, queryDatabase, topicRecords } from './support';
 
 // Story 5.4: the seeder's disputes for customers A and B, on the real stack, through the SPA, the gateway, the API, the
-// database (qa_readonly) and the topic. Expectations come from fixtures/local.json, so the spec follows the fixture.
+// database (qa_readonly) and the topic. Expectations come from backend/fixtures/local.json, so the spec follows the fixture.
 // It only reads the seeded rows (and sends one refused withdraw), so it is safe to run on a database other specs have
 // used, but the "once on the topic" and "restart" tests assume the stack's own Seed:Enabled run.
 
 const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const dashboard = process.env.ASPIRE_ORIGIN ?? 'http://localhost:18888';
-const fixtures = JSON.parse(readFileSync(fileURLToPath(new URL('../../fixtures/local.json', import.meta.url)), 'utf8'));
+const fixtures = JSON.parse(readFileSync(fileURLToPath(new URL('../../backend/fixtures/local.json', import.meta.url)), 'utf8'));
 
 type FixtureAction = { action: string; outcome?: string; note?: string };
 type FixtureDispute = { customer: string; accountRef: string; transactionId: string; reason: string; note?: string; slaDemo?: boolean; actions: FixtureAction[] };
