@@ -1,20 +1,12 @@
 # syntax=docker/dockerfile:1
-# The gateway image: the SPA built in a Node stage, served by unprivileged nginx with the edge rules (AD-23).
-# Build context: the repository root, so one build reads frontend/ and infra/nginx/ (the root .dockerignore sends
-# nothing else).
-#   docker build -f infra/nginx/Dockerfile -t disputedesk-gateway .
-# Images are pinned by tag and by multi-arch index digest. The Node tag matches .nvmrc.
-
-FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS spa
-WORKDIR /src/frontend
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
-COPY frontend/ ./
-# Browser tracing is on unless the build says off (story 7.11): CI's publish job builds the image for AWS with
-# --build-arg BROWSER_TELEMETRY=off, because the AWS gateway takes in no browser telemetry (AD-29). Vite reads
-# VITE_BROWSER_TELEMETRY at build time (Docker, "Build variables"; Vite, "Env Variables and Modes").
-ARG BROWSER_TELEMETRY=on
-RUN VITE_BROWSER_TELEMETRY=$BROWSER_TELEMETRY npm run build
+# The gateway image: the built SPA files, served by unprivileged nginx with the edge rules (AD-23).
+# The SPA comes from the SPA image (frontend/Dockerfile, its files at /dist/; ad-011) through the
+# named build context spa (Docker, "Named contexts"); Compose passes it with additional_contexts. Build context: this
+# folder. From the repository root:
+#   docker build -t disputedesk-spa frontend
+#   docker build --build-context spa=docker-image://disputedesk-spa -t disputedesk-gateway infra/nginx
+# The browser telemetry switch is the SPA image's BROWSER_TELEMETRY build argument (story 7.11).
+# The image is pinned by tag and by multi-arch index digest.
 
 FROM nginxinc/nginx-unprivileged:1.31.7-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
 # The newest base still ships brotli-libs, curl/libcurl and libexpat with HIGH CVEs that Alpine 3.24 has fixed, so
@@ -30,12 +22,12 @@ RUN rm /etc/nginx/nginx.conf /etc/nginx/conf.d/default.conf
 # GATEWAY_* variables, so nginx's own $variables are never replaced by an environment variable of the same name.
 ENV NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx \
     NGINX_ENVSUBST_FILTER=^GATEWAY_
-COPY infra/nginx/templates/ /etc/nginx/templates/
+COPY templates/ /etc/nginx/templates/
 # The AWS edge (infra/aws/compose.yml selects it with NGINX_ENVSUBST_TEMPLATE_DIR), with the app's security and Scalar
 # headers and the identity origin's headers copied from the one source above.
-COPY infra/nginx/templates-aws/ /etc/nginx/templates-aws/
-COPY infra/nginx/templates/security-headers.conf.template infra/nginx/templates/scalar-headers.conf.template \
-     infra/nginx/templates/identity-headers.conf.template /etc/nginx/templates-aws/
-COPY --from=spa /src/frontend/dist/ /usr/share/nginx/html/
+COPY templates-aws/ /etc/nginx/templates-aws/
+COPY templates/security-headers.conf.template templates/scalar-headers.conf.template \
+     templates/identity-headers.conf.template /etc/nginx/templates-aws/
+COPY --from=spa /dist/ /usr/share/nginx/html/
 # The base image already runs as its non-root nginx user (UID 101); restated so the Dockerfile says so (Trivy DS-0002).
 USER 101

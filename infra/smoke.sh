@@ -34,8 +34,9 @@ clients_hash(){ in_provisioner sha256sum /out/zitadel-clients.json | cut -d' ' -
 
 section "clean slate"
 docker compose down -v --remove-orphans >/dev/null 2>&1
-# Remove the locally built images too, so `up` has to build them as on a fresh machine (layer cache aside).
-docker image rm -f $(docker compose config --images | grep ':local$') >/dev/null 2>&1 || true
+# Remove the locally built images too, so `up` has to build them as on a fresh machine (layer cache aside). The
+# build profile adds the build-only spa image, which the gateway's build takes its SPA files from.
+docker image rm -f $(docker compose --profile build config --images | grep ':local$') >/dev/null 2>&1 || true
 echo "volumes and locally built images removed"
 
 section "docker compose up --wait"
