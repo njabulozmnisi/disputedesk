@@ -24,3 +24,10 @@ Brief: `redpanda-console-brief.md`. Builder: built, all six criteria met; review
 ## Metrics
 
 Fix rounds 0; full-suite runs 1 (plus one Api project rerun); builder about 23 min, reviewer about 3 min.
+
+## Follow-ups on main (2026-11-03)
+
+| Finding | Caught by | Should have been caught by | Category | Countermeasure |
+| --- | --- | --- | --- | --- |
+| Security and `publish` red on commit "feat(infra): Redpanda Console under the opt-in local console profile, never in AWS; Redpanda pinned at v26.2.6 (human decisions 2026-11-02)" (2026-11-02): libexpat 2.9.0-r0 in the pinned nginx base, two HIGH CVEs published after the last green run; fixed in commit "fix(infra): the gateway image upgrades libexpat to Alpine's fixed 2.10.0-r0 (two HIGH CVEs in the pinned base, Trivy image scan)" (2026-11-03) by adding libexpat to the gateway's `apk upgrade` line | CI (Security, publish) | none: disclosed after the last scan | environment or tooling | none; the existing `shortcut:` line covers it until the base is rebuilt |
+| `SlaBatchTests.Sweep_TwoAtOnceWithOverlappingTransactions_…` failed on commit "fix(infra): the gateway image upgrades libexpat to Alpine's fixed 2.10.0-r0 (two HIGH CVEs in the pinned base, Trivy image scan)" (2026-11-03): it read the two sweeps' first batches by span end order, which is not fixed; fixed in commit "test(worker): the overlapping-sweeps test reads each sweep's first batch by span start time, not by the order spans end (CI flake on commit "fix(infra): the gateway image upgrades libexpat to Alpine's fixed 2.10.0-r0 (two HIGH CVEs in the pinned base, Trivy image scan)" (2026-11-03))" (2026-11-03) by ordering by start time (forced interleaving reproduced the CI failure; 30 of 30 runs pass) | CI (backend) | story 5.3 review | flaky | proposed for the human: a review-story pitfall line, "a race test relies only on an order the code guarantees or on an identifier, never on the order concurrent work records spans or events" |
