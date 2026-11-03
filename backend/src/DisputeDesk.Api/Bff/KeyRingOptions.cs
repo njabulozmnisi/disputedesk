@@ -4,7 +4,7 @@ namespace DisputeDesk.Api.Bff;
 
 /// <summary>
 /// The <c>DataProtection</c> section (AD-7, AD-26): where the Data Protection key ring lives. Unset, it stays in Postgres;
-/// in AWS, docker-compose.aws.yml sets both keys, and the key ring goes to SSM Parameter Store.
+/// in AWS, infra/aws/compose.yml sets both keys, and the key ring goes to SSM Parameter Store.
 /// </summary>
 public sealed class KeyRingOptions
 {

@@ -223,7 +223,7 @@ case $call in
   | "iptables -I DOCKER-USER 3 -s 10.201.89.0/24 -d 169.254.169.254/32 -j DROP" \
   | "iptables-save -f /etc/sysconfig/iptables" \
   | "systemctl enable iptables" \
-  | "docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d --wait")
+  | "docker compose -f docker-compose.yml -f infra/aws/compose.yml up -d --wait")
     ;;
   "docker run "*)
     shift
@@ -327,7 +327,7 @@ section "a later deploy finds the roles and databases and skips the init (criter
 run_deploy later-deploy "$DB_HOST" "$work/tls/ca.crt"
 [ "$status" -eq 0 ] || fail "the later deploy failed: $(cat "$out/later-deploy.out")"
 ! grep -qF 10-roles-and-databases.sh "$out/later-deploy.calls" || fail "the init ran again"
-grep -qxF 'docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d --wait' "$out/later-deploy.calls" \
+grep -qxF 'docker compose -f docker-compose.yml -f infra/aws/compose.yml up -d --wait' "$out/later-deploy.calls" \
   || fail "Compose up was not called"
 ok "deploy.sh exits 0, skips the init and calls docker compose ... up -d --wait"
 

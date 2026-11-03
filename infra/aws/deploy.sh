@@ -35,7 +35,7 @@ FROM_SSM=(
 RDS_MASTER_USER=dbmaster
 # The pinned image of docker-compose.yml's postgres service, for psql (deploy.test.sh checks they match).
 POSTGRES_IMAGE=postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
-# docker-compose.aws.yml's fixed subnet and the two addresses allowed to reach the instance metadata service.
+# infra/aws/compose.yml's fixed subnet and the two addresses allowed to reach the instance metadata service.
 COMPOSE_SUBNET=10.201.89.0/24
 API_ADDRESS=10.201.89.10/32
 COLLECTOR_ADDRESS=10.201.89.11/32
@@ -168,4 +168,4 @@ else
 fi
 
 step "starting the stack"
-docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d --wait
+docker compose -f docker-compose.yml -f infra/aws/compose.yml up -d --wait

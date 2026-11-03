@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Render checks of docker-compose.aws.yml merged with docker-compose.yml (story 7.4, criteria 1, 2 and 5), and of
+# Render checks of infra/aws/compose.yml merged with docker-compose.yml (story 7.4, criteria 1, 2 and 5), and of
 # Redpanda Console staying behind its profile, offline:
 # Compose renders the merged file with the dummy inputs in compose.test.env, and jq reads the JSON render. The last
 # section validates the collector config with the pinned collector image.
@@ -11,7 +11,7 @@ cd "$(dirname "$0")/../.."
 . infra/aws/input-bounds.sh
 
 ENV_FILE=infra/aws/compose.test.env
-OVERRIDE=docker-compose.aws.yml
+OVERRIDE=infra/aws/compose.yml
 SUBNET=10.201.89.0/24
 GATEWAY_IP=10.201.89.12   # pinned outside ip_range, so it is the gateway's alone
 LONG_RUNNING=(redpanda zitadel zitadel-login mailpit core-banking api worker otel-collector gateway)
