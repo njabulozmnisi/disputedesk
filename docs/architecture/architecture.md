@@ -658,6 +658,7 @@ backend/
 frontend/                                # AD-31; Dockerfile builds the SPA the gateway image copies (ad-011)
 contracts/events/                        # AD-19 JSON Schemas and v1 samples
 infra/terraform/modules/, envs/dev/      # AD-28
+infra/tests/DisputeDesk.PlatformTests/  # checks of infra files, no reference to backend/ (ad-011)
 infra/deploy/aws/compose.yml                    # AD-26 production overrides (ad-011)
 ```
 

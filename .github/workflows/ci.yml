@@ -215,6 +215,26 @@ jobs:
           ! grep -qE 'url\([^)]*wordmark' frontend/src/theme/tokens.css || { echo "::error::tokens.css loads a wordmark"; exit 1; }
           echo "ok  tokens.css names both wordmarks and loads neither"
 
+      # ad-011: the tests of infra/'s own files (the provisioner and the gateway templates). infra/tests/global.json pins
+      # the same SDK as the backend job and selects Microsoft.Testing.Platform; dotnet reads it from the working directory.
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: infra/tests/global.json
+
+      - name: Infra tests
+        working-directory: infra/tests
+        run: dotnet test --project DisputeDesk.PlatformTests
+
+      # As in the backend job: the IDE-only style rules never run in `dotnet build`; this is where they are enforced.
+      - name: Infra tests code style
+        working-directory: infra/tests
+        run: dotnet format style DisputeDesk.PlatformTests --verify-no-changes --no-restore
+
+      # The file-level .editorconfig rules (final newline, line endings, charset) are only checked here.
+      - name: Infra tests whitespace
+        working-directory: infra/tests
+        run: dotnet format whitespace DisputeDesk.PlatformTests --verify-no-changes
+
   # Story 7.5 (AD-28): the AWS dev environment's Terraform, checked with no AWS credentials and no AWS call. Plans and
   # applies run only from the maintainer's machine (infra/terraform/README.md); here every test plans against mocked
   # providers.

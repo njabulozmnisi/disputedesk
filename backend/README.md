@@ -40,5 +40,5 @@ Other folders read these, never the backend's source.
 - `contracts/events/`, the JSON Schemas and samples of the published events.
 - `docs/problems/`, the pages the ProblemDetails `type` URLs name.
 - In the tests only, `docker-compose.yml` and `scripts/`; `ApiReferenceTests` also checks that the API's Scalar headers
-  match `infra/images/gateway/templates/scalar-headers.conf.template`, a consistency check across teams. The provision and
-  gateway-template cases in `PlatformScriptTests` move to `infra/tests/` in a later slice.
+  match `infra/images/gateway/templates/scalar-headers.conf.template`, a consistency check across teams. The tests of the
+  provisioner and the gateway templates are infra's own, in `infra/tests/`.
