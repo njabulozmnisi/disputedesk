@@ -24,3 +24,10 @@ Brief: `redpanda-console-brief.md`. Builder: built, all six criteria met; review
 ## Metrics
 
 Fix rounds 0; full-suite runs 1 (plus one Api project rerun); builder about 23 min, reviewer about 3 min.
+
+## Follow-ups on main (2026-11-03)
+
+| Finding | Caught by | Should have been caught by | Category | Countermeasure |
+| --- | --- | --- | --- | --- |
+| Security and `publish` red on 50d1332: libexpat 2.9.0-r0 in the pinned nginx base, two HIGH CVEs published after the last green run; fixed in cbe5f4a by adding libexpat to the gateway's `apk upgrade` line | CI (Security, publish) | none: disclosed after the last scan | environment or tooling | none; the existing `shortcut:` line covers it until the base is rebuilt |
+| `SlaBatchTests.Sweep_TwoAtOnceWithOverlappingTransactions_…` failed on cbe5f4a: it read the two sweeps' first batches by span end order, which is not fixed; fixed in 08318fe by ordering by start time (forced interleaving reproduced the CI failure; 30 of 30 runs pass) | CI (backend) | story 5.3 review | flaky | proposed for the human: a review-story pitfall line, "a race test relies only on an order the code guarantees or on an identifier, never on the order concurrent work records spans or events" |
