@@ -136,5 +136,5 @@ flowchart LR
 | Shared-resource locks | `scripts/test-lock.sh` (`stack`, `testcontainers`) |
 | Non-author verification | `scripts/verify-with-copilot.sh` |
 | Machine setup | `scripts/bootstrap.sh` |
-| Model choices | [ad-004](../decisions/ad-004-model-roles.md) |
+| Model choices | [ad-004](ad-004-model-roles.md) |
 | Where the workflow comes from | [workflow-sources.md](workflow-sources.md) |

@@ -241,8 +241,8 @@ Linking attempts, start and verify combined, are limited to 5 per login and 20 p
 - A login's 6th attempt within 15 minutes returns 429 (RFC 6585) with `Retry-After` (RFC 9110).
 - An IP address's 21st attempt within 15 minutes returns 429, whichever logins are used.
 - "In any 15 minutes" follows the built-in sliding-window limiter: the window is split into segments, and permits come back one segment at a time. Settled on 2026-10-30 (story 6.3).
-- The per-IP limiter runs before the per-login limiter, so a request the login limit rejects has already spent IP permits: two, because ASP.NET Core's rate-limiting middleware asks the chained limiter twice (`AttemptAcquire`, then `AcquireAsync`) before it rejects (dotnet/aspnetcore `release/10.0` `RateLimitingMiddleware.cs`). One login can therefore spend a shared IP's 20 permits in 13 requests; brute-force protection is unchanged. Decided 2026-10-30 (story 6.3).
-- Requests rejected with 429 do not count against the limiter that rejected them. The IP limit runs first, so a request the login limit rejects has already used one of the IP's 20. Settled on 2026-10-30 (story 6.3).
+- The per-IP limiter runs before the per-login limiter. Chained limiters run in order, and a time-based limiter does not return a permit it already granted when a later limiter in the chain rejects the request ([Microsoft Learn, *Rate limiting middleware*](https://learn.microsoft.com/aspnet/core/performance/rate-limit), *Chain limiters in a named policy*; the global `PartitionedRateLimiter.CreateChained` section documents only that the limiters run in sequence, and the permit that is not returned is a property of the time-based limiter types), so a request the login limit rejects has already spent IP permits; brute-force protection is unchanged. How many it spends is not documented behaviour, so it is not a requirement; a test pins today's count as a regression check (decided 2026-11-03, simplicity audit D14).
+- Requests rejected with 429 do not count against the limiter that rejected them. Settled on 2026-10-30 (story 6.3).
 - The client IP is read from forwarded headers only when they come from the known proxies (nginx, and CloudFront in AWS); locally that is the Compose network's configured range. Otherwise the connection address is used. A test shows that a spoofed `X-Forwarded-For` from an unknown source is ignored.
 - Limits are held in memory on the single Api instance. This is stated in the README, and shared limits for scale-out are a production-path note.
 
@@ -624,7 +624,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
   - failed outbox rows.
 
   Raise-screen opens and time to submit come from the SPA's browser spans.
-- **NFR-OBS-4:** the Aspire Dashboard runs locally and CloudWatch is used in AWS. Both work with no manual setup after start-up.
+- **NFR-OBS-4:** the Aspire Dashboard runs locally and CloudWatch is used in AWS. Both work with no manual setup after start-up. AWS takes in no browser telemetry (architecture AD-29), so the browser-span metrics behind SM-1 and SM-2 are measured on the local stack only in v1 (decided 2026-11-03, simplicity audit D11).
 
 ### 5.9 Infrastructure and DevOps
 
@@ -635,25 +635,16 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
   - RDS PostgreSQL db.t4g.micro;
   - three CloudFront distributions, one for the app, one for auth and one for Mailpit (decided 2026-10-30, story 7.4);
   - Mailpit as the demo inbox, protected as in NFR-SEC-11.
+
+  As delivered in v1, the Terraform passes `fmt`, `validate` and mocked `test`, and is applied when the account exists.
 - **NFR-INFRA-4:** deployment uses a GitHub OIDC role, with no long-lived AWS keys. Terraform state is held in S3 with native locking. A budget alarm measures spend with credits excluded, so free-plan credits cannot hide real cost.
-- **NFR-INFRA-5:** `terraform destroy` removes the environment cleanly [manual check] [ASSUMPTION].
+- **NFR-INFRA-5:** `terraform destroy` removes the environment cleanly [manual check] [ASSUMPTION]. As delivered in v1, the Terraform passes `fmt`, `validate` and mocked `test`, and is applied, and this check made, when the account exists.
 
 ### 5.10 Documentation and communication
 
 - **NFR-DOC-1:** the README gives build, run and test steps, the demo logins and seed identities (FR-29), and how to drive the operations endpoints from Scalar. It ends with a map from each of the ten quality areas to where it is addressed.
 - **NFR-DOC-2:** `docs/production-path.md` records everything deferred in §6.2, with a one-line reason for each.
-- **NFR-DOC-3:** key decisions are short decision records in `docs/decisions/`, exactly these (settled on 2026-10-26):
-  - ad-001 Zitadel as the external identity provider, standing in for the bank's identity platform;
-  - ad-002 `IAppDbContext`;
-  - ad-003 Result types;
-  - ad-004 model roles;
-  - ad-005 QA data integrity;
-  - ad-006 actor-agnostic dispute actions;
-  - ad-007 the browser session, with no tokens in the browser;
-  - ad-008 linking, including the SIM-swap check before the OTP is sent.
-  - ad-009 stored events as the record of dispute changes (settled on 2026-10-29).
-
-  The outbox and having no schema registry are recorded in the architecture spine (AD-14, AD-17, AD-19).
+- **NFR-DOC-3:** key decisions are short decision records in `docs/decisions/`. The outbox and having no schema registry are recorded in the architecture spine (AD-14, AD-17, AD-19).
 - **NFR-DOC-4:** Scalar is the API viewer in dev and demo, and stands in for another team's operations tool.
 - **NFR-DOC-5:** the README states plainly the simplifications the research identified:
   - the 90-day customer window counted from the transaction date, set against the scheme's 120 days from its processing date;
@@ -713,7 +704,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 
 ## 8. Success metrics
 
-There is no production baseline, so the targets are illustrative for the demo [ASSUMPTION]. They are measured from the NFR-OBS-3 metrics.
+There is no production baseline, so the targets are illustrative for the demo [ASSUMPTION]. They are measured from the NFR-OBS-3 metrics. SM-1 and SM-2 come from the SPA's browser spans, so in v1 they are measured on the local stack only; the AWS environment exports no browser telemetry (NFR-OBS-4).
 
 **Primary**
 - **SM-1: Dispute submission completion.** Disputes submitted ÷ raise-dispute screens opened. Target: at least 80%. Validates FR-13 and FR-14.
@@ -782,7 +773,7 @@ None open. Settled on 2026-10-25:
 - §5.5 NFR-SEC-7: the gateway limits each IP address to 10 requests per second, with a burst of 20.
 - §5.5 NFR-SEC-8: high or critical scan findings fail the build.
 - §5.5 NFR-SEC-9: secrets come from SSM Parameter Store in AWS.
-- §5.9 NFR-INFRA-5: `terraform destroy` is clean.
+- §5.9 NFR-INFRA-5: `terraform destroy` is clean; as delivered in v1, the Terraform passes `fmt`, `validate` and mocked `test`, and is applied when the account exists.
 
 **Success metrics**
 - §8: the targets are illustrative.
