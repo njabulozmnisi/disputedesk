@@ -372,11 +372,11 @@ public partial class PlatformScriptTests
     {
         string script = File.ReadAllText(DevLoginPath);
 
-        // Passwords come from fixtures/local.json; the login client's PAT is read inside its container at run time.
+        // Passwords come from backend/fixtures/local.json; the login client's PAT is read inside its container at run time.
         Assert.DoesNotContain("Dev-Only-", script, StringComparison.Ordinal);
         Assert.DoesNotMatch(LiteralBearerToken(), script);
         Assert.DoesNotContain("playwright", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("fixtures/local.json", script, StringComparison.Ordinal);
+        Assert.Contains("\"$ROOT/backend/fixtures/local.json\"", script, StringComparison.Ordinal);
     }
 
     [Theory]

@@ -15,7 +15,7 @@ const customerC = { ...fixtureLogin('customer-c'), ...fixtureFull('customer-c') 
 const startedAt = new Date().toISOString();
 
 function fixtureFull(key: string): { userId: string; email: string } {
-  const text = execFileSync('cat', [new URL('../../fixtures/local.json', import.meta.url).pathname], { encoding: 'utf8' });
+  const text = execFileSync('cat', [new URL('../../backend/fixtures/local.json', import.meta.url).pathname], { encoding: 'utf8' });
   const login = JSON.parse(text).logins.find((entry: { key: string }) => entry.key === key);
   return { userId: login.userId, email: login.email };
 }

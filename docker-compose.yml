@@ -167,7 +167,7 @@ services:
     environment:
       FixturesPath: /fixtures/local.json
     volumes:
-      - ./fixtures/local.json:/fixtures/local.json:ro
+      - ./backend/fixtures/local.json:/fixtures/local.json:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -206,7 +206,7 @@ services:
       ForwardedHeaders__AllowedHosts: localhost
     volumes:
       - zitadel-clients:/run/zitadel:ro            # zitadel-clients.json (the Zitadel:* keys, client IDs and secrets)
-      - ./fixtures/local.json:/fixtures/local.json:ro   # the seed source, the same file the stub reads
+      - ./backend/fixtures/local.json:/fixtures/local.json:ro   # the seed source, the same file the stub reads
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
       interval: 5s

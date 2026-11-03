@@ -60,7 +60,7 @@ A second stack beside this one (another worktree or a throwaway copy) sets anoth
 
 - Fixed dev-only values (database passwords, Zitadel master key, admin password) are inline defaults in
   `docker-compose.yml`, overridable from an untracked `.env`.
-- Logins for customers A, B and C come from [`fixtures/local.json`](../fixtures/local.json). Sign in with the username.
+- Logins for customers A, B and C come from [`backend/fixtures/local.json`](../backend/fixtures/local.json). Sign in with the username.
   The Zitadel console admin is `admin` / `Dev-Only-Admin-1`.
 - Zitadel's bootstrap PATs sit in two volumes: `zitadel-bootstrap` (the IAM_OWNER PAT, seen only by zitadel and
   the provisioner) and `login-pat` (the login client's PAT, seen only by zitadel and zitadel;

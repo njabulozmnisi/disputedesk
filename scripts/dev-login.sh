@@ -3,7 +3,7 @@
 # code flow with plain HTTP requests (curl, no browser) and leaves the session cookie in a curl cookie jar.
 #
 # Usage: scripts/dev-login.sh <login> [cookie-jar]
-#   <login>       a login key from fixtures/local.json: customer-a, customer-b or customer-c
+#   <login>       a login key from backend/fixtures/local.json: customer-a, customer-b or customer-c
 #   [cookie-jar]  where to write the cookies (default: ${TMPDIR:-/tmp}/disputedesk-<login>.cookies)
 # Then call the Api with the jar, for example:
 #   curl -b <cookie-jar> http://localhost:8080/api/v1/authentication/session
@@ -34,8 +34,8 @@ esac
 
 key=$1
 jar="${2:-${TMPDIR:-/tmp}/disputedesk-$key.cookies}"
-login=$(jq -ce --arg key "$key" '.logins[] | select(.key == $key)' "$ROOT/fixtures/local.json") \
-  || die "no login '$key' in fixtures/local.json"
+login=$(jq -ce --arg key "$key" '.logins[] | select(.key == $key)' "$ROOT/backend/fixtures/local.json") \
+  || die "no login '$key' in backend/fixtures/local.json"
 
 umask 077
 rm -f "$jar"

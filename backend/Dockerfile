@@ -60,7 +60,7 @@ FROM worker AS worker-local
 COPY --from=probe /bin/busybox /usr/local/bin/busybox
 
 # The core-banking stub (AD-21): its own restore and publish, since it references no DisputeDesk project. It reads
-# fixtures/local.json, which Compose mounts at runtime. It only exists for local and demo stacks, so the image
+# backend/fixtures/local.json, which Compose mounts at runtime. It only exists for local and demo stacks, so the image
 # carries the same wget probe as api-local for its Compose healthcheck.
 FROM ${SDK_IMAGE} AS publish-core-banking
 WORKDIR /src

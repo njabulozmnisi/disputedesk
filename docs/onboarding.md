@@ -23,7 +23,7 @@ How to start working on DisputeDesk. To run it, see the [README](../README.md).
 | [`contracts/`](../contracts/) | The dispute event JSON Schemas |
 | [`docs/`](README.md) | Planning, decisions, conventions and verification records (below) |
 | [`e2e/`](../e2e/) | The Playwright journeys and regression specs |
-| [`fixtures/`](../fixtures/) | The synthetic seed data for the local stack |
+| [`backend/fixtures/`](../backend/fixtures/) | The synthetic seed data for the local stack |
 | [`frontend/`](../frontend/) | The React SPA |
 | [`infra/`](../infra/) | The Compose platform's configuration: database init, gateway, Zitadel provisioning |
 | [`scripts/`](../scripts/) | Developer and pipeline scripts: locks, sign-in, the operations token, scans |

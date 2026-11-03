@@ -5,7 +5,7 @@ using DisputeDesk.Domain.Transactions;
 
 namespace DisputeDesk.Infrastructure.Seeding;
 
-/// <summary>The parts of <c>fixtures/local.json</c> the seeder reads; everything else in the file is ignored.</summary>
+/// <summary>The parts of <c>backend/fixtures/local.json</c> the seeder reads; everything else in the file is ignored.</summary>
 internal sealed record Fixtures(
     IReadOnlyList<FixtureCustomer> Customers,
     IReadOnlyList<FixtureLogin> Logins,

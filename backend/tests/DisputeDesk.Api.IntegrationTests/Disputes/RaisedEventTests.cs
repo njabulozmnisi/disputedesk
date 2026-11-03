@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using DisputeDesk.Api.IntegrationTests.CoreBanking;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Contracts.Events;
@@ -209,10 +208,6 @@ public class RaisedEventTests(PostgresFixture postgres, TransactionsStub stub) :
             .SingleAsync(TestContext.Current.CancellationToken);
     }
 
-    /// <summary>A file under the repository root, found from <c>fixtures/local.json</c>.</summary>
-    private static string RepoFile(string relativePath)
-    {
-        string repo = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(FixturesFile.FindPath()) ?? "", ".."));
-        return Path.Combine(repo, relativePath);
-    }
+    /// <summary>A file under the repository root.</summary>
+    private static string RepoFile(string relativePath) => Path.Combine(RepoRoot.Repo, relativePath);
 }

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 namespace DisputeDesk.Infrastructure.Seeding;
 
 /// <summary>
-/// Seeds the demo data from <c>fixtures/local.json</c> when <c>Seed:Enabled</c> is on (AD-30). EF Core calls it after
+/// Seeds the demo data from <c>backend/fixtures/local.json</c> when <c>Seed:Enabled</c> is on (AD-30). EF Core calls it after
 /// every migrate (Microsoft Learn: "Data Seeding", <c>UseSeeding</c> and <c>UseAsyncSeeding</c>), so it only adds what
 /// is missing. First the customer links: each customer marked <c>linked</c> is linked to their fixture login
 /// (<c>LoginSub</c> = the login's <c>userId</c>). Then the disputes: per customer, a context acting for that customer
