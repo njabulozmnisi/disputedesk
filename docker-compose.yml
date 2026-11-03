@@ -269,19 +269,9 @@ services:
       retries: 20
     mem_limit: 512m
 
-  # Build-only: the built SPA files (frontend/Dockerfile, at /dist/) that the gateway image copies in. The profile
-  # keeps it from ever getting a container; `up --build` still builds it, because the gateway's build names it
-  # (Compose, additional_contexts "service:"). infra/deploy/aws/check-compose.sh checks that it stays behind the profile.
-  spa:
-    image: disputedesk-spa:local
-    build: ./frontend
-    profiles: [build]
-
   gateway:   # the SPA and the edge rules; runs as the image's non-root nginx user (infra/images/gateway/Dockerfile)
     image: disputedesk-gateway:local
-    build:
-      context: ./infra/images/gateway
-      additional_contexts: { spa: "service:spa" }   # the built SPA files, not the frontend source (ad-011)
+    build: { context: ., dockerfile: infra/images/gateway/Dockerfile }   # the repo root, so it reads frontend/ too
     restart: unless-stopped
     # Fixed on purpose (AD-24 keeps the zero-click http://localhost:8080 and http://auth.localhost:8080): 8080 is
     # also baked into Zitadel's issuer and the hosted login URLs, the sign-in redirect URIs and the GATEWAY_* and zitadel
