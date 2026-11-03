@@ -1,5 +1,7 @@
 # DisputeDesk in AWS (AD-28): the same stack as docker-compose.yml, merged with this file on the one EC2 instance.
-#   docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d --wait
+#   docker compose -f docker-compose.yml -f infra/deploy/aws/compose.yml up -d --wait
+# Run from the repository root: Compose resolves relative paths in every file from the first file's folder (Compose,
+# "Merge Compose files"), so ./infra/... below is the repository's infra/.
 #
 # Every secret and deployment value comes from .env, which the deploy script writes from SSM (AD-26): each is
 # ${VAR:?message}, with no default, so a missing one stops Compose before anything starts (Compose, "Interpolation").

@@ -4,7 +4,7 @@
 #   identity origin  Zitadel API and the hosted login (/ui/login); the console answers 404
 #   Mailpit origin   Mailpit's UI and API, behind Mailpit's own basic auth (MP_UI_AUTH)
 #
-# docker-compose.aws.yml selects this directory with NGINX_ENVSUBST_TEMPLATE_DIR, and the image's entrypoint renders it
+# infra/deploy/aws/compose.yml selects this directory with NGINX_ENVSUBST_TEMPLATE_DIR, and the image's entrypoint renders it
 # with envsubst into /etc/nginx, filling in the GATEWAY_* variables (nginx official image, "Using environment variables
 # in nginx configuration"). The Dockerfile copies security-headers.conf.template, scalar-headers.conf.template and
 # identity-headers.conf.template in from infra/images/gateway/templates/, so both gateways send the same app and identity headers.

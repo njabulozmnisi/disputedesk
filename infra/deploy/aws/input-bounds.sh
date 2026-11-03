@@ -1,4 +1,4 @@
-# The inputs of docker-compose.aws.yml and the bound each value must meet (story 7.4, Inputs; AD-26). Sourced, not run:
+# The inputs of infra/deploy/aws/compose.yml and the bound each value must meet (story 7.4, Inputs; AD-26). Sourced, not run:
 # infra/deploy/aws/check-compose.sh checks compose.test.env with it, and the deploy script checks .env with it before any
 # docker call, so both use the same patterns.
 #

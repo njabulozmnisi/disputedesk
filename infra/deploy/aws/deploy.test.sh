@@ -257,7 +257,7 @@ called "systemctl enable iptables" || fail "iptables-services is not enabled to 
 ok "inserts DOCKER-USER: RETURN for the api (.10) and collector (.11), then DROP for the Compose subnet, to 169.254.169.254"
 ok "  and saves them to /etc/sysconfig/iptables with the iptables service enabled"
 
-[ "$(tail -n 1 "$work/calls")" = "docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d --wait" ] \
+[ "$(tail -n 1 "$work/calls")" = "docker compose -f docker-compose.yml -f infra/deploy/aws/compose.yml up -d --wait" ] \
   || fail "the last call is not Compose up --wait with the AWS override: $(tail -n 1 "$work/calls")"
 order=$(cut -d' ' -f1 "$work/calls" | uniq | tr '\n' ' ')
 [ "$order" = "aws curl docker iptables iptables-save systemctl docker " ] || fail "the calls run in the wrong order: $order"
@@ -331,7 +331,7 @@ expect_failure "a failed init" "the database init failed" compose STUB_INIT_EXIT
 
 section "the script never prints what it reads"
 code=$(grep -v '^[[:space:]]*#' infra/deploy/aws/deploy.sh)
-for pattern in 'set -x' 'set -o xtrace' 'cat .env' 'compose config' 'compose logs' 'compose -f docker-compose.yml -f docker-compose.aws.yml config'; do
+for pattern in 'set -x' 'set -o xtrace' 'cat .env' 'compose config' 'compose logs' 'compose -f docker-compose.yml -f infra/deploy/aws/compose.yml config'; do
   ! grep -qF -- "$pattern" <<< "$code" || fail "deploy.sh has $pattern"
 done
 grep -qx "POSTGRES_IMAGE=$compose_postgres" infra/deploy/aws/deploy.sh || fail "deploy.sh's postgres image is not docker-compose.yml's"

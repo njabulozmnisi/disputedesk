@@ -6,7 +6,7 @@ been run (decided 2026-10-30). Before any real use, run the procedure below once
 checks.
 
 One environment (AD-28): one EC2 instance runs the same Compose stack as local development plus
-`docker-compose.aws.yml`, RDS PostgreSQL holds both databases, and three CloudFront distributions (app, auth, mail)
+`infra/deploy/aws/compose.yml`, RDS PostgreSQL holds both databases, and three CloudFront distributions (app, auth, mail)
 are the only public entry. GitHub Actions deploys a commit through SSM Run Command with an OIDC role and no stored key.
 
 | Folder | What |
@@ -288,7 +288,7 @@ Run each once after the first deploy, and after any change to the Terraform or t
    reboot (`sudo reboot`, then repeat). On the instance, from `/opt/disputedesk`:
 
    ```sh
-   docker compose -f docker-compose.yml -f docker-compose.aws.yml exec mailpit \
+   docker compose -f docker-compose.yml -f infra/deploy/aws/compose.yml exec mailpit \
      wget -T 5 -O - http://169.254.169.254/latest/meta-data/
    ```
 

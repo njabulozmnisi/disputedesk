@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The AWS gateway's edge rules (story 7.4, criteria 3, 4, 6 and 7), offline: the gateway image as CI publishes it, with
-# the environment docker-compose.aws.yml gives it, on a throwaway Docker network with a real Mailpit and an echo server
+# the environment infra/deploy/aws/compose.yml gives it, on a throwaway Docker network with a real Mailpit and an echo server
 # that stands in for the api, Zitadel and the login and answers with the headers it received. Clients run on the same
 # network at fixed addresses, one inside test-realip.conf's range (as CloudFront would be) and one outside it.
 # It also starts the image with the local templates, for their cache headers (criterion 7).
@@ -45,7 +45,7 @@ docker build -q -f infra/images/gateway/Dockerfile -t "$LOCAL_IMAGE" . >/dev/nul
 ok "built $IMAGE (BROWSER_TELEMETRY=off) and $LOCAL_IMAGE (the default)"
 unset_inputs=()
 for name in "${AWS_INPUTS[@]}"; do unset_inputs+=(-u "$name"); done
-env "${unset_inputs[@]}" docker compose -f docker-compose.yml -f docker-compose.aws.yml --env-file "$ENV_FILE" config --format json > "$work/aws.json"
+env "${unset_inputs[@]}" docker compose -f docker-compose.yml -f infra/deploy/aws/compose.yml --env-file "$ENV_FILE" config --format json > "$work/aws.json"
 env "${unset_inputs[@]}" docker compose -f docker-compose.yml config --format json > "$work/local.json"
 environment_of(){ jq -r --arg s "$2" '.services[$s].environment | to_entries[] | "\(.key)=\(.value)"' "$1"; }
 environment_of "$work/aws.json" gateway > "$work/gateway.env"
