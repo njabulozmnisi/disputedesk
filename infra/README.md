@@ -55,6 +55,19 @@ A second stack beside this one (another worktree or a throwaway copy) sets anoth
 | `terraform/` | The AWS dev environment (never applied: there is no account): `bootstrap/` (the state bucket), `envs/dev/` with its mocked-provider tests (`tests/`, and `tests-oidc/` for the deploy role's GitHub subject, story 7.15), the modules (network, compute, database, edge, observability, deploy-role, budget), and `iam-names.test.sh`, which checks every IAM name against AWS's public service reference (story 7.16). See `terraform/README.md`. |
 | `nginx/templates-aws/` | The AWS gateway's config, selected by `NGINX_ENVSUBST_TEMPLATE_DIR`: three server blocks (app, identity, Mailpit), each refusing requests without CloudFront's origin-verify header, with the client address and scheme from CloudFront's headers. |
 | `otel-collector/` | The OpenTelemetry Collector config in AWS: OTLP in from the Api and the Worker, traces to X-Ray, logs and metrics to CloudWatch (AD-29). |
+| `tests/` | `DisputeDesk.PlatformTests`, the xUnit tests of the provisioner and the gateway templates (ad-011): they read the files, run `provision.sh`'s input checks and curl its retry options against an in-process stand-in for Zitadel. A standalone project with its own `global.json` (the SDK and Microsoft.Testing.Platform) and `.editorconfig`; nothing under `backend/` is referenced. CI's `platform` job runs it. |
+
+## Tests
+
+The infra tests need the .NET SDK pinned in `tests/global.json`, plus `bash` and `curl`; no Docker. Run them from
+`infra/tests`, where `dotnet` finds that `global.json`:
+
+```sh
+cd infra/tests && dotnet test --project DisputeDesk.PlatformTests
+```
+
+The shell tests of the AWS deploy (`aws/*.test.sh`) and of the IAM names (`terraform/iam-names.test.sh`) run on their
+own; see the folder table above.
 
 ## Credentials
 

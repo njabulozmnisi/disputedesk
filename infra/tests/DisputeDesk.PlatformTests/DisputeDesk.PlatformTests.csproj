@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The tests of infra/'s own files (ad-011). No Directory.Build.props or Directory.Packages.props sits between this
+    folder and the repository root, so this file (with ../.editorconfig and ../global.json) is the whole build. Its
+    settings and exact package versions are the backend test projects', copied rather than imported: change both together.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Required for IDE0005 (unused usings) to run in the build. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- With TreatWarningsAsErrors, restore fails on a High or Critical advisory, transitive packages included. -->
+    <NuGetAuditLevel>high</NuGetAuditLevel>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The retry cases start a stand-in Zitadel on Kestrel. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.35.0.4138" PrivateAssets="all" />
+    <PackageReference Include="xunit.v3" Version="4.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

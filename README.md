@@ -52,6 +52,14 @@ dotnet format whitespace DisputeDesk.slnx --verify-no-changes
 dotnet test --solution DisputeDesk.slnx
 ```
 
+Platform tests (checks of the provisioning scripts and gateway templates), in `infra/tests/`:
+
+```sh
+dotnet test --project DisputeDesk.PlatformTests
+dotnet format style DisputeDesk.PlatformTests --verify-no-changes
+dotnet format whitespace DisputeDesk.PlatformTests --verify-no-changes
+```
+
 Frontend, in `frontend/`:
 
 ```sh
