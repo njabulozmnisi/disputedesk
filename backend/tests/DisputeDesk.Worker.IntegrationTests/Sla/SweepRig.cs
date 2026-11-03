@@ -94,7 +94,7 @@ public sealed class SweepRig : IAsyncDisposable
     /// <summary>The sweep's own log lines and values, without EF Core's or Npgsql's.</summary>
     public IReadOnlyList<string> SweepLogLines => [.. LogLines.Where(line => line.Category == typeof(SlaSweep).FullName).Select(line => line.Line)];
 
-    /// <summary>The ended batch spans whose claim was <paramref name="claim"/> (<c>overdue</c> or <c>warning</c>), in order.</summary>
+    /// <summary>The ended batch spans whose claim was <paramref name="claim"/> (<c>overdue</c> or <c>warning</c>), in the order they ended.</summary>
     public IReadOnlyList<Activity> BatchSpans(string claim) =>
         [.. Spans.Snapshot().Where(span => span.OperationName == SlaSweep.BatchSpanName && span.GetTagItem("disputedesk.sla_sweep.claim") as string == claim)];
 
