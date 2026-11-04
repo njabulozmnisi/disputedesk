@@ -38,6 +38,22 @@ jobs:
         with:
           global-json-file: backend/global.json
 
+      # As in the platform job: the architecture tests render docker-compose.yml with docker compose config, and the
+      # runner's own Compose is older and refuses the gateway's service:spa build context.
+      - name: Install Compose
+        run: |
+          plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
+          mkdir -p "$plugins"
+          curl -fsSL --max-time 300 -o "$RUNNER_TEMP/docker-compose" \
+            "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-x86_64"
+          echo "${COMPOSE_SHA256}  $RUNNER_TEMP/docker-compose" | sha256sum --check --strict
+          install -m 0755 "$RUNNER_TEMP/docker-compose" "$plugins/docker-compose"
+          docker compose version
+          if [ "$(docker compose version --short)" != "$COMPOSE_VERSION" ]; then
+            echo "::error::docker compose is not v$COMPOSE_VERSION"
+            exit 1
+          fi
+
       - run: dotnet restore DisputeDesk.slnx
 
       # Warnings are errors through Directory.Build.props (TreatWarningsAsErrors), so CI and local builds agree.
@@ -113,7 +129,7 @@ jobs:
 
   platform:
     runs-on: ubuntu-24.04
-    # The AWS gateway test builds the SPA image twice (with and without browser telemetry) and a gateway on each.
+    # The Infra tests step's GatewayTests build the SPA image twice (with and without browser telemetry) and a gateway on each.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -143,10 +159,6 @@ jobs:
       # instance's memory budget) and the collector config, validated by the pinned collector image.
       - name: AWS Compose override
         run: infra/aws/check-compose.sh
-
-      # Story 7.4: the AWS gateway's edge rules, against the gateway image and Mailpit on a throwaway Docker network.
-      - name: AWS gateway
-        run: infra/aws/gateway.test.sh
 
       # Story 7.5: the instance's deploy script with aws, curl, docker, iptables and systemctl stubbed.
       - name: AWS deploy script
@@ -180,8 +192,9 @@ jobs:
           ! grep -qE 'url\([^)]*wordmark' frontend/src/theme/tokens.css || { echo "::error::tokens.css loads a wordmark"; exit 1; }
           echo "ok  tokens.css names both wordmarks and loads neither"
 
-      # ad-011: the tests of infra/'s own files (the provisioner and the gateway templates). infra/tests/global.json pins
-      # the same SDK as the backend job and selects Microsoft.Testing.Platform; dotnet reads it from the working directory.
+      # ad-011: the tests of infra/'s own files: the provisioner, the gateway templates, and both gateway images on a
+      # throwaway Docker network (GatewayTests, stories 7.4 and 7.12). infra/tests/global.json pins the same SDK as the
+      # backend job and selects Microsoft.Testing.Platform; dotnet reads it from the working directory.
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: infra/tests/global.json
