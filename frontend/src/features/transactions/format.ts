@@ -14,11 +14,14 @@ const yearFormat = new Intl.DateTimeFormat('en-US', {
   timeZone: 'Africa/Johannesburg',
 });
 
+function partValue(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes): string {
+  return parts.find((candidate) => candidate.type === type)?.value ?? '';
+}
+
 /** "Mon 26 Oct": the day the transaction was made, in South African time. */
 export function formatDay(isoDateTime: string): string {
   const parts = dayFormat.formatToParts(new Date(isoDateTime));
-  const part = (type: string) => parts.find((candidate) => candidate.type === type)?.value ?? '';
-  return `${part('weekday')} ${part('day')} ${part('month')}`;
+  return `${partValue(parts, 'weekday')} ${partValue(parts, 'day')} ${partValue(parts, 'month')}`;
 }
 
 /** "Mon 26 Oct 2026": the same day with its year, for the raise and review screens. */
@@ -36,8 +39,7 @@ const dateFormat = new Intl.DateTimeFormat('en-US', {
 /** "26 Oct 2026": the day a dispute was raised, in South African time. */
 export function formatDayWithYear(isoDateTime: string): string {
   const parts = dateFormat.formatToParts(new Date(isoDateTime));
-  const part = (type: string) => parts.find((candidate) => candidate.type === type)?.value ?? '';
-  return `${part('day')} ${part('month')} ${part('year')}`;
+  return `${partValue(parts, 'day')} ${partValue(parts, 'month')} ${partValue(parts, 'year')}`;
 }
 
 const timeFormat = new Intl.DateTimeFormat('en-US', {
@@ -53,8 +55,9 @@ const timeFormat = new Intl.DateTimeFormat('en-US', {
 /** "26 Oct 2026, 14:32 SAST": a timeline entry's instant in South African time, which has no daylight saving (AD-4). */
 export function formatTimelineTime(isoDateTime: string): string {
   const parts = timeFormat.formatToParts(new Date(isoDateTime));
-  const part = (type: string) => parts.find((candidate) => candidate.type === type)?.value ?? '';
-  return `${part('day')} ${part('month')} ${part('year')}, ${part('hour')}:${part('minute')} SAST`;
+  const date = `${partValue(parts, 'day')} ${partValue(parts, 'month')} ${partValue(parts, 'year')}`;
+  const time = `${partValue(parts, 'hour')}:${partValue(parts, 'minute')}`;
+  return `${date}, ${time} SAST`;
 }
 
 function isDecimalString(value: string): value is `${number}` {

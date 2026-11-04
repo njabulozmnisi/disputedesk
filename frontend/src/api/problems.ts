@@ -29,7 +29,7 @@ export function isProblem(error: unknown, slug: ProblemSlug): boolean {
 }
 
 /** The reference to quote to the bank, when the error is a response whose problem body carried one. */
-export function traceIdOf(error: ApiError | TypeError): string | undefined {
+export function traceIdOf(error: unknown): string | undefined {
   return error instanceof ApiError ? error.problem?.traceId : undefined;
 }
 

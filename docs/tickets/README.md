@@ -117,7 +117,7 @@ Source: waves 2 and 3 of [the simplicity audit's mitigation plan](../verificatio
 |---|---|---|---|
 | 8.1 | [CI lints workflows and shell scripts, and the scripts use their tools' documented features](epic-8-simplicity-sweep/tickets/story-8.1-ci-lints-workflows-and-shell-scripts-and-scripts-use-their-tools.md) | backend | done |
 | 8.2 | [Backend tidy: one copy of each helper, and no unused members](epic-8-simplicity-sweep/tickets/story-8.2-backend-tidy-one-copy-of-each-helper-and-no-unused-members.md) | backend | done |
-| 8.3 | [Frontend tidy: route guards in beforeLoad, and one form pattern](epic-8-simplicity-sweep/tickets/story-8.3-frontend-tidy-route-guards-in-beforeload-and-one-form-pattern.md) | frontend | planned |
+| 8.3 | [Frontend tidy: route guards in beforeLoad, and one form pattern](epic-8-simplicity-sweep/tickets/story-8.3-frontend-tidy-route-guards-in-beforeload-and-one-form-pattern.md) | frontend | done |
 | 8.4 | [Backend tests use the standard metric, log and clock fakes](epic-8-simplicity-sweep/tickets/story-8.4-backend-tests-use-the-standard-metric-log-and-clock-fakes.md) | backend | done |
 | 8.5 | [Architecture source rules read Roslyn syntax trees, and banned APIs fail the build](epic-8-simplicity-sweep/tickets/story-8.5-architecture-source-rules-read-roslyn-syntax-trees-and-banned-apis.md) | backend | planned |
 | 8.6 | [E2E specs share their helpers and wait on signals, not time](epic-8-simplicity-sweep/tickets/story-8.6-e2e-specs-share-their-helpers-and-wait-on-signals.md) | qa | done |

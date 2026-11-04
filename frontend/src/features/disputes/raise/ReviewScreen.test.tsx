@@ -13,7 +13,17 @@ import {
   recordRaiseRequests,
   type RaiseRequest,
 } from '@/test/raise';
-import { disputeGuid, makeDispute, makeRow, problemResponse, serveDispute } from '@/test/support';
+import {
+  disputeGuid,
+  makeDispute,
+  makeRow,
+  problemResponse,
+  renderApp,
+  serveAntiforgeryToken,
+  serveDispute,
+  serveTransactions,
+  signInAs,
+} from '@/test/support';
 
 const quotedUuid = /^"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"$/;
 const submit = () => screen.getByRole('button', { name: /^Submit/ });
@@ -319,6 +329,49 @@ describe('after a 201', () => {
     expect(router.state.location.pathname).toBe('/transactions');
     // The list is active again on /transactions and refetches at once, so check a query that stays idle.
     expect(queryClient.getQueryState(['/api/v1/disputes', 'D-7'])?.isInvalidated).toBe(true);
+  });
+
+  it('a late 201 does not navigate when the review screen of another transaction is current', async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post('*/api/v1/disputes', async () => {
+        await gate;
+        return created();
+      }),
+    );
+    signInAs('linked');
+    serveAntiforgeryToken();
+    serveTransactions([makeRow(), makeRow({ transactionId: 'TXN-2' })]);
+    serveDispute();
+    const { user, router } = renderApp({ path: '/transactions' });
+    const openRaiseFor = async (index: number) => {
+      const links = await screen.findAllByRole('link', { name: 'Dispute this transaction' });
+      await user.click(links[index] as HTMLElement);
+    };
+    await openRaiseFor(0);
+    await chooseReason(user, 'Unrecognised');
+    await continueToReview(user);
+    await user.click(submit());
+    await screen.findByRole('button', { name: 'Submitting…' });
+
+    // Back to the list, then on to the review of TXN-2, while the request for TXN-1 is in flight.
+    await act(async () => {
+      await router.navigate({ href: '/transactions' });
+    });
+    await openRaiseFor(1);
+    await chooseReason(user, 'Unrecognised');
+    await continueToReview(user);
+    release();
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/transactions/TXN-2/dispute/review');
+    });
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Review your dispute' }),
+    ).toBeInTheDocument();
   });
 });
 

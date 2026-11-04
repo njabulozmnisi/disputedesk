@@ -1,11 +1,21 @@
+import type { QueryClient } from '@tanstack/react-query';
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
   notFound,
+  redirect,
+  useRouter,
+  type ErrorComponentProps,
   type RouterHistory,
 } from '@tanstack/react-router';
 
+import { getApiV1BffSession, getGetApiV1BffSessionQueryOptions } from '@/api/generated/disputedesk';
+import type { SessionState } from '@/api/generated/model';
+import { traceIdOf } from '@/api/problems';
+import { Page } from '@/components/Page';
+import { ProblemNotice } from '@/components/ProblemNotice';
+import { Button } from '@/components/ui/button';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { SignedOutPage } from '@/pages/SignedOutPage';
 import { StartPage } from '@/pages/StartPage';
@@ -19,66 +29,103 @@ import { ReviewScreen } from '@/features/disputes/raise/ReviewScreen';
 import { TransactionsScreen } from '@/features/transactions/TransactionsScreen';
 
 import { RootLayout } from './RootLayout';
-import { SessionGate } from './SessionGate';
 
-// Routes are defined with TanStack Router (AD-31). `/`, `/signed-out` and the not-found route are public.
-// The raise draft lives in RootLayout around every route, so Change keeps its values and Back after a submit finds it
-// submitted.
-const rootRoute = createRootRoute({
+// Routes are defined with TanStack Router (AD-31). `/signed-out` and the not-found route are public. Every other route
+// sits under one of three pathless layout routes, one per authorisation state, whose `beforeLoad` sends any other
+// state to its home (TanStack Router, Authenticated Routes). The raise draft lives in RootLayout around every route,
+// so Change keeps its values and Back after a submit finds it submitted.
+const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: RootLayout,
   notFoundComponent: NotFoundPage,
 });
 
+// Where each authorisation state belongs (EXPERIENCE.md, Information Architecture).
+const homeOf = {
+  anonymous: '/',
+  unlinked: '/link',
+  linked: '/transactions',
+} as const satisfies Record<SessionState, string>;
+
+// While the session is unknown a layout shows nothing, and if the session request fails it shows an error with "Try
+// again", never the start page. Both show at once: `pendingMs: 0` and `pendingMinMs: 0`, because the router's defaults
+// would show nothing for a second and then hold the busy state for half a second (TanStack Router, Data Loading).
+function SessionPending() {
+  return <div aria-busy="true" />;
+}
+
+// "Try again" runs the guard again (TanStack Router, Data Loading: `router.invalidate()` reloads the matches).
+function SessionError({ error }: ErrorComponentProps) {
+  const router = useRouter();
+  return (
+    <Page width="form">
+      <ProblemNotice
+        message="Something went wrong on our side. Try again."
+        traceId={traceIdOf(error)}
+      />
+      <Button
+        onClick={() => {
+          void router.invalidate();
+        }}
+      >
+        Try again
+      </Button>
+    </Page>
+  );
+}
+
+function sessionLayout<Id extends string>(id: Id, ownState: SessionState) {
+  return createRoute({
+    getParentRoute: () => rootRoute,
+    id,
+    beforeLoad: async ({ context }) => {
+      // `query` with `staleTime: 'static'` returns a cached session as it is. Its `queryFn` does not read `signal`, so
+      // an observer that leaves mid-read does not cancel it (TanStack Query, Query Cancellation).
+      const session = await context.queryClient.query({
+        ...getGetApiV1BffSessionQueryOptions({ query: { queryFn: () => getApiV1BffSession() } }),
+        staleTime: 'static',
+      });
+      if (session.state !== ownState) throw redirect({ to: homeOf[session.state], replace: true });
+    },
+    pendingComponent: SessionPending,
+    pendingMs: 0,
+    pendingMinMs: 0,
+    errorComponent: SessionError,
+  });
+}
+const anonymousRoute = sessionLayout('_anonymous', 'anonymous');
+const unlinkedRoute = sessionLayout('_unlinked', 'unlinked');
+const linkedRoute = sessionLayout('_linked', 'linked');
+
 // Anonymous people see the start page; anyone signed in is sent to their state's home.
 const startRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => anonymousRoute,
   path: '/',
-  component: () => (
-    <SessionGate allow="anonymous">
-      <StartPage />
-    </SessionGate>
-  ),
+  component: StartPage,
 });
 
 // 2a and 2b are for an unlinked login only. 2b keeps nothing from 2a: the challenge is held by the server (AD-12).
 const linkRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => unlinkedRoute,
   path: '/link',
-  component: () => (
-    <SessionGate allow="unlinked">
-      <DetailsScreen />
-    </SessionGate>
-  ),
+  component: DetailsScreen,
 });
 
 const linkOtpRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => unlinkedRoute,
   path: '/link/otp',
-  component: () => (
-    <SessionGate allow="unlinked">
-      <OtpScreen />
-    </SessionGate>
-  ),
+  component: OtpScreen,
 });
 
 const transactionsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => linkedRoute,
   path: '/transactions',
-  component: () => (
-    <SessionGate allow="linked">
-      <TransactionsScreen />
-    </SessionGate>
-  ),
+  component: TransactionsScreen,
 });
 
 const disputesRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => linkedRoute,
   path: '/disputes',
-  component: () => (
-    <SessionGate allow="linked">
-      <DisputesScreen />
-    </SessionGate>
-  ),
+  component: DisputesScreen,
 });
 
 // The router decodes path params and the generated client puts `disputeId` into the request path unencoded, so only
@@ -87,7 +134,7 @@ const disputesRoute = createRoute({
 // query key for the dispute then has one form.
 const guidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const disputeDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => linkedRoute,
   path: '/disputes/$disputeId',
   params: {
     parse: ({ disputeId }) => {
@@ -95,16 +142,12 @@ const disputeDetailRoute = createRoute({
       return { disputeId: disputeId.toLowerCase() };
     },
   },
-  component: () => (
-    <SessionGate allow="linked">
-      <DisputeDetailScreen />
-    </SessionGate>
-  ),
+  component: DisputeDetailScreen,
 });
 
 // 4a and 4b share one parent: it finds the cached row and sends anything else to the list (story 3.6).
 const raiseRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => linkedRoute,
   path: '/transactions/$transactionId/dispute',
   component: RaiseLayout,
 });
@@ -119,17 +162,12 @@ const raiseReviewRoute = createRoute({
   component: ReviewScreen,
 });
 
-// The BFF accepts a returnUrl of at most 2048 characters, and only a local path (IsLocalUrl, AD-7). The SPA keeps a
-// value only when it starts with a single "/" and the browser's own URL parser (WHATWG URL, which drops tab and
-// newline and reads a backslash as "/") resolves it to this origin, so what the SPA builds is what a browser follows.
+// The SPA applies no redirect rule of its own: the BFF accepts only a local URL of at most 2048 characters (IsLocalUrl,
+// AD-7; OWASP, Unvalidated Redirects and Forwards). The SPA passes on a string of 1 to 2048 characters, and drops a
+// longer one because the BFF would answer it with 400 instead of showing the plain sign-in link.
 const maxReturnUrlLength = 2048;
-function localPathOrUndefined(value: unknown): string | undefined {
-  if (typeof value !== 'string' || value.length > maxReturnUrlLength) return undefined;
-  if (!value.startsWith('/') || value.startsWith('//')) return undefined;
-  // The parser throws on values that pass the checks above but resolve to an invalid host, such as "/\[".
-  try {
-    if (new URL(value, window.location.origin).origin !== window.location.origin) return undefined;
-  } catch {
+function returnUrlOrUndefined(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length === 0 || value.length > maxReturnUrlLength) {
     return undefined;
   }
   return value;
@@ -141,7 +179,7 @@ const signedOutRoute = createRoute({
   path: '/signed-out',
   validateSearch: (search: Record<string, unknown>) => ({
     reason: search.reason === 'expired' ? ('expired' as const) : undefined,
-    returnUrl: localPathOrUndefined(search.returnUrl),
+    returnUrl: returnUrlOrUndefined(search.returnUrl),
   }),
   beforeLoad: ({ search }) => {
     if (search.reason !== 'expired') throw notFound();
@@ -150,19 +188,20 @@ const signedOutRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  startRoute,
-  linkRoute,
-  linkOtpRoute,
-  transactionsRoute,
-  disputesRoute,
-  disputeDetailRoute,
-  raiseRoute.addChildren([raiseFormRoute, raiseReviewRoute]),
+  anonymousRoute.addChildren([startRoute]),
+  unlinkedRoute.addChildren([linkRoute, linkOtpRoute]),
+  linkedRoute.addChildren([
+    transactionsRoute,
+    disputesRoute,
+    disputeDetailRoute,
+    raiseRoute.addChildren([raiseFormRoute, raiseReviewRoute]),
+  ]),
   signedOutRoute,
 ]);
 
-/** Tests pass a memory history; the app uses the browser's. */
-export function createAppRouter(history?: RouterHistory) {
-  return createRouter({ routeTree, history });
+/** The guards read the session through `queryClient`. Tests pass a memory history; the app uses the browser's. */
+export function createAppRouter(queryClient: QueryClient, history?: RouterHistory) {
+  return createRouter({ routeTree, history, context: { queryClient } });
 }
 export type AppRouter = ReturnType<typeof createAppRouter>;
 

@@ -480,7 +480,7 @@ describe('a session that has started ending', () => {
     expect(cachedCustomerData(queryClient)).toEqual([]);
     expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
     expect(requests).toEqual([]);
-    // Only the session query still says signed in, so that SessionGate does not race the session-ended screen.
+    // Only the session query still says signed in, so that a layout route's beforeLoad does not race the session-ended screen.
     expect(queryClient.getQueryData(sessionKey)).toEqual({ state: 'linked' });
     navigation.open();
     await ended;

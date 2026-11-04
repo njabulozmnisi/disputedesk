@@ -6,9 +6,18 @@ import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Reason } from '@/api/generated/model';
 import { useAnnounce } from '@/app/LiveRegion';
 import { usePageHeading } from '@/app/usePageHeading';
+import { ErrorSummary } from '@/components/ErrorSummary';
 import { Page } from '@/components/Page';
 import { Button } from '@/components/ui/button';
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
@@ -75,12 +84,18 @@ export function RaiseScreen() {
     }
   }, [returnedErrors, setError]);
 
-  const watched = useWatch({ control });
-  const values: RaiseFormValues = { ...emptyValues, ...watched };
-
   // The error summary shows after a failed Continue or a returned 400, and takes focus each time.
   const [summaryRequests, setSummaryRequests] = useState(returnedErrors ? 1 : 0);
   const summaryRef = useRef<HTMLDivElement>(null);
+  // React runs a child's effects before its parent's, and a parent's in the order they are declared. A summary that
+  // mounts with the screen focuses itself first and then loses focus to the heading (usePageHeading), so the screen
+  // gives it focus again here, after that hook's effect.
+  useEffect(() => {
+    summaryRef.current?.focus();
+  }, [summaryRequests]);
+
+  const watched = useWatch({ control });
+  const values: RaiseFormValues = { ...emptyValues, ...watched };
 
   const noteLength = values.note.trim().length;
   const noteLevel = noteLevelFor(noteLength);
@@ -112,12 +127,9 @@ export function RaiseScreen() {
 
   const summaryItems = fields.flatMap(({ name, focusId }) => {
     const message = formState.errors[name]?.message;
-    return message ? [{ name, focusId, message }] : [];
+    return message ? [{ fieldId: focusId, message }] : [];
   });
   const showSummary = summaryRequests > 0 && (summaryItems.length > 0 || returnedErrors?.formError);
-  useEffect(() => {
-    if (showSummary) summaryRef.current?.focus();
-  }, [summaryRequests, showSummary]);
 
   /** `aria-describedby` for a field: its error element when it has an error, then any hint. */
   const describedBy = (name: FieldName, hint?: string) =>
@@ -135,36 +147,12 @@ export function RaiseScreen() {
       </h1>
 
       {showSummary ? (
-        <div
+        <ErrorSummary
           ref={summaryRef}
-          role="group"
-          aria-labelledby="error-summary-title"
-          tabIndex={-1}
-          className="rounded-md border-[1.5px] border-destructive bg-status-danger-bg p-4 text-status-danger-fg"
-        >
-          {/* GOV.UK Error summary: the summary takes focus and an inner role="alert" announces it. */}
-          <div role="alert" className="grid gap-2">
-            <h2 id="error-summary-title" className="text-body font-strong">
-              Check the details below
-            </h2>
-            {returnedErrors?.formError ? <p>{formError}</p> : null}
-            <ul className="grid gap-1">
-              {summaryItems.map(({ name, focusId, message }) => (
-                <li key={name}>
-                  <a
-                    href={`#${focusId}`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      document.getElementById(focusId)?.focus();
-                    }}
-                  >
-                    {message}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+          items={summaryItems}
+          requests={summaryRequests}
+          formError={returnedErrors?.formError ? formError : undefined}
+        />
       ) : null}
 
       <TransactionSummary row={row} />
@@ -183,11 +171,8 @@ export function RaiseScreen() {
             control={control}
             render={({ field, fieldState }) => (
               <div className="grid gap-3">
-                <p id="reason-label" className="font-strong">
-                  Why are you disputing it?
-                </p>
                 <RadioGroup
-                  aria-labelledby="reason-label"
+                  asChild
                   value={field.value}
                   onValueChange={(value) => {
                     field.onChange(value);
@@ -199,30 +184,34 @@ export function RaiseScreen() {
                   aria-invalid={fieldState.invalid}
                   aria-describedby={describedBy('reason')}
                 >
-                  {reasons.map((reason) => (
-                    <div
-                      key={reason}
-                      className="flex gap-3 rounded-md border border-border bg-card p-4 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary-subtle"
-                    >
-                      <RadioGroupItem
-                        id={`reason-${reason}`}
-                        value={reason}
-                        aria-labelledby={`reason-${reason}-label`}
-                        aria-describedby={`reason-${reason}-explanation`}
-                      />
-                      <label htmlFor={`reason-${reason}`} className="grid cursor-pointer gap-1">
-                        <span id={`reason-${reason}-label`} className="font-strong">
-                          {reasonCopy[reason].label}
-                        </span>
-                        <span
-                          id={`reason-${reason}-explanation`}
-                          className="text-label text-muted-foreground"
-                        >
-                          {reasonCopy[reason].explanation}
-                        </span>
-                      </label>
-                    </div>
-                  ))}
+                  {/* A fieldset with a legend names the group (WAI, Grouping Controls); Radix adds role="radiogroup". */}
+                  <FieldSet>
+                    <FieldLegend>Why are you disputing it?</FieldLegend>
+                    {reasons.map((reason) => (
+                      <div
+                        key={reason}
+                        className="flex gap-3 rounded-md border border-border bg-card p-4 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary-subtle"
+                      >
+                        <RadioGroupItem
+                          id={`reason-${reason}`}
+                          value={reason}
+                          aria-labelledby={`reason-${reason}-label`}
+                          aria-describedby={`reason-${reason}-explanation`}
+                        />
+                        <label htmlFor={`reason-${reason}`} className="grid cursor-pointer gap-1">
+                          <span id={`reason-${reason}-label`} className="font-strong">
+                            {reasonCopy[reason].label}
+                          </span>
+                          <span
+                            id={`reason-${reason}-explanation`}
+                            className="text-label text-muted-foreground"
+                          >
+                            {reasonCopy[reason].explanation}
+                          </span>
+                        </label>
+                      </div>
+                    ))}
+                  </FieldSet>
                 </RadioGroup>
                 {fieldState.error ? (
                   <FieldError id="reason-error">{fieldState.error.message}</FieldError>

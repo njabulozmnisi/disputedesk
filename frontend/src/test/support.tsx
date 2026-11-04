@@ -36,8 +36,8 @@ export function renderApp({
   fakeTimers = false,
   strictMode = false,
 }: RenderOptions = {}) {
-  const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
-  const queryClient = createQueryClient(router);
+  const queryClient = createQueryClient(() => router);
+  const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
   queryClient.setDefaultOptions({
     ...queryClient.getDefaultOptions(),
     queries: { ...queryClient.getDefaultOptions().queries, retryDelay: 0 },

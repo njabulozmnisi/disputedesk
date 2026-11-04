@@ -64,6 +64,14 @@ async function expectCollected(queryRef: WeakRef<Query>) {
   expect(queryRef.deref()).toBeUndefined();
 }
 
+// The first list query sent through the app in each worker is held for the life of the worker, whichever end path runs
+// first; raw fetches and an app on the start page do not clear it. A throwaway screen sends it first, and every end
+// path still asserts that its own query is collected.
+beforeAll(async () => {
+  await openTransactions();
+  cleanup();
+});
+
 describe('the customer query after the session ends and the screen is gone', () => {
   it('is collected after endSession, with the session-ended navigation pending', async () => {
     const { queryClient, router, queryRef } = await openTransactions();

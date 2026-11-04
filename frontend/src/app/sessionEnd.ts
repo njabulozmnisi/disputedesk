@@ -101,16 +101,17 @@ function returnUrlAfterSignIn(location: { pathname: string; href: string }): str
 /**
  * Clears the customer data, shows the session-ended screen, then marks the session `anonymous`. The idle limit, a 401
  * and another tab's `expired` end the session this way. The session stays signed in until the screen is shown, because
- * the `anonymous` state makes the open screen redirect (a gate sends it to the start page) and that redirect would win
- * over this one. The cached query and mutation data is already empty while the screen changes, and the queries are removed after it.
+ * the `anonymous` state makes a layout route's `beforeLoad` send a navigation to the start page, and that redirect
+ * would win over this one. The cached query and mutation data is already empty while the screen changes, and the
+ * queries are removed after it.
  */
 export async function endSession(
   queryClient: QueryClient,
   router: Pick<AppRouter, 'navigate' | 'state'>,
 ) {
   // All customer data is emptied first, so none is in memory while the screen changes and a response that arrives
-  // meanwhile brings nothing back. Only the session query stays, still signed in, so that SessionGate does not race
-  // the screen. The queries are removed once the screen has changed.
+  // meanwhile brings nothing back. Only the session query stays, still signed in, so that a layout route's `beforeLoad`
+  // does not race the screen. The queries are removed once the screen has changed.
   endingSessions.add(queryClient);
   resetCustomerData(queryClient);
   try {

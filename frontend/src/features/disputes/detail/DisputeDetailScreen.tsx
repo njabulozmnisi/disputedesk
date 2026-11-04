@@ -4,8 +4,8 @@ import { useRef, useState, type ReactNode, type RefObject } from 'react';
 
 import { useGetApiV1DisputesDisputeId } from '@/api/generated/disputedesk';
 import type { DisputeResponse } from '@/api/generated/model';
-import { ApiError } from '@/api/mutator';
-import { traceIdOf } from '@/api/problems';
+import type { ApiError } from '@/api/mutator';
+import { isProblem, traceIdOf } from '@/api/problems';
 import { isSignedIn } from '@/app/sessionEnd';
 import { usePageHeading } from '@/app/usePageHeading';
 import { Page } from '@/components/Page';
@@ -176,7 +176,7 @@ function LoadedCard({
  * change to it focuses the heading (EXPERIENCE.md, Accessibility Floor).
  */
 export function DisputeDetailScreen() {
-  const { disputeId } = useParams({ from: '/disputes/$disputeId' });
+  const { disputeId } = useParams({ from: '/_linked/disputes/$disputeId' });
   const queryClient = useQueryClient();
   // The generated hook sets its own `enabled`, which replaces the client's default, so the same rule is given here:
   // no customer query runs once the session is ending (see createQueryClient).
@@ -190,8 +190,7 @@ export function DisputeDetailScreen() {
   });
 
   const isNotFound =
-    goneDisputeId === disputeId ||
-    (query.isError && query.error instanceof ApiError && query.error.status === 404);
+    goneDisputeId === disputeId || (query.isError && isProblem(query.error, 'not-found'));
   // The query's error is checked before its data, so a failed refetch never leaves a stale detail on screen: the loaded
   // card and the withdraw dialog it owns give way to the failure and Try again (criterion 2).
   const dispute = isNotFound || query.isError ? undefined : query.data;
@@ -233,7 +232,7 @@ export function DisputeDetailScreen() {
         onRetry={() => {
           // The Try again button unmounts unless the retry fails again, so focus goes to the heading (WCAG 2.2 SC 2.4.3).
           void query.refetch().then((result) => {
-            const gone = result.error instanceof ApiError && result.error.status === 404;
+            const gone = isProblem(result.error, 'not-found');
             if (result.isSuccess || gone) headingRef.current?.focus();
           });
         }}

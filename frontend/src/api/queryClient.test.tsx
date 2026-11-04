@@ -22,8 +22,8 @@ import {
 import { createQueryClient } from './queryClient';
 
 function setUp(sessionState?: 'anonymous' | 'unlinked' | 'linked', path = '/transactions') {
-  const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
-  const queryClient = createQueryClient(router);
+  const queryClient = createQueryClient(() => router);
+  const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
   queryClient.setDefaultOptions({
     ...queryClient.getDefaultOptions(),
     queries: { ...queryClient.getDefaultOptions().queries, retryDelay: 0 },

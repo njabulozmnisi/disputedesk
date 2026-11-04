@@ -74,7 +74,7 @@ export function RootLayout() {
           >
             Skip to main content
           </a>
-          <Header state={state} wide={isStartPage} onSignOut={() => void signOut()} />
+          <Header state={state} isStartPage={isStartPage} onSignOut={() => void signOut()} />
           {signOutFailed ? (
             <div className="mx-auto grid w-full max-w-(--content-max) gap-4 px-4 pt-4 md:px-6">
               <ProblemNotice
