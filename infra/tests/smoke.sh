@@ -60,45 +60,8 @@ section "api readiness through the gateway"
 [ "$(curl -fsS "$GW/api/health/ready")" = Healthy ] || fail "api readiness"
 ok "GET $GW/api/health/ready -> Healthy"
 
-section "gateway: the SPA and security headers, each exactly once"
-curl -fsS -o /dev/null "$GW/" && ok "GET $GW/ -> 200"
-for path in / /api/health/live; do
-  headers=$(curl -fsSI "$GW$path")
-  for h in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
-    [ "$(grep -ic "^$h:" <<< "$headers")" = 1 ] || fail "$path: header $h is not sent exactly once"
-    ok "$path $(grep -i "^$h:" <<< "$headers" | tr -d '\r')"
-  done
-  # Locally GATEWAY_HSTS is empty, and nginx must then send no Strict-Transport-Security at all.
-  ! grep -qi '^strict-transport-security:' <<< "$headers" || fail "$path: HSTS sent over plain HTTP"
-  ok "$path no strict-transport-security"
-done
-# index.html (for / and client routes) is revalidated on every load; the hashed build files are cached for a year
-# (RFC 9111 5.2.2.4, RFC 8246). Each of these locations repeats the security headers, checked once each above for /.
-index=$(curl -fsS "$GW/")
-# grep finds nothing in a broken build; || true lets the line below say so instead of set -e ending the run silently.
-asset=$(grep -oE '/assets/[^"]+\.js' <<< "$index" | sed -n 1p) || true
-[ -n "$asset" ] || fail "index.html names no /assets/ script"
-# The CSP's base-uri 'none' would block a base element, so the page must hold none (CSP Level 3, base-uri).
-! grep -qi '<base' <<< "$index" || fail "index.html holds a <base> element"
-ok "index.html holds no <base> element"
-for path_cache in "/|no-cache" "/disputes|no-cache" "$asset|public, max-age=31536000, immutable"; do
-  path=${path_cache%%|*} expected=${path_cache#*|}
-  headers=$(curl -fsSI "$GW$path" | tr -d '\r')
-  [ "$(grep -ic '^cache-control:' <<< "$headers")" = 1 ] || fail "$path: not exactly one cache-control"
-  grep -qix "cache-control: $expected" <<< "$headers" || fail "$path: cache-control is not $expected"
-  for h in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
-    [ "$(grep -ic "^$h:" <<< "$headers")" = 1 ] || fail "$path: header $h is not sent exactly once"
-  done
-  ok "$path cache-control: $expected, with each security header once"
-done
-# The Api owns Cache-Control on its responses; the gateway adds none of its own. A transport error and a missing header
-# each fail with their own message (a grep inside the request's pipeline would end the run silently under set -e).
-live_headers=$(curl -fsSI "$GW/api/health/live" | tr -d '\r') || fail "/api/health/live: request failed"
-cache_control=$(grep -i '^cache-control:' <<< "$live_headers") || fail "/api/health/live: no cache-control"
-[ "$(grep -c . <<< "$cache_control")" = 1 ] || fail "/api/health/live: not exactly one cache-control: $cache_control"
-grep -qi 'no-store' <<< "$cache_control" || fail "/api/health/live: cache-control without no-store: $cache_control"
-ok "/api/health/live $cache_control"
-
+# The gateway's own headers (security, cache and the 429) are infra/tests' GatewayTests, on both gateway images. This
+# check keeps what a stand-in upstream cannot show: how the gateway meets the real Api and Zitadel.
 section "gateway: Scalar and the runtime document (AD-26)"
 header_value(){ grep -i "^$1:" | cut -d' ' -f2-; }   # header name, response headers on stdin (CR stripped)
 spa_headers=$(curl -fsSI "$GW/" | tr -d '\r')
@@ -130,44 +93,6 @@ done
 ok "/scalar/ no strict-transport-security"
 ! grep -qi '<base' <<< "$(curl -fsS "$GW/scalar/")" || fail "the Scalar page holds a <base> element"
 ok "the Scalar page holds no <base> element"
-
-section "gateway: the coarse limit's 429"
-# The limit is 10 r/s with burst 20. Each burst sends 60 requests at once (curl --parallel), at most 3 bursts, and the
-# probe stops at the first burst that gets a 429 and says what it took, so a failure shows what this host managed.
-# The 429 is @rate_limited's on every location, with the SPA's CSP and Cache-Control: no-store (AD-23).
-expect_429(){ # path
-  local burst results tally limited=""
-  for burst in 1 2 3; do
-    # One JSON object per request, its status and its headers (curl --write-out %{header_json}: lower-case names, each
-    # value in an array).
-    results=$(curl -sS --parallel --parallel-max 60 -o /dev/null -w '{"status":%{http_code},"headers":%{header_json}}\n' \
-      "$GW$1?burst=$burst&request=[1-60]") || fail "$1: a request in burst $burst failed"
-    limited=$(jq -rn 'first(inputs | select(.status == 429)) | .headers | to_entries[] | "\(.key): \(.value[])"' <<< "$results")
-    [ -z "$limited" ] || break
-  done
-  if [ -z "$limited" ]; then
-    # The statuses of the last burst, as "200 x60", so the failure shows what this host managed.
-    tally=$(jq -rn '[inputs.status] | group_by(.) | map("\(.[0]) x\(length)") | join(", ")' <<< "$results")
-    fail "$1: no 429 in 3 bursts of 60 concurrent requests (180 requests); the last burst got $tally"
-  fi
-  echo "$1: a 429 after $burst burst(s) of 60 concurrent requests ($((burst * 60)) requests; $(jq -n '[inputs | select(.status == 429)] | length' <<< "$results") limited in the last burst)"
-  if ! { [ "$(grep -ic '^content-type:' <<< "$limited")" = 1 ] && grep -qix 'content-type: application/problem+json' <<< "$limited"; }; then
-    fail "$1 429 content type: $limited"
-  fi
-  grep -qix 'retry-after: 1' <<< "$limited" || fail "$1 429 has no Retry-After: 1: $limited"
-  if ! { [ "$(grep -ic '^cache-control:' <<< "$limited")" = 1 ] && grep -qix 'cache-control: no-store' <<< "$limited"; }; then
-    fail "$1 429: not exactly one Cache-Control: no-store: $limited"
-  fi
-  for h in content-security-policy x-content-type-options x-frame-options referrer-policy permissions-policy cross-origin-opener-policy; do
-    [ "$(grep -ic "^$h:" <<< "$limited")" = 1 ] || fail "$1 429: header $h is not sent exactly once"
-  done
-  [ "$(header_value content-security-policy <<< "$limited")" = "$(header_value content-security-policy <<< "$spa_headers")" ] \
-    || fail "$1 429 does not carry the SPA's CSP: $limited"
-  ok "$1 429 with application/problem+json, Retry-After: 1, Cache-Control: no-store, the SPA's CSP and each security header once"
-}
-# The path ends in .json, so the 429 proves its Content-Type does not come from the extension.
-expect_429 /api/limit-probe.json
-expect_429 /scalar/
 
 section "Zitadel discovery and the hosted login at auth.localhost"
 discovery=$(curl -fsS "$AUTH/.well-known/openid-configuration")

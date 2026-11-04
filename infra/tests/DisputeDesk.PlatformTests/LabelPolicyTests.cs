@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 
 namespace DisputeDesk.PlatformTests;
@@ -23,7 +22,7 @@ public class LabelPolicyTests
     [InlineData("  --primary: #2b57c9;", "  --primary: blue;", "--primary in the light block is 'blue', not #rrggbb")]
     public async Task LabelPolicy_TokenOutsideItsBounds_ExitsNonZeroNamingTheToken(string text, string replacement, string error)
     {
-        ScriptResult result = await RunOnChangedTokensAsync(text, replacement);
+        ProcessResult result = await RunOnChangedTokensAsync(text, replacement);
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains(error, result.Errors, StringComparison.Ordinal);
@@ -36,17 +35,15 @@ public class LabelPolicyTests
         // A comment line's first non-blank text is /* or *, never the token's name, so neither copy below is read.
         const string Comments = "  /* --primary: #000000; */\n  /*\n   * --primary: #000000;\n   */\n";
 
-        ScriptResult result = await RunOnChangedTokensAsync("  --primary: #2b57c9;\n", Comments + "  --primary: #2b57c9;\n");
+        ProcessResult result = await RunOnChangedTokensAsync("  --primary: #2b57c9;\n", Comments + "  --primary: #2b57c9;\n");
 
         Assert.Equal(0, result.ExitCode);
         using var body = JsonDocument.Parse(result.Output);
         Assert.Equal("#2b57c9", body.RootElement.GetProperty("primaryColor").GetString());
     }
 
-    private sealed record ScriptResult(int ExitCode, string Output, string Errors);
-
     /// <summary>Runs label-policy.sh on a temporary copy of tokens.css in which TEXT, found exactly once, is replaced.</summary>
-    private static async Task<ScriptResult> RunOnChangedTokensAsync(string text, string replacement)
+    private static async Task<ProcessResult> RunOnChangedTokensAsync(string text, string replacement)
     {
         Assert.Equal(2, Tokens.Split(text).Length);
         CancellationToken cancellation = TestContext.Current.CancellationToken;
@@ -54,16 +51,8 @@ public class LabelPolicyTests
         try
         {
             await File.WriteAllTextAsync(copy, Tokens.Replace(text, replacement, StringComparison.Ordinal), cancellation);
-            var start = new ProcessStartInfo("bash", [Path.Combine(SourceRoots.Repo, "infra/images/zitadel/label-policy.sh"), copy])
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            using Process process = Process.Start(start) ?? throw new InvalidOperationException("bash did not start.");
-            Task<string> output = process.StandardOutput.ReadToEndAsync(cancellation);
-            string errors = await process.StandardError.ReadToEndAsync(cancellation);
-            await process.WaitForExitAsync(cancellation);
-            return new ScriptResult(process.ExitCode, await output, errors);
+            return await Processes.RunAsync(
+                "bash", [Path.Combine(SourceRoots.Repo, "infra/images/zitadel/label-policy.sh"), copy], Processes.BaseEnvironment(), TimeSpan.FromSeconds(30));
         }
         finally
         {

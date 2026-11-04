@@ -1,6 +1,7 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.Versioning;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -9,17 +10,20 @@ using Microsoft.AspNetCore.Http;
 namespace DisputeDesk.PlatformTests;
 
 /// <summary>
-/// AC11: what the Zitadel provisioner creates, read from the files. 5.1 AC7: the operations actor mapping it writes.
-/// 7.12 AC6 and AC7: the gateway templates' access log format and their /api error pages.
+/// AC11: what the Zitadel provisioner creates. 5.1 AC7: the operations actor mapping it writes. 7.12 AC6 and AC7: the
+/// gateway templates' access log format and their /api error pages; GatewayTests proves the rest by response.
+/// The provision.sh cases read the file because no run on this machine reaches a Zitadel call: the script first runs
+/// /label-policy.sh and reads /brand/, which only the provisioner image holds.
 /// </summary>
+[UnsupportedOSPlatform("windows")] // the stub curl needs its execute bit
 public partial class PlatformScriptTests
 {
     private static readonly string ProvisionScript = File.ReadAllText(Path.Combine(SourceRoots.Repo, "infra/images/zitadel/provision.sh"));
-    private static readonly string Compose = File.ReadAllText(Path.Combine(SourceRoots.Repo, "docker-compose.yml"));
 
     [Fact]
     public void ProvisionScript_ProjectRoles_AreTheFourCamelCaseKeys()
     {
+        // Text: no run here reaches the role calls (the class summary says why).
         string roles = RolesBlock().Match(ProvisionScript).Groups["roles"].Value;
         IEnumerable<string> keys = roles.Split('\n').Select(line => line.Split('|')[0].Trim());
 
@@ -34,6 +38,7 @@ public partial class PlatformScriptTests
     [InlineData("WebApp: { ClientId: $webAppId, ClientSecret: .[0] }")]
     public void ProvisionScript_ClientsFile_HoldsTheAd26ZitadelKeys(string key)
     {
+        // Text: no run here reaches the clients file (the class summary says why).
         Assert.Contains(key, ProvisionScript, StringComparison.Ordinal);
     }
 
@@ -55,17 +60,26 @@ public partial class PlatformScriptTests
         Assert.Contains("[ \"$(jq -r --arg ops \"$OPS_ID\" '.Operations.Actors[$ops]' \"$OUT_FILE\")\" = operations ]", currentCheck, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ProvisionScript_DevelopmentMode_ComesFromConfiguration()
+    [Theory]
+    [InlineData(null, "true")]
+    [InlineData("false", "false")]
+    public async Task ProvisionScript_DevelopmentMode_ComesFromConfiguration(string? set, string expected)
     {
+        // Compose gives the provisioner ${AUTH_DEVELOPMENT_MODE:-true}: true unless the variable says otherwise.
+        Dictionary<string, string> variables = set is null ? [] : new() { ["AUTH_DEVELOPMENT_MODE"] = set };
+
+        JsonNode model = await ComposeModel.RenderAsync(["docker-compose.yml"], variables: variables);
+
+        Assert.Equal(expected, model["services"]!["provision"]!["environment"]!["AUTH_DEVELOPMENT_MODE"]!.GetValue<string>());
+        // Text: no run here reaches the app's creation (the class summary says why).
         Assert.Contains("\\\"developmentMode\\\":$AUTH_DEVELOPMENT_MODE,", ProvisionScript, StringComparison.Ordinal);
-        Assert.Contains("AUTH_DEVELOPMENT_MODE: ${AUTH_DEVELOPMENT_MODE:-true}", Compose, StringComparison.Ordinal);
     }
 
     [Fact]
     public void ProvisionScript_WebApp_UsesClientSecretPostAndOnlyTheCodeGrant()
     {
-        // The ASP.NET Core handler sends the client secret in the form body and keeps no refresh token.
+        // The ASP.NET Core handler sends the client secret in the form body and keeps no refresh token. Text: no run here
+        // reaches the app's creation (the class summary says why).
         Assert.Contains("\\\"authMethodType\\\":\\\"OIDC_AUTH_METHOD_TYPE_POST\\\"", ProvisionScript, StringComparison.Ordinal);
         Assert.Contains("\\\"grantTypes\\\":[\\\"OIDC_GRANT_TYPE_AUTHORIZATION_CODE\\\"]", ProvisionScript, StringComparison.Ordinal);
         Assert.DoesNotContain("OIDC_GRANT_TYPE_REFRESH_TOKEN", ProvisionScript, StringComparison.Ordinal);
@@ -74,42 +88,66 @@ public partial class PlatformScriptTests
     [Fact]
     public async Task ProvisionScript_DevelopmentModeNotABoolean_FailsBeforeCallingZitadel()
     {
-        var start = new ProcessStartInfo("bash", [Path.Combine(SourceRoots.Repo, "infra/images/zitadel/provision.sh")])
-        {
-            RedirectStandardError = true,
-            Environment =
-            {
-                ["ZITADEL_URL"] = "http://zitadel.invalid",
-                ["OUT_DIR"] = Path.GetTempPath(),
-                ["OUT_UID"] = "1654",
-                ["FIXTURES_FILE"] = "unused.json",
-                ["APP_ORIGINS"] = "http://localhost:8080",
-                ["AUTH_DEVELOPMENT_MODE"] = "yes",
-            },
-        };
-        using Process process = Process.Start(start) ?? throw new InvalidOperationException("bash did not start.");
-        string errors = await process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
-        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+        // Expected: no curl call, exit 1, one message on standard error.
+        string bin = Directory.CreateTempSubdirectory("provision-").FullName;
+        await WriteStubAsync(bin, "curl");
+        Dictionary<string, string> environment = StubEnvironment(bin);
+        environment["ZITADEL_URL"] = "http://zitadel.invalid";
+        environment["OUT_DIR"] = bin;
+        environment["OUT_UID"] = "1654";
+        environment["FIXTURES_FILE"] = "unused.json";
+        environment["APP_ORIGINS"] = "http://localhost:8080";
+        environment["AUTH_DEVELOPMENT_MODE"] = "yes";
 
-        Assert.Equal(1, process.ExitCode);
-        Assert.Contains("AUTH_DEVELOPMENT_MODE must be true or false", errors, StringComparison.Ordinal);
+        ProcessResult run = await Processes.RunAsync("bash", ["infra/images/zitadel/provision.sh"], environment, TimeSpan.FromSeconds(30));
+        string[][] calls = StubCalls(bin, "curl");
+        Directory.Delete(bin, recursive: true);
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Equal("[provision] AUTH_DEVELOPMENT_MODE must be true or false, not 'yes'\n", run.Errors);
+        Assert.Empty(run.Output);
+        Assert.Empty(calls);
     }
 
-    [Theory]
-    [InlineData("infra/images/zitadel/provision.sh")]
-    [InlineData("infra/images/zitadel/verify.sh")]
-    public void ProvisioningScript_CurlOptions_SetAMaxTime(string script)
+    [Fact]
+    public void ProvisionScript_CurlOptions_SetAMaxTime()
     {
         // Every Zitadel call in the script goes through curl "${CURL_OPTS[@]}", so this one option times them all out.
-        string text = File.ReadAllText(Path.Combine(SourceRoots.Repo, script));
+        // Text: no run here reaches a curl call (the class summary says why).
+        Assert.Contains("CURL_OPTS=(--max-time ", ProvisionScript, StringComparison.Ordinal);
+    }
 
-        Assert.Contains("CURL_OPTS=(--max-time ", text, StringComparison.Ordinal);
+    [Fact]
+    public async Task VerifyScript_FirstZitadelCall_SetsAMaxTime()
+    {
+        // Every Zitadel call in verify.sh goes through curl "${CURL_OPTS[@]}". Expected: one curl call, to GetProject with
+        // --max-time 30 first; the stub answers as curl does on an HTTP error (exit 22), which ends the run with that code.
+        string bin = Directory.CreateTempSubdirectory("verify-").FullName;
+        await WriteStubAsync(bin, "curl", ("", "", 22));
+        await File.WriteAllTextAsync(Path.Combine(bin, "zitadel-clients.json"), """{"Zitadel":{"ProjectId":"p1","WebApp":{"ClientId":"c1"}}}""", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(bin, "pat"), "test-only-pat", TestContext.Current.CancellationToken);
+        Dictionary<string, string> environment = StubEnvironment(bin);
+        environment["ZITADEL_URL"] = "http://zitadel.invalid";
+        environment["FIXTURES_FILE"] = "unused.json";
+        environment["OUT_DIR"] = bin;
+        environment["PAT_FILE"] = Path.Combine(bin, "pat");
+
+        ProcessResult run = await Processes.RunAsync("bash", ["infra/images/zitadel/verify.sh"], environment, TimeSpan.FromSeconds(30));
+        string[][] calls = StubCalls(bin, "curl");
+        Directory.Delete(bin, recursive: true);
+
+        Assert.Equal(22, run.ExitCode);
+        Assert.Empty(run.Output);
+        string[] call = Assert.Single(calls);
+        Assert.Equal(["--max-time", "30"], call[..2]);
+        Assert.Contains("http://zitadel.invalid/zitadel.project.v2.ProjectService/GetProject", call);
     }
 
     [Fact]
     public void ProvisionScript_FirstZitadelCall_IsTheOnlyOneThatRetries()
     {
         // Zitadel can refuse connections or answer 503 for a moment after its health check passes (story 2.6, QA F1).
+        // Text: no run here reaches a curl call (the class summary says why); the retry cases below run the options.
         string firstCall = ZitadelCall().Match(ProvisionScript).Value;
 
         Assert.Equal("RETRY=1 call GET /admin/v1/policies/label/_preview", firstCall);
@@ -120,7 +158,8 @@ public partial class PlatformScriptTests
     [Fact]
     public void ProvisionScript_CallCurl_AddsRetryOptionsWhenRetryIsSet()
     {
-        // RETRY=1 on the first call does nothing unless call's curl line expands RETRY_OPTS.
+        // RETRY=1 on the first call does nothing unless call's curl line expands RETRY_OPTS. Text: no run here reaches a
+        // curl call (the class summary says why).
         string callCurl = CallCurlLine().Match(ProvisionScript).Groups["curl"].Value;
 
         Assert.Contains("curl \"${CURL_OPTS[@]}\" ${RETRY:+\"${RETRY_OPTS[@]}\"} ", callCurl, StringComparison.Ordinal);
@@ -173,16 +212,20 @@ public partial class PlatformScriptTests
     }
 
     [Fact]
-    public void Compose_Api_StartsAfterTheGatewayThatHoldsTheIssuerAlias()
+    public async Task Compose_Api_StartsAfterTheGatewayThatHoldsTheIssuerAlias()
     {
         // Before the gateway's auth.localhost alias exists, Docker's DNS passes the name to the host's resolver, which may
         // answer loopback for *.localhost (RFC 6761): the api then fetches the issuer's discovery document from itself.
         // So the api waits for the gateway, and the gateway, which cannot wait for the api too, finds it at run time.
         // The api waits only for the gateway to start: the gateway's health includes the api (the backend case
         // Compose_GatewayHealth_WaitsUntilItReachesTheApi), so healthy would deadlock.
-        Assert.Contains("      gateway: { condition: service_started }\n", ComposeService("api"), StringComparison.Ordinal);
-        Assert.DoesNotContain("      api: {", ComposeService("gateway"), StringComparison.Ordinal);
-        Assert.Contains("server api:8080 resolve;", GatewayTemplate(), StringComparison.Ordinal);
+        JsonNode services = (await ComposeModel.RenderAsync(["docker-compose.yml"]))["services"]!;
+        string template = await File.ReadAllTextAsync(Path.Combine(SourceRoots.Repo, "infra/images/gateway/templates/nginx.conf.template"), TestContext.Current.CancellationToken);
+
+        Assert.Equal("service_started", services["api"]!["depends_on"]!["gateway"]!["condition"]!.GetValue<string>());
+        Assert.False(services["gateway"]!["depends_on"]!.AsObject().ContainsKey("api"));
+        // Text: the template's upstream line is the contract that the api is found at run time.
+        Assert.Matches(ApiUpstreamResolvedAtRunTime(), template);
     }
 
     [Theory]
@@ -192,7 +235,8 @@ public partial class PlatformScriptTests
     {
         // 7.12 AC6 (NFR-SEC-5, NFR-OBS-2; replaces 6.6 AC2's identity-only test, AD-20, ASVS 5.0 V14.2.1): a query can
         // carry the sign-in callback's code, the end-session id_token_hint or a Mailpit search, and a Referer can carry a
-        // URL with its query, so every origin logs with one path-only format.
+        // URL with its query, so every origin logs with one path-only format. Text: the log_format definition is the
+        // contract (GatewayTests.AccessLogs_RecordThePath_NeverTheQueryOrTheReferer shows it on both images).
         string template = File.ReadAllText(Path.Combine(SourceRoots.Repo, templatePath));
         string[] formats = [.. AccessLog().Matches(template).Select(match => match.Groups["format"].Value)];
         string definition = LogFormat("path_only").Match(template).Groups["definition"].Value;
@@ -208,50 +252,18 @@ public partial class PlatformScriptTests
     [Theory]
     [InlineData("infra/images/gateway/templates/nginx.conf.template")]
     [InlineData("infra/images/gateway/templates-aws/nginx.conf.template")]
-    public void GatewayTemplate_ApiLocations_SendTheGatewaysOwnErrorsWithNoStore(string templatePath)
+    public void GatewayTemplate_ApiLocations_SendTheGatewaysOwnErrorsToGatewayError(string templatePath)
     {
-        // 7.12 AC7 (AD-23 as amended 2026-10-31): the Api sets Cache-Control: no-store on what it produces, nginx on the
-        // /api responses it generates itself. A location that sets error_page inherits none from its server (nginx,
-        // error_page), so each /api location repeats the 429 line.
+        // 7.12 AC7 (AD-23 as amended 2026-10-31): GatewayTests shows the 413 and 502 with no-store on /api/ and
+        // /api/health/ of both images. Text: a 504 needs a 60-second upstream stall per image (nginx's default
+        // proxy_read_timeout, which no template sets), so this directive's status list is the contract.
         string template = File.ReadAllText(Path.Combine(SourceRoots.Repo, templatePath));
-        string[] locations = [.. MultiLineLocation().Matches(template).Select(match => match.Value)];
-        string[] apiLocations = [.. locations.Where(block => block.StartsWith("    location /api/", StringComparison.Ordinal))];
 
-        // /api/ and /api/health/.
-        Assert.Equal(2, apiLocations.Length);
-        Assert.All(apiLocations, block =>
-        {
-            Assert.Contains("\n      error_page 429 @rate_limited;\n", block, StringComparison.Ordinal);
-            Assert.Contains("\n      error_page 413 500 502 504 @gateway_error;\n", block, StringComparison.Ordinal);
-            // The Api's own responses pass through untouched: the gateway neither adds nor hides their Cache-Control,
-            // and proxy_intercept_errors stays off, so an upstream error never reaches error_page.
-            Assert.DoesNotContain("Cache-Control", block, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("proxy_intercept_errors", block, StringComparison.Ordinal);
-        });
-        foreach (string name in new[] { "@rate_limited", "@gateway_error" })
-        {
-            string named = Assert.Single(locations, block => block.StartsWith($"    location {name} {{\n", StringComparison.Ordinal));
-            Assert.Contains("\n      include /etc/nginx/security-headers.conf;\n", named, StringComparison.Ordinal);
-            Assert.Contains("\n      add_header Cache-Control \"no-store\" always;\n", named, StringComparison.Ordinal);
-        }
-    }
+        // /api/ and /api/health/, each with the full list in its own block.
+        Match[] locations = ApiLocation().Matches(template).ToArray();
 
-    [Theory]
-    [InlineData("infra/images/gateway/templates/nginx.conf.template")]
-    [InlineData("infra/images/gateway/templates-aws/nginx.conf.template")]
-    public void GatewayTemplate_ProxiedLocations_DropTheClientsForwardedHeader(string templatePath)
-    {
-        // 6.6 QA O1: Zitadel resolves its instance from an RFC 7239 Forwarded header, so a client's own must not reach an
-        // upstream. An empty proxy_set_header value is not passed on, and a location that sets any proxy_set_header
-        // inherits none from its server (nginx, proxy_set_header), so each proxied location drops it itself.
-        string template = File.ReadAllText(Path.Combine(SourceRoots.Repo, templatePath));
-        string[] proxied = [.. MultiLineLocation().Matches(template)
-            .Select(match => match.Value)
-            .Where(block => block.Contains("proxy_pass ", StringComparison.Ordinal))];
-
-        // Every proxy_pass in the file sits in one of the blocks found, so none is missed.
-        Assert.Equal(ProxyPass().Count(template), proxied.Length);
-        Assert.All(proxied, block => Assert.Contains("\n      proxy_set_header Forwarded \"\";\n", block, StringComparison.Ordinal));
+        Assert.Equal(["/api/", "/api/health/"], locations.Select(location => location.Groups["path"].Value).Order(StringComparer.Ordinal));
+        Assert.All(locations, location => Assert.Matches(GatewayErrorPage(), location.Groups["body"].Value));
     }
 
     // From the "is the file current" test up to the log line it ends with.
@@ -268,17 +280,58 @@ public partial class PlatformScriptTests
         // The body goes to a temporary file, as in the script's call(). Not /dev/null: before a retry curl truncates the
         // output file, and curl 8.5.0 (ubuntu-24.04) fails that on /dev/null with exit 23 and prints no status.
         string body = Path.GetTempFileName();
-        var start = new ProcessStartInfo("curl") { RedirectStandardOutput = true };
-        foreach (string argument in RetryOptions().Concat(["-sS", "-o", body, "-w", "%{http_code}", $"{zitadel}admin/v1/policies/label/_preview"]))
+        ProcessResult curl = await Processes.RunAsync("curl", [.. RetryOptions(), "-sS", "-o", body, "-w", "%{http_code}", $"{zitadel}admin/v1/policies/label/_preview"],
+            Processes.BaseEnvironment(), TimeSpan.FromSeconds(60));
+        File.Delete(body);
+        return curl.Output;
+    }
+
+    /// <summary>
+    /// A stand-in for a command, first on PATH: each call writes its arguments (one per line) to NAME.N.args and its
+    /// standard input to NAME.N.stdin, then prints the N-th answer's output and errors and exits with its code. A call
+    /// with no answer fails, naming itself.
+    /// </summary>
+    private static async Task WriteStubAsync(string bin, string name, params (string Output, string Errors, int Exit)[] answers)
+    {
+        string stub = Path.Combine(bin, name);
+        await File.WriteAllTextAsync(stub, """
+            #!/usr/bin/env bash
+            dir=$(dirname "$0"); name=$(basename "$0")
+            n=1; while [ -e "$dir/$name.$n.args" ]; do n=$((n + 1)); done
+            printf '%s\n' "$@" > "$dir/$name.$n.args"
+            cat > "$dir/$name.$n.stdin"
+            if [ ! -e "$dir/$name.$n.exit" ]; then echo "unexpected $name call $n: $*" >&2; exit 99; fi
+            cat "$dir/$name.$n.out"; cat "$dir/$name.$n.err" >&2
+            exit "$(cat "$dir/$name.$n.exit")"
+            """, TestContext.Current.CancellationToken);
+        File.SetUnixFileMode(stub, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        for (int call = 1; call <= answers.Length; call++)
         {
-            start.ArgumentList.Add(argument);
+            (string output, string errors, int exit) = answers[call - 1];
+            await File.WriteAllTextAsync(Path.Combine(bin, $"{name}.{call}.out"), output, TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(bin, $"{name}.{call}.err"), errors, TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(bin, $"{name}.{call}.exit"), $"{exit}", TestContext.Current.CancellationToken);
+        }
+    }
+
+    /// <summary>The arguments of each call the stub received, in order.</summary>
+    private static string[][] StubCalls(string bin, string name)
+    {
+        List<string[]> calls = [];
+        for (int call = 1; File.Exists(Path.Combine(bin, $"{name}.{call}.args")); call++)
+        {
+            calls.Add(File.ReadAllLines(Path.Combine(bin, $"{name}.{call}.args")));
         }
 
-        using Process process = Process.Start(start) ?? throw new InvalidOperationException("curl did not start.");
-        string status = await process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
-        File.Delete(body);
-        return status;
+        return [.. calls];
+    }
+
+    /// <summary>The base environment with the stubs in this folder first on PATH.</summary>
+    private static Dictionary<string, string> StubEnvironment(string bin)
+    {
+        Dictionary<string, string> environment = Processes.BaseEnvironment();
+        environment["PATH"] = $"{bin}{Path.PathSeparator}{environment["PATH"]}";
+        return environment;
     }
 
     /// <summary>A stand-in for Zitadel on a loopback port (0 picks a free one): every request gets the given answer.</summary>
@@ -315,11 +368,6 @@ public partial class PlatformScriptTests
     [GeneratedRegex(@"ROLES='(?<roles>[^']*)'")]
     private static partial Regex RolesBlock();
 
-    /// <summary>The lines of one service in docker-compose.yml, its name line excluded, up to the blank line after it.</summary>
-    private static string ComposeService(string name) =>
-        new Regex(@"\n  " + Regex.Escape(name) + @":[^\n]*\n(?<body>(?:    [^\n]*\n)+)", RegexOptions.None, TimeSpan.FromSeconds(1))
-            .Match(Compose).Groups["body"].Value;
-
     /// <summary>An access_log directive anywhere on a line; the format is empty when none is named (nginx's combined).</summary>
     [GeneratedRegex(@"\baccess_log\s+(?<path>[^\s;]+)\s*(?<format>[^\s;]*)[^;]*;")]
     private static partial Regex AccessLog();
@@ -328,15 +376,15 @@ public partial class PlatformScriptTests
     [GeneratedRegex(@"\n  access_log\s+[^\s;]+\s+path_only\s*;")]
     private static partial Regex HttpLevelPathOnlyAccessLog();
 
-    /// <summary>A location written over several lines: from its opening line to its closing brace (four-space indent).</summary>
-    [GeneratedRegex(@"^    location [^\n]*\{\n.*?^    \}$", RegexOptions.Multiline | RegexOptions.Singleline)]
-    private static partial Regex MultiLineLocation();
+    /// <summary>A prefix location under /api/: its path and its block, which holds no nested block, only ${VARIABLE}s.</summary>
+    [GeneratedRegex(@"\blocation\s+(?<path>/api/[^\s{]*)\s*\{(?<body>(?:[^{}]|\$\{\w+\})*)\}")]
+    private static partial Regex ApiLocation();
 
-    [GeneratedRegex(@"\bproxy_pass\s")]
-    private static partial Regex ProxyPass();
+    [GeneratedRegex(@"\berror_page\s+413\s+500\s+502\s+504\s+@gateway_error\s*;")]
+    private static partial Regex GatewayErrorPage();
 
-    private static string GatewayTemplate() =>
-        File.ReadAllText(Path.Combine(SourceRoots.Repo, "infra/images/gateway/templates/nginx.conf.template"));
+    [GeneratedRegex(@"\bserver\s+api:8080\s+resolve\s*;")]
+    private static partial Regex ApiUpstreamResolvedAtRunTime();
 
     /// <summary>The definition of a log_format: its quoted strings, up to the semicolon.</summary>
     private static Regex LogFormat(string name) => new(@"\n  log_format\s+" + Regex.Escape(name) + @"\s+(?<definition>[^;]+);", RegexOptions.None, TimeSpan.FromSeconds(1));
