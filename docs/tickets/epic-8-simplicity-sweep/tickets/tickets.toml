@@ -1,0 +1,311 @@
+# Simplicity sweep: stories in build order. Written by Sofia, 2026-11-04, from waves 2 and 3 of
+# docs/verification/simplicity-audit/mitigation-plan.md. Extra keys (owner, lane, high_stakes, migration, touches,
+# supervisor_checks) are for the supervisor; tickets.py ignores them.
+
+next_id = 18
+
+[[entry]]
+id = 1
+type = "story"
+title = "CI lints workflows and shell scripts, and the scripts use their tools' documented features"
+description = "Slice S7a (INF-2, INF-4, INF-5, INF-11 to INF-14): actionlint and shellcheck run in CI as pinned binaries; the label-policy generator is a plain lookup and its 11 sed mutations and the brand-file byte check go; the wordmark grep stays; push-and-watch uses gh run watch, Security calls security-local.sh, check-ready reads a decisions: settled front-matter field (human approval 2026-11-04), lane.sh copies a committed runner taking the story and agent and reads JSON with jq."
+verify = "CI's floor-guard job runs actionlint and shellcheck green; the label-policy exact-values step is green; each supervisor break fails as described."
+covers = ["R33", "R34"]
+after = []
+hitl = false
+risk = "low"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = [".github/workflows/ci.yml (floor-guard lint steps; two platform steps removed)", ".github/workflows/security.yml (filesystem scan step)", "infra/zitadel/provision/label-policy.sh", "infra/tests/DisputeDesk.PlatformTests (three label-policy cases)", "scripts/push-and-watch.sh, security-local.sh, check-ready.sh, lane.sh, lane-runner.zsh (new)"]
+supervisor_checks = ["Throwaway branch: an unquoted $var in a run: block; floor-guard fails at actionlint.", "Throwaway branch: cd $dir in infra/smoke.sh; floor-guard fails at shellcheck.", "Throwaway copy: a [decision] point with prose but no decisions: settled; check-ready reports not ready."]
+
+[[entry]]
+id = 2
+type = "story"
+title = "Backend tidy: one copy of each helper, and no unused members"
+description = "Slice S1 with D10 (CORE-1 to CORE-9, API-3 to API-6): the Worker validates its connection string on start; one clock cut, one not-found error, one money format; withdraw replays inline and clashes are caught where retried; no unused Result factories, typed error variants in Application, linking registered and mapped like the customer routes, the metric label from the enum, NoStoreApiResponses, and no GetAccountsAsync."
+verify = "Build with warnings as errors, dotnet format and the full backend suite pass; openapi.json unchanged."
+covers = ["R25", "R27", "R34"]
+after = []
+hitl = false
+risk = "medium"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = false
+touches = ["backend/src (Worker host, relay, handlers, views, Result, DisputeErrors, DisputeWire, Program.cs, linking, metrics, SecurityHeaders, core-banking port)", "backend/stubs/DisputeDesk.CoreBankingStub/Program.cs", "backend/Directory.Packages.props (comment)", "backend/tests (the tests the criteria name)"]
+supervisor_checks = ["Throwaway copy: start the Worker with an empty connection string; it exits naming the setting.", "Throwaway copy: drop the microsecond cut from the shared helper; the 2.8 truncation tests fail."]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Frontend tidy: route guards in beforeLoad, and one form pattern"
+description = "Slice S2 (FE-2 to FE-5, FE-7 to FE-10): pathless layout routes guard each session state in beforeLoad with redirect and SessionGate goes; the withdraw note uses React Hook Form, zod and Field; one ErrorSummary and one z.config; problem bodies read by type; returnUrl left to the BFF; the reason group is a fieldset; one partValue; isStartPage."
+verify = "npm run typecheck, lint and test pass in frontend/; the e2e regression suite passes on the stack."
+covers = ["R2", "R9", "R34", "R40"]
+after = []
+hitl = false
+risk = "medium"
+refine = false
+owner = "frontend"
+lane = "B"
+high_stakes = false
+migration = false
+touches = ["frontend/src/app/router.tsx, SessionGate.tsx (deleted), main.tsx, Header.tsx, RootLayout.tsx", "frontend/src/features/disputes (raise, withdraw, detail)", "frontend/src/features/linking/linkSchema.ts", "frontend/src/components/ErrorSummary.tsx", "frontend/src/features/transactions/format.ts"]
+supervisor_checks = ["Throwaway copy: _linked redirects only anonymous; the unlinked-login routing test fails.", "Throwaway copy: withdraw schema bound 499; the 500-character test fails."]
+
+[[entry]]
+id = 4
+type = "story"
+title = "Backend tests use the standard metric, log and clock fakes"
+description = "Slice S3 (TST-1, TST-3, TST-4, TST-8 to TST-11), test-only: MetricCollector and FakeLogger replace the MeterListener rigs and ILoggerProviders (the privacy test keeps its factory-scoped recorder); one start instant, TestClock kept for host timers and FakeTimeProvider elsewhere; DisputeIn(status) drives the aggregate; one Eventually per project; ForbidProbe goes; one seeding and one body helper; absence checks hold the first call and check again after release."
+verify = "The full backend suite passes; no production file changes; Microsoft.Extensions.Diagnostics.Testing 10.11.0 pinned after verification."
+covers = ["R35"]
+after = []
+hitl = false
+risk = "low"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["backend/Directory.Packages.props (Microsoft.Extensions.Diagnostics.Testing)", "backend/tests/DisputeDesk.Api.IntegrationTests", "backend/tests/DisputeDesk.Worker.IntegrationTests"]
+supervisor_checks = ["Throwaway copy: wrong reason label in RaiseMetrics; the MetricCollector test fails.", "Throwaway copy: StartLinkingHandler calls core banking twice; the held-call absence test fails."]
+
+[[entry]]
+id = 5
+type = "story"
+title = "Architecture source rules read Roslyn syntax trees, and banned APIs fail the build"
+description = "Slice S4 (TST-2) with wave 4's ban: the C# source rules parse syntax trees with Microsoft.CodeAnalysis.CSharp and the regex self-tests go; BannedApiAnalyzers bans every AddDbContextPool and AddPooledDbContextFactory overload in production projects and ILoggerProvider in test projects; MeterListener is not banned (8.4 keeps one recorder)."
+verify = "ArchitectureTests and the backend build pass; each rule fails on its supervisor break; both packages pinned after verification."
+covers = ["R25", "R35"]
+after = [4]
+hitl = false
+risk = "low"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["backend/Directory.Packages.props (Microsoft.CodeAnalysis.CSharp, Microsoft.CodeAnalysis.BannedApiAnalyzers)", "backend/tests/DisputeDesk.ArchitectureTests (incl. PlatformScriptTests.ApiProgram_ForwardedHeaders_RunFirstInThePipeline)", "backend/Directory.Build.props or backend/tests/Directory.Build.props", "BannedSymbols.txt (two, new)"]
+supervisor_checks = ["Throwaway copy: ActorType . Automation across a line break in an Api file; the rule fails.", "Throwaway copy: a string literal \"// !\"; the null-forgiving rule does not fail.", "Throwaway copy: AddPooledDbContextFactory<AppDbContext> in Infrastructure; the build fails with RS0030."]
+
+[[entry]]
+id = 6
+type = "story"
+title = "E2E specs share their helpers and wait on signals, not time"
+description = "Slice S5 (TST-5, TST-6, TST-10's e2e parts) with wave 4's ESLint check: each matching copy imports signInContext, queryRows, origin and axeTags from support.ts (specialised sign-ins stay, journeys frozen); until becomes expect.poll; no waitForTimeout, absence checked by a wait that must time out; stale headers corrected; the existing resolved-409 withdraw case also checks what was written; no-wait-for-timeout and no-restricted-properties run in e2e/ and CI."
+verify = "On a fresh stack the regression project and the journeys pass twice; npm run lint passes in e2e/ and CI's e2e job."
+covers = ["R33", "R35"]
+after = []
+hitl = false
+risk = "low"
+refine = false
+owner = "qa"
+lane = "QA"
+high_stakes = false
+migration = false
+touches = ["e2e/tests (support.ts and the specs named in the story)", "e2e/package.json, package-lock.json, eslint.config.js (new)", ".github/workflows/ci.yml (one lint step in e2e, landed by the supervisor)", "docs/verification/8.6-qa.md"]
+supervisor_checks = ["Throwaway copy: the linking form sends a request per keystroke; the absence check fails.", "Throwaway copy: await page.waitForTimeout(100), and second.waitForTimeout(100), in a spec; npm run lint fails on each."]
+
+[[entry]]
+id = 7
+type = "story"
+title = "Gateway and Compose checks move to the infra test project, edge headers checked once"
+description = "First half of slice S6 (INF-1, INF-9, TST-7): one process helper in infra/tests; gateway.test.sh becomes GatewayTests on both images and is the one place edge headers are checked; smoke.sh keeps only 'up and wired' (Scalar and the identity origin stay); gateway template rules and per-route forwarded headers, /otlp/ included, proved by responses; Compose checks read the rendered model, root-file cases in backend with a pinned Compose in the backend job."
+verify = "The infra test project passes locally and in CI; ArchitectureTests pass; infra/smoke.sh passes on a fresh stack; gateway.test.sh is gone."
+covers = ["R32", "R35", "R37"]
+after = [1]
+hitl = false
+risk = "medium"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["infra/tests/DisputeDesk.PlatformTests (GatewayTests, process helper, PlatformScriptTests)", "backend/tests/DisputeDesk.ArchitectureTests/PlatformScriptTests.cs", "infra/aws/gateway.test.sh (deleted)", "infra/smoke.sh", "infra/README.md", ".github/workflows/ci.yml (AWS gateway step removed; Install Compose added to the backend job)"]
+supervisor_checks = ["Throwaway copy: a second X-Content-Type-Options locally; a GatewayTests case fails.", "Throwaway copy: init: false on worker; the Compose model test fails."]
+
+[[entry]]
+id = 8
+type = "story"
+title = "Deploy, database-init and Compose-render harnesses move to the infra test project"
+description = "Second half of slice S6 (INF-1, INF-10) with wave 4's harness rule: deploy.test.sh, rds-init.test.sh and check-compose.sh become xUnit tests with one PATH-stub helper (unexpected calls fail, docker run passes through); the input bounds are tested once on both sides; exact rendered environment key sets replace the awk override-tag reader; a test fails on any shell test harness under infra/ except iam-names.test.sh until 8.16."
+verify = "The infra test project passes locally and in CI; the three scripts are gone; deploy.sh and input-bounds.sh unchanged apart from comments."
+covers = ["R35", "R38"]
+after = [1, 7]
+hitl = false
+risk = "low"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["infra/tests/DisputeDesk.PlatformTests (DeployScriptTests, DatabaseInitTests, ComposeRenderTests, PATH-stub helper, harness rule)", "infra/aws/deploy.test.sh, rds-init.test.sh, check-compose.sh (deleted)", ".github/workflows/ci.yml (three platform steps removed)", "infra/README.md"]
+supervisor_checks = ["Throwaway copy: PGSSLMODE=require in deploy.sh; a DatabaseInitTests case fails.", "Throwaway copy: one !override tag removed; a ComposeRenderTests case fails.", "Throwaway copy: infra/aws/new.test.sh added; the harness rule fails."]
+
+[[entry]]
+id = 9
+type = "story"
+title = "Gateway sets the forwarded-header block once per server"
+description = "Slice S7b (INF-3): both nginx templates set proxy_http_version and the forwarded-header block once per server, inherited by every location that sets none; the /otlp/ location and the AWS Mailpit server keep their own sets unchanged; every upstream receives the same headers route by route, proved by 8.7's GatewayTests unchanged."
+verify = "8.7's GatewayTests pass unchanged on both images; the e2e job and ZAP pass."
+covers = ["R32"]
+after = [7]
+hitl = false
+risk = "medium"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["infra/nginx/templates/nginx.conf.template", "infra/nginx/templates-aws/nginx.conf.template"]
+supervisor_checks = ["Throwaway copy: proxy_set_header X-Test 1 in the local /api/ location only; the /api/ forwarded-header case fails.", "Throwaway copy: drop X-Origin-Verify \"\" from the AWS app server; the origin-verify case fails."]
+
+[[entry]]
+id = 10
+type = "story"
+title = "Every route checks in the framework's order: 401, 403, 400, 404, 409, 422"
+description = "Slice S9 with D1 (DES-4, DES-6): withdraw and resolve validate their bodies with the built-in minimal API validation before the lookup, DisableValidation and the post-lookup body checks go, raise states the same order with its trailing 400 for a rule that needs the loaded resource, a body error never reveals whether an ID exists, the handlers keep their generic failure returns, and the AcceptsMetadata workaround goes (human, 2026-11-04): a text/plain resolve gets the cookie fallback's 401 and its tests are rewritten."
+verify = "The full backend suite passes with the order tests rewritten; OpenAPI drift passes after regenerating; the e2e regression suite passes after QA's two spec changes."
+covers = ["R19", "R20", "R30"]
+after = [2, 4]
+hitl = false
+risk = "high"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Contracts (WithdrawDisputeRequest, ResolveDisputeRequest)", "backend/src/DisputeDesk.Api (DisputeEndpoints, OperationsEndpoints)", "backend/src/DisputeDesk.Application (WithdrawDisputeHandler, OperationsActionHandler)", "backend/src/DisputeDesk.Domain/Disputes/DisputeErrors.cs (OutcomeRequired deleted)", "backend/openapi.json, frontend/src/api/generated/", "QA stage: e2e/tests/dispute-withdraw.spec.ts, operations-actions.spec.ts"]
+supervisor_checks = ["Throwaway copy: .DisableValidation() back on withdraw; the unknown-ID 400 case fails.", "Throwaway copy: a different detail for the 400 on another customer's dispute; the no-probing case fails.", "Throwaway copy: drop the generic failure return after dispute.Withdraw; a test sees 200 with no stored event.", "Throwaway copy: a non-nullable Outcome; the missing-outcome case binds as Upheld and fails."]
+
+[[entry]]
+id = 11
+type = "story"
+title = "One enum rule on the wire: exact camelCase names only"
+description = "Slice S13 with D5 (API-1, DES-13): one converter factory registered in DisputeDeskJson.Apply reads every enum from exactly its camelCase name; SingleNameEnumConverter goes; writing is unchanged and an undefined value still fails to write; JSON bodies only; the raise reason no longer binds in other casings, a contract change proved by the tests (an empty openapi diff is acceptable)."
+verify = "The full backend suite passes with the raise casing test rewritten; OpenAPI and Orval drift pass after regenerating; the e2e regression suite passes."
+covers = ["R13", "R20", "R30"]
+after = [10]
+hitl = false
+risk = "medium"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["backend/src/DisputeDesk.Contracts/Json (DisputeDeskJson, the converter and its factory; SingleNameEnumConverter deleted)", "backend/src/DisputeDesk.Contracts/Operations/ResolveDisputeRequest.cs", "backend/src/DisputeDesk.Api/EnumSchemaTransformer.cs (doc comment)", "backend/tests (RaiseDisputeInputTests)", "backend/openapi.json, frontend/src/api/generated/ (if changed)"]
+supervisor_checks = ["Throwaway copy: case-insensitive reads in the factory; the WrongAmount case binds and fails.", "Throwaway copy: the factory accepts a number; the 1 case binds and fails."]
+
+[[entry]]
+id = 12
+type = "story"
+title = "Operations callers are a plain allowlist of client subs"
+description = "Slice S12 with D4 (API-2, DES-5): Operations:AllowedClients, an array of subs, replaces the Operations:Actors map and its validator; every allowed caller is actor type operations with its sub; a refused caller gets 403 and a Denied entry with its sub; no appsettings file holds an Operations section; the provisioner writes the allowlist, checks it by exact array equality and rewrites an old-shape clients file with fresh secrets."
+verify = "The full backend suite and the infra test project pass; infra/smoke.sh passes on a fresh stack; the e2e regression suite passes after QA's change."
+covers = ["R10", "R21"]
+after = [11]
+hitl = false
+risk = "high"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = false
+touches = ["backend/src/DisputeDesk.Api/Operations (OperationsOptions, OperationsAuthentication, OperationsActorHandler)", "backend/src/DisputeDesk.Api/Authorization/AuthorizationResultHandler.cs (comment)", "infra/zitadel/provision/provision.sh", "infra/tests/DisputeDesk.PlatformTests/PlatformScriptTests.cs", "backend/tests (ApiFactory, ApiReferenceTests, OperationsRolesTests)", "QA stage: e2e/tests/operations-read.spec.ts"]
+supervisor_checks = ["Throwaway copy: case-insensitive sub comparison; a case-different sub gets through and the test fails.", "Throwaway copy: an empty list allows every caller; the empty-list test fails.", "Throwaway copy: an Operations section in appsettings.json; the configuration test fails.", "Docker check: an old-shape clients file is rewritten on the next up; sign-in and the operations token both work."]
+
+[[entry]]
+id = 13
+type = "story"
+title = "Every session ends in the browser by a document navigation"
+description = "Slice S10 with D2 (FE-1, FE-6, DES-8): a 401, an anonymous session answer or the tab's own idle limit calls location.replace to the session-ended screen; the screen is a fresh document that makes no request (the root's session query disabled there); each tab keeps its own wall-clock deadline and warning; other tabs learn on focus through refetchOnWindowFocus on the session query (human, 2026-11-04); sign-out is the form post and a failed one keeps the screen with a notice (human, 2026-11-04); the in-place clean-up, the BroadcastChannel deadline, the late-response guards and their test scaffolding go."
+verify = "npm run typecheck, lint and test pass in frontend/; the e2e regression suite passes after QA's spa-session-end changes; the journeys pass."
+covers = ["R2", "R3", "R40"]
+after = [3]
+hitl = false
+risk = "high"
+refine = false
+owner = "frontend"
+lane = "B"
+high_stakes = true
+migration = false
+touches = ["frontend/src/app (sessionEnd, useSessionTabs, InactivityWarning, useSignOut, RootLayout)", "frontend/src/api (queryClient, mutator)", "frontend/src/features (the late-response guards)", "frontend/src/test/support.tsx and the deleted scaffolding tests", "QA stage: e2e/tests/spa-session-end.spec.ts"]
+supervisor_checks = ["Throwaway copy: router.navigate in place of location.replace; criterion 1's tests fail.", "Throwaway copy: the session query enabled on /signed-out; the no-request test fails.", "Throwaway copy: no visibilitychange re-check; the moved-Date case fails.", "Throwaway copy: refetchOnWindowFocus false on the session query; the focus test fails.", "Docker check: after expiry the new document's heap holds no dispute ID."]
+
+[[entry]]
+id = 14
+type = "story"
+title = "The SLA sweep only escalates: SlaWarningRaised is dropped"
+description = "Slice S11 with D3 (DES-3, DES-16): one migration DropSlaWarning drops SlaWarningRaisedAtUtc and IX_Disputes_SlaWarning; the event type leaves the domain, the stored-event mapping, the operations timeline and the wire enum; the sweep claims only overdue disputes and drops its claim span tag; every stored event is published, so disputeVersion has no gaps, proved across the old 48-hour lead window; a database holding warning rows must be recreated."
+verify = "The full backend suite passes; the EF drift check reports no pending changes; OpenAPI and Orval drift pass after regenerating; on a fresh stack the e2e regression suite and the journeys pass after QA's changes."
+covers = ["R16", "R22", "R23", "R29", "R30"]
+after = [12]
+hitl = false
+risk = "high"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = true
+migration = true
+touches = ["backend/src/DisputeDesk.Domain/Disputes (SlaWarningRaised deleted, Dispute)", "backend/src/DisputeDesk.Application (StoredEventRow, OperationsView)", "backend/src/DisputeDesk.Contracts/Operations (StoredEventType, OperationsTimelineEntryResponse doc comment)", "contracts/events/disputedesk.dispute.status-changed.v1.schema.json (description)", "backend/src/DisputeDesk.Infrastructure (CommitRows, DisputeConfiguration, SlaQueries, Migrations/DropSlaWarning)", "backend/src/DisputeDesk.Worker/Sla/SlaSweep.cs", "backend/openapi.json, frontend/src/api/generated/", "QA stage: e2e/tests/sla-sweep.spec.ts, seeded-disputes.spec.ts, dispute-list.spec.ts"]
+supervisor_checks = ["Throwaway copy: keep a publish-nothing case; the no-gap test fails.", "Throwaway copy: database update AddSlaWarning, then compare pg_indexes and information_schema.columns; a Down without the index filter shows the difference.", "Docker check: fresh stack; the SLA demo dispute ends with one DisputeEscalated and no SlaWarningRaised."]
+
+[[entry]]
+id = 15
+type = "story"
+title = "The seeder is the third named ownership-filter bypass"
+description = "Slice S14 with D6 (DES-7): the seeder reads fixture disputes on the migrating context with IgnoreQueryFilters([\"Ownership\"]) and an explicit customer predicate; the per-customer AppDbContext goes; the ownership rule names Operations/, Worker/Sla/ and the one file Infrastructure/Seeding/Seeder.cs; a new test proves a wrong-customer row makes seeding fail, not skip; seeding is otherwise unchanged."
+verify = "The full backend suite passes with the seeding tests unchanged; the architecture tests pass; a fresh stack seeds as before."
+covers = ["R17", "R24", "R25"]
+after = [5, 14]
+hitl = false
+risk = "medium"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["backend/src/DisputeDesk.Infrastructure/Seeding/Seeder.cs", "backend/tests/DisputeDesk.ArchitectureTests/OwnershipRulesTests.cs"]
+supervisor_checks = ["Throwaway copy: drop the customer predicate; the wrong-customer test sees a silent skip and fails.", "Throwaway copy: a bypass in Infrastructure/Linking, and in a new Seeding/ file; the ownership rule fails."]
+
+[[entry]]
+id = 16
+type = "story"
+title = "IAM policies are JSON templates checked in the infra tests, and the OIDC jobs become a recorded check"
+description = "Slice S16 with D8 and D9 (INF-7, INF-8): each IAM policy is a .json.tftpl rendered with templatefile() inside the kept modules; IamNamesTests in the infra test project reads every action and condition key with System.Text.Json (human, 2026-11-04) and checks them against AWS's service reference as 7.16 did, with an anchored attribute rule and a whole-check deadline; iam-names.test.sh, the oidc-token and oidc-subject jobs and tests-oidc go; the README records the one-time subject check."
+verify = "terraform fmt, validate and mocked test pass with every tftest unchanged; the infra test project passes locally and in CI; actionlint passes; no AWS command is run."
+covers = ["R33", "R38", "R39"]
+after = [8]
+hitl = false
+risk = "medium"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["infra/terraform/modules (deploy-role, compute, observability) and bootstrap: .json.tftpl files and main.tf", "infra/terraform/iam-names.test.sh, envs/dev/tests-oidc/ (deleted)", "infra/tests/DisputeDesk.PlatformTests/IamNamesTests.cs (new)", ".github/workflows/ci.yml (IAM step; oidc-token and oidc-subject jobs)", "infra/README.md, infra/terraform/README.md"]
+supervisor_checks = ["Throwaway copy: xray:PutSpans to xray:PutSpan in a template; IamNamesTests fails.", "Throwaway copy: a jsonencode() policy in a module, and one starting on the next line; IamNamesTests fails.", "Throwaway copy: a template's Version changed to 2008-10-17; IamNamesTests fails.", "Throwaway copy: the index URL at v1/no-such-file.json; IamNamesTests fails naming it."]
+
+[[entry]]
+id = 17
+type = "story"
+title = "Contracts references Domain for the enums that are identical on the wire"
+description = "Slice S17 with D14b (DES-16): Contracts references Domain; the nine enums with identical members exist once, in Domain, and their hand-written mappings go; the customer-facing enums stay in Contracts; LayerTests allows Contracts to reference Domain only; openapi.json, the event schemas and the generated client show no diff, and a fixed-input exact-string test written first proves the persisted shapes byte-identical."
+verify = "The full backend suite passes; OpenAPI drift shows no change; event schema tests pass with the schemas unchanged; Orval drift shows no change."
+covers = ["R25", "R30"]
+after = [11]
+hitl = false
+risk = "medium"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = ["backend/src/DisputeDesk.Contracts (csproj; nine enum files deleted; records)", "backend/src/DisputeDesk.Application (DisputeWire, ListTransactions, error variants)", "backend/tests/DisputeDesk.ArchitectureTests/LayerTests.cs"]
+supervisor_checks = ["Throwaway copy: rename Domain Reason.WrongAmount; OpenAPI drift fails.", "Throwaway copy: Contracts references Application; the layer test fails."]

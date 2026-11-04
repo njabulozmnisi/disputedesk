@@ -54,3 +54,10 @@ title = "Journeys proven on the stack, deployed and documented"
 description = "The Playwright journeys with accessibility and ZAP scans pass on the real stack and in CI, images publish to GHCR, the dev environment deploys to AWS through Terraform and the OIDC role, and the production readiness review, the README and the records are written."
 covers = ["R3", "R9", "R11", "R28", "R30", "R32", "R33", "R34", "R35", "R36", "R38", "R39", "R40"]
 after = [{ epic = 2, needs = "the themed hosted login for UJ-1" }, { epic = 3, needs = "dispute screens for UJ-1, UJ-2 and UJ-5" }, { epic = 4, needs = "events on the topic for the four-hop trace" }, { epic = 5, needs = "Scalar and the sweep for the README and the sweep story" }, { epic = 6, needs = "linking screens for UJ-1" }]
+
+[[epic]]
+id = 8
+slug = "epic-8-simplicity-sweep"
+title = "Simplicity sweep"
+description = "Waves 2 and 3 of the 2026-11-03 simplicity audit's mitigation plan are merged: framework helpers and standard test tools in place of copies, one infra test style, linters in CI, and the human's decisions D1 to D6, D9 and D14b; each finding maps to a merged criterion and CI is green."
+covers = ["R2", "R3", "R9", "R10", "R13", "R16", "R17", "R19", "R20", "R21", "R22", "R23", "R24", "R25", "R27", "R29", "R30", "R32", "R33", "R34", "R35", "R37", "R38", "R39", "R40"]

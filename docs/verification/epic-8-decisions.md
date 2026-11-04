@@ -12,3 +12,5 @@ Raised by the challenger (`8.x-challenge.md`), the pre-build review and the pre-
 Dismissed as not decisions (fixed in the stories): 8.7's point on `Compose_Api_StartsAfterTheGatewayThatHoldsTheIssuerAlias` (it reads `infra/nginx/templates/nginx.conf.template`, so ad-011 change 4 moves it); 8.15's point on PRD NFR-SEC-6 and R17 (D6 already decides the third bypass; the docs-first change aligns them).
 
 Also approved 2026-11-04: `CLAUDE.md` points at `docs/process/ad-004-model-roles.md`; the backend builder may write `scripts/` (story 8.1).
+
+Approved 2026-11-04 (8.1, criterion 7): `scripts/check-ready.sh` reads a front-matter field `decisions: settled`, which the supervisor sets after the human answers a story's `[decision]` points, citing the decisions record. The supervisor adds the matching line to `docs/process/agentic-sdlc.md` and the product owner's ticket template when 8.1 lands. Also: 8.3's two `returnUrl` test cases (`Callback_NonLocalReturnUrl_RedirectsToRoot`) go to a backend builder as a test-only change before 8.3 merges.
