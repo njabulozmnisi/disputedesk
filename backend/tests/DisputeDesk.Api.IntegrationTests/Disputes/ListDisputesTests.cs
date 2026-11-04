@@ -16,12 +16,9 @@ public class ListDisputesTests(PostgresFixture postgres, TransactionsStub stub) 
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        Guid resolvedId = (await browser.RaiseCreatedAsync(DisputesApi.Body())).GetProperty("disputeId").GetGuid();
+        Guid resolvedId = (await factory.DisputeInAsync(DisputeStatus.Resolved, outcome: Outcome.Rejected)).Id;
         Guid openId = (await browser.RaiseCreatedAsync(DisputesApi.Body(transactionId: "TXN-A-0028", reason: "wrongAmount", expectedAmount: "200.00")))
             .GetProperty("disputeId").GetGuid();
-        await factory.AppendAsync(resolvedId, DisputeStatus.Resolved, Outcome.Rejected,
-            At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2),
-            At(new DisputeResolved(DisputeStatus.UnderReview, DisputeStatus.Resolved, Outcome.Rejected, "Not a match"), 3));
 
         using JsonDocument page = await browser.ListDisputesPageAsync();
 
@@ -55,9 +52,9 @@ public class ListDisputesTests(PostgresFixture postgres, TransactionsStub stub) 
     {
         await using ApiFactory factory = await DisputesApi.StartWithoutCoreBankingAsync(postgres);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        SeededDispute oldest = await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-1", DisputesApi.SeedInstant.AddHours(-2));
-        SeededDispute newest = await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-2", DisputesApi.SeedInstant);
-        SeededDispute middle = await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-3", DisputesApi.SeedInstant.AddHours(-1));
+        SeededDispute oldest = await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-1", DisputesApi.SeedInstant.AddHours(-2));
+        SeededDispute newest = await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-2", DisputesApi.SeedInstant);
+        SeededDispute middle = await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-3", DisputesApi.SeedInstant.AddHours(-1));
 
         using JsonDocument page = await browser.ListDisputesPageAsync();
 
@@ -78,12 +75,4 @@ public class ListDisputesTests(PostgresFixture postgres, TransactionsStub stub) 
 
     private static JsonElement Item(JsonDocument page, Guid disputeId) =>
         page.RootElement.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("disputeId").GetGuid() == disputeId);
-
-    private StoredEvent At(StoredEvent storedEvent, int version) => storedEvent with
-    {
-        Version = version,
-        OccurredAtUtc = stub.NowAsStored.AddHours(version),
-        ActorType = ActorType.Operations,
-        ActorId = "ops-sub",
-    };
 }

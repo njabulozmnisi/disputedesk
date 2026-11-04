@@ -1,5 +1,6 @@
 using Confluent.Kafka;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 
 namespace DisputeDesk.Worker.IntegrationTests.Outbox;
 
@@ -22,9 +23,9 @@ public class OutboxRelayHandoverTests(OutboxFixture outbox)
 
         await using RelayHost leader = await outbox.StartRelayAsync(leaderClock);
         // Leader, every due row already sent, waiting out its idle loop.
-        await OutboxFixture.WaitUntilAsync(() => IsLeader(leader) && leaderClock.RelayWaitsNow);
+        await Eventually.UntilAsync(() => IsLeader(leader) && leaderClock.RelayWaitsNow, OutboxFixture.WaitLimit);
         await using RelayHost next = await outbox.StartRelayAsync(nextClock);
-        await OutboxFixture.WaitUntilAsync(() => nextClock.RelayWaitsNow);
+        await Eventually.UntilAsync(() => nextClock.RelayWaitsNow, OutboxFixture.WaitLimit);
         Assert.False(IsLeader(next));
 
         DateTimeOffset at = leaderClock.GetUtcNow();
@@ -35,7 +36,7 @@ public class OutboxRelayHandoverTests(OutboxFixture outbox)
         try
         {
             leaderClock.Advance(TimeSpan.FromSeconds(10));
-            await OutboxFixture.WaitUntilAsync(() => leader.SendStarted(first.Id));
+            await Eventually.UntilAsync(() => leader.SendStarted(first.Id), OutboxFixture.WaitLimit);
             await outbox.TerminateLockConnectionAsync();
         }
         finally
@@ -44,7 +45,7 @@ public class OutboxRelayHandoverTests(OutboxFixture outbox)
             await outbox.UnpauseBrokerAsync();
         }
 
-        await OutboxFixture.WaitUntilAsync(() => leader.LogLines.Any(line => line.StartsWith("Outbox relay cannot reach postgres", StringComparison.Ordinal)));
+        await Eventually.UntilAsync(() => leader.LogLines.Any(line => line.StartsWith("Outbox relay cannot reach postgres", StringComparison.Ordinal)), OutboxFixture.WaitLimit);
         await outbox.WaitUntilSentAsync(rows.Select(row => row.Id), nextClock);
 
         // The old leader caught the failed update and is still running; it never retook the lock.

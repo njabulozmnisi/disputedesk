@@ -1,8 +1,8 @@
 using System.Net;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
+using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Api.IntegrationTests.Disputes;
 
@@ -33,19 +33,9 @@ public sealed class ListDisputesPagingTests(PostgresFixture postgres, ListDisput
 
         await response.AssertValidationProblemAsync("limit");
         // The random traceId is removed first: its hex could hold "abc" or a short number by chance.
-        string body = await BodyWithoutTraceIdAsync(response);
+        string body = await response.BodyWithoutTraceIdAsync();
         Assert.DoesNotContain($"\"{value}\"", body, StringComparison.Ordinal);
         Assert.DoesNotContain("abc", body, StringComparison.Ordinal);
-    }
-
-    /// <summary>The problem body with its <c>traceId</c>, the one value that differs per request, removed.</summary>
-    private static async Task<string> BodyWithoutTraceIdAsync(HttpResponseMessage response)
-    {
-        JsonNode body = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
-            ?? throw new InvalidOperationException("No body.");
-        Assert.NotNull(body["traceId"]);
-        body.AsObject().Remove("traceId");
-        return body.ToJsonString();
     }
 
     [Theory]
@@ -96,7 +86,7 @@ public sealed class ListDisputesPagingTests(PostgresFixture postgres, ListDisput
         foreach (string cursor in MalformedCursors.Select(row => row.Data))
         {
             HttpResponseMessage response = await Browser.ListDisputesAsync($"cursor={Uri.EscapeDataString(cursor)}");
-            bodies.Add(await BodyWithoutTraceIdAsync(response));
+            bodies.Add(await response.BodyWithoutTraceIdAsync());
         }
 
         Assert.Single(bodies);
@@ -138,8 +128,8 @@ public sealed class ListDisputesPagingTests(PostgresFixture postgres, ListDisput
     {
         await using ApiFactory factory = await DisputesApi.StartWithoutCoreBankingAsync(postgres);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        SeededDispute older = await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-1", DisputesApi.SeedInstant.AddDays(-1));
-        SeededDispute newer = await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-2", DisputesApi.SeedInstant);
+        SeededDispute older = await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-1", DisputesApi.SeedInstant.AddDays(-1));
+        SeededDispute newer = await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-2", DisputesApi.SeedInstant);
 
         using JsonDocument afterMin = await browser.ListDisputesPageAsync($"cursor={DisputesApi.ListCursor(DateTimeOffset.MinValue, Guid.Empty)}");
         using JsonDocument afterMax = await browser.ListDisputesPageAsync($"cursor={DisputesApi.ListCursor(DateTimeOffset.MaxValue, Guid.Empty)}");
@@ -155,9 +145,9 @@ public sealed class ListDisputesPagingTests(PostgresFixture postgres, ListDisput
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
         List<SeededDispute> seeded =
         [
-            await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-1", DisputesApi.SeedInstant),
-            await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-2", DisputesApi.SeedInstant),
-            await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-3", DisputesApi.SeedInstant.AddHours(-1)),
+            await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-1", DisputesApi.SeedInstant),
+            await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-2", DisputesApi.SeedInstant),
+            await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-3", DisputesApi.SeedInstant.AddHours(-1)),
         ];
 
         List<JsonElement> items = await browser.ListEveryDisputeAsync("limit=1");
@@ -171,8 +161,8 @@ public sealed class ListDisputesPagingTests(PostgresFixture postgres, ListDisput
         // limit + 1 rows are read: a page as long as the limit has a next page only when the extra row exists.
         await using ApiFactory factory = await DisputesApi.StartWithoutCoreBankingAsync(postgres);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        SeededDispute newer = await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-1", DisputesApi.SeedInstant);
-        SeededDispute older = await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-2", DisputesApi.SeedInstant.AddHours(-1));
+        SeededDispute newer = await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-1", DisputesApi.SeedInstant);
+        SeededDispute older = await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-2", DisputesApi.SeedInstant.AddHours(-1));
 
         using JsonDocument both = await browser.ListDisputesPageAsync("limit=2");
         using JsonDocument first = await browser.ListDisputesPageAsync("limit=1");
@@ -193,7 +183,7 @@ public sealed class ListDisputesPagingTests(PostgresFixture postgres, ListDisput
         var seeded = new List<SeededDispute>();
         for (int index = 0; index < 21; index++)
         {
-            seeded.Add(await factory.SeedDisputeAsync(TransactionsApi.CustomerA, $"TXN-{index}", DisputesApi.SeedInstant.AddMinutes(-index)));
+            seeded.Add(await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, $"TXN-{index}", DisputesApi.SeedInstant.AddMinutes(-index)));
         }
 
         using JsonDocument first = await browser.ListDisputesPageAsync();

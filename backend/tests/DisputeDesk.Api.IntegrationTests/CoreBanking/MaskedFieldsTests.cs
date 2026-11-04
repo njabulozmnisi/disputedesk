@@ -1,7 +1,9 @@
+using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Domain;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Testing;
 
 namespace DisputeDesk.Api.IntegrationTests.CoreBanking;
 
@@ -42,14 +44,14 @@ public sealed class MaskedFieldsTests
     public async Task GetTransactionsAsync_RowNotMasked_LogsAValueFreeWarning()
     {
         await using FakeCoreBankingServer stub = await AnswerAsync($$"""{"items":[{{Row("0011", FullCardNumber)}}],"nextCursor":null}""");
-        var logs = new LogCapture();
-        await using ServiceProvider services = CoreBankingServices.Build(stub.BaseUrl, logs);
+        await using ServiceProvider services = CoreBankingServices.Build(stub.BaseUrl);
         ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
+        FakeLogCollector logs = services.GetFakeLogCollector();
 
         await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken);
 
-        Assert.Contains("Core banking answered with an unmasked account or card number; treated as unavailable", logs.Lines);
-        Assert.DoesNotContain(logs.Lines, line => line.Contains(FullCardNumber, StringComparison.Ordinal));
+        Assert.Contains("Core banking answered with an unmasked account or card number; treated as unavailable", logs.Lines());
+        Assert.DoesNotContain(logs.Lines(), line => line.Contains(FullCardNumber, StringComparison.Ordinal));
     }
 
     [Theory]

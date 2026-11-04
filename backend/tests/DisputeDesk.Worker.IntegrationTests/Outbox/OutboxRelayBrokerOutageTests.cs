@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Confluent.Kafka;
 using DisputeDesk.Infrastructure.Outbox;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Logs;
 
@@ -32,7 +33,7 @@ public class OutboxRelayBrokerOutageTests(OutboxFixture outbox)
 
         await using (RelayHost host = await outbox.StartRelayAsync(clock))
         {
-            await OutboxFixture.WaitUntilAsync(() => host.LogLines.Any(line => line.StartsWith("Outbox relay holds the outbox lock", StringComparison.Ordinal)));
+            await Eventually.UntilAsync(() => host.LogLines.Any(line => line.StartsWith("Outbox relay holds the outbox lock", StringComparison.Ordinal)), OutboxFixture.WaitLimit);
             await outbox.PauseBrokerAsync();
             try
             {

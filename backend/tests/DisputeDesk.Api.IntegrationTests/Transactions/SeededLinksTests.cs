@@ -26,7 +26,7 @@ public class SeededLinksTests(PostgresFixture postgres)
         await using ApiFactory factory = SeedingApi(emptyDatabase);
         using HttpClient client = factory.CreateClient();
         // Ready means migrated, and with it seeded: the first run.
-        await HealthTests.WaitUntilReadyAsync(client);
+        await Eventually.WaitUntilReadyAsync(client);
 
         await MigrateAsync(factory);
 
@@ -43,8 +43,8 @@ public class SeededLinksTests(PostgresFixture postgres)
         using HttpClient firstClient = first.CreateClient();
         using HttpClient secondClient = second.CreateClient();
 
-        await HealthTests.WaitUntilReadyAsync(firstClient);
-        await HealthTests.WaitUntilReadyAsync(secondClient);
+        await Eventually.WaitUntilReadyAsync(firstClient);
+        await Eventually.WaitUntilReadyAsync(secondClient);
 
         Assert.Equal(SeededLinks, await LinksAsync(emptyDatabase));
         Assert.Equal(SeededApi.FullSeed, await SeededApi.CountAsync(emptyDatabase));
@@ -93,7 +93,7 @@ public class SeededLinksTests(PostgresFixture postgres)
         await using ApiFactory factory = SeedingApi(database);
         using HttpClient client = factory.CreateClient();
         // Let the Api's own start-up migrate finish first, so it never races the downgrade for the migration lock.
-        await HealthTests.WaitUntilReadyAsync(client);
+        await Eventually.WaitUntilReadyAsync(client);
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -109,7 +109,7 @@ public class SeededLinksTests(PostgresFixture postgres)
         string database = await postgres.CreateMigratedDatabaseAsync();
         await using ApiFactory factory = SeedingApi(database);
         using HttpClient client = factory.CreateClient();
-        await HealthTests.WaitUntilReadyAsync(client);
+        await Eventually.WaitUntilReadyAsync(client);
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

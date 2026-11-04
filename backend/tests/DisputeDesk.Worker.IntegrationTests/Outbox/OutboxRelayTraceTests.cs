@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using Confluent.Kafka;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.Time.Testing;
 
 namespace DisputeDesk.Worker.IntegrationTests.Outbox;
@@ -43,7 +44,7 @@ public class OutboxRelayTraceTests(OutboxFixture outbox)
         await using (RelayHost host = await outbox.StartRelayAsync(clock))
         {
             await outbox.WaitUntilSentAsync([row.Id]);
-            await OutboxFixture.WaitUntilAsync(() => host.ProducerSpansFor(row.Id).Count == 1);
+            await Eventually.UntilAsync(() => host.ProducerSpansFor(row.Id).Count == 1, OutboxFixture.WaitLimit);
             span = Assert.Single(host.ProducerSpansFor(row.Id));
         }
 

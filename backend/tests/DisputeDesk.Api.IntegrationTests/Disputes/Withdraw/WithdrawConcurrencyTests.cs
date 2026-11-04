@@ -85,7 +85,7 @@ public class WithdrawConcurrencyTests(PostgresFixture postgres, TransactionsStub
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
         // The other side of "the later of" (AD-15): the stream's latest instant is before the clock, so the retry keeps
         // the withdraw's own.
-        Guid disputeId = await factory.RaiseDirectlyAsync("login-a", stub.NowAsStored.AddMinutes(-30));
+        Guid disputeId = (await factory.DisputeInAsync(DisputeStatus.Submitted, raisedAt: stub.NowAsStored.AddMinutes(-30))).Id;
         appendFirst.Arm(
             Next(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), disputeId, 2, stub.NowAsStored.AddMinutes(-10)),
             DisputeStatus.UnderReview);
@@ -114,7 +114,7 @@ public class WithdrawConcurrencyTests(PostgresFixture postgres, TransactionsStub
             configureServices: services => services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(appendFirst, moveClock)),
             clock: clock);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        Guid disputeId = await factory.RaiseDirectlyAsync("login-a", requestAt.AddMinutes(-30));
+        Guid disputeId = (await factory.DisputeInAsync(DisputeStatus.Submitted, raisedAt: requestAt.AddMinutes(-30))).Id;
         appendFirst.Arm(
             Next(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), disputeId, 2, requestAt.AddMinutes(-10)),
             DisputeStatus.UnderReview);

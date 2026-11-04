@@ -9,6 +9,7 @@ using DisputeDesk.Application.Audit;
 using DisputeDesk.Application.Disputes;
 using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Problems;
+using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Domain.Transactions;
 using DisputeDesk.Infrastructure.Persistence;
@@ -209,21 +210,57 @@ public static class DisputesApi
     public static DateTimeOffset SeedInstant { get; } = new(2026, 10, 1, 10, 0, 0, TimeSpan.Zero);
 
     /// <summary>
-    /// Raises a dispute for <paramref name="customerId"/> at <paramref name="createdAt"/> through the aggregate and the
-    /// one commit path (AD-14), without HTTP, so a test chooses the instant and the customer. The transaction is a
-    /// settled card debit two days before.
+    /// A new dispute of <paramref name="customerId"/> on <paramref name="transactionId"/> in <paramref name="status"/>,
+    /// without HTTP or core banking: raised through <see cref="Dispute.Raise"/> at <paramref name="raisedAt"/>, then taken
+    /// to the status by the aggregate's own actions (review, escalation and resolution by operations, withdrawal by the
+    /// customer), the first at <paramref name="actedAt"/> and each next one a second later, and saved once through the one
+    /// commit path (AD-14). Both instants default to the Api clock's reading; a resolve has <paramref name="outcome"/>. The transaction is a settled card debit of
+    /// R87.23 two days before the raise. When the aggregate refuses a step it throws, naming the status and the error,
+    /// and nothing is saved.
     /// </summary>
-    public static async Task<SeededDispute> SeedDisputeAsync(this ApiFactory factory, string customerId, string transactionId, DateTimeOffset createdAt)
+    public static async Task<SeededDispute> DisputeInAsync(
+        this ApiFactory factory,
+        DisputeStatus status,
+        string customerId = TransactionsApi.CustomerA,
+        string transactionId = Disputable,
+        DateTimeOffset? raisedAt = null,
+        DateTimeOffset? actedAt = null,
+        Outcome outcome = Outcome.Upheld)
     {
-        var snapshot = new TransactionSnapshot("ACC-" + customerId, transactionId, "0011", createdAt.AddDays(-2), "Shop", 10m, "ZAR", null,
+        DateTimeOffset now = factory.Services.GetRequiredService<TimeProvider>().GetUtcNow();
+        DateTimeOffset raised = raisedAt ?? now;
+        DateTimeOffset acted = actedAt ?? now;
+        var customer = new Actor(ActorType.Customer, "login-" + customerId);
+        var operations = new Actor(ActorType.Operations, "ops-a");
+        var transaction = new TransactionSnapshot(
+            AccountA, transactionId, "4417", raised.AddDays(-2), "Steers Braamfontein", 87.23m, "ZAR", null,
             TransactionDirection.Debit, TransactionKind.Card, TransactionState.Settled);
-        Dispute dispute = Dispute.Raise(customerId, snapshot, everDisputed: false, Reason.Unrecognised, note: null, expectedAmount: null,
-            new Actor(ActorType.Customer, "login-" + customerId), createdAt).Value;
+        Dispute dispute = Dispute.Raise(
+            customerId, transaction, everDisputed: false, Reason.Unrecognised, note: null, expectedAmount: null, customer, raised).Value;
+
+        Func<DateTimeOffset, Result>[] steps = status switch
+        {
+            DisputeStatus.Submitted => [],
+            DisputeStatus.UnderReview => [at => dispute.StartReview(operations, at)],
+            DisputeStatus.Escalated => [at => dispute.Escalate(operations, at)],
+            DisputeStatus.Resolved => [at => dispute.StartReview(operations, at), at => dispute.Resolve(outcome, "Refunded", operations, at)],
+            DisputeStatus.Withdrawn => [at => dispute.Withdraw(null, customer, at)],
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status, "No action leads there."),
+        };
+        for (int stepIndex = 0; stepIndex < steps.Length; stepIndex++)
+        {
+            Result result = steps[stepIndex](acted.AddSeconds(stepIndex));
+            if (result.IsFailure)
+            {
+                throw new InvalidOperationException($"The dispute cannot reach {status}: {result.Error.Code}.");
+            }
+        }
+
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.Set<Dispute>().Add(dispute);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        return new SeededDispute(dispute.Id, customerId, createdAt);
+        return new SeededDispute(dispute.Id, customerId, TestInstants.AsStored(raised));
     }
 
     /// <summary>The withdraw path of the dispute <paramref name="disputeId"/>, written as the client sends it.</summary>
@@ -276,26 +313,6 @@ public static class DisputesApi
         Assert.Equal(customerStatus, problem.RootElement.GetProperty("customerStatus").GetString());
     }
 
-    /// <summary>
-    /// Raises a dispute of customer A on <paramref name="transactionId"/> straight through the commit path at <paramref name="at"/>,
-    /// without core banking: for a raise earlier than the Api's clock (the session cookie follows that clock), or for
-    /// many open disputes in one test.
-    /// </summary>
-    public static async Task<Guid> RaiseDirectlyAsync(this ApiFactory factory, string loginSub, DateTimeOffset at, string transactionId = Disputable)
-    {
-        var transaction = new TransactionSnapshot(
-            AccountA, transactionId, "4417", at.AddDays(-2), "Steers Braamfontein", 87.23m, "ZAR", null,
-            TransactionDirection.Debit, TransactionKind.Card, TransactionState.Settled);
-        Dispute dispute = Dispute.Raise(
-            TransactionsApi.CustomerA, transaction, everDisputed: false, Reason.Unrecognised, note: null, expectedAmount: null,
-            new Actor(ActorType.Customer, loginSub), at).Value;
-        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
-        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Set<Dispute>().Add(dispute);
-        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        return dispute.Id;
-    }
-
     /// <summary>The dispute's stored event rows in version order, read past the ownership filter.</summary>
     public static async Task<List<StoredEventRow>> StreamAsync(this ApiFactory factory, Guid disputeId)
     {
@@ -335,12 +352,14 @@ public static class DisputesApi
     }
 
     /// <summary>
-    /// Appends <paramref name="storedEvents"/> to the stream of the dispute <paramref name="disputeId"/>, each with its
-    /// own version, instant, actor and trace ID, and moves that dispute's <c>Disputes</c> row to <paramref name="status"/>
-    /// and <paramref name="outcome"/> at the stream's highest stored version, as the later stories' actions will. Only the
-    /// raise exists yet, so tests write the later stored events by hand; the insert-only guard allows adds.
+    /// Writes <paramref name="storedEvents"/> into the stream of the dispute <paramref name="disputeId"/> directly, past the
+    /// aggregate, each with its own version, instant, actor and trace ID, and moves that dispute's <c>Disputes</c> row to
+    /// <paramref name="status"/> and <paramref name="outcome"/> at the stream's highest stored version. Only for a stream
+    /// the aggregate cannot write (every event type, rows out of version order) or whose actors, instants or notes a test
+    /// must choose; a test that only needs a dispute in a status uses <see cref="DisputeInAsync"/>. The insert-only guard
+    /// allows adds.
     /// </summary>
-    public static async Task AppendAsync(this ApiFactory factory, Guid disputeId, DisputeStatus status, Outcome? outcome, params StoredEvent[] storedEvents)
+    public static async Task AppendDirectlyAsync(this ApiFactory factory, Guid disputeId, DisputeStatus status, Outcome? outcome, params StoredEvent[] storedEvents)
     {
         await factory.AddRowsAsync([.. storedEvents.Select(storedEvent => StoredEventRows.For(disputeId, storedEvent))]);
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();

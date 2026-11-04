@@ -1,4 +1,5 @@
 using DisputeDesk.Domain.Disputes;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using DisputeDesk.Worker.IntegrationTests.Outbox;
 using DisputeDesk.Worker.Sla;
 
@@ -23,7 +24,7 @@ public class SlaHeartbeatAndPrivacyTests(SlaFixture fixture)
         try
         {
             // The first loop runs at once: an escalation batch and a warning batch, then the heartbeat at the clock's time.
-            await OutboxFixture.WaitUntilAsync(() => Loops(rig) == 1 && HeartbeatAt() == start.UtcDateTime);
+            await Eventually.UntilAsync(() => Loops(rig) == 1 && HeartbeatAt() == start.UtcDateTime, OutboxFixture.WaitLimit);
 
             rig.Clock.Advance(TimeSpan.FromSeconds(30) - SweepRig.Microsecond);
             await Task.Delay(300, TestContext.Current.CancellationToken);
@@ -31,10 +32,10 @@ public class SlaHeartbeatAndPrivacyTests(SlaFixture fixture)
             Assert.Equal(start.UtcDateTime, HeartbeatAt());
 
             rig.Clock.Advance(SweepRig.Microsecond);
-            await OutboxFixture.WaitUntilAsync(() => Loops(rig) == 2 && HeartbeatAt() == start.AddSeconds(30).UtcDateTime);
+            await Eventually.UntilAsync(() => Loops(rig) == 2 && HeartbeatAt() == start.AddSeconds(30).UtcDateTime, OutboxFixture.WaitLimit);
 
             rig.Clock.Advance(TimeSpan.FromSeconds(30));
-            await OutboxFixture.WaitUntilAsync(() => Loops(rig) == 3 && HeartbeatAt() == start.AddSeconds(60).UtcDateTime);
+            await Eventually.UntilAsync(() => Loops(rig) == 3 && HeartbeatAt() == start.AddSeconds(60).UtcDateTime, OutboxFixture.WaitLimit);
         }
         finally
         {
@@ -60,7 +61,8 @@ public class SlaHeartbeatAndPrivacyTests(SlaFixture fixture)
         IEnumerable<string> spanText = rig.Spans.Snapshot()
             .Where(span => span.OperationName == SlaSweep.BatchSpanName)
             .SelectMany(span => span.TagObjects.Select(tag => $"{tag.Key}={tag.Value}").Append(span.DisplayName).Append(span.StatusDescription ?? ""));
-        IEnumerable<string> metricText = rig.Measurements.SelectMany(measurement => measurement.Tags.Select(tag => $"{tag.Key}={tag.Value}"));
+        IEnumerable<string> metricText = rig.Escalations.GetMeasurementSnapshot().Concat(rig.Actions.GetMeasurementSnapshot())
+            .SelectMany(measurement => measurement.Tags.Select(tag => $"{tag.Key}={tag.Value}"));
         IEnumerable<string> logText = rig.LogLines.Select(line => line.Line);
         foreach (string text in spanText.Concat(metricText).Concat(logText))
         {

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Outbox;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using DisputeDesk.Worker.IntegrationTests.Outbox;
 using DisputeDesk.Worker.Sla;
 using Microsoft.EntityFrameworkCore;
@@ -60,8 +61,8 @@ public class SlaTelemetryPrivacyTests(SlaFixture fixture)
         {
             await host.StartAsync(TestContext.Current.CancellationToken);
             // The first loop runs at once; it has ended when its warning batch span has.
-            await OutboxFixture.WaitUntilAsync(() => spans.Snapshot().Any(span => span.OperationName == SlaSweep.BatchSpanName
-                && span.GetTagItem("disputedesk.sla_sweep.claim") as string == "warning"));
+            await Eventually.UntilAsync(() => spans.Snapshot().Any(span => span.OperationName == SlaSweep.BatchSpanName
+                && span.GetTagItem("disputedesk.sla_sweep.claim") as string == "warning"), OutboxFixture.WaitLimit);
             host.Services.GetRequiredService<MeterProvider>().ForceFlush();
             await host.StopAsync(TestContext.Current.CancellationToken);
         }

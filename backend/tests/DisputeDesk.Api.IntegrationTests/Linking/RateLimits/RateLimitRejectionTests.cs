@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Net;
 using System.Text.Json;
@@ -9,6 +8,7 @@ using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
@@ -61,8 +61,9 @@ public class RateLimitRejectionTests(PostgresFixture postgres)
     {
         var telemetry = new TelemetryCapture();
         await using RateLimitApi api = await RateLimitApi.StartAsync(postgres, configureServices: telemetry.AddTo);
-        var rejections = new ConcurrentQueue<string>();
-        using MeterListener listener = ListenToRejections(api.Factory, rejections);
+        // ASP.NET Core's own rate-limiting meter, read only on this test's Api (its meter factory is the scope).
+        using var requests = new MetricCollector<long>(
+            api.Factory.Services.GetRequiredService<IMeterFactory>(), "Microsoft.AspNetCore.RateLimiting", "aspnetcore.rate_limiting.requests");
 
         // The login limit rejects the first login three times: one audit entry.
         string first = LinkingApi.NewLogin("audit-first");
@@ -87,7 +88,7 @@ public class RateLimitRejectionTests(PostgresFixture postgres)
                 (entry.Result, entry.ActorType, entry.ActorId, entry.CustomerId, entry.ClientIp));
         }
 
-        Assert.Equal(6, rejections.Count(tags => tags.Contains("aspnetcore.rate_limiting.result=global_limiter", StringComparison.Ordinal)));
+        Assert.Equal(6, requests.GetMeasurementSnapshot().Count(measurement => measurement.SortedTags().Contains(("aspnetcore.rate_limiting.result", "global_limiter"))));
         Metric exported = await telemetry.WaitForMetricAsync(api.Factory.Services, "aspnetcore.rate_limiting.requests");
         Assert.Equal(MetricType.LongSum, exported.MetricType);
     }
@@ -172,25 +173,4 @@ public class RateLimitRejectionTests(PostgresFixture postgres)
     private static async Task<JsonObject> BodyAsync(HttpResponseMessage response) =>
         JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))?.AsObject()
             ?? throw new JsonException("The problem body is not a JSON object.");
-
-    /// <summary>Puts the tags of every <c>aspnetcore.rate_limiting.requests</c> measurement of this test's Api in <paramref name="measurements"/>.</summary>
-    private static MeterListener ListenToRejections(ApiFactory factory, ConcurrentQueue<string> measurements)
-    {
-        IMeterFactory meterFactory = factory.Services.GetRequiredService<IMeterFactory>();
-        var listener = new MeterListener
-        {
-            // Only this test's Api: its own meter factory is the meter's scope.
-            InstrumentPublished = (instrument, meterListener) =>
-            {
-                if (instrument.Meter.Scope == meterFactory && instrument.Name == "aspnetcore.rate_limiting.requests")
-                {
-                    meterListener.EnableMeasurementEvents(instrument);
-                }
-            },
-        };
-        listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
-            measurements.Enqueue(string.Join(',', tags.ToArray().Select(tag => $"{tag.Key}={tag.Value}"))));
-        listener.Start();
-        return listener;
-    }
 }

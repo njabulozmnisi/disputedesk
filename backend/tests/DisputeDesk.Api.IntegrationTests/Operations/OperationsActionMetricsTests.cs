@@ -7,6 +7,7 @@ using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 
 namespace DisputeDesk.Api.IntegrationTests.Operations;
 
@@ -28,16 +29,18 @@ public class OperationsActionMetricsTests(PostgresFixture postgres, Transactions
         var failAudit = new FailAuditInsertInterceptor { Armed = false };
         await using ApiFactory factory = await TransactionsApi.StartAsync(
             postgres, stub, services => services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(appendFirst, failAudit)));
-        using var recorder = new MeasurementRecorder(factory.Services.GetRequiredService<IMeterFactory>());
+        IMeterFactory meterFactory = factory.Services.GetRequiredService<IMeterFactory>();
+        using var actions = new MetricCollector<long>(meterFactory, "DisputeDesk", Actions);
+        using var resolved = new MetricCollector<long>(meterFactory, "DisputeDesk", Resolved);
         using HttpClient tool = factory.CreateTool();
         DateTimeOffset at = stub.NowAsStored.AddHours(-1);
-        Guid manual = await factory.RaiseDirectlyAsync("login-a", at, "TXN-A-7001");
-        Guid underReview = await factory.RaiseDirectlyAsync("login-a", at, "TXN-A-7002");
-        await factory.AppendAsync(underReview, DisputeStatus.UnderReview, null, By(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, at, ActorType.Operations, "ops-a"));
-        Guid slaEscalated = await factory.RaiseDirectlyAsync("login-a", at, "TXN-A-7003");
-        await factory.AppendAsync(slaEscalated, DisputeStatus.Escalated, null, By(new DisputeEscalated(DisputeStatus.Submitted, DisputeStatus.Escalated), 2, at, ActorType.Automation, Actor.SlaSweepId));
-        Guid retried = await factory.RaiseDirectlyAsync("login-a", at, "TXN-A-7004");
-        Guid clashThenRefused = await factory.RaiseDirectlyAsync("login-a", at, "TXN-A-7005");
+        Guid manual = (await factory.DisputeInAsync(DisputeStatus.Submitted, transactionId: "TXN-A-7001", raisedAt: at)).Id;
+        Guid underReview = (await factory.DisputeInAsync(DisputeStatus.UnderReview, transactionId: "TXN-A-7002", raisedAt: at, actedAt: at)).Id;
+        Guid slaEscalated = (await factory.DisputeInAsync(DisputeStatus.Submitted, transactionId: "TXN-A-7003", raisedAt: at)).Id;
+        // Written directly: the test chooses the SLA sweep's automation actor, which DisputeInAsync does not take.
+        await factory.AppendDirectlyAsync(slaEscalated, DisputeStatus.Escalated, null, By(new DisputeEscalated(DisputeStatus.Submitted, DisputeStatus.Escalated), 2, at, ActorType.Automation, Actor.SlaSweepId));
+        Guid retried = (await factory.DisputeInAsync(DisputeStatus.Submitted, transactionId: "TXN-A-7004", raisedAt: at)).Id;
+        Guid clashThenRefused = (await factory.DisputeInAsync(DisputeStatus.Submitted, transactionId: "TXN-A-7005", raisedAt: at)).Id;
 
         // Successes: start review, a manual escalate then its resolve, a resolve with no escalation, and one after the sweep's.
         Assert.Equal(HttpStatusCode.OK, (await factory.ActAsMappedAsync(tool, manual, "start-review")).StatusCode);
@@ -70,14 +73,14 @@ public class OperationsActionMetricsTests(PostgresFixture postgres, Transactions
                 [("action", "resolve"), ("actor_type", "operations")],
                 [("action", "escalate"), ("actor_type", "operations")],
             ],
-            recorder.Measurements(Actions).Select(measurement => { Assert.Equal(1, measurement.Value); return measurement.Tags; }));
+            actions.GetMeasurementSnapshot().Select(measurement => { Assert.Equal(1, measurement.Value); return measurement.SortedTags(); }));
         Assert.Equal(
             [
                 [("outcome", "upheld"), ("sla_escalated", "false")],
                 [("outcome", "upheld"), ("sla_escalated", "false")],
                 [("outcome", "rejected"), ("sla_escalated", "true")],
             ],
-            recorder.Measurements(Resolved).Select(measurement => { Assert.Equal(1, measurement.Value); return measurement.Tags; }));
+            resolved.GetMeasurementSnapshot().Select(measurement => { Assert.Equal(1, measurement.Value); return measurement.SortedTags(); }));
     }
 
     [Fact]
@@ -87,12 +90,13 @@ public class OperationsActionMetricsTests(PostgresFixture postgres, Transactions
         var failOutbox = new FailOutboxInsertInterceptor { Armed = false };
         await using ApiFactory factory = await TransactionsApi.StartAsync(
             postgres, stub, services => services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(failOutbox)));
-        using var recorder = new MeasurementRecorder(factory.Services.GetRequiredService<IMeterFactory>());
+        IMeterFactory meterFactory = factory.Services.GetRequiredService<IMeterFactory>();
+        using var actions = new MetricCollector<long>(meterFactory, "DisputeDesk", Actions);
+        using var resolved = new MetricCollector<long>(meterFactory, "DisputeDesk", Resolved);
         using HttpClient tool = factory.CreateTool();
         DateTimeOffset at = stub.NowAsStored.AddHours(-1);
-        Guid submitted = await factory.RaiseDirectlyAsync("login-a", at, "TXN-A-7101");
-        Guid underReview = await factory.RaiseDirectlyAsync("login-a", at, "TXN-A-7102");
-        await factory.AppendAsync(underReview, DisputeStatus.UnderReview, null, By(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, at, ActorType.Operations, "ops-a"));
+        Guid submitted = (await factory.DisputeInAsync(DisputeStatus.Submitted, transactionId: "TXN-A-7101", raisedAt: at)).Id;
+        Guid underReview = (await factory.DisputeInAsync(DisputeStatus.UnderReview, transactionId: "TXN-A-7102", raisedAt: at, actedAt: at)).Id;
         failOutbox.Armed = true;
 
         HttpResponseMessage startReview = await factory.ActAsMappedAsync(tool, submitted, "start-review");
@@ -101,8 +105,8 @@ public class OperationsActionMetricsTests(PostgresFixture postgres, Transactions
         Assert.Equal(HttpStatusCode.InternalServerError, startReview.StatusCode);
         Assert.Equal(HttpStatusCode.InternalServerError, resolve.StatusCode);
         Assert.Equal(2, failOutbox.Failed);
-        Assert.Empty(recorder.Measurements(Actions));
-        Assert.Empty(recorder.Measurements(Resolved));
+        Assert.Empty(actions.GetMeasurementSnapshot());
+        Assert.Empty(resolved.GetMeasurementSnapshot());
         Assert.Single(await factory.StreamAsync(submitted));
         Assert.Equal(2, (await factory.StreamAsync(underReview)).Count);
         Assert.Equal(DisputeStatus.Submitted, (await factory.DisputeRowAsync(submitted)).Status);
@@ -113,10 +117,10 @@ public class OperationsActionMetricsTests(PostgresFixture postgres, Transactions
     public async Task Resolved_Instrument_IsACounter()
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
-        using var recorder = new MeasurementRecorder(factory.Services.GetRequiredService<IMeterFactory>());
+        using var resolved = new MetricCollector<long>(factory.Services.GetRequiredService<IMeterFactory>(), "DisputeDesk", Resolved);
         factory.Services.GetRequiredService<DisputeActionMetrics>();
 
-        Assert.IsType<Counter<long>>(recorder.Instrument(Resolved));
+        Assert.IsType<Counter<long>>(resolved.Instrument);
     }
 
     private static TEvent By<TEvent>(TEvent storedEvent, int version, DateTimeOffset at, ActorType actorType, string actorId)

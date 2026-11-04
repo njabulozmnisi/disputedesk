@@ -38,10 +38,10 @@ public class GetDisputeTests(PostgresFixture postgres, TransactionsStub stub) : 
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
         Guid disputeId = (await browser.RaiseCreatedAsync(DisputesApi.Body())).GetProperty("disputeId").GetGuid();
-        // Version 3 is inserted before version 2, so the stored row order is not the version order.
-        await factory.AppendAsync(disputeId, DisputeStatus.Escalated, outcome: null,
+        // Written directly: version 3 is inserted before version 2, so the stored row order is not the version order.
+        await factory.AppendDirectlyAsync(disputeId, DisputeStatus.Escalated, outcome: null,
             At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 3, ActorType.Automation, "worker:sla-sweep"));
-        await factory.AppendAsync(disputeId, DisputeStatus.Escalated, outcome: null,
+        await factory.AppendDirectlyAsync(disputeId, DisputeStatus.Escalated, outcome: null,
             At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, ActorType.Operations, "ops-sub"));
         // The read model is at the stream's highest version, as an action leaves it, though version 2 was appended last.
         Assert.Equal(3, await factory.DisputeVersionAsync(disputeId));
@@ -69,7 +69,8 @@ public class GetDisputeTests(PostgresFixture postgres, TransactionsStub stub) : 
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
         Guid disputeId = (await browser.RaiseCreatedAsync(DisputesApi.Body())).GetProperty("disputeId").GetGuid();
-        await factory.AppendAsync(disputeId, DisputeStatus.Resolved, outcome,
+        // Written directly: the test chooses the resolve note and each event's instant.
+        await factory.AppendDirectlyAsync(disputeId, DisputeStatus.Resolved, outcome,
             At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, ActorType.Operations, "ops-sub"),
             At(new DisputeResolved(DisputeStatus.UnderReview, DisputeStatus.Resolved, outcome, "We looked into it"), 3, ActorType.Operations, "ops-sub"));
 

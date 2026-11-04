@@ -291,15 +291,16 @@ public class ProblemDetailsTests(PostgresFixture postgres)
 
     public static TheoryData<string, bool, int, string, string> FrameworkResponses()
     {
-        // The probes sit after authorization on paths with no endpoint, so only a signed-in caller reaches them (2.8 AC9).
+        // A path with no endpoint answers 404 only to a signed-in caller (2.8 AC9). The disputes list is for linked
+        // customers only, so the signed-in login here, which is not linked, gets a real 403.
         var data = new TheoryData<string, bool, int, string, string>();
         foreach (string environment in Environments)
         {
             data.Add("/api/v1/no-such-route", true, 404, "not-found", environment);
             data.Add("/api/v1/no-such-route", false, 401, "unauthorized", environment);
             data.Add("/api/v1/bff/antiforgery", false, 401, "unauthorized", environment);
-            data.Add(ForbidProbe.Path, true, 403, "forbidden", environment);
-            data.Add(ForbidProbe.Path, false, 401, "unauthorized", environment);
+            data.Add("/api/v1/disputes", true, 403, "linking-required", environment);
+            data.Add("/api/v1/disputes", false, 401, "unauthorized", environment);
         }
 
         return data;
@@ -309,7 +310,7 @@ public class ProblemDetailsTests(PostgresFixture postgres)
     [MemberData(nameof(FrameworkResponses))]
     public async Task FrameworkResponse_EachStatus_CarriesItsSlug(string path, bool signedIn, int expectedStatus, string expectedSlug, string environment)
     {
-        await using var factory = new ApiFactory(postgres.ConnectionString, environment, configureServices: ForbidProbe.Register);
+        await using var factory = new ApiFactory(postgres.ConnectionString, environment);
         using HttpClient client = signedIn ? await SignedInBrowserAsync(factory) : factory.CreateClient();
 
         HttpResponseMessage response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);

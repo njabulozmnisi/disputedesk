@@ -48,18 +48,15 @@ public sealed class TelemetryCapture
     private static async Task<T> WaitForAsync<T>(Func<T?> probe)
         where T : class
     {
-        var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < Timeout)
-        {
-            if (probe() is { } found)
+        T? found = null;
+        await Eventually.UntilAsync(
+            () =>
             {
-                return found;
-            }
-
-            await Task.Delay(50, TestContext.Current.CancellationToken);
-        }
-
-        throw new TimeoutException($"No matching {typeof(T).Name} was exported within {Timeout}.");
+                found = probe();
+                return Task.FromResult(found is not null);
+            },
+            Timeout);
+        return found ?? throw new InvalidOperationException($"No matching {typeof(T).Name} was exported.");
     }
 
     /// <summary>The exporters add from whichever thread ends the span or log, so writes and reads take a lock.</summary>

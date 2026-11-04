@@ -60,3 +60,5 @@ Items 1 (renamed to `Login_AlreadySignedIn_RecordsSignOutForTheEndedSession`: on
 - Data budget: the `dispute-withdraw.spec.ts:332` failure was an over-broad audit check (an earlier spec leaves a Withdraw Rejected row for login B), now scoped to rows since B's raise; `:347` failed only because Playwright re-ran the `beforeAll` after `:332` failed. `outbox-relay-failure-paths` failed on an Error-span check tied to the spec's own rows; it now counts Worker error spans in the outage window from the telemetry API.
 
 - ZAP baseline exit 3 "Failed to access summary file /home/zap/zap_out.json" (2026-11-03, run 41727294544 on a0e0182, a process-files-only commit); the next commit 40d0a22 passed. ZAP tooling, not a finding. Watch for a repeat.
+
+- `sessionEndCollected.test.tsx` "is collected after signing out here" (2026-11-04, 8.3 fix round): 1 failure in about 22 runs, 0 in 52 later runs on HEAD and the change; matches the undici keep-alive retention the file documents. If it recurs, take a heap snapshot and replace the fixed 50 ms `letRequestsFinish` wait with a wait on the query reaching idle.

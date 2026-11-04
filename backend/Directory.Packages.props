@@ -55,6 +55,9 @@
          nothing from 9.5.0. -->
     <PackageVersion Include="JsonSchema.Net" Version="9.4.1" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
+    <!-- MetricCollector<T> and FakeLogCollector: Microsoft's own fakes for reading metrics and logs in tests (publisher
+         Microsoft, repository dotnet/extensions; 10.11.0 is the latest stable and matches TimeProvider.Testing). -->
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.11.0" />
     <!-- FakeTimeProvider: drives the relay's waits in tests without real delays (Microsoft Learn, TimeProvider testing). -->
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
     <PackageVersion Include="OpenTelemetry.Exporter.InMemory" Version="1.20.1" />

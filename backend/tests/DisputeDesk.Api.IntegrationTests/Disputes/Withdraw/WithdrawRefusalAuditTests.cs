@@ -42,13 +42,7 @@ public class WithdrawRefusalAuditTests(PostgresFixture postgres, TransactionsStu
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        Guid disputeId = (await browser.RaiseCreatedAsync(DisputesApi.Body())).GetProperty("disputeId").GetGuid();
-        StoredEvent closing = status == DisputeStatus.Resolved
-            ? new DisputeResolved(DisputeStatus.Submitted, DisputeStatus.Resolved, Outcome.Upheld, "Refunded")
-            : new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, null);
-        await factory.AppendAsync(
-            disputeId, status, status == DisputeStatus.Resolved ? Outcome.Upheld : null,
-            closing with { Version = 2, OccurredAtUtc = stub.NowAsStored, ActorType = ActorType.Operations, ActorId = "ops-a" });
+        Guid disputeId = (await factory.DisputeInAsync(status)).Id;
 
         Assert.Equal(HttpStatusCode.Conflict, (await browser.WithdrawAsync(disputeId.ToString())).StatusCode);
 

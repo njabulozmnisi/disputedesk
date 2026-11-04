@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
+using DisputeDesk.Domain.Disputes;
 using OpenTelemetry.Logs;
 
 namespace DisputeDesk.Api.IntegrationTests.Disputes;
@@ -21,8 +22,8 @@ public class ListDisputesTelemetryTests(PostgresFixture postgres)
         var telemetry = new TelemetryCapture();
         await using ApiFactory factory = await DisputesApi.StartWithoutCoreBankingAsync(postgres, telemetry.AddTo);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-A-1", DisputesApi.SeedInstant);
-        await factory.SeedDisputeAsync(TransactionsApi.CustomerB, "TXN-B-1", DisputesApi.SeedInstant);
+        await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-A-1", DisputesApi.SeedInstant);
+        await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerB, "TXN-B-1", DisputesApi.SeedInstant);
         // A trace ID of the test's own, so spans from tests running in parallel are never mistaken for this request's.
         var traceId = ActivityTraceId.CreateRandom();
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri($"{DisputesApi.RaisePath}?customerId={TransactionsApi.CustomerB}", UriKind.Relative));

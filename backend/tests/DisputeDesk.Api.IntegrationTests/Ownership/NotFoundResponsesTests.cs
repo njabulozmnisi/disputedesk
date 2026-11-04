@@ -80,7 +80,8 @@ public class NotFoundResponsesTests(PostgresFixture postgres, TransactionsStub s
         Assert.Equal(
             typeof(StoredEvent).Assembly.GetTypes().Where(type => type.IsSubclassOf(typeof(StoredEvent))).Select(type => type.Name).Order(StringComparer.Ordinal),
             later.Select(storedEvent => storedEvent.GetType().Name).Append(nameof(DisputeRaised)).Order(StringComparer.Ordinal));
-        await factory.AppendAsync(disputeId, DisputeStatus.Withdrawn, Outcome.Rejected, later);
+        // Written directly: no lifecycle holds every event type, so the aggregate cannot write this stream.
+        await factory.AppendDirectlyAsync(disputeId, DisputeStatus.Withdrawn, Outcome.Rejected, later);
         return disputeId;
     }
 

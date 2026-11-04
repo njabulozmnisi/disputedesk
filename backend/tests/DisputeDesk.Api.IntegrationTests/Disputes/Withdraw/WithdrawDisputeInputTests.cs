@@ -35,7 +35,7 @@ public sealed class WithdrawDisputeInputTests(WithdrawDisputeInputTests.LinkedCu
     [MemberData(nameof(BodiesThatSucceed))]
     public async Task Withdraw_NoteWithinTheLimitOrNone_Returns200WithTheTrimmedNoteOrNone(string json, string? note)
     {
-        Guid disputeId = await api.OpenDisputeAsync();
+        Guid disputeId = await api.DisputeInAsync(DisputeStatus.Submitted);
 
         HttpResponseMessage response = await Browser.WithdrawAsync(disputeId.ToString(), json);
 
@@ -49,7 +49,7 @@ public sealed class WithdrawDisputeInputTests(WithdrawDisputeInputTests.LinkedCu
     [Fact]
     public async Task Withdraw_NoteOf501UnitsAfterTrimming_Returns400NamingNoteWith500AndChangesNothing()
     {
-        Guid disputeId = await api.OpenDisputeAsync();
+        Guid disputeId = await api.DisputeInAsync(DisputeStatus.Submitted);
 
         HttpResponseMessage response = await Browser.WithdrawAsync(disputeId.ToString(), DisputesApi.WithdrawBody("  " + Note501 + "  "));
 
@@ -107,7 +107,7 @@ public sealed class WithdrawDisputeInputTests(WithdrawDisputeInputTests.LinkedCu
     [Fact]
     public async Task Withdraw_TextPlainBody_Returns415Validation()
     {
-        Guid disputeId = await api.OpenDisputeAsync();
+        Guid disputeId = await api.DisputeInAsync(DisputeStatus.Submitted);
 
         HttpResponseMessage response = await Browser.WithdrawAsync(
             disputeId.ToString(), "{}", await Browser.AntiforgeryTokenAsync(), mediaType: "text/plain");
@@ -129,14 +129,7 @@ public sealed class WithdrawDisputeInputTests(WithdrawDisputeInputTests.LinkedCu
     [Fact]
     public async Task Withdraw_NoteTooLongOnTheOwnersResolvedDispute_Returns400Before409()
     {
-        Guid disputeId = await api.OpenDisputeAsync();
-        await Factory.AppendAsync(disputeId, DisputeStatus.Resolved, Outcome.Upheld, new DisputeResolved(DisputeStatus.Submitted, DisputeStatus.Resolved, Outcome.Upheld, "Refunded")
-        {
-            Version = 2,
-            OccurredAtUtc = api.Now,
-            ActorType = ActorType.Operations,
-            ActorId = "ops-a",
-        });
+        Guid disputeId = await api.DisputeInAsync(DisputeStatus.Resolved);
 
         HttpResponseMessage response = await Browser.WithdrawAsync(disputeId.ToString(), DisputesApi.WithdrawBody(Note501));
 
@@ -158,9 +151,9 @@ public sealed class WithdrawDisputeInputTests(WithdrawDisputeInputTests.LinkedCu
 
         public HttpClient Browser => _browser ?? throw new InvalidOperationException("Not initialised.");
 
-        /// <summary>A new Submitted dispute of customer A on a transaction of its own.</summary>
-        public Task<Guid> OpenDisputeAsync() =>
-            Factory.RaiseDirectlyAsync("login-a", Now, $"TXN-A-9{Interlocked.Increment(ref _disputes):D3}");
+        /// <summary>A new dispute of customer A in <paramref name="status"/>, on a transaction of its own.</summary>
+        public async Task<Guid> DisputeInAsync(DisputeStatus status) =>
+            (await Factory.DisputeInAsync(status, transactionId: $"TXN-A-9{Interlocked.Increment(ref _disputes):D3}", raisedAt: Now)).Id;
 
         public async ValueTask InitializeAsync()
         {

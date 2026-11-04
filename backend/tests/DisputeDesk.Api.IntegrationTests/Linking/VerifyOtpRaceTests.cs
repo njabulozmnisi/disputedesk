@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Net;
 using DisputeDesk.Api.IntegrationTests.Disputes;
@@ -10,6 +9,7 @@ using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 
 namespace DisputeDesk.Api.IntegrationTests.Linking;
 
@@ -30,8 +30,7 @@ public class VerifyOtpRaceTests(PostgresFixture postgres)
         var ports = new LinkingFakes.Ports();
         var consume = new GateInterceptor(ConsumeUpdate);
         await using ApiFactory factory = await StartGatedApiAsync(ports, consume);
-        var events = new ConcurrentQueue<string>();
-        using MeterListener listener = factory.ListenToLinkingEvents(events);
+        using var events = new MetricCollector<long>(factory.Services.GetRequiredService<IMeterFactory>(), "DisputeDesk", "disputedesk.linking.events");
         string login = LinkingApi.NewLogin("parallel");
         using HttpClient browser = await factory.SignInUnlinkedAsync(login);
         string otp = await factory.StartAndReadOtpAsync(browser, ports, login, LinkingFakes.D);
@@ -65,7 +64,7 @@ public class VerifyOtpRaceTests(PostgresFixture postgres)
         Assert.Single(audits, entry => entry is { Action: AuditAction.Linked, Result: AuditResult.Succeeded });
         Assert.Equal(2, audits.Count(entry => entry is { Action: AuditAction.Linked, Result: AuditResult.Rejected }));
         // The two that lost the consume did not lock the challenge: it linked.
-        Assert.Equal(["event=completed"], events.Where(tags => tags != "event=started"));
+        Assert.Equal(["event=completed"], events.Events().Where(tags => tags != "event=started"));
     }
 
     [Fact]
@@ -96,8 +95,7 @@ public class VerifyOtpRaceTests(PostgresFixture postgres)
         var ports = new LinkingFakes.Ports();
         var consume = new GateInterceptor(ConsumeUpdate);
         await using ApiFactory factory = await StartGatedApiAsync(ports, consume);
-        var events = new ConcurrentQueue<string>();
-        using MeterListener listener = factory.ListenToLinkingEvents(events);
+        using var events = new MetricCollector<long>(factory.Services.GetRequiredService<IMeterFactory>(), "DisputeDesk", "disputedesk.linking.events");
         string login = LinkingApi.NewLogin("superseded-third");
         using HttpClient browser = await factory.SignInUnlinkedAsync(login);
         string otp = await factory.StartAndReadOtpAsync(browser, ports, login, LinkingFakes.D);
@@ -116,7 +114,7 @@ public class VerifyOtpRaceTests(PostgresFixture postgres)
             [AuditAction.LinkingOtpIncorrect, AuditAction.LinkingOtpIncorrect, AuditAction.Linked],
             (await factory.VerifyAuditsAsync(login)).Select(entry => entry.Action).Order());
         // The superseded challenge was taken by the start, not locked.
-        Assert.DoesNotContain(events, tags => tags != "event=started");
+        Assert.DoesNotContain(events.Events(), tags => tags != "event=started");
     }
 
     [Fact]
@@ -157,8 +155,7 @@ public class VerifyOtpRaceTests(PostgresFixture postgres)
     {
         var ports = new LinkingFakes.Ports();
         await using ApiFactory factory = await LinkingApi.StartApiAsync(postgres, ports, new TestClock());
-        var events = new ConcurrentQueue<string>();
-        using MeterListener listener = factory.ListenToLinkingEvents(events);
+        using var events = new MetricCollector<long>(factory.Services.GetRequiredService<IMeterFactory>(), "DisputeDesk", "disputedesk.linking.events");
         string loginA = LinkingApi.NewLogin("clash-a");
         string loginB = LinkingApi.NewLogin("clash-b");
         using HttpClient browserA = await factory.SignInUnlinkedAsync(loginA);
@@ -185,7 +182,7 @@ public class VerifyOtpRaceTests(PostgresFixture postgres)
             audits.Select(entry => entry.Action).Order());
         AuditLogEntry locked = Assert.Single(audits, entry => entry.Action == AuditAction.LinkingLocked);
         Assert.Equal((AuditResult.Rejected, LinkingFakes.D.CustomerId), (locked.Result, locked.CustomerId));
-        Assert.Equal(["event=completed", "event=locked"], events.Where(tags => tags != "event=started"));
+        Assert.Equal(["event=completed", "event=locked"], events.Events().Where(tags => tags != "event=started"));
     }
 
     private Task<ApiFactory> StartGatedApiAsync(LinkingFakes.Ports ports, GateInterceptor consume) =>

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using DisputeDesk.Infrastructure.Outbox;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 
@@ -76,7 +77,7 @@ public class OutboxRelayHeartbeatTests(OutboxFixture outbox)
         TimeSpan oldest = TimeSpan.Zero;
         await using (RelayHost host = await RelayHost.StartAsync(clock, outbox.ConnectionString, "127.0.0.1:1"))
         {
-            await OutboxFixture.WaitUntilAsync(() => HeartbeatAt() >= start);
+            await Eventually.UntilAsync(() => HeartbeatAt() >= start, OutboxFixture.WaitLimit);
             var held = Stopwatch.StartNew();
             bool released = false;
             while (host.ProducerSpans.Count == 0)

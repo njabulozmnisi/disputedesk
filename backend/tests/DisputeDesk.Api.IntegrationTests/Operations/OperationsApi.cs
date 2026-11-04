@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using DisputeDesk.Api.IntegrationTests.Disputes;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
@@ -124,15 +123,6 @@ public static class OperationsApi
         return await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<AuditLogEntry>()
             .Where(entry => entry.Action == AuditAction.DisputeRead && entry.DisputeId == disputeId)
             .ToListAsync(TestContext.Current.CancellationToken);
-    }
-
-    /// <summary>The response's JSON body without its <c>traceId</c>, which differs on every request.</summary>
-    public static async Task<string> BodyWithoutTraceIdAsync(this HttpResponseMessage response)
-    {
-        JsonObject body = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))?.AsObject()
-            ?? throw new InvalidOperationException("The response has no JSON object body.");
-        Assert.True(body.Remove("traceId"), "The problem body has no traceId.");
-        return body.ToJsonString();
     }
 
     /// <summary>The names of <paramref name="element"/>'s properties, in order.</summary>

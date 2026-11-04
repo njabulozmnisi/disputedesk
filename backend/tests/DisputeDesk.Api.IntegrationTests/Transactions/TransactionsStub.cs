@@ -1,4 +1,5 @@
 using DisputeDesk.Api.IntegrationTests.CoreBanking;
+using DisputeDesk.Api.IntegrationTests.Infrastructure;
 
 namespace DisputeDesk.Api.IntegrationTests.Transactions;
 
@@ -14,10 +15,9 @@ public sealed class TransactionsStub : IAsyncDisposable
 
     private readonly CoreBankingStubFactory _stub;
 
-    // .1234567 s past the second is a tick finer than the microseconds Postgres keeps, so a test sees any instant
-    // that storing would change; the raise stamps it as .123456 s.
+    // Not microsecond-aligned, so a test sees any instant that storing would change; the raise stamps it as .123456 s.
     public TransactionsStub()
-        : this(DateTimeOffset.FromUnixTimeSeconds(TimeProvider.System.GetUtcNow().ToUnixTimeSeconds()).AddTicks(1_234_567))
+        : this(TestInstants.NotMicrosecondAligned())
     {
     }
 
@@ -25,7 +25,7 @@ public sealed class TransactionsStub : IAsyncDisposable
     internal TransactionsStub(DateTimeOffset now)
     {
         Now = now;
-        NowAsStored = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
+        NowAsStored = TestInstants.AsStored(now);
         _stub = new CoreBankingStubFactory { ClockNow = Now };
     }
 

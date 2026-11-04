@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using DisputeDesk.Contracts.Bff;
 using Microsoft.AspNetCore.WebUtilities;
 
@@ -33,6 +34,22 @@ public static class Browser
         await JsonDocument.ParseAsync(
             await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken),
             cancellationToken: TestContext.Current.CancellationToken);
+
+    /// <summary>
+    /// The response's JSON object body without its <c>traceId</c>, the one value that differs on every request, which the
+    /// body must have as a non-empty string.
+    /// </summary>
+    public static async Task<string> BodyWithoutTraceIdAsync(this HttpResponseMessage response)
+    {
+        JsonObject body = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))?.AsObject()
+            ?? throw new InvalidOperationException("The response has no JSON object body.");
+        bool hasTraceId = body["traceId"] is JsonValue traceId
+            && traceId.GetValueKind() == JsonValueKind.String
+            && traceId.GetValue<string>().Length > 0;
+        Assert.True(hasTraceId, "The body has no non-empty traceId string.");
+        body.Remove("traceId");
+        return body.ToJsonString();
+    }
 
     public static async Task<string> SessionStateAsync(this HttpClient browser)
     {

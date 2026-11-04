@@ -29,7 +29,7 @@ public class ApiShutdownTests(PostgresFixture postgres, TransactionsStub stub) :
     public async Task Raise_InFlightWhenTheApiStops_Answers201AndCommitsItsRowsWithinTheShutdownTimeout()
     {
         string connectionString = await postgres.CreateMigratedDatabaseAsync();
-        var clock = new FixedTimeProvider(stub.Now);
+        var clock = new TestClock(stub.Now);
 
         // A seeded linked customer signs in through an in-memory instance on https://localhost; the cookies it gets are
         // sent to the Kestrel instance, which shares its database and so its sessions and key ring.

@@ -20,10 +20,15 @@ public static class CoreBankingRegistration
 
         // Neither client follows a redirect: it would carry the customer ID header, the account reference or the request
         // body to wherever it points (ASVS 5.0.0 V15.3.2). A 3xx reaches the client as any other non-success answer.
+        // Neither client has an HttpClient logger: the default one's Trace header record keeps the raw X-Customer-Id
+        // value in its structured state even though its message redacts it, whatever the logging configuration.
+        // Each call is still recorded by the OpenTelemetry HttpClient span and metric and by the resilience logs.
         services.AddHttpClient<ICoreBankingClient, CoreBankingClient>(UseCoreBankingBaseUrl)
+            .RemoveAllLoggers()
             .UseSocketsHttpHandler((handler, _) => handler.AllowAutoRedirect = false)
             .AddStandardResilienceHandler(TuneResilience);
         services.AddHttpClient<ISimSwapCheck, SimSwapCheck>(UseCoreBankingBaseUrl)
+            .RemoveAllLoggers()
             .UseSocketsHttpHandler((handler, _) => handler.AllowAutoRedirect = false)
             .AddStandardResilienceHandler(TuneResilience);
 

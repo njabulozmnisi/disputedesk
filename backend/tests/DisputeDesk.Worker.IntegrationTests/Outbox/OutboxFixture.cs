@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using Confluent.Kafka;
@@ -7,6 +6,7 @@ using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Domain.Transactions;
 using DisputeDesk.Infrastructure.Outbox;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
@@ -41,7 +41,8 @@ public sealed class OutboxFixture : IAsyncLifetime
     private const decimal MarkerAmount = 9876.53m;
     private const decimal MarkerExpectedAmount = 1234.56m;
 
-    private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(30);
+    /// <summary>How long a test waits for the relay or the sweep before it fails.</summary>
+    public static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(30);
 
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.6-alpine").Build();
     private readonly RedpandaContainer _redpanda = new RedpandaBuilder(RedpandaImage).Build();
@@ -165,7 +166,7 @@ public sealed class OutboxFixture : IAsyncLifetime
         "9876.53", "1234.56", "8641.97",
     ];
 
-    /// <summary>A hand-built later version of a dispute's outbox row; only <c>Raise</c> exists to write one through the commit.</summary>
+    /// <summary>A hand-built later version of a dispute's outbox row, written directly so the test chooses its version and instant.</summary>
     public async Task<OutboxMessage> AddVersionAsync(Guid disputeId, int version, DateTimeOffset at)
     {
         var id = Guid.CreateVersion7(at);
@@ -217,7 +218,7 @@ public sealed class OutboxFixture : IAsyncLifetime
     /// </summary>
     public async Task<List<(DateTimeOffset RefusedAt, OutboxMessage Row)>> RefuseFiveTimesAsync(RelayClock clock, Guid id)
     {
-        await WaitUntilAsync(async () => clock.RelayWaitsNow && (await RowAsync(id)).Attempts == 1);
+        await Eventually.UntilAsync(async () => clock.RelayWaitsNow && (await RowAsync(id)).Attempts == 1, WaitLimit);
         var refusals = new List<(DateTimeOffset, OutboxMessage)> { (clock.GetUtcNow(), await RowAsync(id)) };
         for (int refusal = 2; refusal <= 5; refusal++)
         {
@@ -269,33 +270,16 @@ public sealed class OutboxFixture : IAsyncLifetime
     public async Task WaitUntilSentAsync(IEnumerable<Guid> ids, FakeTimeProvider? clock = null)
     {
         Guid[] wanted = [.. ids];
-        await WaitUntilAsync(
+        await Eventually.UntilAsync(
             async () =>
             {
                 await using AppDbContext db = CreateDbContext();
                 int sent = await db.Set<OutboxMessage>().CountAsync(row => wanted.Contains(row.Id) && row.Status == OutboxStatus.Sent);
                 return sent == wanted.Length;
             },
+            WaitLimit,
             clock);
     }
-
-    public static async Task WaitUntilAsync(Func<Task<bool>> condition, FakeTimeProvider? clock = null)
-    {
-        var elapsed = Stopwatch.StartNew();
-        while (!await condition())
-        {
-            if (elapsed.Elapsed > WaitLimit)
-            {
-                throw new TimeoutException($"The condition was not met within {WaitLimit}.");
-            }
-
-            clock?.Advance(TimeSpan.FromSeconds(1));
-            await Task.Delay(50);
-        }
-    }
-
-    public static Task WaitUntilAsync(Func<bool> condition, FakeTimeProvider? clock = null) =>
-        WaitUntilAsync(() => Task.FromResult(condition()), clock);
 
     /// <summary>Every record now in the topic whose key is one of <paramref name="disputeIds"/>, in partition offset order.</summary>
     public List<ConsumeResult<string, string>> RecordsFor(params Guid[] disputeIds)

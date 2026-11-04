@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Net;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Application.Audit;
@@ -8,6 +9,7 @@ using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 
 namespace DisputeDesk.Api.IntegrationTests.Linking;
 
@@ -28,7 +30,7 @@ public class LinkingSendCapTests(PostgresFixture postgres)
         var client = new ClientAddressStartupFilter(FirstIp);
         await using ApiFactory factory = await LinkingApi.StartApiAsync(
             postgres, ports, clock, services => services.AddTransient<IStartupFilter>(_ => client));
-        using var events = new LinkingEvents(factory);
+        using var events = new MetricCollector<long>(factory.Services.GetRequiredService<IMeterFactory>(), "DisputeDesk", "disputedesk.linking.events");
         await SendToDAsync(factory, "first");
         clock.Advance(TimeSpan.FromMinutes(10));
         client.Address = SecondIp;
@@ -62,7 +64,7 @@ public class LinkingSendCapTests(PostgresFixture postgres)
         Assert.Equal(3, ports.SimSwap.Cellphones.Count);
         LinkingChallenge capped = Assert.Single(await factory.ChallengesAsync(login));
         Assert.Equal((null, null, null), (capped.CustomerId, capped.OtpHmac, capped.OtpSentAtUtc));
-        Assert.Equal(1, events.Count("capped"));
+        Assert.Equal(1, events.Events().Count(tags => tags == "event=capped"));
         // The release cleared the OTP and its lifetime but kept the claim's instant, which holds its cap slot.
         LinkingChallenge released = Assert.Single(await factory.ChallengesAsync(failedLogin));
         Assert.Equal((null, null, failedClaim), (released.OtpHmac, released.ExpiresAtUtc, released.OtpSentAtUtc));

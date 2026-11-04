@@ -124,7 +124,8 @@ public class CustomerPrivacyTests(PostgresFixture postgres, TransactionsStub stu
     {
         JsonElement created = await browser.RaiseCreatedAsync(DisputesApi.Body(reason: "wrongAmount", expectedAmount: "80.00", note: "Not me"));
         Guid disputeId = created.GetProperty("disputeId").GetGuid();
-        await factory.AppendAsync(disputeId, DisputeStatus.Escalated, outcome: null,
+        // Written directly: the test chooses each actor (the seeder, the SLA sweep) and a trace ID per event.
+        await factory.AppendDirectlyAsync(disputeId, DisputeStatus.Escalated, outcome: null,
             At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, ActorType.Automation, "worker:seeder"),
             At(new SlaWarningRaised(), 3, ActorType.Automation, "worker:sla-sweep"),
             At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 4, ActorType.Operations, OperationsSub));

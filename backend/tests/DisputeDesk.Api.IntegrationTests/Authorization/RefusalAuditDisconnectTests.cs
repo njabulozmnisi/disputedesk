@@ -69,7 +69,7 @@ public class RefusalAuditDisconnectTests(PostgresFixture postgres, TransactionsS
 
         Task<bool> committed = hold.SendAndDisconnectAsync(browser, raise);
         await checkRead.Reached.WaitAsync(TestContext.Current.CancellationToken);
-        Guid winner = await factory.RaiseDirectlyAsync("login-a", stub.NowAsStored);
+        Guid winner = (await factory.DisputeInAsync(DisputeStatus.Submitted, raisedAt: stub.NowAsStored)).Id;
         checkRead.Release();
 
         Assert.True(await committed);
@@ -141,9 +141,7 @@ public class RefusalAuditDisconnectTests(PostgresFixture postgres, TransactionsS
             hold.AddTo(services);
             services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(appendFirst));
         });
-        Guid disputeId = await factory.RaiseForCustomerAAsync();
-        await factory.AppendAsync(
-            disputeId, DisputeStatus.UnderReview, null, Next(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), disputeId, 2));
+        Guid disputeId = (await factory.DisputeInAsync(DisputeStatus.UnderReview)).Id;
         // Each clash leaves the dispute escalated, which resolve allows, so the retry decides again and only the last
         // read of the Disputes row gives the 409.
         appendFirst.Arm(Next(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), disputeId, 3), DisputeStatus.Escalated);

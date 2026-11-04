@@ -3,6 +3,7 @@ using System.Text;
 using Confluent.Kafka;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
@@ -30,7 +31,7 @@ public class OutboxRelayPrivacyTests(OutboxFixture outbox)
         await using (RelayHost host = await outbox.StartRelayAsync(clock))
         {
             await outbox.WaitUntilSentAsync([row.Id]);
-            await OutboxFixture.WaitUntilAsync(() => host.ProducerSpansFor(row.Id).Count == 1);
+            await Eventually.UntilAsync(() => host.ProducerSpansFor(row.Id).Count == 1, OutboxFixture.WaitLimit);
             host.Services.GetRequiredService<MeterProvider>().ForceFlush();
             observed.AddRange(TelemetryValues(host));
         }
@@ -62,11 +63,11 @@ public class OutboxRelayPrivacyTests(OutboxFixture outbox)
         {
             await using RelayHost host = await outbox.StartRelayAsync(clock);
             // The marker row's send times out while the broker is paused (10 s); the relay then waits out its backoff.
-            await OutboxFixture.WaitUntilAsync(() => host.ProducerSpansFor(raised.Id).Any(span => span.Status == ActivityStatusCode.Error));
+            await Eventually.UntilAsync(() => host.ProducerSpansFor(raised.Id).Any(span => span.Status == ActivityStatusCode.Error), OutboxFixture.WaitLimit);
             await outbox.UnpauseBrokerAsync();
             paused = false;
             // Each step ends one backoff; the producer may need more than one try after the pause.
-            await OutboxFixture.WaitUntilAsync(async () =>
+            await Eventually.UntilAsync(async () =>
             {
                 if ((await outbox.RowAsync(raised.Id)).Status == OutboxStatus.Sent)
                 {
@@ -75,7 +76,7 @@ public class OutboxRelayPrivacyTests(OutboxFixture outbox)
 
                 await clock.StepAsync(TimeSpan.FromSeconds(10));
                 return false;
-            });
+            }, OutboxFixture.WaitLimit);
             List<(DateTimeOffset RefusedAt, OutboxMessage Row)> refusals = await outbox.RefuseFiveTimesAsync(clock, refused.Id);
             Assert.Equal(OutboxStatus.Failed, refusals[^1].Row.Status);
             observed.AddRange(refusals.Select(refusal => refusal.Row.LastError ?? ""));
@@ -131,7 +132,7 @@ public class OutboxRelayPrivacyTests(OutboxFixture outbox)
         await using (RelayHost host = await outbox.StartRelayAsync(clock, BuildProducer))
         {
             // The fatal send: the relay logs the recreate line, builds a new producer and waits out its backoff.
-            await OutboxFixture.WaitUntilAsync(() => clock.RelayWaitsNow && RecreateLines(host).Count == 1);
+            await Eventually.UntilAsync(() => clock.RelayWaitsNow && RecreateLines(host).Count == 1, OutboxFixture.WaitLimit);
             OutboxMessage during = await outbox.RowAsync(raised.Id);
             Assert.Equal((OutboxStatus.Pending, 0, (string?)null), (during.Status, during.Attempts, during.LastError));
 

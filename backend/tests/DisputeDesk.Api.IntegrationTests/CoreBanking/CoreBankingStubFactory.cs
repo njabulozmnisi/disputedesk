@@ -2,6 +2,7 @@ extern alias CoreBankingStub;
 
 using System.Net;
 using CoreBankingStub::DisputeDesk.CoreBankingStub;
+using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -10,12 +11,13 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 
 namespace DisputeDesk.Api.IntegrationTests.CoreBanking;
 
 /// <summary>
 /// The real core-banking stub on a loopback port, reading the real <c>backend/fixtures/local.json</c>, with its clock fixed at
-/// <see cref="ClockNow"/>. Everything it logs is captured in <see cref="Logs"/>.
+/// <see cref="ClockNow"/>. Everything it logs is collected in <see cref="Logs"/>.
 /// </summary>
 public class CoreBankingStubFactory : WebApplicationFactory<Bank>
 {
@@ -29,7 +31,7 @@ public class CoreBankingStubFactory : WebApplicationFactory<Bank>
     // addresses after the build, which throws when the stub's entry point has already started Kestrel on its own thread.
     public CoreBankingStubFactory() => UseKestrel(kestrel => kestrel.Listen(IPAddress.Loopback, 0));
 
-    public LogCapture Logs { get; } = new();
+    public FakeLogCollector Logs => Services.GetFakeLogCollector();
 
     /// <summary>The instant the stub's clock reads: <see cref="Now"/> unless set.</summary>
     public DateTimeOffset ClockNow { get; init; } = Now;
@@ -46,7 +48,7 @@ public class CoreBankingStubFactory : WebApplicationFactory<Bank>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.ConfigureLogging(logging => logging.AddProvider(Logs).AddFilter<LogCapture>(category: null, LogLevel.Trace));
-        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(new FixedTimeProvider(ClockNow)));
+        builder.ConfigureLogging(logging => logging.AddFakeLogging().AddFilter<FakeLoggerProvider>(category: null, LogLevel.Trace));
+        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(new TestClock(ClockNow)));
     }
 }

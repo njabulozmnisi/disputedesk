@@ -50,7 +50,7 @@ public sealed partial class SeedFixtureTests
         // Security pitfall 3.8: a record's generated ToString would print every private field if anything logged it.
         var fixtures = Fixtures.Read(FixturesFile.FindPath());
         FixtureDispute dispute = fixtures.Disputes[0];
-        List<SeedDispute> planned = SeedDispute.Plan(fixtures, new TestClock().GetUtcNow());
+        List<SeedDispute> planned = SeedDispute.Plan(fixtures, TestInstants.NotMicrosecondAligned());
 
         Assert.Equal(nameof(FixtureCustomer), fixtures.Customers[0].ToString());
         Assert.Equal(nameof(FixtureAccount), fixtures.Customers[0].Accounts[0].ToString());

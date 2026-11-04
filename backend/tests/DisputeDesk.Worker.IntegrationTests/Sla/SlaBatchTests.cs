@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using DisputeDesk.Domain.Disputes;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using DisputeDesk.Worker.IntegrationTests.Outbox;
 using DisputeDesk.Worker.Sla;
 using Npgsql;
@@ -72,8 +73,8 @@ public class SlaBatchTests(SlaFixture fixture)
         Assert.Equal((1, 1), counts[disputeIds[0]]);
         Assert.Equal((1, 1), counts[disputeIds[2]]);
         // AC5: only the two committed escalations are counted.
-        Assert.Equal(2, rig.Total("disputedesk.sla.escalations"));
-        Assert.Equal(2, rig.Total("disputedesk.dispute_actions", ("action", "escalate"), ("actor_type", "automation")));
+        Assert.Equal(2, SweepRig.Total(rig.Escalations));
+        Assert.Equal(2, SweepRig.Total(rig.Actions, ("action", "escalate"), ("actor_type", "automation")));
         // AC8: the failure is logged with the dispute ID and the exception's type only, never its message.
         Assert.Contains(rig.SweepLogLines, line => line.Contains(failing.ToString(), StringComparison.Ordinal) && line.Contains("DbUpdateException", StringComparison.Ordinal));
         Assert.DoesNotContain(rig.SweepLogLines, line => line.Contains("FAILMARK", StringComparison.Ordinal));
@@ -96,7 +97,7 @@ public class SlaBatchTests(SlaFixture fixture)
 
         Assert.All(await rig.EscalationCountsAsync(disputeIds), counts => Assert.Equal((1, 1), counts.Value));
         Assert.Equal(DisputeStatus.Escalated, (await rig.DisputeRowAsync(failing)).Status);
-        Assert.Equal(3, rig.Total("disputedesk.sla.escalations"));
+        Assert.Equal(3, SweepRig.Total(rig.Escalations));
     }
 
     [Fact]
@@ -117,8 +118,8 @@ public class SlaBatchTests(SlaFixture fixture)
         Assert.Equal((1, 1), counts[disputeIds[0]]);
         Assert.Equal((0, 0), counts[failing]);
         Assert.Equal((1, 1), counts[disputeIds[2]]);
-        Assert.Equal(2, rig.Total("disputedesk.sla.escalations"));
-        Assert.Equal(2, rig.Total("disputedesk.dispute_actions", ("action", "escalate"), ("actor_type", "automation")));
+        Assert.Equal(2, SweepRig.Total(rig.Escalations));
+        Assert.Equal(2, SweepRig.Total(rig.Actions, ("action", "escalate"), ("actor_type", "automation")));
         Assert.Equal([2], rig.BatchSpans("overdue").Select(span => (int?)span.GetTagItem("disputedesk.sla_sweep.changed")));
         Assert.Contains(rig.SweepLogLines, line => line.Contains(failing.ToString(), StringComparison.Ordinal) && line.Contains("PostgresException", StringComparison.Ordinal));
     }
@@ -226,8 +227,8 @@ public class SlaBatchTests(SlaFixture fixture)
         SlaSweep sweep = rig.Sweep;
 
         await sweep.StartAsync(TestContext.Current.CancellationToken);
-        await OutboxFixture.WaitUntilAsync(async () =>
-            (await rig.EscalationCountsAsync(disputeIds)).Values.All(counts => counts == (1, 1)));
+        await Eventually.UntilAsync(async () =>
+            (await rig.EscalationCountsAsync(disputeIds)).Values.All(counts => counts == (1, 1)), OutboxFixture.WaitLimit);
         await sweep.StopAsync(TestContext.Current.CancellationToken);
 
         Assert.All(await rig.EscalationCountsAsync(disputeIds), counts => Assert.Equal((1, 1), counts.Value));

@@ -1,3 +1,4 @@
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.Time.Testing;
 
 namespace DisputeDesk.Worker.IntegrationTests.Outbox;
@@ -28,8 +29,8 @@ public sealed class RelayClock(DateTimeOffset start) : FakeTimeProvider(start)
     /// </summary>
     public async Task StepAsync(TimeSpan by)
     {
-        await OutboxFixture.WaitUntilAsync(() => RelayWaitsNow);
+        await Eventually.UntilAsync(() => RelayWaitsNow, OutboxFixture.WaitLimit);
         Advance(by);
-        await OutboxFixture.WaitUntilAsync(() => RelayWaitsNow);
+        await Eventually.UntilAsync(() => RelayWaitsNow, OutboxFixture.WaitLimit);
     }
 }

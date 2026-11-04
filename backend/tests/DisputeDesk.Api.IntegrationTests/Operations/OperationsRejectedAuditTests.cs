@@ -71,14 +71,7 @@ public sealed class OperationsRejectedAuditTests(OperationsToolFixture api, Post
             postgres, new Uri("http://core-banking.invalid"), api.Now,
             services => services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(failAudit)));
         // Withdrawn: every action is refused with 409.
-        Guid disputeId = await factory.RaiseDirectlyAsync("login-a", api.Now.AddHours(-1));
-        await factory.AppendAsync(disputeId, DisputeStatus.Withdrawn, null, new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, null)
-        {
-            Version = 2,
-            OccurredAtUtc = api.Now.AddHours(-1),
-            ActorType = ActorType.Customer,
-            ActorId = "login-a",
-        });
+        Guid disputeId = (await factory.DisputeInAsync(DisputeStatus.Withdrawn, raisedAt: api.Now.AddHours(-1), actedAt: api.Now.AddHours(-1))).Id;
         using HttpClient tool = factory.CreateTool();
         failAudit.Armed = true;
 
@@ -111,7 +104,7 @@ public sealed class OperationsRejectedAuditTests(OperationsToolFixture api, Post
         Assert.Equal(disputeId, entry.DisputeId);
         Assert.Null(entry.CustomerId);
         // The use case's one instant, cut to whole microseconds as stored.
-        Assert.Equal(api.Now.AddTicks(-(api.Now.Ticks % TimeSpan.TicksPerMicrosecond)), entry.OccurredAtUtc);
+        Assert.Equal(TestInstants.AsStored(api.Now), entry.OccurredAtUtc);
         Assert.Matches("^[0-9a-f]{32}$", entry.TraceId);
     }
 }

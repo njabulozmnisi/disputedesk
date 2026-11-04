@@ -1,6 +1,10 @@
+using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Domain;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 
 namespace DisputeDesk.Api.IntegrationTests.CoreBanking;
 
@@ -40,13 +44,12 @@ public sealed class CoreBankingClientTests(CoreBankingStubFactory stub) : IClass
     [Fact]
     public async Task MatchCustomerAsync_AnyCall_SendsIdNumberOnlyInTheBodyAndNeverLogsIt()
     {
-        var logs = new LogCapture();
         var recorder = new RequestRecorder();
         await using ServiceProvider services = CoreBankingServices.Build(
             stub.BaseUrl,
-            logs,
             configure => configure.ConfigureHttpClientDefaults(client => client.AddHttpMessageHandler(() => recorder)));
         ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
+        FakeLogCollector logs = services.GetFakeLogCollector();
 
         await client.MatchCustomerAsync(CustomerAIdNumber, "1000000011", CancellationToken);
 
@@ -54,29 +57,53 @@ public sealed class CoreBankingClientTests(CoreBankingStubFactory stub) : IClass
         Assert.Contains(CustomerAIdNumber, request.Body, StringComparison.Ordinal);
         Assert.DoesNotContain(CustomerAIdNumber, request.Url, StringComparison.Ordinal);
         Assert.DoesNotContain(CustomerAIdNumber, request.Headers, StringComparison.Ordinal);
-        Assert.NotEmpty(logs.Lines);
-        Assert.DoesNotContain(logs.Lines, line => line.Contains(CustomerAIdNumber, StringComparison.Ordinal));
-        Assert.DoesNotContain(stub.Logs.Lines, line => line.Contains(CustomerAIdNumber, StringComparison.Ordinal));
+        Assert.NotEmpty(logs.Lines());
+        Assert.DoesNotContain(logs.Lines(), line => line.Contains(CustomerAIdNumber, StringComparison.Ordinal));
+        Assert.DoesNotContain(stub.Logs.Lines(), line => line.Contains(CustomerAIdNumber, StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task GetTransactionsAsync_AnyCall_SendsCustomerIdOnlyInAHeaderAndNeverLogsIt()
     {
-        var logs = new LogCapture();
         var recorder = new RequestRecorder();
         await using ServiceProvider services = CoreBankingServices.Build(
             stub.BaseUrl,
-            logs,
             configure => configure.ConfigureHttpClientDefaults(client => client.AddHttpMessageHandler(() => recorder)));
         ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
+        FakeLogCollector logs = services.GetFakeLogCollector();
 
         await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken);
 
         RecordedRequest request = Assert.Single(recorder.Requests);
         Assert.Contains(CustomerA, request.Headers, StringComparison.Ordinal);
         Assert.DoesNotContain(CustomerA, request.Url, StringComparison.Ordinal);
-        Assert.DoesNotContain(logs.Lines, line => line.Contains(CustomerA, StringComparison.Ordinal));
-        Assert.DoesNotContain(stub.Logs.Lines, line => line.Contains(CustomerA, StringComparison.Ordinal));
+        Assert.DoesNotContain(logs.Lines(), line => line.Contains(CustomerA, StringComparison.Ordinal));
+        Assert.DoesNotContain(stub.Logs.Lines(), line => line.Contains(CustomerA, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetTransactionsAsync_HttpClientTraceOnInConfiguration_NoRecordHoldsTheCustomerId()
+    {
+        IConfiguration logging = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["LogLevel:Default"] = "Information",
+                ["LogLevel:System.Net.Http.HttpClient"] = "Trace",
+            })
+            .Build();
+        await using ServiceProvider services = CoreBankingServices.Build(
+            stub.BaseUrl,
+            configure => configure.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Information).AddConfiguration(logging)));
+        ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
+        FakeLogCollector logs = services.GetFakeLogCollector();
+        ILogger clientHandler = services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("System.Net.Http.HttpClient.ICoreBankingClient.ClientHandler");
+
+        await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken);
+
+        Assert.True(clientHandler.IsEnabled(LogLevel.Trace));
+        Assert.NotEmpty(logs.Lines());
+        Assert.DoesNotContain(logs.Lines(), line => line.Contains(CustomerA, StringComparison.Ordinal));
     }
 
     [Fact]

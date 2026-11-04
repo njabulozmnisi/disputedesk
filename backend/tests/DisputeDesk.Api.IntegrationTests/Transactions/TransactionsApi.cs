@@ -1,4 +1,3 @@
-using DisputeDesk.Api.IntegrationTests.CoreBanking;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,7 +25,7 @@ public static class TransactionsApi
             environment,
             configureServices,
             settings: new Dictionary<string, string?> { ["CoreBanking:BaseUrl"] = coreBankingUrl.ToString() },
-            clock: new FixedTimeProvider(now));
+            clock: new TestClock(now));
 
     /// <summary>The Api against the stub, both reading the stub's instant.</summary>
     public static Task<ApiFactory> StartAsync(
