@@ -7,6 +7,7 @@ covers: [R32, R35, R37]
 after: [1]
 hitl: false
 risk: medium
+decisions: settled
 refined: true
 ---
 

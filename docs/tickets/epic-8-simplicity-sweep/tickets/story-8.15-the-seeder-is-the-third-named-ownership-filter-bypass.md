@@ -7,6 +7,7 @@ covers: [R17, R24, R25]
 after: [5, 14]
 hitl: false
 risk: medium
+decisions: settled
 refined: true
 ---
 

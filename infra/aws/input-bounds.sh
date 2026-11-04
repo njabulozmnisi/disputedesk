@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # The inputs of infra/aws/compose.yml and the bound each value must meet (story 7.4, Inputs; AD-26). Sourced, not run:
 # infra/aws/check-compose.sh checks compose.test.env with it, and the deploy script checks .env with it before any
 # docker call, so both use the same patterns.
@@ -6,6 +7,7 @@
 # `?`, `#` and `%` break Zitadel's DSN URL, and `$`, quotes and spaces break .env interpolation. The Zitadel admin
 # password also needs `-`, because Zitadel's default password complexity policy requires a symbol.
 
+# shellcheck disable=SC2034 # read by the scripts that source this file
 AWS_INPUTS=(
   APP_DB_PASSWORD ZITADEL_DB_PASSWORD LOGIN_SESSION_COOKIE_SECRET ZITADEL_MASTERKEY ZITADEL_ADMIN_PASSWORD
   LINKING_OTP_HMAC_KEY MAILPIT_UI_AUTH GATEWAY_ORIGIN_VERIFY

@@ -169,46 +169,11 @@ jobs:
           jq -e --argjson expected "$expected" \
             'map_values(ascii_downcase) == ($expected | map_values(ascii_downcase))' <<< "$body"
 
-      # Each bound of the generator's input exits non-zero naming the token, before any API call.
-      - name: Label policy generator rejects tokens outside its bounds
+      # Story 2.6. Zitadel checks the brand files' bytes when provision.sh uploads them (the type from the bytes, at most
+      # 512 KiB; the upload fails on HTTP 400 or above). No upload reads tokens.css's wordmark names, so they are
+      # checked here.
+      - name: tokens.css names both wordmarks and loads neither
         run: |
-          rejects(){ # description sed-script token
-            sed -E "$2" frontend/src/theme/tokens.css > "$RUNNER_TEMP/tokens.css"
-            if err=$(infra/zitadel/provision/label-policy.sh "$RUNNER_TEMP/tokens.css" 2>&1 >/dev/null); then
-              echo "::error::accepted $1"; exit 1
-            fi
-            grep -qF -- "$3" <<< "$err" || { echo "::error::$1: the error does not name $3: $err"; exit 1; }
-            echo "ok  $1: $err"
-          }
-          rejects "a named colour"            's/--primary: #2b57c9;/--primary: blue;/'                       --primary
-          rejects "a three-digit colour"      's/--background: #f4f5f7;/--background: #fff;/'                --background
-          rejects "an eight-digit colour"     's/--destructive: #b42318;/--destructive: #b42318ff;/'         --destructive
-          rejects "a token declared twice"    's/--primary: #2b57c9;/--primary: #2b57c9; --primary: #2b57c9;/' --primary
-          rejects "a twice-declared token with a space before its colon" \
-            's/--primary: #2b57c9;/--primary: #2b57c9; --primary : #000000;/' --primary
-          rejects "a twice-declared token with a newline before its colon" 's/--primary: #2b57c9;/--primary: #2b57c9; --primary\
-          : #000000;/' --primary
-          rejects "a value that repeats the token name" 's/--primary: #2b57c9;/--primary: --primary: #2b57c9;/' --primary
-          rejects "only a prefixed token"     '/--primary: #2b57c9;/d'                                       --primary
-          rejects "a dark token missing"      '/--foreground: #eef1f5;/d'                                    --foreground
-          rejects "only a commented-out token" 's|--primary: #2b57c9;|/* --primary: #2b57c9; */|'             --primary
-          rejects "only a multi-line comment" 's|--primary: #2b57c9;|/*\
-          --primary: #2b57c9;\
-          */|' --primary
-
-      # The files provisioning uploads: signatures from the W3C PNG (section 5.2) and WOFF 2.0 (section 3)
-      # specifications, and Zitadel's 512 KiB limit per asset.
-      - name: Hosted-login brand files
-        run: |
-          brand(){ # file signature-hex
-            size=$(wc -c < "$1")
-            [ "$size" -le 524288 ] || { echo "::error::$1 is $size bytes, over 512 KiB"; exit 1; }
-            [ "$(od -An -tx1 -N $(( ${#2} / 2 )) "$1" | tr -d ' \n')" = "$2" ] || { echo "::error::$1 is not the expected type"; exit 1; }
-            echo "ok  $1 ($size bytes)"
-          }
-          brand frontend/src/theme/wordmark.png                         89504e470d0a1a0a
-          brand frontend/src/theme/wordmark-dark.png                    89504e470d0a1a0a
-          brand frontend/src/theme/fonts/nunito-sans-latin-400-normal.woff2 774f4632
           for f in wordmark.png wordmark-dark.png; do
             grep -qF "$f" frontend/src/theme/tokens.css || { echo "::error::tokens.css does not name $f"; exit 1; }
           done
@@ -295,12 +260,52 @@ jobs:
   floor-guard:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # Downloaded from their GitHub releases and checked against a SHA-256 pinned here, as security.yml installs Trivy.
+    # actionlint's pin is its line in the release's actionlint_<version>_checksums.txt; shellcheck publishes no checksum
+    # file, so its pin is GitHub's digest of the release asset. Change a version and its pin together.
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      SHELLCHECK_VERSION: 0.11.0
+      SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - run: scripts/floor-guard.sh
+
+      - name: Install actionlint
+        run: |
+          curl -fsSL --max-time 60 -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP/bin" actionlint
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # $GITHUB_PATH entries come before the runner's PATH, so this shellcheck, not the runner image's, is the one both
+      # lint steps run.
+      - name: Install shellcheck
+        run: |
+          curl -fsSL --max-time 60 -o "$RUNNER_TEMP/shellcheck.tar.xz" \
+            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  $RUNNER_TEMP/shellcheck.tar.xz" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP/bin" --strip-components 1 \
+            "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # actionlint runs the shellcheck on PATH over every run: block too (actionlint, docs/checks.md). Any finding fails.
+      - name: actionlint
+        run: |
+          shellcheck --version
+          actionlint .github/workflows/*.yml
+
+      # Every tracked shell script. The :(glob) magic lets ** match no directory as well, so infra/smoke.sh is included
+      # (gitglossary, pathspec). scripts/lane-runner.zsh is not linted: shellcheck does not support zsh.
+      - name: shellcheck
+        run: git ls-files -z ':(glob)infra/**/*.sh' 'scripts/*.sh' | xargs -0 shellcheck
 
       # Same rule as the pre-commit hook: whole-word, case-insensitive, one term per line, # comments allowed.
       # Only file:line is printed, never the matching text, so the terms stay out of the log.

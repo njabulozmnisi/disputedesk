@@ -36,6 +36,7 @@ section "clean slate"
 docker compose down -v --remove-orphans >/dev/null 2>&1
 # Remove the locally built images too, so `up` has to build them as on a fresh machine (layer cache aside). The
 # build profile adds the build-only spa image, which the gateway's build takes its SPA files from.
+# shellcheck disable=SC2046 # split on purpose: one argument per image name, and no name holds a space
 docker image rm -f $(docker compose --profile build config --images | grep ':local$') >/dev/null 2>&1 || true
 echo "volumes and locally built images removed"
 
@@ -49,6 +50,7 @@ docker compose ps -a --format 'table {{.Service}}\t{{.Status}}'
 ! docker compose ps -a --format '{{.Status}}' | grep -qE 'Exited \([1-9]' || fail "a one-shot container failed"
 
 section "memory (docker stats --no-stream)"
+# shellcheck disable=SC2046 # split on purpose: one argument per container ID
 stats=$(docker stats --no-stream --format '{{.Name}}\t{{.MemUsage}}' $(docker compose ps -q) | sort)
 echo "$stats"
 awk -F'\t' '{split($2, a, " / "); v=a[1]; n=v+0; if (v ~ /GiB/) n*=1024; else if (v ~ /KiB/) n/=1024; t+=n}

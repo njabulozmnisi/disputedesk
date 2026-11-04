@@ -163,7 +163,7 @@ section "criterion 3: the rendered config, CloudFront's client address and schem
 docker exec "$run-gateway" nginx -t 2>&1 | grep -q 'test is successful' || fail "nginx -t on the rendered AWS config"
 ok "nginx -t passes on the rendered AWS config"
 rendered=$(docker exec "$run-gateway" nginx -T 2>/dev/null)
-[ -z "$(grep -v '^[[:space:]]*#' infra/nginx/templates-aws/nginx.conf.template | grep set_real_ip_from)" ] \
+! grep -q set_real_ip_from <<< "$(grep -v '^[[:space:]]*#' infra/nginx/templates-aws/nginx.conf.template)" \
   || fail "the AWS template sets a trusted range itself"
 grep -qx '  include /etc/nginx/cloudfront-realip.conf;' <<< "$rendered" || fail "the realip file is not included"
 grep -qx '  real_ip_header CloudFront-Viewer-Address;' <<< "$rendered" || fail "real_ip_header is not CloudFront-Viewer-Address"
@@ -197,10 +197,10 @@ for host_path in "$APP /api/verify-app" "$AUTH /oauth/v2/verify-auth" "$MAIL /ap
   read -r host path <<< "$host_path"
   [ "$(status trusted "$host" "$path-missing")" = 403 ] || fail "$host without X-Origin-Verify"
   [ "$(status trusted "$host" "$path-wrong" -H "X-Origin-Verify: wrong-$VERIFY")" = 403 ] || fail "$host with a wrong X-Origin-Verify"
-  ! upstream_saw "$path-missing" && ! upstream_saw "$path-wrong" || fail "a refused request to $host reached an upstream"
+  { ! upstream_saw "$path-missing" && ! upstream_saw "$path-wrong"; } || fail "a refused request to $host reached an upstream"
 done
-[ "$(status trusted "$APP" /api/verify-app-right -H "X-Origin-Verify: $VERIFY")" = 200 ] && upstream_saw /api/verify-app-right || fail "the app host refused the right header"
-[ "$(status trusted "$AUTH" /oauth/v2/verify-auth-right -H "X-Origin-Verify: $VERIFY")" = 200 ] && upstream_saw /oauth/v2/verify-auth-right || fail "the identity host refused the right header"
+{ [ "$(status trusted "$APP" /api/verify-app-right -H "X-Origin-Verify: $VERIFY")" = 200 ] && upstream_saw /api/verify-app-right; } || fail "the app host refused the right header"
+{ [ "$(status trusted "$AUTH" /oauth/v2/verify-auth-right -H "X-Origin-Verify: $VERIFY")" = 200 ] && upstream_saw /oauth/v2/verify-auth-right; } || fail "the identity host refused the right header"
 [ "$(status trusted "$MAIL" /api/v1/messages -H "X-Origin-Verify: $VERIFY")" = 401 ] || fail "the right header did not reach Mailpit (its own 401)"
 ok "on all three hosts, no X-Origin-Verify and a wrong one get 403 before any upstream; the right one passes"
 
@@ -223,6 +223,7 @@ unstripped=$(awk '
 ! grep -qF "$VERIFY" <<< "$(docker logs "$run-gateway" 2>&1)" || fail "the gateway's log holds the origin-verify value"
 ok "every proxied location clears X-Origin-Verify and the client's Forwarded (RFC 7239), so the upstream sees neither; no log format or log line holds the origin-verify value"
 
+# shellcheck disable=SC2016 # the health check's own text: the gateway container's shell expands it, not this one
 grep -qF 'X-Origin-Verify: $GATEWAY_ORIGIN_VERIFY' <<< "$healthcheck" || fail "the health check does not send the origin-verify header"
 docker exec "$run-gateway" sh -c "$healthcheck" || fail "the gateway's health check fails: $healthcheck"
 ok "the gateway's health check sends the origin-verify header and passes"

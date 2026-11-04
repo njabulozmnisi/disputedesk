@@ -80,7 +80,7 @@ sequenceDiagram
     S->>S: Commit, merge to main (CI must be green)
 ```
 
-Before dispatch the supervisor runs `scripts/check-ready.sh <story>`, which fails while a `[story]` point has no Sofia disposition, a `[decision]` point has no recorded human decision, or a story in the `after` list is not done.
+Before dispatch the supervisor runs `scripts/check-ready.sh <story>`, which fails while a `[story]` point has no Sofia disposition, a `[decision]` point exists but the story's front matter lacks `decisions: settled` (the supervisor sets it, citing the decisions record, once the human has answered), or a story in the `after` list is not done.
 
 A failed stage sends the story back to its builder with the findings. After two failed attempts the builder returns `blocked` and the supervisor escalates for a decision.
 
