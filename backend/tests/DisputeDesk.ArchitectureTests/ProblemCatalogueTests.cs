@@ -1,6 +1,9 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
 using DisputeDesk.Contracts.Problems;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace DisputeDesk.ArchitectureTests;
 
@@ -16,6 +19,10 @@ public partial class ProblemCatalogueTests
         "idempotency-in-progress", "idempotency-mismatch", "linking-required", "already-linked", "otp-incorrect",
         "linking-locked", "rate-limited", "core-banking-unavailable", "unauthorized", "forbidden", "internal",
     ];
+
+    // The Error factories of Domain/Error.cs, each taking the code first.
+    private static readonly string[] ErrorFactories =
+        ["NotFound", "Validation", "Forbidden", "ActionNotAllowed", "Conflict", "BusinessRule", "Unavailable", "RateLimited"];
 
     [Fact]
     public void Catalogue_AllFeatureClasses_HoldExactlyTheAd3Slugs()
@@ -81,29 +88,28 @@ public partial class ProblemCatalogueTests
 
         foreach (string file in SourceFiles("DisputeDesk.Domain", "DisputeDesk.Application"))
         {
-            foreach (Match call in ErrorFactoryCall().Matches(File.ReadAllText(file)))
+            foreach (InvocationExpressionSyntax call in ErrorFactoryCalls(file))
             {
-                string code = call.Groups["code"].Value.Trim();
-                bool isKnownLiteral = code.StartsWith('"') && catalogue.Contains(code.Trim('"'));
+                bool isKnownLiteral = Code(call) is LiteralExpressionSyntax literal
+                    && literal.IsKind(SyntaxKind.StringLiteralExpression)
+                    && catalogue.Contains(literal.Token.ValueText);
                 if (!isKnownLiteral)
                 {
-                    violations.Add($"{Path.GetFileName(file)}: {call.Value} (use a string literal from the catalogue)");
+                    violations.Add(SourceTrees.Describe(call.GetLocation()));
                 }
             }
         }
 
-        Assert.True(violations.Count == 0, "Error codes outside the AD-3 catalogue:\n" + string.Join('\n', violations));
+        Assert.True(violations.Count == 0, "Error codes outside the AD-3 catalogue (use a string literal from the catalogue):\n" + string.Join('\n', violations));
     }
 
-    [Theory]
-    [InlineData("return Error.NotFound(\"not-found\", \"Dispute not found.\");", "\"not-found\"")]
-    [InlineData("Error.ActionNotAllowed(Codes.Mine, \"...\", \"status\", status)", "Codes.Mine")]
-    public void ErrorFactoryCall_SampleLine_CapturesTheCodeArgument(string line, string expectedCode)
+    [Fact]
+    public void DomainSource_ErrorFactoryCall_IsFoundWithItsCode()
     {
-        Match call = ErrorFactoryCall().Match(line);
+        // Proves the scan reads the calls and their code argument, so an empty violation list is not a scan that found nothing.
+        string disputeErrors = Path.Combine(SourceRoots.Src, "DisputeDesk.Domain", "Disputes", "DisputeErrors.cs");
 
-        Assert.True(call.Success);
-        Assert.Equal(expectedCode, call.Groups["code"].Value.Trim());
+        Assert.Contains(ErrorFactoryCalls(disputeErrors), call => Code(call) is LiteralExpressionSyntax { Token.ValueText: "not-found" });
     }
 
     /// <summary>Every public string constant of the <c>*Problems</c> classes in Contracts.</summary>
@@ -119,8 +125,15 @@ public partial class ProblemCatalogueTests
         projects.SelectMany(project => Directory.EnumerateFiles(Path.Combine(SourceRoots.Src, project), "*.cs", SearchOption.AllDirectories))
             .Where(file => !SourceRoots.IsBuildOutput(file));
 
-    [GeneratedRegex(@"Error\.(?:NotFound|Validation|Forbidden|ActionNotAllowed|Conflict|BusinessRule|Unavailable|RateLimited)\(\s*(?<code>[^,)]*)")]
-    private static partial Regex ErrorFactoryCall();
+    /// <summary>Each <c>Error.&lt;Kind&gt;(code, …)</c> factory call in <paramref name="file"/>.</summary>
+    private static IEnumerable<InvocationExpressionSyntax> ErrorFactoryCalls(string file) =>
+        SourceTrees.Root(file).DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Where(call => call.Expression is MemberAccessExpressionSyntax access
+                && SourceTrees.LastName(access.Expression) == "Error"
+                && ErrorFactories.Contains(access.Name.Identifier.ValueText));
+
+    /// <summary>The code argument of a factory call, its first; null when the call has none.</summary>
+    private static ExpressionSyntax? Code(InvocationExpressionSyntax call) => call.ArgumentList.Arguments.FirstOrDefault()?.Expression;
 
     /// <summary>A <c>- Status: </c> line that starts with a 3-digit HTTP status (<c>409</c>, <c>400, or another 4xx…</c>).</summary>
     [GeneratedRegex(@"^- Status: \d{3}\b", RegexOptions.Multiline)]

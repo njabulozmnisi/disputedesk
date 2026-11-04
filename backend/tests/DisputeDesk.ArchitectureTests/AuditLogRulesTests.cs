@@ -1,4 +1,6 @@
-using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace DisputeDesk.ArchitectureTests;
 
@@ -8,50 +10,41 @@ namespace DisputeDesk.ArchitectureTests;
 /// modified or deleted, but bulk and raw SQL writes never pass the change tracker, so no production file that names
 /// either may call them. The database-level grant is on the production path.
 /// </summary>
-public partial class AuditLogRulesTests
+public class AuditLogRulesTests
 {
+    // The types, their configurations and the tables: AuditLogEntry, AuditLogEntryConfiguration, AuditLogEntries;
+    // StoredEvent and StoredEventRow, StoredEventConfiguration, StoredEvents.
+    private static readonly string[] InsertOnlyNames = ["AuditLogEntr", "StoredEvent"];
+
+    // ExecuteUpdate(Async), ExecuteDelete(Async), ExecuteSql(Async/Interpolated/Raw) and SqlQuery(Raw), which runs any
+    // statement it is given, such as DELETE ... RETURNING; every *SqlRaw method is matched separately.
+    private static readonly string[] BulkOrRawSqlPrefixes = ["ExecuteUpdate", "ExecuteDelete", "ExecuteSql", "SqlQuery"];
+
+    // Add, Attach and Update with their Async and Range forms.
+    private static readonly string[] WritePrefixes = ["Add", "Attach", "Update"];
+
     [Fact]
     public void ProductionSource_FileNamingAuditEntriesOrStoredEvents_HasNoBulkOrRawSqlCall()
     {
-        var violations = Directory.EnumerateFiles(SourceRoots.Src, "*.cs", SearchOption.AllDirectories)
-            .Where(file => !SourceRoots.IsBuildOutput(file))
-            .Select(file => (File: file, Text: File.ReadAllText(file)))
-            .Where(source => NamesInsertOnlyRecords().IsMatch(source.Text) && BulkOrRawSqlCall().IsMatch(source.Text))
-            .Select(source => Path.GetRelativePath(SourceRoots.Src, source.File))
+        var violations = SourceFiles()
+            .Where(NamesInsertOnlyRecords)
+            .SelectMany(BulkOrRawSqlCalls)
+            .Select(call => SourceTrees.Describe(call.GetLocation()))
             .ToList();
 
         Assert.True(violations.Count == 0, "Bulk or raw SQL call in a file naming the audit entries or stored events:\n" + string.Join('\n', violations));
     }
 
-    [Theory]
-    [InlineData("db.Set<AuditLogEntry>().ExecuteUpdateAsync(setters => setters.SetProperty(entry => entry.Result, value))", true)]
-    [InlineData("query.ExecuteDelete()", true)]
-    [InlineData("db.Database.ExecuteSqlAsync($\"DELETE FROM \\\"AuditLogEntries\\\"\")", true)]
-    [InlineData("db.Database.ExecuteSqlRawAsync(sql)", true)]
-    [InlineData("db.Set<AuditLogEntry>().FromSqlRaw(sql)", true)]
-    [InlineData("db.Database.SqlQueryRaw<int>(sql)", true)]
-    [InlineData("db.Database.SqlQuery<Guid>($\"DELETE FROM \\\"AuditLogEntries\\\" RETURNING \\\"Id\\\"\")", true)]
-    [InlineData("db.Set<StoredEventRow>().Where(row => row.Version == 1).ExecuteDeleteAsync()", true)]
-    [InlineData("db.Database.ExecuteSqlAsync($\"UPDATE \\\"StoredEvents\\\" SET \\\"Data\\\" = '{}'\")", true)]
-    [InlineData("Set<AuditLogEntry>().Add(entry);", false)]
-    [InlineData("Set<StoredEventRow>().Add(row);", false)]
-    [InlineData("// ExecuteUpdate is not called here", false)]
-    public void BulkOrRawSqlCall_SampleLine_IsMatchedOnlyWhenCalled(string line, bool expected)
+    [Fact]
+    public void ProductionSource_BulkCall_IsFoundInTheSessionStore()
     {
-        Assert.Equal(expected, BulkOrRawSqlCall().IsMatch(line));
-    }
+        // Proves the scans read the bulk calls a file that names neither record may make, and the names in the audit log,
+        // so an empty violation list is not a scan that found nothing.
+        string sessions = Path.Combine(SourceRoots.Src, "DisputeDesk.Api", "Authentication", "SessionTicketStore.cs");
 
-    [Theory]
-    [InlineData("Set<AuditLogEntry>()", true)]
-    [InlineData("FROM \"AuditLogEntries\"", true)]
-    [InlineData("Set<StoredEventRow>()", true)]
-    [InlineData("public sealed record DisputeRaised(string CustomerId) : StoredEvent;", true)]
-    [InlineData("new StoredEventConfiguration()", true)]
-    [InlineData("FROM \"StoredEvents\"", true)]
-    [InlineData("Set<OutboxMessage>()", false)]
-    public void NamesInsertOnlyRecords_SampleText_IsMatchedForTheTypesOrTheTables(string text, bool expected)
-    {
-        Assert.Equal(expected, NamesInsertOnlyRecords().IsMatch(text));
+        Assert.NotEmpty(BulkOrRawSqlCalls(sessions));
+        Assert.False(NamesInsertOnlyRecords(sessions));
+        Assert.True(NamesInsertOnlyRecords(AuditLogFile));
     }
 
     [Fact]
@@ -59,47 +52,84 @@ public partial class AuditLogRulesTests
     {
         // AD-14a: AuditLog.Record is the one way to write an audit entry. The configuration, the context and the
         // migrations name the type for the model only.
-        var violations = Directory.EnumerateFiles(SourceRoots.Src, "*.cs", SearchOption.AllDirectories)
-            .Where(file => !SourceRoots.IsBuildOutput(file) && !MayNameAuditEntries(file))
-            .Where(file => ConstructsOrAddsAuditEntry().IsMatch(File.ReadAllText(file)))
-            .Select(file => Path.GetRelativePath(SourceRoots.Src, file))
+        var violations = SourceFiles()
+            .Where(file => !MayNameAuditEntries(file))
+            .SelectMany(AuditEntryWrites)
+            .Select(node => SourceTrees.Describe(node.GetLocation()))
             .ToList();
 
         Assert.True(violations.Count == 0, "An audit entry is written outside AuditLog.Record in:\n" + string.Join('\n', violations));
     }
 
-    [Theory]
-    [InlineData("db.Entities<AuditLogEntry>().Add(new AuditLogEntry { Id = id });", true)]
-    [InlineData("db.Add(new AuditLogEntry\n{", true)]
-    [InlineData("db.Entities<AuditLogEntry>().Add(new() { Id = id, Action = action });", true)]
-    [InlineData("Set<AuditLogEntry>().AddRange(entries);", true)]
-    [InlineData("AuditLogEntry entry = new() { Id = id };", true)]
-    [InlineData("var entry = new AuditLogEntry();", true)]
-    [InlineData("AuditLog.Record(db, AuditAction.Raise, AuditResult.Rejected, actor, now);", false)]
-    [InlineData("await db.Set<AuditLogEntry>().CountAsync(cancellationToken);", false)]
-    [InlineData("db.Entities<AuditLogEntry>().AsNoTracking().Where(entry => entry.Action == action)", false)]
-    [InlineData("public sealed class AuditLogEntry", false)]
-    public void ConstructsOrAddsAuditEntry_SampleLine_IsMatchedOnlyForAWrite(string line, bool expected)
+    [Fact]
+    public void ProductionSource_AuditEntryWrite_IsFoundInTheAuditLog()
     {
-        Assert.Equal(expected, ConstructsOrAddsAuditEntry().IsMatch(line));
+        // Proves the scan reads the write the rule allows, so an empty violation list is not a scan that found nothing.
+        Assert.NotEmpty(AuditEntryWrites(AuditLogFile));
     }
+
+    private static string AuditLogFile => Path.Combine(SourceRoots.Src, "DisputeDesk.Application", "Audit", "AuditLog.cs");
+
+    private static IEnumerable<string> SourceFiles() =>
+        Directory.EnumerateFiles(SourceRoots.Src, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !SourceRoots.IsBuildOutput(file));
 
     private static bool MayNameAuditEntries(string file) =>
         Path.GetFileName(file) is "AuditLog.cs" or "AuditLogEntryConfiguration.cs" or "AppDbContext.cs"
         || Path.GetRelativePath(SourceRoots.Src, file).Split(Path.DirectorySeparatorChar).Contains("Migrations");
 
-    // A construction (new AuditLogEntry, or a target-typed new() assigned to one) or an Add, Attach or Update (Async, Range)
-    // on the audit entry set.
-    [GeneratedRegex(@"\bnew\s+AuditLogEntry\b|\bAuditLogEntry\s+\w+\s*=\s*new\s*\(|<AuditLogEntry>\(\)\s*\.(?:Add|Attach|Update)\w*\s*\(")]
-    private static partial Regex ConstructsOrAddsAuditEntry();
+    /// <summary>
+    /// Whether <paramref name="file"/> names either record: an identifier that starts with one of the names, or a string
+    /// (a literal or an interpolated string's text, as in raw SQL) that contains one.
+    /// </summary>
+    private static bool NamesInsertOnlyRecords(string file)
+    {
+        SyntaxNode root = SourceTrees.Root(file);
+        bool namesAType = root.DescendantTokens()
+            .Any(token => token.IsKind(SyntaxKind.IdentifierToken) && InsertOnlyNames.Any(name => token.ValueText.StartsWith(name, StringComparison.Ordinal)));
+        bool namesATable = root.DescendantNodes()
+            .Select(StringText)
+            .Any(text => text is not null && InsertOnlyNames.Any(name => text.Contains(name, StringComparison.Ordinal)));
+        return namesAType || namesATable;
+    }
 
-    // The types, their configurations and the tables: AuditLogEntry, AuditLogEntryConfiguration, AuditLogEntries;
-    // StoredEvent and StoredEventRow, StoredEventConfiguration, StoredEvents.
-    [GeneratedRegex(@"\b(?:AuditLogEntr|StoredEvent)")]
-    private static partial Regex NamesInsertOnlyRecords();
+    private static string? StringText(SyntaxNode node) => node switch
+    {
+        LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression) => literal.Token.ValueText,
+        InterpolatedStringTextSyntax text => text.TextToken.ValueText,
+        _ => null,
+    };
 
-    // ExecuteUpdate(Async), ExecuteDelete(Async), ExecuteSql(Async/Interpolated/Raw), every *SqlRaw variant, and
-    // SqlQuery(Raw), which runs any statement it is given, such as DELETE ... RETURNING.
-    [GeneratedRegex(@"\b(?:ExecuteUpdate|ExecuteDelete|ExecuteSql|SqlQuery|\w*SqlRaw)\w*\s*[<(]")]
-    private static partial Regex BulkOrRawSqlCall();
+    private static IEnumerable<InvocationExpressionSyntax> BulkOrRawSqlCalls(string file) =>
+        SourceTrees.Root(file).DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Where(call => SourceTrees.LastName(call.Expression) is { } name
+                && (BulkOrRawSqlPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal)) || name.Contains("SqlRaw", StringComparison.Ordinal)));
+
+    /// <summary>
+    /// Each write of an audit entry in <paramref name="file"/>: a <c>new AuditLogEntry</c>, a target-typed <c>new()</c>
+    /// assigned to an <c>AuditLogEntry</c> variable, or an Add, Attach or Update on <c>Set&lt;AuditLogEntry&gt;()</c>.
+    /// </summary>
+    private static IEnumerable<SyntaxNode> AuditEntryWrites(string file) =>
+        SourceTrees.Root(file).DescendantNodes().Where(node => node switch
+        {
+            ObjectCreationExpressionSyntax creation => SourceTrees.LastName(creation.Type) == "AuditLogEntry",
+            ImplicitObjectCreationExpressionSyntax creation =>
+                creation.Parent is EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax declaration } }
+                && SourceTrees.LastName(declaration.Type) == "AuditLogEntry",
+            InvocationExpressionSyntax call =>
+                call.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax set } write
+                && WritePrefixes.Any(prefix => write.Name.Identifier.ValueText.StartsWith(prefix, StringComparison.Ordinal))
+                && IsAuditEntrySet(set),
+            _ => false,
+        });
+
+    /// <summary>Whether <paramref name="call"/> is a generic call with no arguments on the audit entry type, such as <c>Set&lt;AuditLogEntry&gt;()</c>.</summary>
+    private static bool IsAuditEntrySet(InvocationExpressionSyntax call)
+    {
+        SyntaxNode method = call.Expression is MemberAccessExpressionSyntax access ? access.Name : call.Expression;
+        return method is GenericNameSyntax generic
+            && generic.TypeArgumentList.Arguments.Count == 1
+            && SourceTrees.LastName(generic.TypeArgumentList.Arguments[0]) == "AuditLogEntry"
+            && call.ArgumentList.Arguments.Count == 0;
+    }
 }

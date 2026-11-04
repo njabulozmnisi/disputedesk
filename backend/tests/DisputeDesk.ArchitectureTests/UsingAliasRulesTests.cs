@@ -1,6 +1,6 @@
-using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace DisputeDesk.ArchitectureTests;
 
@@ -11,18 +11,27 @@ namespace DisputeDesk.ArchitectureTests;
 /// the other qualified from the DisputeDesk root, which C# resolves against each enclosing namespace (C# language
 /// specification, "Namespace and type names").
 /// </summary>
-public partial class UsingAliasRulesTests
+public class UsingAliasRulesTests
 {
     [Fact]
     public void SourceAndTests_UsingAliasDirective_IsAbsent()
     {
         var violations = SourceAndTestFiles()
-            .SelectMany(file => File.ReadLines(file).Select((line, index) => (file, line, number: index + 1)))
-            .Where(entry => UsingAliasDirective().IsMatch(entry.line))
-            .Select(entry => $"{Path.GetRelativePath(SourceRoots.Repo, entry.file)}:{entry.number}: {entry.line.Trim()}")
+            .SelectMany(UsingDirectives)
+            .Where(directive => directive.Alias is not null)
+            .Select(directive => SourceTrees.Describe(directive.GetLocation()))
             .ToList();
 
         Assert.True(violations.Count == 0, "Using alias directives found:\n" + string.Join('\n', violations));
+    }
+
+    [Fact]
+    public void SourceAndTests_UsingDirectives_AreFoundInThisFile()
+    {
+        // Proves the scan reads the using directives, so an empty violation list is not a scan that found nothing.
+        string thisFile = Path.Combine(SourceRoots.Tests, "DisputeDesk.ArchitectureTests", nameof(UsingAliasRulesTests) + ".cs");
+
+        Assert.Contains(UsingDirectives(thisFile), directive => directive.Name?.ToString() == "System.Xml.Linq");
     }
 
     [Fact]
@@ -78,23 +87,8 @@ public partial class UsingAliasRulesTests
         Assert.Equal(expected, MsBuildUsingAliases(project).Any());
     }
 
-    [Theory]
-    [InlineData("using Wire = DisputeDesk.Contracts.Disputes;", true)]
-    [InlineData("using ActorType = DisputeDesk.Domain.Disputes.ActorType;", true)]
-    [InlineData("global using Json = System.Text.Json;", true)]
-    [InlineData("    using Pair = (int Left, int Right);", true)]
-    [InlineData("using Names = System.Collections.Generic.List<string>;", true)]
-    [InlineData("using DisputeDesk.Domain.Disputes;", false)]
-    [InlineData("global using global::System;", false)]
-    [InlineData("using static System.Math;", false)]
-    [InlineData("using var activity = Source.StartActivity();", false)]
-    [InlineData("using IServiceScope scope = provider.CreateScope();", false)]
-    [InlineData("using (var scope = provider.CreateScope())", false)]
-    [InlineData("// using Wire = DisputeDesk.Contracts.Disputes;", false)]
-    public void UsingAliasDirective_SampleLine_IsMatchedOnlyForAnAlias(string line, bool expected)
-    {
-        Assert.Equal(expected, UsingAliasDirective().IsMatch(line));
-    }
+    private static IEnumerable<UsingDirectiveSyntax> UsingDirectives(string file) =>
+        SourceTrees.Root(file).DescendantNodes().OfType<UsingDirectiveSyntax>();
 
     private static IEnumerable<string> SourceAndTestFiles() =>
         new[] { SourceRoots.Src, SourceRoots.Tests, SourceRoots.Stubs }
@@ -105,11 +99,6 @@ public partial class UsingAliasRulesTests
         Directory.EnumerateFiles(SourceRoots.Backend, "*.csproj", SearchOption.AllDirectories)
             .Concat(Directory.EnumerateFiles(SourceRoots.Backend, "*.props", SearchOption.AllDirectories))
             .Where(file => !SourceRoots.IsBuildOutput(file));
-
-    // Matched one line at a time: `using` (or `global using`), one name, then `=`: an alias. A using declaration
-    // (`using var x =`, `using Type x =`) has two names before the `=`, and a using statement opens a parenthesis.
-    [GeneratedRegex(@"^\s*(?:global\s+)?using\s+@?\w+\s*=")]
-    private static partial Regex UsingAliasDirective();
 
     // `Using` items with `Alias` metadata, written as an attribute or as a child element (Microsoft Learn, Item element
     // (MSBuild): "Specify metadata as attributes"). The XML parser skips comments and joins multi-line elements. Names are
