@@ -504,7 +504,7 @@ Every successful action, including withdrawal and SLA escalation, publishes `dis
 - Each event is written to the outbox in the same database transaction as the change it describes. If that transaction rolls back, nothing is published.
 - Events carry no personal data: no names, ID numbers, account or card numbers, amounts, notes, customer ID or actor identity [ASSUMPTION: customer ID and amount are also left out; consumers read detail through FR-30].
 - Delivery is at least once. The event ID is set when the outbox row is written and stays the same across redelivery. Events for one dispute are published in the order they were committed.
-- Enum values (status, action, reason, outcome, actor type) use one wire casing, camelCase (for example `underReview`, `startReview`, `duplicateCharge`), in both the API and the events, serialised by `JsonStringEnumConverter(JsonNamingPolicy.CamelCase)`. C# enum members are PascalCase, and Postgres stores the member names. Settled on 2026-10-26.
+- Enum values (status, action, reason, outcome, actor type) use one wire casing, camelCase (for example `underReview`, `startReview`, `duplicateCharge`), in both the API and the events, serialised by the one camelCase enum converter (AD-5). C# enum members are PascalCase, and Postgres stores the member names. Settled on 2026-10-26.
 - Each type has a committed JSON Schema. A test checks serialised samples against it, and checks that v1 sample JSON still deserialises.
 
 ### 4.10 Demo seed data
@@ -572,7 +572,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - **NFR-API-3:** lists use keyset pagination with opaque cursors.
 - **NFR-API-4:** each action has its own endpoint, named after the action. There is no generic "update status" endpoint.
 - **NFR-API-5:** customer endpoint responses never contain an actor's identity or an SLA, and Escalated is mapped as FR-17 describes.
-- **NFR-API-6:** money travels as decimal strings, and enum values use camelCase (FR-28).
+- **NFR-API-6:** money travels as decimal strings, and enum values use camelCase (FR-28). One converter (AD-5) reads an enum in a JSON request body only from its exact camelCase name; a number, a list or any other casing is refused with 400 `validation`. Settled on 2026-11-03 (D5).
 
 ### 5.5 Security (primary)
 
