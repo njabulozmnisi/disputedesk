@@ -8,4 +8,8 @@
     <ProjectReference Include="..\..\src\DisputeDesk.Worker\DisputeDesk.Worker.csproj" />
     <ProjectReference Include="..\..\stubs\DisputeDesk.CoreBankingStub\DisputeDesk.CoreBankingStub.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+  </ItemGroup>
 </Project>

@@ -12,4 +12,9 @@
          advisory. NuGetAuditMode defaults to `all` (transitive packages too) for net10.0. -->
     <NuGetAuditLevel>high</NuGetAuditLevel>
   </PropertyGroup>
+
+  <!-- The production projects' banned APIs (BannedApiAnalyzers, RS0030); the test projects add tests/BannedSymbols.txt. -->
+  <ItemGroup Condition="'$(DisputeDeskTestProject)' != 'true'">
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+  </ItemGroup>
 </Project>

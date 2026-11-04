@@ -1,0 +1,2 @@
+// Test projects (BannedApiAnalyzers: one documentation ID per line, then ";" and the reason).
+T:Microsoft.Extensions.Logging.ILoggerProvider;Capture logs with FakeLogCollector (Microsoft.Extensions.Diagnostics.Testing), not a hand-written provider

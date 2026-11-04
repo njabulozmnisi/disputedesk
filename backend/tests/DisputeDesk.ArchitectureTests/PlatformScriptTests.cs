@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace DisputeDesk.ArchitectureTests;
 
@@ -105,11 +106,21 @@ public partial class PlatformScriptTests
     public void ApiProgram_ForwardedHeaders_RunFirstInThePipeline()
     {
         // 6.6 AC1: before anything reads the client address, the scheme or the host.
-        string program = File.ReadAllText(Path.Combine(SourceRoots.Src, "DisputeDesk.Api/Program.cs"));
-        string pipeline = program[program.IndexOf("builder.Build();", StringComparison.Ordinal)..];
+        List<InvocationExpressionSyntax> calls =
+            [.. SourceTrees.Root(Path.Combine(SourceRoots.Src, "DisputeDesk.Api", "Program.cs")).DescendantNodes().OfType<InvocationExpressionSyntax>()];
+        InvocationExpressionSyntax build = calls.Single(call => IsCallOn(call, "builder") && SourceTrees.LastName(call.Expression) == "Build");
 
-        Assert.Equal("app.UseForwardedHeaders();", FirstMiddleware().Match(pipeline).Value);
+        string? firstMiddleware = calls
+            .Where(call => call.SpanStart > build.SpanStart && IsCallOn(call, "app"))
+            .Select(call => SourceTrees.LastName(call.Expression))
+            .FirstOrDefault(name => name is not null && name.StartsWith("Use", StringComparison.Ordinal));
+
+        Assert.Equal("UseForwardedHeaders", firstMiddleware);
     }
+
+    /// <summary>Whether <paramref name="call"/> calls a method on the variable <paramref name="variable"/> (<c>app.UseX()</c>).</summary>
+    private static bool IsCallOn(InvocationExpressionSyntax call, string variable) =>
+        call.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax receiver } && receiver.Identifier.ValueText == variable;
 
     [Fact]
     public async Task DevLoginScript_Help_DescribesAHeadlessSignInThatWritesACookieJar()
@@ -168,8 +179,4 @@ public partial class PlatformScriptTests
 
     [GeneratedRegex(@"\n      ForwardedHeaders__TrustedNetwork: (?<network>\S+)\n")]
     private static partial Regex ApiTrustedNetwork();
-
-    /// <summary>The first app.Use... call.</summary>
-    [GeneratedRegex(@"app\.Use\w+\([^)]*\);")]
-    private static partial Regex FirstMiddleware();
 }

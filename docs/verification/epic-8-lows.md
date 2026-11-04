@@ -18,3 +18,5 @@
 | 8.6 | review | `e2e/tests/spa-transactions.spec.ts:12` | `gateway` duplicates the shared `origin`; import `origin`. |
 | 8.6 | review | `linking-start`, `linking-rate-limits`, `linking-screens` (ten polls) | Poll the value (`toBe(4)`) instead of a boolean, so a timeout shows the count. |
 | 8.6 | review | `linking-screens.spec.ts:300` and the other absence checks | `.rejects.toThrow(errors.TimeoutError)` states the intent exactly. |
+| 8.5 | review | `backend/tests/DisputeDesk.ArchitectureTests/SourceTrees.cs:21` | A file that fails to parse is not detected (Roslyn recovers); add one fact asserting no error diagnostics for every scanned file. |
+| 8.5 | review | `infra/tests/DisputeDesk.PlatformTests/DisputeDesk.PlatformTests.csproj` | The "change both together" comment no longer holds once backend tests carry BannedApiAnalyzers; reword to "the shared compiler settings". |
