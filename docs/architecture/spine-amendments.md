@@ -83,6 +83,9 @@ The human's decisions changed or confirmed these rules; unlike the rows above, t
 | AD-7 | 2026-11-03 | The two key-ring mechanisms are kept: the human answered no to one Postgres key ring in both environments (audit D7, DES-9) | simplicity audit mitigation plan |
 | AD-12 | 2026-11-03 | The count of IP permits a rejected request spends is no longer stated: FR-8 and AD-12 cite only Microsoft Learn's documented chained-limiter behaviour, and the test stays as a regression pin (audit D14, DES-6) | simplicity audit mitigation plan |
 | AD-28 | 2026-11-03 | AWS-only mechanisms stay as built until an apply is possible (audit D11, DES-10); the seven Terraform modules stay, ready for a second environment (audit D8, INF-6) | simplicity audit mitigation plan |
+| AD-8 | 2026-11-03 | Every route checks in the framework's order, 401, 403, 400, 404, 409, 422, then 400 for a rule that needs the loaded resource, raise included; 403 before 404 still stops ID probing. PRD FR-24 and the initiative's R20 state the same order; `.DisableValidation()`, the body check after the lookup and raise's second order go | human decision |
+| AD-8 | 2026-11-04 | Resolve's `AcceptsMetadata` with no content types is removed: a `text/plain` resolve gets the cookie fallback policy's 401 with no `WWW-Authenticate: Bearer` for a missing, refused or valid token. Replaces the 2026-10-30 row above | human decision |
+| AD-14a | 2026-11-04 | A refused token on a `text/plain` resolve writes no `Denied` entry, the one unaudited operations refusal | human decision |
 
 ## What else left the spine on 2026-11-04
 
