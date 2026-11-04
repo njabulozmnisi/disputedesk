@@ -347,7 +347,6 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 - **Details:**
   - **The port and stub, shipped whole:**
     - `MatchCustomerAsync(idNumber, accountNumber)` → customer ID and the cellphone on record. This is a POST body; the ID number is never in a URL.
-    - `GetAccountsAsync(customerId)`
     - `GetTransactionsAsync(customerId, cursor, limit)`, merged across the customer's accounts, keyset ordered
     - `GetTransactionAsync(customerId, accountRef, transactionId)`
     - `ISimSwapCheck` against the stub

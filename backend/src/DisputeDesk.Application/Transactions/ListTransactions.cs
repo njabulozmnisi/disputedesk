@@ -1,4 +1,3 @@
-using System.Globalization;
 using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Application.Disputes;
 using DisputeDesk.Contracts.Transactions;
@@ -70,7 +69,7 @@ public sealed class ListTransactions(CurrentCustomer currentCustomer, ICoreBanki
             transaction.AccountLast4,
             transaction.TransactionDate,
             transaction.Description,
-            new Money(transaction.Amount.ToString("0.00", CultureInfo.InvariantCulture), transaction.Currency),
+            DisputeWire.ToMoney(transaction.Amount, transaction.Currency),
             ToWire(transaction.Direction),
             ToWire(transaction.Kind),
             ToWire(transaction.State),

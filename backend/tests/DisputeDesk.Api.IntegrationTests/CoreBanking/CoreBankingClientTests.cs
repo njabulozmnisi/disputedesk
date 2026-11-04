@@ -80,17 +80,6 @@ public sealed class CoreBankingClientTests(CoreBankingStubFactory stub) : IClass
     }
 
     [Fact]
-    public async Task GetAccountsAsync_CustomerWithTwoAccounts_ReturnsBothByReferenceAndLast4()
-    {
-        await using ServiceProvider services = CoreBankingServices.Build(stub.BaseUrl);
-        ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
-
-        Result<IReadOnlyList<Account>> result = await client.GetAccountsAsync(CustomerA, CancellationToken);
-
-        Assert.Equal([new Account("ACC-A-1", "0011"), new Account("ACC-A-2", "0012")], result.Value);
-    }
-
-    [Fact]
     public async Task GetTransactionsAsync_CustomerWithTwoAccounts_PagesThroughBothAccountsMergedNewestFirst()
     {
         await using ServiceProvider services = CoreBankingServices.Build(stub.BaseUrl);

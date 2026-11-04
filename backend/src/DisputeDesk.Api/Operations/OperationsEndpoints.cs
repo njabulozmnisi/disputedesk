@@ -112,7 +112,7 @@ public static class OperationsEndpoints
         OperationsActionHandler handler,
         DisputeActionMetrics metrics,
         CancellationToken cancellationToken) =>
-        ActAsync(disputeId, DisputeAction.StartReview, "startReview", resolve: null, handler, metrics, cancellationToken);
+        ActAsync(disputeId, DisputeAction.StartReview, resolve: null, handler, metrics, cancellationToken);
 
     /// <summary>
     /// Escalates a submitted or under-review dispute (FR-22). Needs the <c>dispute.escalate</c> role and a mapped token
@@ -125,7 +125,7 @@ public static class OperationsEndpoints
         OperationsActionHandler handler,
         DisputeActionMetrics metrics,
         CancellationToken cancellationToken) =>
-        ActAsync(disputeId, DisputeAction.Escalate, "escalate", resolve: null, handler, metrics, cancellationToken);
+        ActAsync(disputeId, DisputeAction.Escalate, resolve: null, handler, metrics, cancellationToken);
 
     /// <summary>
     /// Resolves an under-review or escalated dispute with an outcome and a note for the customer (FR-23). Needs the
@@ -143,13 +143,12 @@ public static class OperationsEndpoints
         OperationsActionHandler handler,
         DisputeActionMetrics metrics,
         CancellationToken cancellationToken) =>
-        ActAsync(disputeId, DisputeAction.Resolve, "resolve", request, handler, metrics, cancellationToken);
+        ActAsync(disputeId, DisputeAction.Resolve, request, handler, metrics, cancellationToken);
 
     /// <summary>Runs one action and counts it only once it has committed (AD-20).</summary>
     private static async Task<Results<Ok<OperationsDisputeResponse>, ProblemHttpResult>> ActAsync(
         Guid disputeId,
         DisputeAction action,
-        string metricAction,
         ResolveDisputeRequest? resolve,
         OperationsActionHandler handler,
         DisputeActionMetrics metrics,
@@ -162,7 +161,7 @@ public static class OperationsEndpoints
         }
 
         OperationsDisputeResponse dispute = result.Value.Dispute;
-        metrics.RecordOperationsAction(metricAction);
+        metrics.RecordOperationsAction(action);
         if (action == DisputeAction.Resolve && dispute.Outcome is Contracts.Disputes.Outcome outcome)
         {
             metrics.RecordResolved(outcome, result.Value.SlaEscalated);

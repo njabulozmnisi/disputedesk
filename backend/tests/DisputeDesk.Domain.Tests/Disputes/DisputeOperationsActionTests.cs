@@ -170,17 +170,6 @@ public class DisputeOperationsActionTests
     }
 
     [Fact]
-    public void ActionNotAllowedWithDisputeStatus_CarriesTheStatusUnderDisputeStatus()
-    {
-        Error error = DisputeErrors.ActionNotAllowedWithDisputeStatus(DisputeStatus.Escalated);
-
-        Assert.Equal(ErrorKind.ActionNotAllowed, error.Kind);
-        Assert.Equal("action-not-allowed", error.Code);
-        Assert.Equal(["disputeStatus"], error.Extensions.Keys);
-        Assert.Equal(DisputeStatus.Escalated, error.Extensions["disputeStatus"]);
-    }
-
-    [Fact]
     public void StartReviewEscalateAndResolve_ThenReplayOfTheWholeStream_GivesTheSameDispute()
     {
         DisputeRaised raised = RaisedEvent();

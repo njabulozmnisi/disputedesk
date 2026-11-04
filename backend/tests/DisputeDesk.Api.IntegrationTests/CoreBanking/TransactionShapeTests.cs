@@ -72,7 +72,6 @@ public sealed partial class TransactionShapeTests(CoreBankingStubFactory stub) :
             string? cellphone = customer.GetProperty("cellphone").GetString();
 
             responses.Add(await GetAsync("transactions?limit=50", customerId));
-            responses.Add(await GetAsync("accounts", customerId));
             responses.Add(await PostAsync("customers/match", new { idNumber, accountNumber }));
             responses.Add(await PostAsync("sim-swap/check", new { cellphone }));
         }

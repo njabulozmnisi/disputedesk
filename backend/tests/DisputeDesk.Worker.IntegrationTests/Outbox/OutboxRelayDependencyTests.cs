@@ -1,3 +1,4 @@
+using DisputeDesk.Infrastructure;
 using DisputeDesk.Infrastructure.Outbox;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.Extensions.Hosting;
@@ -20,12 +21,34 @@ public class OutboxRelayDependencyTests(OutboxFixture outbox)
     [InlineData("   ")]
     public async Task WorkerHost_BlankBootstrapServers_StopsAtStartWithAnOptionsValidationError(string bootstrapServers)
     {
-        using IHost host = WorkerHost.CreateBuilder(["--environment", "Development", $"--Kafka:BootstrapServers={bootstrapServers}"]).Build();
+        using IHost host = WorkerHost.CreateBuilder(
+            ["--environment", "Development", $"--Kafka:BootstrapServers={bootstrapServers}", WorkerHostTests.UnreachablePostgresArgument]).Build();
 
         OptionsValidationException error = await Assert.ThrowsAsync<OptionsValidationException>(() => host.StartAsync(TestContext.Current.CancellationToken));
 
         Assert.Equal(typeof(KafkaOptions), error.OptionsType);
         Assert.Contains("BootstrapServers", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)] // missing: no argument, and none in the Worker's appsettings
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task WorkerHost_MissingOrBlankConnectionString_StopsAtStartNamingTheSettingWithoutItsValue(string? connectionString)
+    {
+        string[] args = ["--environment", "Development", "--Kafka:BootstrapServers=127.0.0.1:1"];
+        if (connectionString is not null)
+        {
+            args = [.. args, $"--ConnectionStrings:DisputeDesk={connectionString}"];
+        }
+
+        using IHost host = WorkerHost.CreateBuilder(args).Build();
+
+        OptionsValidationException error = await Assert.ThrowsAsync<OptionsValidationException>(() => host.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(typeof(ConnectionStringsOptions), error.OptionsType);
+        // The one failure is the fixed message: it names the setting and carries no value.
+        Assert.Equal(["ConnectionStrings:DisputeDesk is required."], error.Failures);
     }
 
     [Theory]
@@ -42,7 +65,6 @@ public class OutboxRelayDependencyTests(OutboxFixture outbox)
     }
 
     [Theory]
-    [InlineData("", "ConnectionStringMissing")]
     [InlineData("Host=127.0.0.1;Port=1;Username=relay-marker-user;Password=relay-marker-password", "NpgsqlException")]
     public async Task Relay_PostgresUnreachable_WarnsWithoutTheConnectionStringAndRetriesAtLeastEveryTenSeconds(string connectionString, string errorType)
     {
@@ -67,7 +89,7 @@ public class OutboxRelayDependencyTests(OutboxFixture outbox)
             });
             Assert.All(host.Logs.Snapshot().SelectMany(record => record.Attributes ?? []), attribute =>
                 Assert.DoesNotContain("relay-marker", attribute.Value?.ToString() ?? "", StringComparison.Ordinal));
-            // A missing connection string is a warning like any unreachable database, not an exception the relay throws.
+            // An unreachable database is a warning, not an exception the relay throws.
             Assert.All(ErrorTypes(host, "postgres"), type => Assert.Equal(errorType, type));
         }
     }

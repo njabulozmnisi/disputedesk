@@ -92,18 +92,6 @@ public sealed class MaskedFieldsTests
         Assert.Equal(CoreBankingErrors.Unavailable, result.Error);
     }
 
-    [Fact]
-    public async Task GetAccountsAsync_FullAccountNumber_ReturnsUnavailable()
-    {
-        await using FakeCoreBankingServer stub = await AnswerAsync("""[{"accountRef":"ACC-A-1","accountLast4":"1000000011"}]""");
-        await using ServiceProvider services = CoreBankingServices.Build(stub.BaseUrl);
-        ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
-
-        Result<IReadOnlyList<Account>> result = await client.GetAccountsAsync(CustomerA, CancellationToken);
-
-        Assert.Equal(CoreBankingErrors.Unavailable, result.Error);
-    }
-
     private static string Row(string accountLast4, string? maskedCard)
     {
         string card = maskedCard is null ? "null" : $"\"{maskedCard}\"";

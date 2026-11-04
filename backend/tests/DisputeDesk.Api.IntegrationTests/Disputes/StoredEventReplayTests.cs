@@ -42,28 +42,27 @@ public class StoredEventReplayTests(PostgresFixture postgres, TransactionsStub s
     }
 
     [Fact]
-    public async Task LoadDispute_OwnOthersAndUnknown_ReturnsOnlyTheOwnDisputeAtTheStateOfItsStream()
+    public async Task Replay_OwnOthersAndUnknown_ReturnsOnlyTheOwnDisputeAtTheStateOfItsStream()
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         Guid mine = await RaiseAsync(factory, "login-a", TransactionsApi.CustomerA, DisputesApi.Body(note: "Not me"));
         Guid theirs = await RaiseAsync(factory, "login-b", TransactionsApi.CustomerB, DisputesApi.Body("TXN-B-0027", "ACC-B-1"));
         await using AsyncServiceScope scope = ScopeFor(factory, TransactionsApi.CustomerA);
         IAppDbContext db = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        Dispute? own = await db.LoadDisputeAsync(mine, cancellationToken);
+        Dispute? own = await ReplayVisibleAsync(db, mine);
 
         Assert.NotNull(own);
         Assert.Equal(mine, own.Id);
         Assert.Equal(DisputeStatus.Submitted, own.Status);
         Assert.Equal(1, own.Version);
         Assert.Equal("Not me", own.Note);
-        Assert.Null(await db.LoadDisputeAsync(theirs, cancellationToken));
-        Assert.Null(await db.LoadDisputeAsync(Guid.CreateVersion7(stub.Now), cancellationToken));
+        Assert.Null(await ReplayVisibleAsync(db, theirs));
+        Assert.Null(await ReplayVisibleAsync(db, Guid.CreateVersion7(stub.Now)));
     }
 
     [Fact]
-    public async Task LoadDispute_RowOfAnUnknownEventType_ThrowsRatherThanReturnADisputeOrNotFound()
+    public async Task Replay_RowOfAnUnknownEventType_ThrowsRatherThanReturnADisputeOrNotFound()
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         Guid mine = await RaiseAsync(factory, "login-a", TransactionsApi.CustomerA, DisputesApi.Body());
@@ -87,7 +86,7 @@ public class StoredEventReplayTests(PostgresFixture postgres, TransactionsStub s
         await using AsyncServiceScope scope = ScopeFor(factory, TransactionsApi.CustomerA);
         IAppDbContext reader = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => reader.LoadDisputeAsync(mine, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ReplayVisibleAsync(reader, mine));
     }
 
     [Fact]
@@ -196,6 +195,19 @@ public class StoredEventReplayTests(PostgresFixture postgres, TransactionsStub s
     {
         using HttpClient browser = await factory.SignInLinkedAsync(loginSub, customerId);
         return (await CreatedAsync(browser, body)).GetProperty("disputeId").GetGuid();
+    }
+
+    /// <summary>
+    /// The dispute replayed from the stored event rows <paramref name="db"/> shows through the ownership filter, read as
+    /// the withdraw reads them; null when it shows none.
+    /// </summary>
+    private static async Task<Dispute?> ReplayVisibleAsync(IAppDbContext db, Guid disputeId)
+    {
+        List<StoredEventRow> rows = await db.Entities<StoredEventRow>().AsNoTracking()
+            .Where(row => row.DisputeId == disputeId)
+            .OrderBy(row => row.Version)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        return rows.Count == 0 ? null : Dispute.Replay([.. rows.Select(row => row.ToStoredEvent())]);
     }
 
     /// <summary>A request scope whose current customer is <paramref name="customerId"/>, as the Linked policy sets it.</summary>

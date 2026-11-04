@@ -6,7 +6,6 @@ using DisputeDesk.Api.Disputes;
 using DisputeDesk.Api.Errors;
 using DisputeDesk.Api.Health;
 using DisputeDesk.Api.Linking;
-using DisputeDesk.Api.Linking.RateLimiting;
 using DisputeDesk.Api.Operations;
 using DisputeDesk.Api.Security;
 using DisputeDesk.Api.Transactions;
@@ -61,14 +60,13 @@ builder.Services.AddDisputes();
 builder.Services.AddOperationsAuthentication();
 builder.Services.AddOperations();
 builder.Services.AddLinkingRoutes();
-builder.Services.AddLinkingStart();
-builder.Services.AddLinkingRateLimits();
+builder.Services.AddLinkingEndpoints();
 
 WebApplication app = builder.Build();
 
 // First, so everything after it sees the client address, scheme and host the gateway forwarded (AD-23).
 app.UseForwardedHeaders();
-app.UseSecurityHeaders();
+app.UseNoStoreOnApiResponses();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseAuthentication();
@@ -84,6 +82,6 @@ RouteGroupBuilder apiV1 = app.MapApiV1();
 apiV1.MapAuthentication();
 apiV1.MapCustomerRoutes().MapTransactions().MapDisputes();
 apiV1.MapOperations();
-apiV1.MapLinkingRoutes().MapLinkingStart().MapLinkingVerify();
+apiV1.MapLinkingRoutes().MapLinking();
 
 await app.RunAsync();

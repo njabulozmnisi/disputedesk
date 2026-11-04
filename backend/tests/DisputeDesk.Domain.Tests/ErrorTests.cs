@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace DisputeDesk.Domain.Tests;
 
 public class ErrorTests
@@ -12,7 +14,7 @@ public class ErrorTests
         { Error.NotFound("some-slug", "A message."), ErrorKind.NotFound },
         { Error.Validation("some-slug", "A message.", "Note"), ErrorKind.Validation },
         { Error.Forbidden("some-slug", "A message."), ErrorKind.Forbidden },
-        { Error.ActionNotAllowed("some-slug", "A message.", "status", SampleStatus.UnderReview), ErrorKind.ActionNotAllowed },
+        { Error.ActionNotAllowed("some-slug", "A message.", new Dictionary<string, object?> { ["status"] = SampleStatus.UnderReview }), ErrorKind.ActionNotAllowed },
         { Error.Conflict("some-slug", "A message."), ErrorKind.Conflict },
         { Error.BusinessRule("some-slug", "A message."), ErrorKind.BusinessRule },
         { Error.Unavailable("some-slug", "A message."), ErrorKind.Unavailable },
@@ -54,12 +56,27 @@ public class ErrorTests
     }
 
     [Fact]
-    public void ActionNotAllowed_WithCurrentStatus_AddsItAsTheNamedExtension()
+    public void ActionNotAllowed_WithExtensions_CarriesTheCurrentStatus()
     {
-        var error = Error.ActionNotAllowed("action-not-allowed", "A resolved dispute cannot be withdrawn.", "customerStatus", SampleStatus.UnderReview);
+        var error = Error.ActionNotAllowed("action-not-allowed", "A resolved dispute cannot be withdrawn.", new Dictionary<string, object?> { ["customerStatus"] = SampleStatus.UnderReview });
 
         Assert.Equal(SampleStatus.UnderReview, error.Extensions["customerStatus"]);
         Assert.Empty(error.FieldErrors);
+    }
+
+    [Fact]
+    public void DomainMethods_Parameters_NoneIsSystemEnum()
+    {
+        // AD-1: a wire value is built into an error in Application, so Domain never takes an enum it does not own.
+        string[] takingEnum =
+        [
+            .. typeof(Error).Assembly.GetTypes()
+                .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                .Where(method => method.GetParameters().Any(parameter => parameter.ParameterType == typeof(Enum)))
+                .Select(method => $"{method.DeclaringType?.Name}.{method.Name}"),
+        ];
+
+        Assert.Empty(takingEnum);
     }
 
     [Fact]

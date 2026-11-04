@@ -145,16 +145,6 @@ public class DisputeWithdrawTests
         Assert.Equal("Not me", replayed.Note); // the raise's note, not the withdraw's
     }
 
-    [Fact]
-    public void ActionNotAllowedAs_CustomerStatus_CarriesItUnderCustomerStatus()
-    {
-        Error error = DisputeErrors.ActionNotAllowedAs(DisputeStatus.Withdrawn);
-
-        Assert.Equal(ErrorKind.ActionNotAllowed, error.Kind);
-        Assert.Equal("action-not-allowed", error.Code);
-        Assert.Equal(DisputeStatus.Withdrawn, error.Extensions["customerStatus"]);
-    }
-
     /// <summary>FR-24, every cell: the action each status allows.</summary>
     public static TheoryData<DisputeStatus, DisputeAction, bool> AllowedActionCells => new()
     {

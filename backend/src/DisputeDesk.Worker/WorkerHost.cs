@@ -17,6 +17,11 @@ public static class WorkerHost
             .BindConfiguration(KafkaOptions.SectionName)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        // The error names the key, never its value (Microsoft Learn, Options pattern: options validation).
+        builder.Services.AddOptions<ConnectionStringsOptions>()
+            .BindConfiguration(ConnectionStringsOptions.SectionName)
+            .Validate(options => !string.IsNullOrWhiteSpace(options.DisputeDesk), "ConnectionStrings:DisputeDesk is required.")
+            .ValidateOnStart();
         builder.Services.AddHostedService<OutboxRelay>();
         builder.Services.AddHostedService<SlaSweep>();
         return builder;

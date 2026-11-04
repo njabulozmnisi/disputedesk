@@ -32,14 +32,14 @@ public sealed class CoreBankingResilienceTests
     }
 
     [Fact]
-    public async Task GetAccountsAsync_StubStallsTheBody_ReturnsUnavailableWithinFiveSeconds()
+    public async Task GetTransactionsAsync_StubStallsTheBody_ReturnsUnavailableWithinFiveSeconds()
     {
-        await using FakeCoreBankingServer stalledStub = await FakeCoreBankingServer.StalledBodyAsync("[]");
+        await using FakeCoreBankingServer stalledStub = await FakeCoreBankingServer.StalledBodyAsync("{\"items\":[],\"nextCursor\":null}");
         await using ServiceProvider services = CoreBankingServices.Build(stalledStub.BaseUrl);
         ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
 
         var elapsed = Stopwatch.StartNew();
-        Result<IReadOnlyList<Account>> result = await client.GetAccountsAsync(CustomerA, CancellationToken);
+        Result<TransactionPage> result = await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken);
         elapsed.Stop();
 
         Assert.Equal(CoreBankingErrors.Unavailable, result.Error);
@@ -47,7 +47,7 @@ public sealed class CoreBankingResilienceTests
     }
 
     [Fact]
-    public async Task GetAccountsAsync_CallerCancels_ThrowsInsteadOfReturningUnavailable()
+    public async Task GetTransactionsAsync_CallerCancels_ThrowsInsteadOfReturningUnavailable()
     {
         await using FakeCoreBankingServer slowStub = await FakeCoreBankingServer.SlowAsync();
         await using ServiceProvider services = CoreBankingServices.Build(slowStub.BaseUrl);
@@ -55,7 +55,7 @@ public sealed class CoreBankingResilienceTests
         using var caller = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
         caller.CancelAfter(TimeSpan.FromMilliseconds(500));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetAccountsAsync(CustomerA, caller.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, caller.Token));
     }
 
     [Fact]
@@ -74,52 +74,52 @@ public sealed class CoreBankingResilienceTests
     }
 
     [Fact]
-    public async Task GetAccountsAsync_StubFailing_RetriesTwiceThenReturnsUnavailable()
+    public async Task GetTransactionsAsync_StubFailing_RetriesTwiceThenReturnsUnavailable()
     {
         await using FakeCoreBankingServer failingStub = await FakeCoreBankingServer.FailingAsync();
         await using ServiceProvider services = CoreBankingServices.Build(failingStub.BaseUrl);
         ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
 
-        Result<IReadOnlyList<Account>> result = await client.GetAccountsAsync(CustomerA, CancellationToken);
+        Result<TransactionPage> result = await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken);
 
         Assert.Equal(CoreBankingErrors.Unavailable, result.Error);
         Assert.Equal(3, failingStub.RequestCount); // the first attempt and two retries
     }
 
     [Fact]
-    public async Task GetAccountsAsync_StubAnswersMalformedJson_ReturnsUnavailable()
+    public async Task GetTransactionsAsync_StubAnswersMalformedJson_ReturnsUnavailable()
     {
         await using FakeCoreBankingServer malformedStub = await FakeCoreBankingServer.MalformedAsync();
         await using ServiceProvider services = CoreBankingServices.Build(malformedStub.BaseUrl);
         ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
 
-        Result<IReadOnlyList<Account>> result = await client.GetAccountsAsync(CustomerA, CancellationToken);
+        Result<TransactionPage> result = await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken);
 
         Assert.Equal(CoreBankingErrors.Unavailable, result.Error);
     }
 
     [Fact]
-    public async Task GetAccountsAsync_AfterFiveFailures_CircuitOpensAndNoRequestIsSent()
+    public async Task GetTransactionsAsync_AfterFiveFailures_CircuitOpensAndNoRequestIsSent()
     {
         await using FakeCoreBankingServer failingStub = await FakeCoreBankingServer.FailingAsync();
         await using ServiceProvider services = CoreBankingServices.Build(failingStub.BaseUrl);
         ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
 
-        await client.GetAccountsAsync(CustomerA, CancellationToken); // 3 failed attempts
-        await client.GetAccountsAsync(CustomerA, CancellationToken); // 2 more failures open the circuit; the third attempt is refused
-        Result<IReadOnlyList<Account>> result = await client.GetAccountsAsync(CustomerA, CancellationToken);
+        await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken); // 3 failed attempts
+        await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken); // 2 more failures open the circuit; the third attempt is refused
+        Result<TransactionPage> result = await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken);
 
         Assert.Equal(CoreBankingErrors.Unavailable, result.Error);
         Assert.Equal(5, failingStub.RequestCount);
     }
 
     [Fact]
-    public async Task GetAccountsAsync_FailuresWithOneSuccessInTheWindow_CircuitStaysClosed()
+    public async Task GetTransactionsAsync_FailuresWithOneSuccessInTheWindow_CircuitStaysClosed()
     {
-        // /accounts always fails with 500; anything else gets 404, which the circuit breaker counts as a success.
+        // /transactions always fails with 500; anything else gets 404, which the circuit breaker counts as a success.
         await using FakeCoreBankingServer stub = await FakeCoreBankingServer.StartAsync(context =>
         {
-            context.Response.StatusCode = context.Request.Path == "/accounts"
+            context.Response.StatusCode = context.Request.Path == "/transactions"
                 ? StatusCodes.Status500InternalServerError
                 : StatusCodes.Status404NotFound;
             return Task.CompletedTask;
@@ -127,11 +127,11 @@ public sealed class CoreBankingResilienceTests
         await using ServiceProvider services = CoreBankingServices.Build(stub.BaseUrl);
         ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
 
-        await client.GetAccountsAsync(CustomerA, CancellationToken);                                  // 3 failures
+        await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken);                                  // 3 failures
         await client.GetTransactionAsync(CustomerA, "ACC-A-1", "TXN-A-0001", CancellationToken);    // 1 success
-        await client.GetAccountsAsync(CustomerA, CancellationToken);                                  // 3 more failures
+        await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken);                                  // 3 more failures
         int requestsBefore = stub.RequestCount;
-        await client.GetAccountsAsync(CustomerA, CancellationToken);
+        await client.GetTransactionsAsync(CustomerA, cursor: null, limit: 20, CancellationToken);
 
         Assert.Equal(7, requestsBefore);
         Assert.Equal(requestsBefore + 3, stub.RequestCount); // the circuit is still closed, so every attempt reached the stub

@@ -8,13 +8,19 @@ namespace DisputeDesk.Worker.IntegrationTests;
 
 public class WorkerHostTests
 {
+    /// <summary>
+    /// The command-line argument for a connection string nothing listens on (port 1), for a host that must start but
+    /// never reach a real database, whatever the machine's environment sets.
+    /// </summary>
+    public const string UnreachablePostgresArgument = "--ConnectionStrings:DisputeDesk=Host=127.0.0.1;Port=1;Username=unused;Password=unused";
+
     private static readonly TimeSpan ShutdownBudget = TimeSpan.FromSeconds(10);
 
     [Fact]
     public async Task WorkerHost_StartThenStop_CompletesCleanly()
     {
         // Development turns on ValidateOnBuild and ValidateScopes, so a broken registration fails here.
-        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development"]);
+        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development", UnreachablePostgresArgument]);
         // No SLA sweep: a started host would escalate the due disputes of whatever database its configuration names.
         builder.Services.Remove(builder.Services.Single(service => service.ImplementationType == typeof(SlaSweep)));
         using IHost host = builder.Build();

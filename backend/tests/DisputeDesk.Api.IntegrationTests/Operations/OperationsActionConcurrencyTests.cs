@@ -113,6 +113,32 @@ public class OperationsActionConcurrencyTests(PostgresFixture postgres, Transact
     }
 
     [Fact]
+    public async Task Escalate_OneClashWhileTheClockMoves_RetriesWithTheRequestsOneClockReading()
+    {
+        // The clock moves an hour on as the first save runs: a retry that read the clock again would store the later instant.
+        var clock = new TestClock();
+        DateTimeOffset requestAt = clock.NowAsStored;
+        var appendFirst = new AppendNextVersionInterceptor();
+        var moveClock = new AdvanceClockOnNextAppendInterceptor(clock, TimeSpan.FromHours(1));
+        await using var factory = new ApiFactory(
+            await postgres.CreateMigratedDatabaseAsync(),
+            configureServices: services => services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(appendFirst, moveClock)),
+            clock: clock);
+        Guid disputeId = await factory.RaiseDirectlyAsync("login-a", requestAt.AddMinutes(-30));
+        appendFirst.Arm(Next(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), disputeId, 2, requestAt.AddMinutes(-10)), DisputeStatus.UnderReview);
+        moveClock.Arm();
+        using HttpClient tool = factory.CreateTool();
+
+        HttpResponseMessage response = await factory.ActAsMappedAsync(tool, disputeId, "escalate");
+
+        Assert.Equal(1, appendFirst.Appended);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        List<StoredEventRow> stream = await factory.StreamAsync(disputeId);
+        Assert.Equal([nameof(DisputeRaised), nameof(ReviewStarted), nameof(DisputeEscalated)], stream.Select(row => row.EventType));
+        Assert.Equal(requestAt, stream[2].OccurredAtUtc);
+    }
+
+    [Fact]
     public async Task StartReview_DisputeEscalatedCommittedAhead_Gets409EscalatedOnItsRetry()
     {
         var appendFirst = new AppendNextVersionInterceptor();

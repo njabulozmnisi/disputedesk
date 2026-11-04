@@ -38,7 +38,8 @@ public class OutboxRelayHeartbeatTests(OutboxFixture outbox)
             await take.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        string connectionString = state == RelayState.BackingOff ? "" : outbox.ConnectionString;
+        // Backing off: nothing listens on port 1, so every loop fails to reach Postgres and waits.
+        string connectionString = state == RelayState.BackingOff ? "Host=127.0.0.1;Port=1;Username=unused;Password=unused" : outbox.ConnectionString;
         await using RelayHost host = await RelayHost.StartAsync(clock, connectionString, outbox.BootstrapServers);
 
         for (int step = 0; step < 4; step++)

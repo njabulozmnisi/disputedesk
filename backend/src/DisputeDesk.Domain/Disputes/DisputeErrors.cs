@@ -5,16 +5,17 @@ namespace DisputeDesk.Domain.Disputes;
 /// <summary>The expected failures of the dispute actions. The codes are AD-3 problem slugs; messages never echo a value.</summary>
 public static class DisputeErrors
 {
-    public static readonly Error AlreadyDisputed = Error.Conflict("already-disputed", "This transaction has already been disputed.");
+    /// <summary>
+    /// No such dispute, or not this caller's (AD-11): every dispute lookup answers the same 404. The message never echoes
+    /// the ID (AD-3).
+    /// </summary>
+    public static readonly Error NotFound = Error.NotFound("not-found", "There is no such dispute.");
 
     /// <summary>
-    /// <see cref="AlreadyDisputed"/> for a customer: the problem names their dispute and its status as they see it
-    /// (AD-13), <paramref name="customerStatus"/>, which Application maps.
+    /// The transaction already has a dispute. A customer gets it with their dispute and its status as they see it,
+    /// built in Application (AD-13).
     /// </summary>
-    public static Error AlreadyDisputedAs(Guid disputeId, Enum customerStatus) => Error.Conflict(
-        "already-disputed",
-        AlreadyDisputed.Message,
-        new Dictionary<string, object?> { ["disputeId"] = disputeId, ["customerStatus"] = customerStatus });
+    public static readonly Error AlreadyDisputed = Error.Conflict("already-disputed", "This transaction has already been disputed.");
 
     /// <summary>
     /// A version clash (AD-15): another change appended the same stored event version first, so
@@ -24,26 +25,11 @@ public static class DisputeErrors
         Error.Conflict("action-not-allowed", "The dispute was changed by another action at the same time.");
 
     /// <summary>
-    /// The action is not allowed in the dispute's status (FR-24). Each handler returns it as its caller sees the status,
-    /// through <see cref="ActionNotAllowedAs"/> for a customer.
+    /// The action is not allowed in the dispute's status (FR-24). Each handler returns it with the status as its caller
+    /// sees it, built in Application.
     /// </summary>
     public static readonly Error ActionNotAllowed =
         new(ErrorKind.ActionNotAllowed, "action-not-allowed", "This action is not allowed in the dispute's current status.");
-
-    /// <summary>
-    /// <see cref="ActionNotAllowed"/> for a customer: the problem carries the status as they see it (AD-13),
-    /// <paramref name="customerStatus"/>, which Application maps.
-    /// </summary>
-    public static Error ActionNotAllowedAs(Enum customerStatus) =>
-        Error.ActionNotAllowed("action-not-allowed", ActionNotAllowed.Message, "customerStatus", customerStatus);
-
-    /// <summary>
-    /// <see cref="ActionNotAllowed"/> for operations: the problem carries the internal status under <c>disputeStatus</c>,
-    /// because RFC 9457 §3.1 keeps <c>status</c> for the HTTP status code. <paramref name="disputeStatus"/> is the wire
-    /// status, which Application maps.
-    /// </summary>
-    public static Error ActionNotAllowedWithDisputeStatus(Enum disputeStatus) =>
-        Error.ActionNotAllowed("action-not-allowed", ActionNotAllowed.Message, "disputeStatus", disputeStatus);
 
     public static readonly Error NoteTooLong =
         Error.Validation("validation", "The note must be at most 1000 characters after trimming.", "Note");
@@ -71,5 +57,5 @@ public static class DisputeErrors
 
     /// <summary>The transaction cannot be disputed for <paramref name="reason"/>, which the problem carries as <c>reason</c>.</summary>
     public static Error NotDisputable(NotDisputableReason reason) =>
-        Error.BusinessRule("not-disputable", "This transaction cannot be disputed.", "reason", reason);
+        Error.BusinessRule("not-disputable", "This transaction cannot be disputed.", new Dictionary<string, object?> { ["reason"] = reason });
 }
