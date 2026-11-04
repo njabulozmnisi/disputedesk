@@ -15,7 +15,7 @@ FORBIDDEN_TERMS_FILE = PROJECT / ".claude" / "forbidden-terms.local"
 # Which paths each agent may write. The main session (no agent_type) is the supervisor.
 OWNERSHIP = {
     "backend-builder": ("backend/", "infra/", ".github/", "docker-compose.yml", "contracts/", ".zap/", ".nvmrc",
-                        "scripts/floor-guard.sh", "scripts/dev-login.sh", "scripts/operations-token.sh"),
+                        "scripts/"),
     "frontend-builder": ("frontend/",),
     "qa": ("e2e/", "docs/verification/"),
     "verifier": ("docs/verification/",),
