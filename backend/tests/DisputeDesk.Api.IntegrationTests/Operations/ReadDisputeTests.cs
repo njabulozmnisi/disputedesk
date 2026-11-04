@@ -25,7 +25,7 @@ public class ReadDisputeTests(PostgresFixture postgres, TransactionsStub stub) :
         Guid disputeId = raised.GetProperty("disputeId").GetGuid();
         // The read maps each stored row and decides nothing, so the stream need not be a lifecycle a dispute could have.
         // Version 4 is appended before version 3, so the stored row order is not the version order.
-        await factory.AppendAsync(disputeId, DisputeStatus.Resolved, Outcome.Upheld,
+        await factory.AppendDirectlyAsync(disputeId, DisputeStatus.Resolved, Outcome.Upheld,
             At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, ActorType.Operations),
             At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 4, ActorType.Automation),
             At(new SlaWarningRaised(), 3, ActorType.Automation),

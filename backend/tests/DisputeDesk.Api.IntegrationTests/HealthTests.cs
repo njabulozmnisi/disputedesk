@@ -31,7 +31,7 @@ public class HealthTests(PostgresFixture postgres)
     {
         await using var factory = new ApiFactory(postgres.ConnectionString);
         using HttpClient client = factory.CreateClient();
-        await WaitUntilReadyAsync(client);
+        await Eventually.WaitUntilReadyAsync(client);
 
         HttpResponseMessage response = await client.GetAsync(new Uri("/health/ready", UriKind.Relative), TestContext.Current.CancellationToken);
 
@@ -61,8 +61,8 @@ public class HealthTests(PostgresFixture postgres)
         using HttpClient firstClient = first.CreateClient();
         using HttpClient secondClient = second.CreateClient();
 
-        await WaitUntilReadyAsync(firstClient);
-        await WaitUntilReadyAsync(secondClient);
+        await Eventually.WaitUntilReadyAsync(firstClient);
+        await Eventually.WaitUntilReadyAsync(secondClient);
 
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(emptyDatabase).Options);
         Assert.Empty(await db.Database.GetPendingMigrationsAsync(TestContext.Current.CancellationToken));
@@ -96,22 +96,6 @@ public class HealthTests(PostgresFixture postgres)
         HttpResponseMessage response = await client.GetAsync(new Uri("/health/ready", UriKind.Relative), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-    }
-
-    internal static async Task WaitUntilReadyAsync(HttpClient client)
-    {
-        for (int attempt = 0; attempt < 100; attempt++)
-        {
-            HttpResponseMessage response = await client.GetAsync(new Uri("/health/ready", UriKind.Relative), TestContext.Current.CancellationToken);
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                return;
-            }
-
-            await Task.Delay(200, TestContext.Current.CancellationToken);
-        }
-
-        throw new TimeoutException("The Api never reported ready.");
     }
 
     [Fact]

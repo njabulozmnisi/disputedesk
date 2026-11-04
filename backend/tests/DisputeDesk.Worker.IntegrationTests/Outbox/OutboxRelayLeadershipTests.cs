@@ -1,5 +1,6 @@
 using DisputeDesk.Infrastructure.Outbox;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 
@@ -21,7 +22,7 @@ public class OutboxRelayLeadershipTests(OutboxFixture outbox)
 
         await using RelayHost first = await outbox.StartRelayAsync(clock);
         await using RelayHost second = await outbox.StartRelayAsync(clock);
-        await OutboxFixture.WaitUntilAsync(() => LeaderCount(first) + LeaderCount(second) == 1);
+        await Eventually.UntilAsync(() => LeaderCount(first) + LeaderCount(second) == 1, OutboxFixture.WaitLimit);
         clock.Advance(TimeSpan.FromMinutes(1));
         await outbox.WaitUntilSentAsync(rows.Select(row => row.Id), clock);
         // Three more 10-second loops each, in which the other host keeps trying for the lock.
@@ -45,7 +46,7 @@ public class OutboxRelayLeadershipTests(OutboxFixture outbox)
     {
         FakeTimeProvider clock = OutboxFixture.NewClock();
         await using RelayHost host = await outbox.StartRelayAsync(clock);
-        await OutboxFixture.WaitUntilAsync(() => LeaderCount(host) == 1);
+        await Eventually.UntilAsync(() => LeaderCount(host) == 1, OutboxFixture.WaitLimit);
 
         await outbox.TerminateLockConnectionAsync();
         OutboxMessage row = await outbox.RaiseAsync(clock.GetUtcNow());

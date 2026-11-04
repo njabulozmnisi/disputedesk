@@ -97,8 +97,7 @@ public class WithdrawDisputeTests(PostgresFixture postgres, TransactionsStub stu
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        Guid disputeId = await RaisedAsync(browser);
-        await factory.AppendAsync(disputeId, status, outcome: null, StatusChange(status, version: 2));
+        Guid disputeId = (await factory.DisputeInAsync(status)).Id;
 
         JsonElement withdrawn = await browser.WithdrawOkAsync(disputeId.ToString());
 
@@ -157,14 +156,15 @@ public class WithdrawDisputeTests(PostgresFixture postgres, TransactionsStub stu
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        Guid disputeId = await RaisedAsync(browser);
-        await factory.AppendAsync(disputeId, status, status == DisputeStatus.Resolved ? Outcome.Rejected : null, StatusChange(status, version: 2));
+        Guid disputeId = (await factory.DisputeInAsync(status, outcome: Outcome.Rejected)).Id;
+        int storedEvents = (await factory.StreamAsync(disputeId)).Count;
+        int outboxRows = (await factory.OutboxRowsAsync(disputeId)).Count;
 
         HttpResponseMessage response = await browser.WithdrawAsync(disputeId.ToString());
 
         await response.AssertActionNotAllowedAsync(customerStatus);
-        Assert.Equal(2, (await factory.StreamAsync(disputeId)).Count);
-        Assert.Single(await factory.OutboxRowsAsync(disputeId));
+        Assert.Equal(storedEvents, (await factory.StreamAsync(disputeId)).Count);
+        Assert.Equal(outboxRows, (await factory.OutboxRowsAsync(disputeId)).Count);
     }
 
     [Fact]
@@ -207,24 +207,4 @@ public class WithdrawDisputeTests(PostgresFixture postgres, TransactionsStub stu
 
     private static DateTimeOffset LastOccurredAt(JsonElement dispute) =>
         dispute.GetProperty("timeline").EnumerateArray().Last().GetProperty("occurredAt").GetDateTimeOffset();
-
-    /// <summary>The stored event that moves a just-raised dispute to <paramref name="status"/>, as the operations actions or a withdraw would.</summary>
-    private StoredEvent StatusChange(DisputeStatus status, int version)
-    {
-        StoredEvent storedEvent = status switch
-        {
-            DisputeStatus.UnderReview => new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview),
-            DisputeStatus.Escalated => new DisputeEscalated(DisputeStatus.Submitted, DisputeStatus.Escalated),
-            DisputeStatus.Resolved => new DisputeResolved(DisputeStatus.Submitted, DisputeStatus.Resolved, Outcome.Rejected, "Checked"),
-            DisputeStatus.Withdrawn => new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, null),
-            _ => throw new ArgumentOutOfRangeException(nameof(status), status, "No stored event leads there."),
-        };
-        return storedEvent with
-        {
-            Version = version,
-            OccurredAtUtc = stub.NowAsStored,
-            ActorType = status == DisputeStatus.Withdrawn ? ActorType.Customer : ActorType.Operations,
-            ActorId = "actor-" + version,
-        };
-    }
 }

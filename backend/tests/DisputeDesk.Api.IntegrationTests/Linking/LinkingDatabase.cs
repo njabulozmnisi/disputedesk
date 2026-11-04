@@ -27,19 +27,8 @@ public static class LinkingDatabase
             $"""SELECT count(*)::int AS "Value" FROM pg_stat_activity WHERE datname = current_database() AND state LIKE 'idle in transaction%'"""));
 
     /// <summary>Waits until <paramref name="count"/> jobs wait for a customer lock in this database.</summary>
-    public static async Task WaitForLockWaitersAsync(this ApiFactory factory, int count)
-    {
-        var deadline = System.Diagnostics.Stopwatch.StartNew();
-        while (await factory.AdvisoryLocksAsync(granted: false) < count)
-        {
-            if (deadline.Elapsed > Timeout)
-            {
-                throw new TimeoutException($"Fewer than {count} jobs waited for a customer lock within {Timeout}.");
-            }
-
-            await Task.Delay(50, TestContext.Current.CancellationToken);
-        }
-    }
+    public static Task WaitForLockWaitersAsync(this ApiFactory factory, int count) =>
+        Eventually.UntilAsync(async () => await factory.AdvisoryLocksAsync(granted: false) >= count, Timeout);
 
     /// <summary>
     /// Waits until the jobs of <paramref name="logins"/> have recorded <paramref name="count"/> entries whose action is
@@ -48,25 +37,18 @@ public static class LinkingDatabase
     public static async Task<List<AuditLogEntry>> WaitForStopsAsync(
         this ApiFactory factory, IReadOnlyCollection<string> logins, IReadOnlyCollection<AuditAction> stops, int count)
     {
-        var deadline = System.Diagnostics.Stopwatch.StartNew();
-        while (true)
-        {
-            await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
-            List<AuditLogEntry> entries = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<AuditLogEntry>().AsNoTracking()
-                .Where(entry => logins.Contains(entry.ActorId) && stops.Contains(entry.Action))
-                .ToListAsync(TestContext.Current.CancellationToken);
-            if (entries.Count >= count)
+        List<AuditLogEntry> entries = [];
+        await Eventually.UntilAsync(
+            async () =>
             {
-                return entries;
-            }
-
-            if (deadline.Elapsed > Timeout)
-            {
-                throw new TimeoutException($"Only {entries.Count} of {count} stops within {Timeout}.");
-            }
-
-            await Task.Delay(50, TestContext.Current.CancellationToken);
-        }
+                await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+                entries = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<AuditLogEntry>().AsNoTracking()
+                    .Where(entry => logins.Contains(entry.ActorId) && stops.Contains(entry.Action))
+                    .ToListAsync(TestContext.Current.CancellationToken);
+                return entries.Count >= count;
+            },
+            Timeout);
+        return entries;
     }
 
     private static async Task<int> CountAsync(this ApiFactory factory, Func<AppDbContext, IQueryable<int>> query)

@@ -66,7 +66,7 @@ public sealed class InvalidFixtureDisputesTests(PostgresFixture postgres) : IDis
         await WriteBrokenFixturesAsync(fault);
         var fixtures = Fixtures.Read(_fixturesPath);
 
-        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() => SeedDispute.Plan(fixtures, new TestClock().GetUtcNow()));
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() => SeedDispute.Plan(fixtures, TestInstants.NotMicrosecondAligned()));
 
         Assert.Contains($"Fixture {position}", thrown.Message, StringComparison.Ordinal);
     }

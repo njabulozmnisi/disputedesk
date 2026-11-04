@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -20,6 +19,12 @@ namespace DisputeDesk.Api.IntegrationTests.Linking;
 public static class LinkingApi
 {
     public const string StartPath = "/api/v1/linking/start";
+
+    /// <summary>
+    /// How long a test watches for a core-banking call that must not happen. A bounded observation, not a signal: nothing
+    /// announces that no second job will start, and jobs run in parallel, so one would call core banking inside it.
+    /// </summary>
+    public static readonly TimeSpan AbsenceWindow = TimeSpan.FromMilliseconds(500);
 
     private static readonly TimeSpan JobTimeout = TimeSpan.FromSeconds(15);
 
@@ -107,22 +112,15 @@ public static class LinkingApi
     public static async Task<List<AuditLogEntry>> WaitForAuditAsync(
         this ApiFactory factory, string loginSub, AuditAction action, AuditResult result, int count = 1)
     {
-        var deadline = Stopwatch.StartNew();
-        while (true)
-        {
-            List<AuditLogEntry> entries = await factory.LinkingAuditsAsync(loginSub);
-            if (entries.Count(entry => entry.Action == action && entry.Result == result) >= count)
+        List<AuditLogEntry> entries = [];
+        await Eventually.UntilAsync(
+            async () =>
             {
-                return entries;
-            }
-
-            if (deadline.Elapsed > JobTimeout)
-            {
-                throw new TimeoutException($"No {count} {action} {result} entries within {JobTimeout}; found {string.Join(", ", entries.Select(entry => $"{entry.Action} {entry.Result}"))}.");
-            }
-
-            await Task.Delay(50, TestContext.Current.CancellationToken);
-        }
+                entries = await factory.LinkingAuditsAsync(loginSub);
+                return entries.Count(entry => entry.Action == action && entry.Result == result) >= count;
+            },
+            JobTimeout);
+        return entries;
     }
 
     /// <summary>A new login <c>sub</c> unique to the test.</summary>

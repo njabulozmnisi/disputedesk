@@ -52,9 +52,7 @@ public class OperationsActionConcurrencyTests(PostgresFixture postgres, Transact
         await using ApiFactory factory = await TransactionsApi.StartAsync(
             postgres, stub, services => services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(rendezvous)));
         Guid disputeId = await UnderReviewAsync(factory);
-        // RaiseForCustomerAAsync linked login-a already, so this only signs in.
-        using HttpClient browser = factory.CreateBrowser(new System.Net.CookieContainer());
-        await browser.SignInAsync(factory.Zitadel, "login-a");
+        using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
         string antiforgery = await browser.AntiforgeryTokenAsync();
         using HttpClient tool = factory.CreateTool();
 
@@ -124,7 +122,7 @@ public class OperationsActionConcurrencyTests(PostgresFixture postgres, Transact
             await postgres.CreateMigratedDatabaseAsync(),
             configureServices: services => services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(appendFirst, moveClock)),
             clock: clock);
-        Guid disputeId = await factory.RaiseDirectlyAsync("login-a", requestAt.AddMinutes(-30));
+        Guid disputeId = (await factory.DisputeInAsync(DisputeStatus.Submitted, raisedAt: requestAt.AddMinutes(-30))).Id;
         appendFirst.Arm(Next(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), disputeId, 2, requestAt.AddMinutes(-10)), DisputeStatus.UnderReview);
         moveClock.Arm();
         using HttpClient tool = factory.CreateTool();
@@ -186,16 +184,11 @@ public class OperationsActionConcurrencyTests(PostgresFixture postgres, Transact
     }
 
     /// <summary>
-    /// A dispute of customer A put under review by a stored event written directly, so no replay read runs before the
+    /// A dispute of customer A under review, saved directly through the aggregate, so no replay read runs before the
     /// test's own requests (the rendezvous holds the first two).
     /// </summary>
-    private async Task<Guid> UnderReviewAsync(ApiFactory factory)
-    {
-        Guid disputeId = await factory.RaiseForCustomerAAsync();
-        await factory.AppendAsync(
-            disputeId, DisputeStatus.UnderReview, null, Next(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), disputeId, 2, stub.NowAsStored));
-        return disputeId;
-    }
+    private static async Task<Guid> UnderReviewAsync(ApiFactory factory) =>
+        (await factory.DisputeInAsync(DisputeStatus.UnderReview)).Id;
 
     private void AssertOneRejected(List<AuditLogEntry> rows, AuditAction action, Guid disputeId)
     {

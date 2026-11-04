@@ -77,7 +77,8 @@ public class OperationsPrivacyTests(PostgresFixture postgres, TransactionsStub s
     private async Task<Guid> RaiseAndWithdrawAsync(ApiFactory factory)
     {
         Guid disputeId = await factory.RaiseForCustomerAAsync(RaiseNote);
-        await factory.AppendAsync(disputeId, DisputeStatus.Withdrawn, outcome: null, new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, WithdrawNote)
+        // Written directly: the test chooses the withdraw note, the customer's login and the trace ID it searches for.
+        await factory.AppendDirectlyAsync(disputeId, DisputeStatus.Withdrawn, outcome: null, new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, WithdrawNote)
         {
             Version = 2,
             OccurredAtUtc = stub.NowAsStored.AddHours(1),

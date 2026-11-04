@@ -18,8 +18,11 @@ using DisputeDesk.Infrastructure.Seeding;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 
 namespace DisputeDesk.Api.IntegrationTests.Seeding;
 
@@ -106,7 +109,7 @@ public class SeededDisputesTests(PostgresFixture postgres)
         DateTimeOffset today = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(2));
         DateTimeOffset seededAt = new DateTimeOffset(today.Date.Add(TimeSpan.Parse(southAfricanTime, CultureInfo.InvariantCulture)), TimeSpan.FromHours(2))
             .AddTicks(1_234_567).ToUniversalTime();
-        (ApiFactory factory, string connectionString) = await SeededApi.StartAsync(postgres, new FixedTimeProvider(seededAt));
+        (ApiFactory factory, string connectionString) = await SeededApi.StartAsync(postgres, new TestClock(seededAt));
         await using ApiFactory _ = factory;
         await using AppDbContext db = SeededApi.Open(connectionString);
 
@@ -217,7 +220,7 @@ public class SeededDisputesTests(PostgresFixture postgres)
         await using ApiFactory factory = SeededApi.Create(connectionString, new TestClock());
         using HttpClient client = factory.CreateClient();
 
-        await HealthTests.WaitUntilReadyAsync(client);
+        await Eventually.WaitUntilReadyAsync(client);
 
         Assert.Equal(SeededApi.FullSeed, await SeededApi.CountAsync(connectionString));
     }
@@ -227,7 +230,9 @@ public class SeededDisputesTests(PostgresFixture postgres)
     {
         // The seed runs here, after the recorder listens: the Api's own start-up migrate seeds another database.
         await using ApiFactory factory = SeededApi.Create(await postgres.CreateEmptyDatabaseAsync(), new TestClock());
-        using var recorder = new MeasurementRecorder(factory.Services.GetRequiredService<IMeterFactory>());
+        IMeterFactory meterFactory = factory.Services.GetRequiredService<IMeterFactory>();
+        using var actions = new MetricCollector<long>(meterFactory, "DisputeDesk", "disputedesk.dispute_actions");
+        using var resolved = new MetricCollector<long>(meterFactory, "DisputeDesk", "disputedesk.disputes.resolved");
         string connectionString = await postgres.CreateEmptyDatabaseAsync();
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         DbContextOptions<AppDbContext> registered = scope.ServiceProvider.GetRequiredService<DbContextOptions<AppDbContext>>();
@@ -237,8 +242,8 @@ public class SeededDisputesTests(PostgresFixture postgres)
         }
 
         Assert.Equal(SeededApi.FullSeed, await SeededApi.CountAsync(connectionString));
-        Assert.Empty(recorder.Measurements("disputedesk.dispute_actions"));
-        Assert.Empty(recorder.Measurements("disputedesk.disputes.resolved"));
+        Assert.Empty(actions.GetMeasurementSnapshot());
+        Assert.Empty(resolved.GetMeasurementSnapshot());
     }
 
     [Fact]
@@ -247,7 +252,8 @@ public class SeededDisputesTests(PostgresFixture postgres)
         var clock = new TestClock();
         (ApiFactory factory, string connectionString) = await SeededApi.StartAsync(postgres, clock);
         await using ApiFactory _ = factory;
-        var bank = Bank.Load(FixturesFile.FindPath(), clock);
+        // The stub's fixture reader runs no timer, so a fake clock at the Api's instant serves it.
+        var bank = Bank.Load(FixturesFile.FindPath(), new FakeTimeProvider(clock.GetUtcNow()));
         await using AppDbContext db = SeededApi.Open(connectionString);
 
         List<StoredEventRow> raises = await db.Set<StoredEventRow>().IgnoreQueryFilters().AsNoTracking()
@@ -271,12 +277,13 @@ public class SeededDisputesTests(PostgresFixture postgres)
     [Fact]
     public async Task Seed_LogLines_HoldCountsOnly()
     {
-        var logs = new LogCapture();
+        FakeLogCollector logs;
         string connectionString = await postgres.CreateEmptyDatabaseAsync();
-        await using (ApiFactory factory = SeededApi.Create(connectionString, new TestClock(), configureServices: services => services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(logs)))
+        await using (ApiFactory factory = SeededApi.Create(connectionString, new TestClock(), configureServices: services => services.AddFakeLogging()))
         {
             using HttpClient client = factory.CreateClient();
-            await HealthTests.WaitUntilReadyAsync(client);
+            logs = factory.Services.GetFakeLogCollector();
+            await Eventually.WaitUntilReadyAsync(client);
         }
 
         await using AppDbContext db = SeededApi.Open(connectionString);
@@ -288,8 +295,8 @@ public class SeededDisputesTests(PostgresFixture postgres)
             .. disputes.Select(dispute => dispute.Id.ToString()),
         ];
 
-        Assert.Contains($"Seeded {SeededApi.FixtureDisputeCount} disputes", logs.Lines);
-        Assert.All(logs.Lines, line => Assert.All(secrets, secret => Assert.DoesNotContain(secret, line, StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains($"Seeded {SeededApi.FixtureDisputeCount} disputes", logs.Lines());
+        Assert.All(logs.Lines(), line => Assert.All(secrets, secret => Assert.DoesNotContain(secret, line, StringComparison.OrdinalIgnoreCase)));
     }
 
     private static async Task<List<StoredEvent>> StreamAsync(AppDbContext db, Guid disputeId)

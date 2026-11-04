@@ -95,10 +95,8 @@ public sealed class VerifyOtpInputTests(VerifyOtpInputTests.LoginWithChallenge a
     /// </summary>
     private static async Task<List<string>> StringsWithoutTraceIdAsync(HttpResponseMessage response)
     {
-        JsonNode body = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
+        JsonNode body = JsonNode.Parse(await response.BodyWithoutTraceIdAsync())
             ?? throw new InvalidOperationException("No body.");
-        Assert.NotNull(body["traceId"]);
-        body.AsObject().Remove("traceId");
         List<string> strings = [];
         Collect(body, strings);
         return strings;

@@ -22,39 +22,18 @@ public sealed class OperationsToolFixture(PostgresFixture postgres) : IAsyncLife
     private int _disputes;
 
     // Not microsecond-aligned, as TransactionsStub's clock, so a test sees any instant that storing would change.
-    public DateTimeOffset Now { get; } = DateTimeOffset.FromUnixTimeSeconds(TimeProvider.System.GetUtcNow().ToUnixTimeSeconds()).AddTicks(1_234_567);
+    public DateTimeOffset Now { get; } = TestInstants.NotMicrosecondAligned();
 
     public ApiFactory Factory => _factory ?? throw new InvalidOperationException("Not initialised.");
 
     public HttpClient Tool => _tool ?? throw new InvalidOperationException("Not initialised.");
 
-    /// <summary>A new dispute of customer A, raised an hour ago and moved to <paramref name="status"/> by operations.</summary>
+    /// <summary>A new dispute of customer A, raised an hour ago and moved to <paramref name="status"/> through the aggregate.</summary>
     public async Task<Guid> DisputeInAsync(DisputeStatus status)
     {
         DateTimeOffset at = Now.AddHours(-1);
-        Guid disputeId = await Factory.RaiseDirectlyAsync("login-a", at, $"TXN-A-8{Interlocked.Increment(ref _disputes):D3}");
-        StoredEvent[] path = status switch
-        {
-            DisputeStatus.Submitted => [],
-            DisputeStatus.UnderReview => [Next(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), disputeId, 2, at)],
-            DisputeStatus.Escalated => [Next(new DisputeEscalated(DisputeStatus.Submitted, DisputeStatus.Escalated), disputeId, 2, at)],
-            DisputeStatus.Resolved =>
-            [
-                Next(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), disputeId, 2, at),
-                Next(new DisputeResolved(DisputeStatus.UnderReview, DisputeStatus.Resolved, Outcome.Upheld, "Refunded"), disputeId, 3, at),
-            ],
-            DisputeStatus.Withdrawn =>
-            [
-                Next(new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, null), disputeId, 2, at) with { ActorType = ActorType.Customer, ActorId = "login-a" },
-            ],
-            _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unmapped status."),
-        };
-        if (path.Length > 0)
-        {
-            await Factory.AppendAsync(disputeId, status, status == DisputeStatus.Resolved ? Outcome.Upheld : null, path);
-        }
-
-        return disputeId;
+        string transactionId = $"TXN-A-8{Interlocked.Increment(ref _disputes):D3}";
+        return (await Factory.DisputeInAsync(status, transactionId: transactionId, raisedAt: at, actedAt: at)).Id;
     }
 
     /// <summary>The audit entries about <paramref name="disputeId"/>, oldest first.</summary>
@@ -81,8 +60,4 @@ public sealed class OperationsToolFixture(PostgresFixture postgres) : IAsyncLife
             await _factory.DisposeAsync();
         }
     }
-
-    private static TEvent Next<TEvent>(TEvent storedEvent, Guid disputeId, int version, DateTimeOffset at)
-        where TEvent : StoredEvent =>
-        storedEvent with { DisputeId = disputeId, Version = version, OccurredAtUtc = at, ActorType = ActorType.Operations, ActorId = "ops-a" };
 }

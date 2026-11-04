@@ -1,10 +1,7 @@
-using System.Collections.Concurrent;
-using System.Diagnostics.Metrics;
 using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using DisputeDesk.Api.IntegrationTests.Disputes;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Application.Audit;
@@ -14,6 +11,7 @@ using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 
 namespace DisputeDesk.Api.IntegrationTests.Linking;
 
@@ -101,36 +99,19 @@ public static class VerifyApi
     }
 
     /// <summary>The status and the problem body without its <c>traceId</c>, the one value that differs per request.</summary>
-    public static async Task<string> StatusAndBodyAsync(this HttpResponseMessage response)
-    {
-        JsonNode body = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
-            ?? throw new InvalidOperationException("No body.");
-        Assert.NotNull(body["traceId"]);
-        body.AsObject().Remove("traceId");
-        return $"{(int)response.StatusCode} {body.ToJsonString()}";
-    }
+    public static async Task<string> StatusAndBodyAsync(this HttpResponseMessage response) =>
+        $"{(int)response.StatusCode} {await response.BodyWithoutTraceIdAsync()}";
 
-    /// <summary>Puts the tags of every <c>disputedesk.linking.events</c> measurement of this test's Api in <paramref name="events"/>, in order.</summary>
-    public static MeterListener ListenToLinkingEvents(this ApiFactory factory, ConcurrentQueue<string> events)
-    {
-        IMeterFactory meterFactory = factory.Services.GetRequiredService<IMeterFactory>();
-        var listener = new MeterListener
+    /// <summary>
+    /// The tags of each <c>disputedesk.linking.events</c> measurement as <c>name=value</c>, in order; every measurement
+    /// must add 1, so each is one event.
+    /// </summary>
+    public static List<string> Events(this MetricCollector<long> linkingEvents) =>
+    [
+        .. linkingEvents.GetMeasurementSnapshot().Select(measurement =>
         {
-            // Only this test's Api: its own meter factory is the meter's scope.
-            InstrumentPublished = (instrument, meterListener) =>
-            {
-                if (instrument.Meter.Scope == meterFactory && instrument.Name == "disputedesk.linking.events")
-                {
-                    meterListener.EnableMeasurementEvents(instrument);
-                }
-            },
-        };
-        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
-        {
-            Assert.Equal(1, value);
-            events.Enqueue(string.Join(',', tags.ToArray().Select(tag => $"{tag.Key}={tag.Value}")));
-        });
-        listener.Start();
-        return listener;
-    }
+            Assert.Equal(1, measurement.Value);
+            return string.Join(',', measurement.SortedTags().Select(tag => $"{tag.Name}={tag.Value}"));
+        }),
+    ];
 }

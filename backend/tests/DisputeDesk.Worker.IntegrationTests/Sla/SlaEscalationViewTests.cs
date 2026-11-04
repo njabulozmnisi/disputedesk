@@ -43,8 +43,8 @@ public class SlaEscalationViewTests(SlaFixture fixture)
         Assert.Equal(batch.Id, published.TraceParent);
         Assert.Equal(batch.TraceId.ToHexString(), rows[^1].TraceId);
 
-        Assert.Equal(1, rig.Total("disputedesk.sla.escalations"));
-        Assert.Equal(1, rig.Total("disputedesk.dispute_actions", ("action", "escalate"), ("actor_type", "automation")));
+        Assert.Equal(1, SweepRig.Total(rig.Escalations));
+        Assert.Equal(1, SweepRig.Total(rig.Actions, ("action", "escalate"), ("actor_type", "automation")));
     }
 
     [Fact]

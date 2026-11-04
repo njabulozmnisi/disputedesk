@@ -1,6 +1,7 @@
 using DisputeDesk.Infrastructure;
 using DisputeDesk.Infrastructure.Outbox;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -72,13 +73,13 @@ public class OutboxRelayDependencyTests(OutboxFixture outbox)
 
         await using (RelayHost host = await RelayHost.StartAsync(clock, connectionString, outbox.BootstrapServers))
         {
-            await OutboxFixture.WaitUntilAsync(() => Warnings(host) >= 1);
+            await Eventually.UntilAsync(() => Warnings(host) >= 1, OutboxFixture.WaitLimit);
             // Each failure waits at most 10 s of the relay's clock before the next try.
             for (int retry = 0; retry < 6; retry++)
             {
                 int before = Warnings(host);
                 clock.Advance(TimeSpan.FromSeconds(10));
-                await OutboxFixture.WaitUntilAsync(() => Warnings(host) > before);
+                await Eventually.UntilAsync(() => Warnings(host) > before, OutboxFixture.WaitLimit);
             }
 
             Assert.All(host.LogLines.Where(line => line.StartsWith(WarningStart, StringComparison.Ordinal)), line =>
@@ -103,7 +104,7 @@ public class OutboxRelayDependencyTests(OutboxFixture outbox)
         // Nothing listens on port 1: the send waits out its 10-second delivery timeout (real time, librdkafka's clock).
         await using (RelayHost host = await RelayHost.StartAsync(clock, outbox.ConnectionString, "127.0.0.1:1"))
         {
-            await OutboxFixture.WaitUntilAsync(() => host.LogLines.Any(line => line.StartsWith("Outbox relay cannot reach kafka", StringComparison.Ordinal)));
+            await Eventually.UntilAsync(() => host.LogLines.Any(line => line.StartsWith("Outbox relay cannot reach kafka", StringComparison.Ordinal)), OutboxFixture.WaitLimit);
 
             Assert.DoesNotContain(host.LogLines, line => line.Contains(row.Payload, StringComparison.Ordinal));
         }
@@ -125,8 +126,8 @@ public class OutboxRelayDependencyTests(OutboxFixture outbox)
         {
             // The producer connects as it is built, so its log and error events start without any row to send.
             await using RelayHost host = await RelayHost.StartAsync(clock, outbox.ConnectionString, "127.0.0.1:1");
-            await OutboxFixture.WaitUntilAsync(() =>
-                ErrorTypes(host, "kafka").Contains("Local_Transport") && host.LogLines.Contains(KafkaFailLine));
+            await Eventually.UntilAsync(() =>
+                ErrorTypes(host, "kafka").Contains("Local_Transport") && host.LogLines.Contains(KafkaFailLine), OutboxFixture.WaitLimit);
 
             // The client's error events are the relay's warnings; its own log lines keep their syslog level, mapped by
             // Confluent.Kafka (LogMessage.LevelAs), and carry the facility only.

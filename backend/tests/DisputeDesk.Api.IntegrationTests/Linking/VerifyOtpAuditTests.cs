@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Net;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
@@ -6,6 +5,7 @@ using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Logs;
 
@@ -23,8 +23,7 @@ public class VerifyOtpAuditTests(PostgresFixture postgres)
     {
         var ports = new LinkingFakes.Ports();
         await using ApiFactory factory = await LinkingApi.StartApiAsync(postgres, ports, new TestClock());
-        var events = new ConcurrentQueue<string>();
-        using MeterListener listener = factory.ListenToLinkingEvents(events);
+        using var events = new MetricCollector<long>(factory.Services.GetRequiredService<IMeterFactory>(), "DisputeDesk", "disputedesk.linking.events");
         string locked = LinkingApi.NewLogin("metric-locked");
         using HttpClient lockedBrowser = await factory.SignInUnlinkedAsync(locked);
         string wrong = VerifyApi.WrongCode(await factory.StartAndReadOtpAsync(lockedBrowser, ports, locked, LinkingFakes.D));
@@ -39,7 +38,7 @@ public class VerifyOtpAuditTests(PostgresFixture postgres)
 
         Assert.Equal(HttpStatusCode.NoContent, (await linkedBrowser.VerifyCodeAsync(otp)).StatusCode);
 
-        Assert.Equal(["event=locked", "event=completed"], events.Where(tags => tags != "event=started"));
+        Assert.Equal(["event=locked", "event=completed"], events.Events().Where(tags => tags != "event=started"));
     }
 
     [Fact]

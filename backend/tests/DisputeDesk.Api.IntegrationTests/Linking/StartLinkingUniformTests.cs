@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Net;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
@@ -8,6 +7,7 @@ using DisputeDesk.Application.Linking;
 using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 
 namespace DisputeDesk.Api.IntegrationTests.Linking;
 
@@ -96,6 +96,7 @@ public class StartLinkingUniformTests(PostgresFixture postgres)
         string login = LinkingApi.NewLogin("parallel");
         HttpClient browser = await factory.SignInUnlinkedAsync(login);
         string token = await browser.AntiforgeryTokenAsync();
+        LinkingFakes.Hold first = ports.CoreBanking.HoldNext();
 
         HttpResponseMessage[] responses = await Task.WhenAll(
             browser.StartLinkingAsync(LinkingApi.Body(LinkingFakes.NoMatch), withAntiforgeryToken: false, request => request.Headers.Add("X-XSRF-TOKEN", token)),
@@ -103,9 +104,13 @@ public class StartLinkingUniformTests(PostgresFixture postgres)
 
         Assert.All(responses, response => Assert.Equal(HttpStatusCode.Accepted, response.StatusCode));
         Assert.Single(await factory.ChallengesAsync(login));
+        // While the first job's call is held, a second job would reach core banking alongside it.
+        await first.Reached;
+        await Task.Delay(LinkingApi.AbsenceWindow, TestContext.Current.CancellationToken);
+        Assert.Equal(1, ports.CoreBanking.Calls);
+        // After the release, a call the first job made again would show once its last entry is written.
+        first.Release();
         await factory.WaitForAuditAsync(login, AuditAction.LinkingNoMatch, AuditResult.Rejected);
-        // A second job would have reached core banking alongside the first.
-        await Task.Delay(500, TestContext.Current.CancellationToken);
         Assert.Equal(1, ports.CoreBanking.Calls);
         List<AuditLogEntry> entries = await factory.LinkingAuditsAsync(login);
         Assert.Equal([(AuditAction.LinkingStart, AuditResult.Succeeded), (AuditAction.LinkingNoMatch, AuditResult.Rejected)], entries.Select(entry => (entry.Action, entry.Result)));
@@ -116,31 +121,14 @@ public class StartLinkingUniformTests(PostgresFixture postgres)
     {
         var ports = new LinkingFakes.Ports();
         await using ApiFactory factory = await LinkingApi.StartApiAsync(postgres, ports, new TestClock());
-        var measurements = new ConcurrentQueue<(string Instrument, long Value, string Tags)>();
-        IMeterFactory meterFactory = factory.Services.GetRequiredService<IMeterFactory>();
-        using var listener = new MeterListener
-        {
-            // Only this test's Api: its own meter factory is the meter's scope.
-            InstrumentPublished = (instrument, meterListener) =>
-            {
-                if (instrument.Meter.Scope == meterFactory && instrument.Meter.Name == "DisputeDesk")
-                {
-                    meterListener.EnableMeasurementEvents(instrument);
-                }
-            },
-        };
-        listener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
-            measurements.Enqueue((instrument.Name, value, string.Join(',', tags.ToArray().Select(tag => $"{tag.Key}={tag.Value}")))));
-        listener.Start();
+        using var events = new MetricCollector<long>(factory.Services.GetRequiredService<IMeterFactory>(), "DisputeDesk", "disputedesk.linking.events");
         HttpClient browser = await factory.SignInUnlinkedAsync(LinkingApi.NewLogin("metrics"));
 
         await browser.StartAcceptedAsync(LinkingFakes.NoMatch);
         await browser.StartAcceptedAsync(LinkingFakes.D);
         await browser.StartLinkingAsync("""{"idNumber":"1"}""");
 
-        Assert.Equal(
-            [("disputedesk.linking.events", 1L, "event=started"), ("disputedesk.linking.events", 1L, "event=started")],
-            measurements.Where(measurement => measurement.Instrument == "disputedesk.linking.events"));
+        Assert.Equal(["event=started", "event=started"], events.Events());
     }
 
     /// <summary>Status, every header but the varying ones (as name: value), and the body.</summary>

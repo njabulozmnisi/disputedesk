@@ -1,4 +1,5 @@
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 
 namespace DisputeDesk.Worker.IntegrationTests.Outbox;
 
@@ -24,7 +25,7 @@ public class OutboxRelayShutdownTests(OutboxFixture outbox)
         await using (host)
         {
             // Every due row already sent, waiting out its idle loop.
-            await OutboxFixture.WaitUntilAsync(() => clock.RelayWaitsNow);
+            await Eventually.UntilAsync(() => clock.RelayWaitsNow, OutboxFixture.WaitLimit);
             DateTimeOffset at = clock.GetUtcNow();
             inFlight = await outbox.RaiseAsync(at);
             further = await outbox.AddVersionAsync(inFlight.DisputeId, 2, at);
@@ -36,7 +37,7 @@ public class OutboxRelayShutdownTests(OutboxFixture outbox)
             try
             {
                 clock.Advance(TimeSpan.FromSeconds(10));
-                await OutboxFixture.WaitUntilAsync(() => host.SendStarted(inFlight.Id));
+                await Eventually.UntilAsync(() => host.SendStarted(inFlight.Id), OutboxFixture.WaitLimit);
                 Task<TimeSpan> stopping = host.StopAsync();
                 if (brokerReturnsBeforeTheDeliveryTimeout)
                 {

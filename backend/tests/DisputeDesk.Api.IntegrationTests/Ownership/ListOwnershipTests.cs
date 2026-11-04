@@ -3,6 +3,7 @@ using System.Text.Json;
 using DisputeDesk.Api.IntegrationTests.Disputes;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
+using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Api.IntegrationTests.Ownership;
 
@@ -32,12 +33,12 @@ public sealed class ListOwnershipTests(PostgresFixture postgres) : IAsyncLifetim
         DateTimeOffset at = DisputesApi.SeedInstant;
         _seeded =
         [
-            await _factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-A-1", at),
-            await _factory.SeedDisputeAsync(TransactionsApi.CustomerB, "TXN-B-1", at.AddHours(-1)),
-            await _factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-A-2", at.AddHours(-2)),
-            await _factory.SeedDisputeAsync(TransactionsApi.CustomerB, "TXN-B-2", at.AddHours(-2)),
-            await _factory.SeedDisputeAsync(TransactionsApi.CustomerB, "TXN-B-3", at.AddHours(-3)),
-            await _factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-A-3", at.AddHours(-4)),
+            await _factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-A-1", at),
+            await _factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerB, "TXN-B-1", at.AddHours(-1)),
+            await _factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-A-2", at.AddHours(-2)),
+            await _factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerB, "TXN-B-2", at.AddHours(-2)),
+            await _factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerB, "TXN-B-3", at.AddHours(-3)),
+            await _factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-A-3", at.AddHours(-4)),
         ];
     }
 

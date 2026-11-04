@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Confluent.Kafka;
 using DisputeDesk.Infrastructure.Outbox;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Logs;
 
@@ -32,7 +33,7 @@ public class OutboxRelayErrorClassificationTests(OutboxFixture outbox)
         for (int failure = 1; failure <= Failures; failure++)
         {
             // After each failed send the relay waits out its backoff (1, 2 then 4 seconds) with the row untouched.
-            await OutboxFixture.WaitUntilAsync(() => clock.RelayWaitsNow && SendDeferredLines(host).Count == failure);
+            await Eventually.UntilAsync(() => clock.RelayWaitsNow && SendDeferredLines(host).Count == failure, OutboxFixture.WaitLimit);
             OutboxMessage during = await outbox.RowAsync(row.Id);
             Assert.Equal((OutboxStatus.Pending, 0, (string?)null), (during.Status, during.Attempts, during.LastError));
             clock.Advance(TimeSpan.FromSeconds(10));

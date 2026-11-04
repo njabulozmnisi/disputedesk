@@ -5,6 +5,7 @@ using DisputeDesk.Application.Operations.Actions;
 using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using DisputeDesk.Worker.IntegrationTests.Outbox;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -78,7 +79,7 @@ public class SlaRaceTests(SlaFixture fixture)
         StoredEventRow escalated = Assert.Single(await rig.StreamAsync(disputeId), row => row.EventType == nameof(DisputeEscalated));
         Assert.Equal("ops-race", escalated.ActorId);
         Assert.Equal((1, 1), (await rig.EscalationCountsAsync([disputeId]))[disputeId]);
-        Assert.Equal(0, rig.Total("disputedesk.sla.escalations"));
+        Assert.Equal(0, SweepRig.Total(rig.Escalations));
     }
 
     [Fact]
@@ -109,7 +110,7 @@ public class SlaRaceTests(SlaFixture fixture)
         // The sweep's own outbox row was rolled back with its save: only the raise's is left.
         Assert.Single(await rig.OutboxAsync(disputeId));
         Assert.Equal(DisputeStatus.Escalated, (await rig.DisputeRowAsync(disputeId)).Status);
-        Assert.Equal(0, rig.Total("disputedesk.sla.escalations"));
+        Assert.Equal(0, SweepRig.Total(rig.Escalations));
     }
 
     [Fact]
@@ -142,7 +143,7 @@ public class SlaRaceTests(SlaFixture fixture)
         Assert.Equal(DisputeStatus.Escalated, row.Status);
         Assert.Equal(3, row.Version);
         Assert.Equal((1, 1), (await rig.EscalationCountsAsync([disputeId]))[disputeId]);
-        Assert.Equal(1, rig.Total("disputedesk.sla.escalations"));
+        Assert.Equal(1, SweepRig.Total(rig.Escalations));
     }
 
     [Fact]
@@ -188,12 +189,12 @@ public class SlaRaceTests(SlaFixture fixture)
     {
         await using var connection = new NpgsqlConnection(rig.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken);
-        await OutboxFixture.WaitUntilAsync(async () =>
+        await Eventually.UntilAsync(async () =>
         {
             await using var command = new NpgsqlCommand(
                 "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'", connection);
             return (long)(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken) ?? 0L) > 0;
-        });
+        }, OutboxFixture.WaitLimit);
     }
 
     /// <summary>Holds a save's transaction just before it commits, after its rows are written.</summary>

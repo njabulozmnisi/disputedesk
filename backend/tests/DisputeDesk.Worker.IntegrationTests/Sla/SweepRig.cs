@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using DisputeDesk.Application.Disputes;
@@ -13,7 +12,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 
 namespace DisputeDesk.Worker.IntegrationTests.Sla;
@@ -38,7 +39,6 @@ public sealed class SweepRig : IAsyncDisposable
 
     private readonly ServiceProvider _services;
     private readonly ActivityListener _spanListener;
-    private readonly MeterListener _meterListener = new();
 
     private SweepRig(string connectionString, IInterceptor[] interceptors)
     {
@@ -47,7 +47,7 @@ public sealed class SweepRig : IAsyncDisposable
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
             .AddInMemoryCollection([new($"ConnectionStrings:{DependencyInjection.ConnectionStringName}", connectionString)])
             .Build());
-        services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Trace).AddProvider(new LineCapture(LogLines)));
+        services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Trace).AddFakeLogging());
         services.AddMetrics();
         services.AddSingleton<TimeProvider>(Clock);
         services.AddInfrastructure();
@@ -64,17 +64,11 @@ public sealed class SweepRig : IAsyncDisposable
         };
         ActivitySource.AddActivityListener(_spanListener);
 
+        // Only this rig's sweep: its own meter factory is the meters' scope.
         IMeterFactory meterFactory = _services.GetRequiredService<IMeterFactory>();
-        _meterListener.InstrumentPublished = (instrument, listener) =>
-        {
-            if (instrument.Meter.Scope == meterFactory && instrument.Meter.Name == Telemetry.MeterName)
-            {
-                listener.EnableMeasurementEvents(instrument);
-            }
-        };
-        _meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
-            Measurements.Enqueue((instrument.Name, value, tags.ToArray().ToDictionary(tag => tag.Key, tag => tag.Value?.ToString()))));
-        _meterListener.Start();
+        Escalations = new MetricCollector<long>(meterFactory, Telemetry.MeterName, "disputedesk.sla.escalations");
+        Actions = new MetricCollector<long>(meterFactory, Telemetry.MeterName, "disputedesk.dispute_actions");
+        Logs = _services.GetFakeLogCollector();
     }
 
     /// <summary>The sweep's clock, at <see cref="RaisedAt"/> until a test moves it.</summary>
@@ -86,10 +80,17 @@ public sealed class SweepRig : IAsyncDisposable
 
     public LockedCollection<Activity> Spans { get; } = new();
 
-    public ConcurrentQueue<(string Instrument, long Value, Dictionary<string, string?> Tags)> Measurements { get; } = new();
+    /// <summary>The sweep's <c>disputedesk.sla.escalations</c> counter.</summary>
+    public MetricCollector<long> Escalations { get; }
 
-    /// <summary>Every log line as written, followed by each of its structured values as <c>name=value</c>.</summary>
-    public ConcurrentQueue<(string Category, string Line)> LogLines { get; } = new();
+    /// <summary>The sweep's <c>disputedesk.dispute_actions</c> counter.</summary>
+    public MetricCollector<long> Actions { get; }
+
+    public FakeLogCollector Logs { get; }
+
+    /// <summary>Every log line as written, followed by its exception, if any, and each of its structured values as <c>name=value</c>.</summary>
+    public IReadOnlyList<(string Category, string Line)> LogLines =>
+        [.. Logs.GetSnapshot().SelectMany(record => LinesOf(record).Select(line => (record.Category ?? "", line)))];
 
     /// <summary>The sweep's own log lines and values, without EF Core's or Npgsql's.</summary>
     public IReadOnlyList<string> SweepLogLines => [.. LogLines.Where(line => line.Category == typeof(SlaSweep).FullName).Select(line => line.Line)];
@@ -107,10 +108,10 @@ public sealed class SweepRig : IAsyncDisposable
     /// <summary>One loop of the sweep: the escalation batches, then the warning batches.</summary>
     public Task SweepAsync() => Sweep.SweepAsync(TestContext.Current.CancellationToken);
 
-    /// <summary>The sum of the measurements of <paramref name="instrument"/> with all of <paramref name="tags"/>.</summary>
-    public long Total(string instrument, params (string Name, string Value)[] tags) =>
-        Measurements.Where(measurement => measurement.Instrument == instrument
-                && tags.All(tag => measurement.Tags.TryGetValue(tag.Name, out string? value) && value == tag.Value))
+    /// <summary>The sum of the measurements in <paramref name="counter"/> with all of <paramref name="tags"/>.</summary>
+    public static long Total(MetricCollector<long> counter, params (string Name, string Value)[] tags) =>
+        counter.GetMeasurementSnapshot()
+            .Where(measurement => tags.All(tag => measurement.Tags.TryGetValue(tag.Name, out object? value) && value?.ToString() == tag.Value))
             .Sum(measurement => measurement.Value);
 
     public AppDbContext CreateDbContext() => new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(ConnectionString).Options);
@@ -177,7 +178,8 @@ public sealed class SweepRig : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _spanListener.Dispose();
-        _meterListener.Dispose();
+        Escalations.Dispose();
+        Actions.Dispose();
         await _services.DisposeAsync();
     }
 
@@ -203,39 +205,17 @@ public sealed class SweepRig : IAsyncDisposable
         return dispute;
     }
 
-    /// <summary>Keeps every log line, and each structured value logged with it, as text.</summary>
-    private sealed class LineCapture(ConcurrentQueue<(string Category, string Line)> lines) : ILoggerProvider
+    private static IEnumerable<string> LinesOf(FakeLogRecord record)
     {
-        public ILogger CreateLogger(string categoryName) => new Logger(categoryName, lines);
-
-        public void Dispose()
+        yield return record.Message;
+        if (record.Exception is not null)
         {
-            // Nothing to release: the lines stay readable after the provider is disposed.
+            yield return $"exception={record.Exception}";
         }
 
-        private sealed class Logger(string category, ConcurrentQueue<(string Category, string Line)> lines) : ILogger
+        foreach ((string key, string? value) in record.State as IReadOnlyList<KeyValuePair<string, string?>> ?? [])
         {
-            public IDisposable? BeginScope<TState>(TState state)
-                where TState : notnull => null;
-
-            public bool IsEnabled(LogLevel logLevel) => true;
-
-            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-            {
-                lines.Enqueue((category, formatter(state, exception)));
-                if (exception is not null)
-                {
-                    lines.Enqueue((category, $"exception={exception}"));
-                }
-
-                if (state is IEnumerable<KeyValuePair<string, object?>> values)
-                {
-                    foreach ((string key, object? value) in values)
-                    {
-                        lines.Enqueue((category, $"{key}={value}"));
-                    }
-                }
-            }
+            yield return $"{key}={value}";
         }
     }
 }

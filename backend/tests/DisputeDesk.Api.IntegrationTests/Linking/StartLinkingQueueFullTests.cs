@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Application.Audit;
@@ -45,10 +44,11 @@ public class StartLinkingQueueFullTests(PostgresFixture postgres)
             Assert.False(response.Headers.Contains("Retry-After"));
         }
 
-        JsonObject matchBody = await BodyWithoutTraceIdAsync(match);
-        Assert.Equal(matchBody.ToJsonString(), (await BodyWithoutTraceIdAsync(noMatch)).ToJsonString());
-        Assert.Equal("https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/rate-limited.md", (string?)matchBody["type"]);
-        Assert.Equal(429, (int?)matchBody["status"]);
+        string matchBody = await match.BodyWithoutTraceIdAsync();
+        Assert.Equal(matchBody, await noMatch.BodyWithoutTraceIdAsync());
+        var problem = JsonNode.Parse(matchBody);
+        Assert.Equal("https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/rate-limited.md", (string?)problem?["type"]);
+        Assert.Equal(429, (int?)problem?["status"]);
         foreach (string login in new[] { matchLogin, noMatchLogin })
         {
             List<AuditLogEntry> entries = await factory.LinkingAuditsAsync(login);
@@ -59,10 +59,12 @@ public class StartLinkingQueueFullTests(PostgresFixture postgres)
             Assert.Equal((null, null, null, null, null), (blank.SupersededAtUtc, blank.ConsumedAtUtc, blank.CustomerId, blank.OtpHmac, blank.OtpSentAtUtc));
         }
 
+        // While the four workers' calls are held, neither refused start reaches core banking.
+        await Task.Delay(LinkingApi.AbsenceWindow, TestContext.Current.CancellationToken);
+        Assert.Equal(4, ports.CoreBanking.Calls);
         // The queued fifth start runs once a worker is free; neither refused start ever reaches core banking.
         Array.ForEach(holds, hold => hold.Release());
         await factory.WaitForStopsAsync(FillerLogins, [AuditAction.LinkingNoMatch], count: 5);
-        await Task.Delay(500, TestContext.Current.CancellationToken);
         Assert.Equal(5, ports.CoreBanking.Calls);
         Assert.Equal(2, (await factory.LinkingAuditsAsync(matchLogin)).Count);
     }
@@ -86,7 +88,7 @@ public class StartLinkingQueueFullTests(PostgresFixture postgres)
 
         Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
         Assert.Null(response.Headers.RetryAfter);
-        Assert.Equal("https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/rate-limited.md", (string?)(await BodyWithoutTraceIdAsync(response))["type"]);
+        Assert.Equal("https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/rate-limited.md", (string?)JsonNode.Parse(await response.BodyWithoutTraceIdAsync())?["type"]);
         Assert.Equal(1, failAudit.Failed);
         Assert.Equal([(AuditAction.LinkingStart, AuditResult.Succeeded)], (await factory.LinkingAuditsAsync(login)).Select(entry => (entry.Action, entry.Result)));
         Guid challengeId = Assert.Single(await factory.ChallengesAsync(login)).Id;
@@ -119,13 +121,5 @@ public class StartLinkingQueueFullTests(PostgresFixture postgres)
         using HttpClient queued = await factory.SignInUnlinkedAsync(FillerLogins[4]);
         await queued.StartAcceptedAsync(LinkingFakes.NoMatch);
         return holds;
-    }
-
-    private static async Task<JsonObject> BodyWithoutTraceIdAsync(HttpResponseMessage response)
-    {
-        JsonObject body = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))?.AsObject()
-            ?? throw new JsonException("The problem body is not a JSON object.");
-        Assert.True(body.Remove("traceId"));
-        return body;
     }
 }

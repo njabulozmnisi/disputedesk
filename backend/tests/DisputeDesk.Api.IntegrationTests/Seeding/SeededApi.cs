@@ -32,7 +32,7 @@ public static class SeededApi
         string connectionString = await postgres.CreateEmptyDatabaseAsync();
         ApiFactory factory = Create(connectionString, clock);
         using HttpClient client = factory.CreateClient();
-        await HealthTests.WaitUntilReadyAsync(client);
+        await Eventually.WaitUntilReadyAsync(client);
         return (factory, connectionString);
     }
 

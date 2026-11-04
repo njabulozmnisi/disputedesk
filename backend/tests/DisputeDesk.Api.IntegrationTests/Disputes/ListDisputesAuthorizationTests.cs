@@ -4,6 +4,7 @@ using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Application.Audit;
 using DisputeDesk.Contracts.Problems;
+using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -61,7 +62,7 @@ public class ListDisputesAuthorizationTests(PostgresFixture postgres)
     {
         await using ApiFactory factory = await DisputesApi.StartWithoutCoreBankingAsync(postgres);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        await factory.SeedDisputeAsync(TransactionsApi.CustomerA, "TXN-1", DisputesApi.SeedInstant);
+        await factory.DisputeInAsync(DisputeStatus.Submitted, TransactionsApi.CustomerA, "TXN-1", DisputesApi.SeedInstant);
         int auditRows = await AuditRowCountAsync(factory);
 
         HttpResponseMessage response = await browser.ListDisputesAsync();
