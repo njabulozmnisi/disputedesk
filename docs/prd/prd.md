@@ -441,7 +441,7 @@ Only the actions in this table are allowed. Any other action on a dispute return
 - Start review and escalate take no note [ASSUMPTION]. Their timeline entries show only the status and the actor type.
 - Each dispute carries a version (NFR-DATA-5). When two actions race, one commits first. The other handler, customer or operations, reloads the dispute's stored events and decides once more: it succeeds if the reloaded status still allows the action, and returns 409 if the status forbids it or a second version clash occurs. Settled on 2026-10-29 (ad-009, AD-15).
 - Repeating an action that already succeeded returns 409. Operations actions are not idempotency-keyed [ASSUMPTION].
-- Checks run in this order: 401, 403, 404, 400, 409. A caller without the role therefore cannot probe which dispute IDs exist.
+- Checks run in this order: 401, 403, 400, 404, 409, 422, then 400 for a rule that needs the loaded resource. Authorisation runs before the lookup, so a caller without the role cannot probe which dispute IDs exist; a malformed body gets 400 before the lookup, whether or not the ID exists.
 
 #### FR-25: Operations authentication and audit
 
