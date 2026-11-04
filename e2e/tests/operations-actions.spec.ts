@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './support';
+import { expect, request as playwrightRequest, test, type APIRequestContext, type BrowserContext } from '@playwright/test';
+import { expectProblemShape, ownDisputable, queryDatabase, topicRecords, origin, queryRows, signInContext } from './support';
 
 // Story 5.2: operations start review, escalate and resolve under the FR-24 table, with a bearer token from
 // scripts/operations-token.sh. Network level with the real Zitadel token, the database through qa_readonly, the events
@@ -10,7 +10,6 @@ import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase, topicRe
 // mapped to an operations actor, which is itself one of the 403 cases. A transaction can be disputed once, so the spec raises on
 // its reserved transactions (support.ts): seven of customer B's.
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const authOrigin = process.env.AUTH_ORIGIN ?? 'http://auth.localhost:8080';
 const root = new URL('../..', import.meta.url).pathname;
 const unknownId = '01a189e2-0000-7000-8000-000000000052';
@@ -36,28 +35,11 @@ const bearer = (value = token) => ({ Authorization: `Bearer ${value}` });
 const withoutTraceId = ({ traceId: _ignored, ...rest }: Json) => rest;
 const instant = (value: string) => value.replace(/(\+00:00|Z)$/, '').replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
 
-function rows<T = Json>(sql: string): T[] {
-  return JSON.parse(queryDatabase(`select coalesce(json_agg(t), '[]') from (${sql}) t`)) as T[];
-}
-const events = (id: string) => rows(`select "Id", "Version", "EventType", "ActorType", "ActorId", to_char("OccurredAtUtc" at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') as "At", "Data" from "StoredEvents" where "DisputeId" = '${id}' order by "Version"`);
-const outbox = (id: string) => rows(`select "Id", "EventType", "DisputeVersion", "Payload", "TraceParent" from "OutboxMessages" where "DisputeId" = '${id}' order by "DisputeVersion"`);
-const disputeRow = (id: string) => rows(`select "Status", "Outcome", "Version" from "Disputes" where "Id" = '${id}'`)[0];
-const audit = (id: string) => rows(`select "Action", "Result", "ActorType", "ActorId", "CustomerId", "DisputeId" from "AuditLogEntries" where "DisputeId" = '${id}' order by "OccurredAtUtc", "Id"`);
+const events = (id: string) => queryRows<Json>(`select "Id", "Version", "EventType", "ActorType", "ActorId", to_char("OccurredAtUtc" at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') as "At", "Data" from "StoredEvents" where "DisputeId" = '${id}' order by "Version"`);
+const outbox = (id: string) => queryRows<Json>(`select "Id", "EventType", "DisputeVersion", "Payload", "TraceParent" from "OutboxMessages" where "DisputeId" = '${id}' order by "DisputeVersion"`);
+const disputeRow = (id: string) => queryRows<Json>(`select "Status", "Outcome", "Version" from "Disputes" where "Id" = '${id}'`)[0];
+const audit = (id: string) => queryRows<Json>(`select "Action", "Result", "ActorType", "ActorId", "CustomerId", "DisputeId" from "AuditLogEntries" where "DisputeId" = '${id}' order by "OccurredAtUtc", "Id"`);
 const auditCount = () => Number(queryDatabase('select count(*) from "AuditLogEntries"'));
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 /** Raises a dispute on the first of the given customers that still has a disputable reserved transaction. */
 async function raise(...logins: string[]): Promise<{ id: string; login: string }> {
@@ -218,9 +200,9 @@ test.beforeAll(async ({ browser }) => {
   token = execFileSync('scripts/operations-token.sh', { encoding: 'utf8', cwd: root }).trim();
   sub = decode(token).sub;
   ops = await playwrightRequest.newContext({ baseURL: origin });
-  contexts.a = await signIn(browser, 'customer-a');
-  contexts.b = await signIn(browser, 'customer-b');
-  contexts.c = await signIn(browser, 'customer-c');
+  contexts.a = await signInContext(browser, 'customer-a');
+  contexts.b = await signInContext(browser, 'customer-b');
+  contexts.c = await signInContext(browser, 'customer-c');
 
   const clients = JSON.parse(execFileSync('docker', ['compose', 'run', '--rm', '--no-deps', '-T', '--entrypoint', 'cat', 'provision', '/out/zitadel-clients.json'], { encoding: 'utf8', cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }));
   const adminPat = execFileSync('docker', ['run', '--rm', '-v', 'disputedesk_zitadel-bootstrap:/b', 'alpine', 'cat', '/b/admin.pat'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -354,11 +336,22 @@ test.describe('the customer sees the actions', () => {
   test('a resolved dispute cannot be withdrawn: 409 action-not-allowed with customerStatus', async () => {
     const api = contexts[owner.d1].request;
     const csrf = (await (await api.get('/api/v1/antiforgery')).json()).requestToken as string;
+    const disputeBefore = disputeRow(ids.d1);
+    const eventsBefore = events(ids.d1);
+    const outboxBefore = outbox(ids.d1);
+    const auditBefore = audit(ids.d1);
     const response = await api.post(`/api/v1/disputes/${ids.d1}/withdraw`, { headers: { 'X-XSRF-TOKEN': csrf }, data: { note: 'QA withdraw.' }, maxRedirects: 0 });
     expect(response.status()).toBe(409);
     const body = await response.json();
     expect(expectProblemShape(body, 'action-not-allowed', 409)).toEqual([]);
     expect(body.customerStatus).toBe('resolved');
+    // The refusal writes nothing but its audit row: same status, same stored events, same outbox rows.
+    expect(disputeRow(ids.d1)).toEqual(disputeBefore);
+    expect(events(ids.d1)).toEqual(eventsBefore);
+    expect(outbox(ids.d1)).toEqual(outboxBefore);
+    const auditAdded = audit(ids.d1).slice(auditBefore.length);
+    expect(auditAdded).toHaveLength(1);
+    expect(auditAdded[0]).toMatchObject({ Action: 'Withdraw', Result: 'Rejected', DisputeId: ids.d1 });
   });
 
   test("another customer's dispute is 404 for the customer, with no data", async () => {
@@ -543,7 +536,7 @@ test.describe.serial('403: refused tokens, 403 before 404 and 400, each audited 
     for (const action of actions) {
       const response = await act('not-a-guid', action, { headers: bearer(machine.noRole.token) });
       expect(response.status(), action).toBe(403);
-      const row = rows(`select "Action", "Result", "ActorId", "DisputeId" from "AuditLogEntries" where "ActorId" = '${machine.noRole.sub}' order by "OccurredAtUtc" desc, "Id" limit 1`)[0];
+      const row = queryRows<Json>(`select "Action", "Result", "ActorId", "DisputeId" from "AuditLogEntries" where "ActorId" = '${machine.noRole.sub}' order by "OccurredAtUtc" desc, "Id" limit 1`)[0];
       expect(row).toEqual({ Action: auditAction[action], Result: 'Denied', ActorId: machine.noRole.sub, DisputeId: null });
     }
   });

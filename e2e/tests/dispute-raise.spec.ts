@@ -1,18 +1,16 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, request as playwrightRequest, test, type Browser, type BrowserContext, type Page, type Route } from '@playwright/test';
-import { fixtureLogin, gatewayContentSecurityPolicy, ownDisputable, problemTypeBase, queryDatabase } from './support';
+import { expect, request as playwrightRequest, test, type BrowserContext, type Page, type Route } from '@playwright/test';
+import { gatewayContentSecurityPolicy, ownDisputable, problemTypeBase, queryDatabase, axeTags, origin, signInContext } from './support';
 
 // Story 3.6: the raise-a-dispute screens (4a, 4b) with an idempotent submit, through the real gateway, Api,
 // database and Zitadel, signed in as seeded customer A (B owns the 404 case). The database is read through qa_readonly.
 // Refusals come from the real API by forging the one POST in flight (another transaction, another customer's row, a
 // key already used); only the cases the API cannot be made to produce (an in-progress key, a 503, a 500, a 400) are
-// stubbed, and each test says so. There is no outbox relay before story 4.1, so the events hop is the Pending outbox row.
+// stubbed, and each test says so. The events hop is the outbox row, Pending when read (outbox-relay.spec.ts reads the topic).
 // A transaction is disputed once: a run raises on four of customer A's reserved transactions (support.ts), all among the
 // newest 20 rows because the Dispute links are clicked in the SPA.
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const disputesPath = '/api/v1/disputes';
-const axeTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const quotedUuid = /^"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"$/;
 /** The one console error accepted by decision (story 2.5 criterion 7): Radix's scroll-lock <style> under style-src 'self'. */
 const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
@@ -36,20 +34,6 @@ let customerA: BrowserContext;
 let customerB: BrowserContext;
 let oldKey = ''; // the key of the first real raise, reused for the 422 idempotency-mismatch case
 let disputedRow: ApiRow; // a row of A that already has a dispute (made by the first test)
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 async function listRows(context: BrowserContext): Promise<ApiRow[]> {
   const response = await context.request.get('/api/v1/transactions?limit=50');
@@ -151,8 +135,8 @@ const fromCents = (cents: bigint) => `${cents / 100n}.${String(cents % 100n).pad
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-  customerA = await signIn(browser, 'customer-a');
-  customerB = await signIn(browser, 'customer-b');
+  customerA = await signInContext(browser, 'customer-a');
+  customerB = await signInContext(browser, 'customer-b');
 });
 
 test.afterAll(async () => {
@@ -367,13 +351,12 @@ test('criteria 2, 3: wrong amount: bounds in integer cents, live difference, str
   await expect(second.locator('#note-error')).toHaveText('Your note must be 1,000 characters or fewer.');
   await expect(note).toHaveAttribute('aria-invalid', 'true');
   expect(await note.getAttribute('aria-describedby')).toContain('note-error');
-  // The blur that the first press causes shows the field error; with it already showing, Continue must still put focus
-  // on the error summary, never back on the Note field.
-  await second.waitForTimeout(500);
-  if ((await summaryOfSecond.count()) === 0) await second.getByRole('button', { name: 'Continue' }).click();
+  // The press of Continue blurs the Note field, which shows the field error; focus must still go to the error summary,
+  // never back on the Note field.
   await expect(summaryOfSecond).toBeVisible();
   await expect(summaryOfSecond).toBeFocused();
-  await second.waitForTimeout(500);
+  // Focus stays on the summary for 500 ms: a change of the focused element within the window fails the claim.
+  await expect(second.waitForFunction(() => document.activeElement !== document.querySelector('[aria-labelledby="error-summary-title"]'), undefined, { timeout: 500 })).rejects.toThrow('Timeout');
   await expect(summaryOfSecond).toBeFocused();
   await expect(note).not.toBeFocused();
   expect(await second.getByRole('heading', { name: 'Review your dispute' }).count()).toBe(0);
@@ -657,7 +640,7 @@ test('criterion 1: deep link, reload, not-disputable and unknown ID all land on 
 });
 
 test('criterion 8: a 401 on 4b goes to the session-ended screen and Sign in again carries returnUrl=/transactions only', async ({ browser }) => {
-  const context = await signIn(browser, 'customer-a');
+  const context = await signInContext(browser, 'customer-a');
   const page = await context.newPage();
   const attempts = trackAttempts(page);
   const transactionId = await draftUnrecognised(page, 'qa 3.6 session');
@@ -705,7 +688,7 @@ const spansOf = (exports: OtlpExport[]) => exports.flatMap((e) => e.resourceSpan
 
 test('story 3.11 criteria 1-5: one trace from dispute.raise.submit to the API POST, open span and link, attribute keys, no personal data, same-origin export, no CSP violation', async ({ browser }) => {
   test.setTimeout(120_000);
-  const context = await signIn(browser, 'customer-a');
+  const context = await signInContext(browser, 'customer-a');
   const page = await context.newPage();
   await page.addInitScript(() => {
     (window as unknown as { cspViolations: string[] }).cspViolations = [];
@@ -833,7 +816,7 @@ test('story 3.11 criteria 1-5: one trace from dispute.raise.submit to the API PO
 });
 
 test('story 3.11 criteria 1, 4: a fetch to another origin carries no traceparent and no baggage; a cursor in a same-origin URL never reaches the export', async ({ browser }) => {
-  const context = await signIn(browser, 'customer-a');
+  const context = await signInContext(browser, 'customer-a');
   const page = await context.newPage();
   // The gateway's CSP would block the cross-origin fetch before it is sent, so this page is served without it.
   await page.route(`${origin}/transactions`, async (route) => {
@@ -870,7 +853,7 @@ test('story 3.11 criteria 1, 4: a fetch to another origin carries no traceparent
 });
 
 test('story 3.11 criteria 2, 3, 4: a refused raise (404 not-found, forged to another customer\'s transaction) ends the submit span with the status and the problem slug, and holds no id', async ({ browser }) => {
-  const context = await signIn(browser, 'customer-a');
+  const context = await signInContext(browser, 'customer-a');
   const page = await context.newPage();
   const customerBRow = (await listRows(customerB)).find((row) => row.disputable)!;
   const exports: OtlpExport[] = [];

@@ -1,31 +1,15 @@
-import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase } from './support';
+import { expect, request as playwrightRequest, test, type APIRequestContext, type BrowserContext } from '@playwright/test';
+import { expectProblemShape, ownDisputable, origin, queryRows, signInContext } from './support';
 
-// Story 3.4: a customer withdraws an open dispute. The SPA has no withdraw screen yet, so the withdraw is sent at network
-// level from browser contexts that signed in through Zitadel (session cookie and antiforgery token as a browser sends them).
-// Every database fact is read through the read-only qa_readonly role. There is no outbox relay before story 4.1, so the
-// events hop is the outbox row. A Resolved dispute cannot be made on the stack (no resolve action exists yet), so the
-// resolved-409 cell is covered by the integration tests only. A transaction is disputed once: the spec raises on its
-// reserved transactions (support.ts): eight of customer A's, one of customer B's.
+// Story 3.4: a customer withdraws an open dispute. The withdraw is sent at network level (the withdraw screen is tested in
+// dispute-detail.spec.ts) from browser contexts that signed in through Zitadel (session cookie and antiforgery token as a
+// browser sends them). Every database fact is read through the read-only qa_readonly role; the events hop is the outbox row
+// (outbox-relay.spec.ts reads the topic). The resolved-409 case on the stack is in operations-actions.spec.ts. A transaction
+// is disputed once: the spec raises on its reserved transactions (support.ts): eight of customer A's, one of customer B's.
 
 type Row = { transactionId: string; accountRef: string; state: string; disputable: boolean };
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const contexts: Record<string, BrowserContext> = {};
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 async function transactions(api: APIRequestContext): Promise<Row[]> {
   const response = await api.get('/api/v1/transactions?limit=50');
@@ -71,19 +55,16 @@ async function withdraw(api: APIRequestContext, disputeId: string, body: Body = 
   return api.post(`/api/v1/disputes/${disputeId}/withdraw`, options);
 }
 
-function rows<T>(sql: string): T[] {
-  return JSON.parse(queryDatabase(`select coalesce(json_agg(t), '[]') from (${sql}) t`)) as T[];
-}
 
-const totals = () => rows<{ disputes: number; stored: number; outbox: number; audit: number }>(
+const totals = () => queryRows<{ disputes: number; stored: number; outbox: number; audit: number }>(
   `select (select count(*) from "Disputes") as disputes, (select count(*) from "StoredEvents") as stored,
           (select count(*) from "OutboxMessages") as outbox, (select count(*) from "AuditLogEntries") as audit`)[0];
 
 const instant = (value: string) => value.replace(/(\+00:00|Z)$/, '').replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
 
-const stream = (id: string) => rows<any>(`select "Id", "Version", "EventType", "ActorType", "ActorId", "OccurredAtUtc", "Data" from "StoredEvents" where "DisputeId" = '${id}' order by "Version"`);
-const disputeRow = (id: string) => rows<any>(`select "Status", "Version", "Note", "CustomerId" from "Disputes" where "Id" = '${id}'`)[0];
-const auditFor = (sql: string) => rows<any>(`select "Action", "Result", "ActorType", "ActorId", "CustomerId", "DisputeId", "TraceId" from "AuditLogEntries" where ${sql} order by "OccurredAtUtc"`);
+const stream = (id: string) => queryRows<any>(`select "Id", "Version", "EventType", "ActorType", "ActorId", "OccurredAtUtc", "Data" from "StoredEvents" where "DisputeId" = '${id}' order by "Version"`);
+const disputeRow = (id: string) => queryRows<any>(`select "Status", "Version", "Note", "CustomerId" from "Disputes" where "Id" = '${id}'`)[0];
+const auditFor = (sql: string) => queryRows<any>(`select "Action", "Result", "ActorType", "ActorId", "CustomerId", "DisputeId", "TraceId" from "AuditLogEntries" where ${sql} order by "OccurredAtUtc"`);
 
 let aFree: Row[];
 let bFree: Row[];
@@ -91,9 +72,9 @@ let aPending: Row;
 let main: { id: string; row: Row; body: any };
 
 test.beforeAll(async ({ browser }) => {
-  contexts.a = await signIn(browser, 'customer-a');
-  contexts.b = await signIn(browser, 'customer-b');
-  contexts.c = await signIn(browser, 'customer-c');
+  contexts.a = await signInContext(browser, 'customer-a');
+  contexts.b = await signInContext(browser, 'customer-b');
+  contexts.c = await signInContext(browser, 'customer-c');
   const a = await transactions(contexts.a.request);
   aFree = ownDisputable(a, 'dispute-withdraw', 'a');
   aPending = a.find((row) => row.state === 'pending')!;
@@ -137,7 +118,7 @@ test.describe.serial('withdraw an own open dispute', () => {
     expect(events[1].Data.note).toBe('I changed my mind.');
     expect(disputeRow(main.id)).toMatchObject({ Status: 'Withdrawn', Version: 2 });
 
-    const outbox = rows<any>(`select "Id", "EventType", "DisputeVersion", "Status", "TraceParent", "Payload" from "OutboxMessages" where "DisputeId" = '${main.id}' and "DisputeVersion" = 2`);
+    const outbox = queryRows<any>(`select "Id", "EventType", "DisputeVersion", "Status", "TraceParent", "Payload" from "OutboxMessages" where "DisputeId" = '${main.id}' and "DisputeVersion" = 2`);
     expect(outbox).toHaveLength(1);
     expect(outbox[0]).toMatchObject({ Id: events[1].Id, EventType: 'disputedesk.dispute.status-changed.v1', Status: 'Pending' });
     const payload = JSON.parse(outbox[0].Payload);
@@ -168,7 +149,7 @@ test.describe.serial('withdraw an own open dispute', () => {
     expect(expectProblemShape(body, 'action-not-allowed', 409)).toEqual([]);
     expect(body.customerStatus).toBe('withdrawn');
     expect(stream(main.id).filter((event) => event.EventType === 'DisputeWithdrawn')).toHaveLength(1);
-    expect(rows(`select 1 from "OutboxMessages" where "DisputeId" = '${main.id}' and "DisputeVersion" = 2`)).toHaveLength(1);
+    expect(queryRows(`select 1 from "OutboxMessages" where "DisputeId" = '${main.id}' and "DisputeVersion" = 2`)).toHaveLength(1);
     const after = totals();
     expect(after).toEqual({ ...before, audit: before.audit + 1 });
   });
@@ -325,7 +306,7 @@ test.describe.serial('only the owner, only through the cookie', () => {
     // B's stream, row and outbox are untouched.
     expect(stream(bId)).toEqual(bBefore.stream);
     expect(disputeRow(bId)).toEqual(bBefore.row);
-    expect(rows(`select 1 from "OutboxMessages" where "DisputeId" = '${bId}'`)).toHaveLength(1);
+    expect(queryRows(`select 1 from "OutboxMessages" where "DisputeId" = '${bId}'`)).toHaveLength(1);
     expect(disputeRow(bId)).toMatchObject({ Status: 'Submitted', Version: 1 });
   });
 
@@ -335,13 +316,13 @@ test.describe.serial('only the owner, only through the cookie', () => {
     const aSub = aRaised.ActorId as string;
     const bCustomer = bBefore.stream[0].Data.customerId as string;
     expect(aCustomer).not.toBe(bCustomer);
-    const entries = rows<any>(`select "Action", "Result", "ActorType", "ActorId", "CustomerId", "DisputeId" from "AuditLogEntries" where "Action" = 'Withdraw' and "Result" = 'Rejected' and "DisputeId" is null and "CustomerId" = '${aCustomer}'`);
+    const entries = queryRows<any>(`select "Action", "Result", "ActorType", "ActorId", "CustomerId", "DisputeId" from "AuditLogEntries" where "Action" = 'Withdraw' and "Result" = 'Rejected' and "DisputeId" is null and "CustomerId" = '${aCustomer}'`);
     expect(entries.length).toBeGreaterThanOrEqual(4);
     for (const entry of entries) expect(entry).toEqual(entries[0]);
     expect(entries[0]).toEqual({ Action: 'Withdraw', Result: 'Rejected', ActorType: 'Customer', ActorId: aSub, CustomerId: aCustomer, DisputeId: null });
     // Only rows from B's raise on: an earlier spec (dispute-detail) leaves a Withdraw Rejected row for the same login B.
     const sinceBRaised = `"OccurredAtUtc" >= '${bBefore.stream[0].OccurredAtUtc}'`;
-    expect(rows(`select 1 from "AuditLogEntries" where "DisputeId" = '${bId}' or ("Action" = 'Withdraw' and ${sinceBRaised} and ("CustomerId" = '${bCustomer}' or "ActorId" = '${bBefore.stream[0].ActorId}'))`)).toHaveLength(0);
+    expect(queryRows(`select 1 from "AuditLogEntries" where "DisputeId" = '${bId}' or ("Action" = 'Withdraw' and ${sinceBRaised} and ("CustomerId" = '${bCustomer}' or "ActorId" = '${bBefore.stream[0].ActorId}'))`)).toHaveLength(0);
   });
 });
 
@@ -360,7 +341,7 @@ test.describe.serial('refused raises are audited Rejected', () => {
     expect(after.disputes).toBe(before.disputes);
     expect(after.stored).toBe(before.stored);
     expect(after.outbox).toBe(before.outbox);
-    const entries = rows<any>(`select "Action", "Result", "ActorType", "CustomerId", "DisputeId", "TraceId" from "AuditLogEntries" where "Action" = 'Raise' order by "OccurredAtUtc" desc limit 2`);
+    const entries = queryRows<any>(`select "Action", "Result", "ActorType", "CustomerId", "DisputeId", "TraceId" from "AuditLogEntries" where "Action" = 'Raise' order by "OccurredAtUtc" desc limit 2`);
     for (const entry of entries) {
       expect(entry).toMatchObject({ Action: 'Raise', Result: 'Rejected', ActorType: 'Customer', DisputeId: null });
       expect(entry.CustomerId).toBeTruthy();

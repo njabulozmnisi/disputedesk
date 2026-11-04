@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, request as playwrightRequest, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { fixtureLogin, gatewayContentSecurityPolicy, queryDatabase, sessionCookieName } from './support';
+import { fixtureLogin, gatewayContentSecurityPolicy, queryDatabase, sessionCookieName, axeTags } from './support';
 
 // Story 2.4: the SPA shell, session routing and the transactions screen, through the real sign-in and Zitadel.
 // Since story 2.5 the gateway serves the SPA, so SPA_ORIGIN defaults to the gateway and the browser sees the real
@@ -11,7 +11,6 @@ import { fixtureLogin, gatewayContentSecurityPolicy, queryDatabase, sessionCooki
 const spa = process.env.SPA_ORIGIN ?? 'http://localhost:8080';
 const gateway = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const coreBankingContainer = 'disputedesk-core-banking-1';
-const axeTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 type ApiRow = {
   transactionId: string;
@@ -43,6 +42,7 @@ function expectedAmount(row: ApiRow): string {
   return `${row.direction === 'credit' ? '+' : ''}R${grouped}.${cents}`;
 }
 
+// Own sign-in: it sets the browser's time zone and returns the page, which signInContext does not.
 async function signIn(browser: Browser, loginKey: string, timezoneId?: string): Promise<{ context: BrowserContext; page: Page }> {
   const login = fixtureLogin(loginKey);
   const context = await browser.newContext({ timezoneId });

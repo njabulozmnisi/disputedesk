@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { holdsCode, otpCodesSentTo, queryDatabase, telemetryValues, topicRecords } from './support';
+import { holdsCode, otpCodesSentTo, queryDatabase, telemetryValues, topicRecords, origin } from './support';
 
 // Story 6.3: the linking rate limits (5 requests per login, 20 per client IP, a 15-minute window), through the real
 // gateway, Api, job, database (qa_readonly) and Mailpit. The limits are held in memory on the one Api instance, so
@@ -21,7 +21,6 @@ test.skip(process.env.E2E_LINKING_RATE_LIMITS !== 'production', 'needs E2E_LINKI
 
 const startPath = '/api/v1/linking/start';
 const verifyPath = '/api/v1/linking/verify';
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const mailpit = process.env.MAILPIT_URL ?? `http://localhost:${process.env.DISPUTEDESK_MAILPIT_PORT ?? '8025'}`;
 const problemType = (slug: string) => `https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/${slug}.md`;
 const queueCapacity = Number(process.env.E2E_LINKING_QUEUE_CAPACITY ?? 0);
@@ -91,6 +90,7 @@ async function createPoolLogins(): Promise<{ username: string; password: string;
   return logins;
 }
 
+// Own sign-in: it takes a login created by the test, not a fixture key like signInContext.
 async function signInAs(browser: Browser, login: { username: string; password: string }): Promise<BrowserContext> {
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -177,15 +177,6 @@ const auditMark = () => sql(`select coalesce(max("OccurredAtUtc")::text, '1970-0
 const auditRows = (sub: string, since: string) => sql(`select concat_ws('|', "Action", "Result", coalesce("CustomerId", 'null'), ("ClientIp" is not null)::text)
   from "AuditLogEntries" where "ActorId" = '${sub}' and "OccurredAtUtc" > '${since}' order by "OccurredAtUtc"`).split('\n').filter(Boolean);
 const rateLimitedRows = (sub: string, since: string) => auditRows(sub, since).filter((row) => row.startsWith('LinkingRateLimited|'));
-
-async function until(description: string, check: () => boolean | Promise<boolean>, seconds = 40): Promise<void> {
-  const deadline = Date.now() + seconds * 1000;
-  while (Date.now() < deadline) {
-    if (await check()) return;
-    await pause(300);
-  }
-  throw new Error(`timed out waiting for ${description}`);
-}
 
 // ---- setup ---------------------------------------------------------------------------------------------------------------
 
@@ -335,10 +326,10 @@ test('claim: a challenge locked by three wrong codes while its job waits gets no
   const smsBefore = await smsToD();
   const mark = auditMark();
   const holder = holdCustomerLock();
-  await until('the lock holder', () => lockHolders() === 1);
+  await expect.poll(() => lockHolders() === 1, { message: 'the lock holder', timeout: 40_000 }).toBe(true);
   try {
     expect((await post(login, startPath, dDetails)).status).toBe(202);
-    await until('the job waiting on the lock', () => lockWaiters() === 1);
+    await expect.poll(() => lockWaiters() === 1, { message: 'the job waiting on the lock', timeout: 40_000 }).toBe(true);
     // The start left a blank current challenge; wrong codes lock it like any other.
     expect(challengeOf(login.sub)).toBe('0|null|false|false');
     const first = await post(login, verifyPath, JSON.stringify({ code: wrongCodes[0] }));
@@ -351,8 +342,8 @@ test('claim: a challenge locked by three wrong codes while its job waits gets no
   } finally {
     await holder.release();
   }
-  await until('the job to stop', () => auditRows(login.sub, mark).some((row) => row.startsWith('LinkingOtpSent|')));
-  await pause(2000);
+  await expect.poll(() => auditRows(login.sub, mark).some((row) => row.startsWith('LinkingOtpSent|')), { message: 'the job to stop', timeout: 40_000 }).toBe(true);
+  await pause(2000); // a window in which no second LinkingOtpSent row may appear
   const rows = auditRows(login.sub, mark);
   expect(rows.filter((row) => row.startsWith('LinkingOtpSent|'))).toEqual([`LinkingOtpSent|Rejected|${customerD.customerId}|true`]);
   expect(rows.some((row) => row.startsWith('LinkingOtpSent|Succeeded'))).toBe(false);
@@ -369,10 +360,10 @@ test('criterion 4: with the queue full, the blank challenge of a refused start a
   expect(accepted.length + refused.length).toBeLessThanOrEqual(pool.length - 1);
   const mark = auditMark();
   const holder = holdCustomerLock();
-  await until('the lock holder', () => lockHolders() === 1);
+  await expect.poll(() => lockHolders() === 1, { message: 'the lock holder', timeout: 40_000 }).toBe(true);
   try {
     for (const login of accepted) expect((await post(login, startPath, dDetails)).status, login.sub).toBe(202);
-    await until('4 jobs waiting on the lock', () => lockWaiters() === jobsAtOnce);
+    await expect.poll(() => lockWaiters() === jobsAtOnce, { message: '4 jobs waiting on the lock', timeout: 40_000 }).toBe(true);
     const refusedWithMatch = await post(refused[0], startPath, dDetails);
     const refusedNoMatch = await post(refused[1], startPath, noMatchDetails);
     for (const observed of [refusedWithMatch, refusedNoMatch]) {
@@ -383,7 +374,7 @@ test('criterion 4: with the queue full, the blank challenge of a refused start a
     await holder.release();
   }
   // The accepted jobs run: D's three sends are delivered to three logins, the rest are capped (a blank challenge too).
-  await until('the accepted jobs to stop', () => accepted.every((login) => auditRows(login.sub, mark).some((row) => /^Linking(OtpSent|SendCapped)\|/.test(row))), 60);
+  await expect.poll(() => accepted.every((login) => auditRows(login.sub, mark).some((row) => /^Linking(OtpSent|SendCapped)\|/.test(row))), { message: 'the accepted jobs to stop', timeout: 60_000 }).toBe(true);
   const delivered = accepted.filter((login) => challengeOf(login.sub).split('|')[2] === 'true');
   expect(delivered.length).toBeGreaterThan(0);
 

@@ -12,6 +12,7 @@ let rowsBefore = 0;
 const sessionRows = () => Number(queryDatabase('select count(*) from "Sessions"'));
 const customerA = fixtureLogin('customer-a');
 
+// Own sign-in: this spec tests the hosted-login flow itself.
 async function signInThroughHostedLogin(target: Page, loginUrl: string) {
   await target.goto(loginUrl);
   await target.getByTestId('username-text-input').fill(customerA.username);

@@ -1,5 +1,5 @@
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, queryDatabase } from './support';
+import { expect, test, type APIRequestContext, type BrowserContext } from '@playwright/test';
+import { expectProblemShape, queryDatabase, signInContext } from './support';
 
 // Story 2.3: a linked customer lists their own transactions. API level only (no SPA yet).
 // Customers A and B are linked, C is not. Each signs in once through the hosted Zitadel login.
@@ -17,20 +17,6 @@ async function get(api: APIRequestContext, url: string, options?: { maxRedirects
   return api.get(url, options);
 }
 
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password);
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === 'http://localhost:8080');
-  await page.close();
-  return context;
-}
-
 async function listAll(api: APIRequestContext, limit: number): Promise<Row[]> {
   const rows: Row[] = [];
   let cursor: string | null = null;
@@ -46,9 +32,9 @@ async function listAll(api: APIRequestContext, limit: number): Promise<Row[]> {
 }
 
 test.beforeAll(async ({ browser }) => {
-  contexts.a = await signIn(browser, 'customer-a');
-  contexts.b = await signIn(browser, 'customer-b');
-  contexts.c = await signIn(browser, 'customer-c');
+  contexts.a = await signInContext(browser, 'customer-a');
+  contexts.b = await signInContext(browser, 'customer-b');
+  contexts.c = await signInContext(browser, 'customer-c');
 });
 
 test.afterAll(async () => {

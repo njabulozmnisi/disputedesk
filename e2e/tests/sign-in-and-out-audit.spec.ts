@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
 import {
-  antiforgeryCookieName, expectProblemShape, fixtureLogin, queryDatabase, sessionCookieName,
+  antiforgeryCookieName, expectProblemShape, fixtureLogin, origin, queryDatabase, sessionCookieName,
 } from './support';
 
 // Story 2.8: sign-in and sign-out are audited, and every endpoint is denied by default.
@@ -9,7 +9,6 @@ import {
 // Nothing here prints a cookie, token, email or subject: assertions compare, they do not echo.
 test.describe.configure({ mode: 'serial' });
 
-const origin = 'http://localhost:8080';
 const customerA = { ...fixtureLogin('customer-a'), ...fixtureFull('customer-a') };
 const customerC = { ...fixtureLogin('customer-c'), ...fixtureFull('customer-c') };
 const startedAt = new Date().toISOString();
@@ -30,6 +29,7 @@ function auditRowsAfter(skip: number): string[] {
   return queryDatabase(sql).split('\n').filter(Boolean);
 }
 
+// Own sign-in: this spec tests the sign-in itself, so it drives the hosted login on the page under test.
 async function signIn(page: Page, login: { username: string; password: string }, loginUrl = '/api/v1/authentication/login') {
   await page.goto(loginUrl);
   // Zitadel keeps its own session after a sign-in, so a second login completes silently, without the form.

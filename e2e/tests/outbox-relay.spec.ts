@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './support';
+import { expect, test, type APIRequestContext, type BrowserContext } from '@playwright/test';
+import { ownDisputable, topicRecords, queryRows, signInContext } from './support';
 
 // Story 4.1: the Worker's outbox relay publishes a raised dispute's event to disputedesk.disputes.
 // Four hops per raise: the 201 the browser context gets, the Disputes/StoredEvents/OutboxMessages rows (read-only role
@@ -10,24 +10,9 @@ import { fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './supp
 
 type Row = { transactionId: string; accountRef: string; description: string; disputable: boolean };
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const dashboard = process.env.ASPIRE_ORIGIN ?? 'http://localhost:18888';
 let customerA: BrowserContext;
 let disputable: Row[];
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 async function raise(api: APIRequestContext, transaction: Row, note: string) {
   const token = (await (await api.get('/api/v1/antiforgery')).json()).requestToken as string;
@@ -40,12 +25,9 @@ async function raise(api: APIRequestContext, transaction: Row, note: string) {
   return (await response.json()).disputeId as string;
 }
 
-function rows<T>(sql: string): T[] {
-  return JSON.parse(queryDatabase(`select coalesce(json_agg(t), '[]') from (${sql}) t`)) as T[];
-}
 
 const outboxOf = (disputeId: string) =>
-  rows<any>(`select "Id", "Status", "Attempts", "SentAtUtc", "LastError", "NextAttemptAtUtc", "TraceParent", "TraceState", "Payload", "DisputeVersion" from "OutboxMessages" where "DisputeId" = '${disputeId}'`);
+  queryRows<any>(`select "Id", "Status", "Attempts", "SentAtUtc", "LastError", "NextAttemptAtUtc", "TraceParent", "TraceState", "Payload", "DisputeVersion" from "OutboxMessages" where "DisputeId" = '${disputeId}'`);
 
 async function untilSent(disputeId: string, seconds: number) {
   await expect.poll(() => outboxOf(disputeId)[0]?.Status, { timeout: seconds * 1000, intervals: [1000] }).toBe('Sent');
@@ -56,7 +38,7 @@ const workerHealth = () => docker('inspect', 'disputedesk-worker-1', '--format',
 const recordsFor = (disputeId: string) => topicRecords().filter((record) => record.key === disputeId);
 
 test.beforeAll(async ({ browser }) => {
-  customerA = await signIn(browser, 'customer-a');
+  customerA = await signInContext(browser, 'customer-a');
   const response = await customerA.request.get('/api/v1/transactions?limit=50');
   disputable = ownDisputable((await response.json()).items as Row[], 'outbox-relay', 'a');
   expect(disputable.length, 'two of the spec\'s reserved transactions are disputable (reservedTransactions in support.ts)').toBeGreaterThanOrEqual(2);
@@ -74,7 +56,7 @@ test.describe.serial('a raised dispute reaches the topic', () => {
   test('the raise leaves a Pending outbox row that the relay marks Sent', async () => {
     transaction = disputable[0];
     disputeId = await raise(customerA.request, transaction, note);
-    const [stored] = rows<any>(`select "Id", "TraceId" from "StoredEvents" where "DisputeId" = '${disputeId}'`);
+    const [stored] = queryRows<any>(`select "Id", "TraceId" from "StoredEvents" where "DisputeId" = '${disputeId}'`);
     const [outbox] = outboxOf(disputeId);
     expect(outbox.Id).toBe(stored.Id);
 
@@ -114,7 +96,7 @@ test.describe.serial('a raised dispute reaches the topic', () => {
 
   test('no customer ID, account, transaction, amount, note or actor on the topic, in the payload or the Worker log', async () => {
     const [record] = recordsFor(disputeId);
-    const [stored] = rows<any>(`select "ActorId", "Data" from "StoredEvents" where "DisputeId" = '${disputeId}'`);
+    const [stored] = queryRows<any>(`select "ActorId", "Data" from "StoredEvents" where "DisputeId" = '${disputeId}'`);
     const privateValues = [
       stored.Data.customerId, stored.ActorId, transaction.accountRef, transaction.transactionId, transaction.description, note,
       String(stored.Data.expectedAmount), String(stored.Data.disputedAmount),
@@ -129,7 +111,7 @@ test.describe.serial('a raised dispute reaches the topic', () => {
 
   test('every record on the topic follows the contract: one per outbox row, keyed by dispute, per-dispute versions in order', async () => {
     const records = topicRecords();
-    const outbox = rows<any>(`select "Id", "DisputeId", "DisputeVersion", "Status" from "OutboxMessages" where "Status" = 'Sent' order by "DisputeId", "DisputeVersion"`);
+    const outbox = queryRows<any>(`select "Id", "DisputeId", "DisputeVersion", "Status" from "OutboxMessages" where "Status" = 'Sent' order by "DisputeId", "DisputeVersion"`);
     expect(records.map((record) => JSON.parse(record.value).id).sort()).toEqual(outbox.map((row) => row.Id).sort());
     for (const record of records) {
       expect(record.key).toBe(JSON.parse(record.value).subject);

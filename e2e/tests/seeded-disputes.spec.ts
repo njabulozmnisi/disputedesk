@@ -1,15 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, queryDatabase, topicRecords } from './support';
+import { expect, test, type BrowserContext } from '@playwright/test';
+import { expectProblemShape, queryDatabase, topicRecords, origin, queryRows, signInContext } from './support';
 
 // Story 5.4: the seeder's disputes for customers A and B, on the real stack, through the SPA, the gateway, the API, the
 // database (qa_readonly) and the topic. Expectations come from backend/fixtures/local.json, so the spec follows the fixture.
 // It only reads the seeded rows (and sends one refused withdraw), so it is safe to run on a database other specs have
 // used, but the "once on the topic" and "restart" tests assume the stack's own Seed:Enabled run.
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const dashboard = process.env.ASPIRE_ORIGIN ?? 'http://localhost:18888';
 const fixtures = JSON.parse(readFileSync(fileURLToPath(new URL('../../backend/fixtures/local.json', import.meta.url)), 'utf8'));
 
@@ -34,29 +33,12 @@ const badgeOf = (status: string, outcome: string | null) =>
   ({ submitted: 'Submitted', underReview: 'Under review', underReviewPrioritised: 'Under review (prioritised)', withdrawn: 'Withdrawn' } as Record<string, string>)[status]
   ?? `Resolved · ${outcome === 'upheld' ? 'Upheld' : 'Rejected'}`;
 
-function rows<T>(sql: string): T[] {
-  return JSON.parse(queryDatabase(`select coalesce(json_agg(t), '[]') from (${sql}) t`)) as T[];
-}
 const docker = (...args: string[]) => execFileSync('docker', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
 
 const loginUserId = (customerKey: string) => fixtures.logins.find((login: { key: string }) => login.key === `customer-${customerKey.toLowerCase()}`).userId as string;
 
 let customerA: BrowserContext;
 let customerB: BrowserContext;
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 type Item = { disputeId: string; customerStatus: string; outcome: string | null; reason: string; transaction: { transactionId: string; description: string }; createdAt: string };
 async function history(context: BrowserContext): Promise<Item[]> {
@@ -81,11 +63,11 @@ test.beforeAll(async ({ browser }) => {
   test.setTimeout(600_000);
   const demoTransaction = seeded.find((entry) => entry.slaDemo)!.transactionId;
   const deadline = Date.now() + 8 * 60_000;
-  while (rows(`select 1 from "Disputes" where "TransactionId" = '${demoTransaction}' and "Status" = 'Escalated'`).length === 0 && Date.now() < deadline) {
+  while (queryRows(`select 1 from "Disputes" where "TransactionId" = '${demoTransaction}' and "Status" = 'Escalated'`).length === 0 && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 3000));
   }
-  customerA = await signIn(browser, 'customer-a');
-  customerB = await signIn(browser, 'customer-b');
+  customerA = await signInContext(browser, 'customer-a');
+  customerB = await signInContext(browser, 'customer-b');
   aHistory = await history(customerA);
   bHistory = await history(customerB);
 });
@@ -121,9 +103,9 @@ test.describe.serial('seeded disputes', () => {
 
   test('each seeded dispute replays to its row and its timeline', async () => {
     for (const entry of forCustomer('A').concat(forCustomer('B'))) {
-      const [row] = rows<{ Id: string; Status: string; Outcome: string | null; Version: number }>(
+      const [row] = queryRows<{ Id: string; Status: string; Outcome: string | null; Version: number }>(
         `select "Id","Status","Outcome","Version" from "Disputes" where "TransactionId" = '${entry.transactionId}'`);
-      const events = rows<{ Version: number; EventType: string; ActorType: string; ActorId: string; Data: { toStatus: string; outcome?: string } }>(
+      const events = queryRows<{ Version: number; EventType: string; ActorType: string; ActorId: string; Data: { toStatus: string; outcome?: string } }>(
         `select "Version","EventType","ActorType","ActorId","Data" from "StoredEvents" where "DisputeId" = '${row.Id}' order by "Version"`);
       const swept = entry.slaDemo ? sweepEventTypes : [];
       expect(events.map((event) => event.EventType), entry.transactionId).toEqual([...entry.actions.map((action) => eventTypeOf[action.action]), ...swept]);
@@ -154,7 +136,7 @@ test.describe.serial('seeded disputes', () => {
   });
 
   test('the SLA demo dispute was escalated by the sweep, and falls due 5 minutes after the seeding instant, 240 hours after its raise', () => {
-    const [sla] = rows<{ Status: string; Version: number; created: string; due: string; hours: number; micros: number; firstSent: string }>(
+    const [sla] = queryRows<{ Status: string; Version: number; created: string; due: string; hours: number; micros: number; firstSent: string }>(
       `select d."Status", d."Version", d."CreatedAtUtc" as created, d."SlaDueAtUtc" as due,
          extract(epoch from (d."SlaDueAtUtc" - d."CreatedAtUtc")) / 3600 as hours,
          extract(microseconds from d."SlaDueAtUtc")::bigint % 1000000 as micros,
@@ -166,7 +148,7 @@ test.describe.serial('seeded disputes', () => {
     const sent = new Date(sla.firstSent).getTime();
     expect(sent - seedingInstant, 'the relay sent the raise shortly after seeding').toBeGreaterThan(0);
     expect(sent - seedingInstant).toBeLessThan(5 * 60_000);
-    const [old] = rows<{ days: number }>(`select extract(epoch from (d."CreatedAtUtc" - d."TransactionDateUtc")) / 86400 as days from "Disputes" d where d."TransactionId" = '${seeded.find((entry) => entry.slaDemo)!.transactionId}'`);
+    const [old] = queryRows<{ days: number }>(`select extract(epoch from (d."CreatedAtUtc" - d."TransactionDateUtc")) / 86400 as days from "Disputes" d where d."TransactionId" = '${seeded.find((entry) => entry.slaDemo)!.transactionId}'`);
     expect(old.days).toBeGreaterThanOrEqual(0);
   });
 
@@ -207,7 +189,7 @@ test.describe.serial('seeded disputes', () => {
   });
 
   test('one stored event and one outbox row per seeded action, all sent, no audit row from seeding', () => {
-    const ids = rows<{ Id: string }>(`select "Id" from "Disputes" where "TransactionId" in (${transactionList(seeded)})`).map((row) => `'${row.Id}'`).join(',');
+    const ids = queryRows<{ Id: string }>(`select "Id" from "Disputes" where "TransactionId" in (${transactionList(seeded)})`).map((row) => `'${row.Id}'`).join(',');
     const expected = seeded.reduce((sum, entry) => sum + entry.actions.length, 0);
     // The sweep's two events on the demo dispute: the warning (stored only) and the escalation (stored and published).
     expect(Number(queryDatabase(`select count(*) from "StoredEvents" where "DisputeId" in (${ids})`))).toBe(expected + 2);
@@ -219,7 +201,7 @@ test.describe.serial('seeded disputes', () => {
   });
 
   test('each seeded outbox id is on the topic exactly once, keyed by the dispute ID, with trace context', () => {
-    const outbox = rows<{ Id: string; DisputeId: string }>(
+    const outbox = queryRows<{ Id: string; DisputeId: string }>(
       `select o."Id", o."DisputeId" from "OutboxMessages" o join "Disputes" d on d."Id" = o."DisputeId" where d."TransactionId" in (${transactionList(seeded)})`);
     const records = topicRecords().map((record) => ({ record, id: (JSON.parse(record.value) as { id: string }).id }));
     for (const row of outbox) {
@@ -260,7 +242,7 @@ test.describe.serial('seeded disputes', () => {
   });
 
   test('a restart of the Api adds no outbox row and repeats only ids already seen', async () => {
-    const ids = rows<{ Id: string }>(`select o."Id" from "OutboxMessages" o`).map((row) => row.Id);
+    const ids = queryRows<{ Id: string }>(`select o."Id" from "OutboxMessages" o`).map((row) => row.Id);
     const counts = () => queryDatabase('select (select count(*) from "Disputes") || \'/\' || (select count(*) from "StoredEvents") || \'/\' || (select count(*) from "OutboxMessages")');
     const before = counts();
     docker('restart', 'disputedesk-api-1');

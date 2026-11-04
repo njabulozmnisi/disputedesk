@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase } from './support';
+import { expect, test, type APIRequestContext, type BrowserContext } from '@playwright/test';
+import { expectProblemShape, ownDisputable, queryDatabase, origin, signInContext } from './support';
 
 // Story 3.9: a customer lists their disputes newest first, a page at a time (GET /api/v1/disputes).
 // Network level (the list screen is story 3.7), signed in through the hosted Zitadel login as the seeded customers.
@@ -8,27 +8,12 @@ import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase } from '
 // CreatedAtUtc through the API (the read-only role cannot write), so the tied-instant case rests on the integration tests.
 // The data is not reset between runs: the spec tops A up to three disputes and B to one, raising only what is missing, from its reserved transactions (support.ts).
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const dashboard = process.env.ASPIRE_ORIGIN ?? 'http://localhost:18888';
 const contexts: Record<string, BrowserContext> = {};
 const itemKeys = ['createdAt', 'customerStatus', 'disputeId', 'disputedAmount', 'outcome', 'reason', 'transaction'];
 
 type Item = { disputeId: string; createdAt: string; [key: string]: unknown };
 type Page = { items: Item[]; nextCursor: string | null };
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 async function raiseOnReserved(api: APIRequestContext, accountRef: string, customer: 'a' | 'b') {
   const list = await api.get('/api/v1/transactions?limit=50');
@@ -72,9 +57,9 @@ let aItems: Item[];
 let bItems: Item[];
 
 test.beforeAll(async ({ browser }) => {
-  contexts.a = await signIn(browser, 'customer-a');
-  contexts.b = await signIn(browser, 'customer-b');
-  contexts.c = await signIn(browser, 'customer-c');
+  contexts.a = await signInContext(browser, 'customer-a');
+  contexts.b = await signInContext(browser, 'customer-b');
+  contexts.c = await signInContext(browser, 'customer-c');
   for (let have = (await listAll(contexts.a.request, 50)).flatMap((p) => p.items).length; have < 3; have++) {
     await raiseOnReserved(contexts.a.request, 'ACC-A-1', 'a');
   }
@@ -83,10 +68,6 @@ test.beforeAll(async ({ browser }) => {
   }
   aItems = (await listAll(contexts.a.request, 50)).flatMap((p) => p.items);
   bItems = (await listAll(contexts.b.request, 50)).flatMap((p) => p.items);
-});
-
-test.beforeEach(async () => {
-  await new Promise((resolve) => setTimeout(resolve, 3_000));
 });
 
 test.afterAll(async () => {

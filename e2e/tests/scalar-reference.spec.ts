@@ -1,12 +1,11 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
-import { fixtureLogin, ownDisputable } from './support';
+import { fixtureLogin, ownDisputable, origin } from './support';
 
 // Story 5.5: Scalar at /scalar/ drives the operations API with a pasted bearer token, behind Scalar:Enabled. In a real
 // browser through the gateway. The page is anonymous; the token comes from scripts/operations-token.sh and is pasted by hand.
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const repoRoot = new URL('../..', import.meta.url).pathname;
 const scalarCsp =
   "default-src 'self'; script-src 'self' 'sha256-HASH'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
@@ -139,8 +138,9 @@ test('another page path under /scalar/ fails closed: its inline script is refuse
     document.addEventListener('securitypolicyviolation', (event) => (window as unknown as { __csp: string[] }).__csp.push(event.violatedDirective));
   });
   await page.goto('/scalar/v1');
-  await page.waitForTimeout(2000);
+  await page.waitForFunction(() => (window as unknown as { __csp: string[] }).__csp.some((directive) => directive.startsWith('script-src')), undefined, { timeout: 10_000 });
   const violations = await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
   expect(violations.some((directive) => directive.startsWith('script-src'))).toBe(true);
-  await expect(page.getByRole('button', { name: 'Open Group - Operations' })).toHaveCount(0);
+  // The page stays blank for 2 s: the operations button appearing within the window fails the claim.
+  await expect(page.getByRole('button', { name: 'Open Group - Operations' }).waitFor({ timeout: 2000 })).rejects.toThrow('Timeout');
 });

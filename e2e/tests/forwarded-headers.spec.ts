@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { fixtureLogin, queryDatabase } from './support';
+import { fixtureLogin, queryDatabase, origin } from './support';
 
 // Story 6.6: forwarded headers are trusted only from the Compose network, and the identity origin never logs
 // the end-session id_token_hint. Four hops: browser (Zitadel), network (gateway and a direct hop to the Api),
@@ -8,7 +8,6 @@ import { fixtureLogin, queryDatabase } from './support';
 // cookies, tokens or the id_token_hint.
 test.describe.configure({ mode: 'serial' });
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const project = process.env.COMPOSE_PROJECT_NAME ?? 'disputedesk';
 const forgedAddress = '203.0.113.9';
 const forgedHeaders = {
@@ -21,6 +20,7 @@ const unmatchedDetails = JSON.stringify({ idNumber: '0000000000000', accountNumb
 const sql = (statement: string) => queryDatabase(statement);
 const docker = (...args: string[]) => execFileSync('docker', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
 
+// Own sign-in: it sends extra headers and installs a route before the sign-in, which signInContext does not.
 async function signIn(browser: Browser, loginKey: string, extraHeaders: Record<string, string> = {}): Promise<BrowserContext> {
   const login = fixtureLogin(loginKey);
   const context = await browser.newContext();
@@ -55,7 +55,7 @@ async function untilAudit(action: string, mark: string): Promise<string> {
   while (Date.now() < deadline) {
     const row = latestAudit(action, mark);
     if (row) return row;
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500)); // the gap between two reads of the audit table
   }
   throw new Error(`no ${action} audit row after ${mark}`);
 }
