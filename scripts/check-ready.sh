@@ -3,9 +3,10 @@
 #   1. the story's challenge or pre-build review files (docs/verification/<id>-challenge.md, -prebuild-review.md,
 #      -prebuild-security.md) hold a `[story]` point, and none of them nor the story file has a Sofia disposition:
 #      a line starting "Sofia, " (optionally as a list item) or a heading "Sofia's disposition" or "Sofia's refine";
-#   2. they hold a `[decision]` point, and none of them nor the story file records a human decision: a line naming
-#      the human together with "decision", "decided" or "settled" (any case), for example a "## Human decisions"
-#      heading, "S2 [decision], human: ..." or "The human settled ...";
+#   2. they hold a `[decision]` point, and the first `decisions:` line in the story's front matter (between its first
+#      two `---` lines) is not exactly `decisions: settled`. The supervisor sets that field once the human has answered
+#      every `[decision]` point of the story, citing the decisions record; one field settles them all. The field
+#      records that step, not who decided: the decisions record does;
 #   3. a story in the front matter's `after` list is not `done` in docs/tickets/README.md
 #      (a bare number names a story of the same epic: `after: [4, 5.1]` in story 7.12 means 7.4 and 5.1).
 # A point is a line where the tag opens a list item or a table cell, so prose such as "no `[decision]` point" is
@@ -42,9 +43,11 @@ if has_point story \
   problems+=("[story] points in ${review_files[*]} have no Sofia disposition line (\"Sofia, <date>\" or a \"Sofia's disposition\" heading)")
 fi
 
-if has_point decision \
-  && ! grep -hi human "${review_files[@]}" "$story_file" | grep -Ei "decision|decided|settled" >/dev/null; then
-  problems+=("[decision] points in ${review_files[*]} have no recorded human decision")
+# The story's front matter: the lines between its first two `---` lines.
+front_matter=$(awk '/^---$/ { if (++fences == 2) exit; next } fences == 1' "$story_file")
+decisions_line=$(grep -m1 '^decisions:' <<< "$front_matter" || true)
+if has_point decision && [[ "$decisions_line" != "decisions: settled" ]]; then
+  problems+=("[decision] points in ${review_files[*]} are not settled: the story's front matter has no \`decisions: settled\` line")
 fi
 
 # `after: [4, 5.1]` in the front matter; epic 1's plan files have no `after` line.

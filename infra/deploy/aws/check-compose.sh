@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016 # the jq programs here use $s and $ca, jq variables the shell must not expand
 # Render checks of infra/deploy/aws/compose.yml merged with docker-compose.yml (story 7.4, criteria 1, 2 and 5), and of
 # Redpanda Console and the build-only spa service staying behind their profiles, offline:
 # Compose renders the merged file with the dummy inputs in compose.test.env, and jq reads the JSON render. The last
@@ -45,7 +46,7 @@ referenced=$(grep -oE '\$\{[A-Z0-9_]+' <<< "$override_values" | cut -c3- | sort 
 ok "the override, compose.test.env and input-bounds.sh name the same ${#AWS_INPUTS[@]} inputs"
 not_required=$(grep -oE '\$\{[^}]*\}' <<< "$override_values" | grep -vE '^\$\{[A-Z0-9_]+:\?[^}]+\}$' || true)
 [ -z "$not_required" ] || fail "references without :? (a default, or no message): $not_required"
-unbraced=$(sed 's/\$\$//g' <<< "$override_values" | grep -oE '\$[A-Za-z_][A-Za-z0-9_]*' || true)
+unbraced=$(grep -oE '\$[A-Za-z_][A-Za-z0-9_]*' <<< "${override_values//\$\$/}" || true)
 [ -z "$unbraced" ] || fail "unbraced references: $unbraced"
 ok "every reference is \${VAR:?message}: no :- or - default, no bare \$VAR"
 
@@ -264,7 +265,7 @@ COLLECTOR=infra/images/otel-collector/config.yaml
 ! grep -qw debug "$COLLECTOR" || fail "the collector config mentions the debug exporter"
 [ "$(grep -c '^      processors: ' "$COLLECTOR")" = 3 ] || fail "the collector config does not have three pipelines"
 [ "$(grep -c '^      processors: \[memory_limiter, batch\]$' "$COLLECTOR")" = 3 ] || fail "a pipeline does not run memory_limiter, then batch"
-grep -qx '        endpoint: 0.0.0.0:4317' "$COLLECTOR" && grep -qx '        endpoint: 0.0.0.0:4318' "$COLLECTOR" \
+{ grep -qx '        endpoint: 0.0.0.0:4317' "$COLLECTOR" && grep -qx '        endpoint: 0.0.0.0:4318' "$COLLECTOR"; } \
   || fail "the OTLP receiver does not listen on 0.0.0.0:4317 and 0.0.0.0:4318"
 ok "no debug exporter; memory_limiter then batch in all three pipelines; OTLP on 0.0.0.0:4317 and :4318"
 # validate builds the sigv4auth extensions, which look up credentials then (never sending anything): placeholders in the

@@ -121,9 +121,10 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       # Vulnerable dependencies and misconfiguration (the Dockerfiles) in the repo. Secrets are gitleaks' job.
-      # Accepted findings are triaged, one path each, in .github/trivyignore.yaml.
+      # Accepted findings are triaged, one path each, in .github/trivyignore.yaml. The command is the one builders run
+      # locally before merge, so the two scans cannot drift apart.
       - name: Filesystem and config scan
-        run: trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 1 --ignorefile .github/trivyignore.yaml .
+        run: scripts/security-local.sh
 
       # The five images ci.yml's publish job pushes, from the same targets (api-local and worker-local, P57).
       # The gateway takes the built SPA files from the SPA image through the named context spa (ad-011); the SPA
