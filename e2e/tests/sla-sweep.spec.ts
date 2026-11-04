@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, queryDatabase, topicRecords } from './support';
+import { expect, request as playwrightRequest, test, type APIRequestContext, type BrowserContext } from '@playwright/test';
+import { expectProblemShape, topicRecords, origin, queryRows, signInContext } from './support';
 
 // Story 5.3: the Worker's SLA sweep on the real stack. The seeded SLA demo dispute (customer A, due 5 minutes after the
 // seeding instant) is escalated by the sweep as `automation` / `worker:sla-sweep`; the sweep first records one
@@ -11,7 +11,6 @@ import { expectProblemShape, fixtureLogin, queryDatabase, topicRecords } from '.
 // Needs a fresh stack with the committed fixture (the demo dispute is due at seed time + 5 minutes); the spec waits for it.
 // The spec reads only. The one write is the operations escalate that is refused on the already escalated demo dispute.
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const root = new URL('../..', import.meta.url).pathname;
 const fixtures = JSON.parse(readFileSync(fileURLToPath(new URL('../../backend/fixtures/local.json', import.meta.url)), 'utf8'));
 const demo = fixtures.disputes.find((entry: { slaDemo?: boolean }) => entry.slaDemo) as { accountRef: string; transactionId: string };
@@ -19,50 +18,33 @@ const worker = 'disputedesk-worker-1';
 
 type Json = Record<string, any>;
 
-function rows<T = Json>(sql: string): T[] {
-  return JSON.parse(queryDatabase(`select coalesce(json_agg(t), '[]') from (${sql}) t`)) as T[];
-}
 const docker = (...args: string[]) => execFileSync('docker', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const workerHealth = () => docker('inspect', worker, '--format', '{{.State.Health.Status}}');
 const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 const eventsOf = (id: string) =>
-  rows(`select "Id", "Version", "EventType", "ActorType", "ActorId", to_char("OccurredAtUtc" at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') as "At", "Data" from "StoredEvents" where "DisputeId" = '${id}' order by "Version"`);
-const outboxOf = (id: string) => rows(`select "Id", "EventType", "DisputeVersion", "Payload", "TraceParent" from "OutboxMessages" where "DisputeId" = '${id}' order by "DisputeVersion"`);
+  queryRows<Json>(`select "Id", "Version", "EventType", "ActorType", "ActorId", to_char("OccurredAtUtc" at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') as "At", "Data" from "StoredEvents" where "DisputeId" = '${id}' order by "Version"`);
+const outboxOf = (id: string) => queryRows<Json>(`select "Id", "EventType", "DisputeVersion", "Payload", "TraceParent" from "OutboxMessages" where "DisputeId" = '${id}' order by "DisputeVersion"`);
 
 let disputeId: string;
 let dueAt: string;
 let customerA: BrowserContext;
 let customerB: BrowserContext;
 
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/bff/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
-
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(600_000);
-  const [row] = rows<{ Id: string; Due: string }>(
+  const [row] = queryRows<{ Id: string; Due: string }>(
     `select "Id", to_char("SlaDueAtUtc" at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') as "Due" from "Disputes" where "AccountRef" = '${demo.accountRef}' and "TransactionId" = '${demo.transactionId}'`);
   expect(row, 'the seeded SLA demo dispute').toBeDefined();
   disputeId = row.Id;
   dueAt = row.Due;
-  customerA = await signIn(browser, 'customer-a');
-  customerB = await signIn(browser, 'customer-b');
+  customerA = await signInContext(browser, 'customer-a');
+  customerB = await signInContext(browser, 'customer-b');
   // Waits for the sweep: up to the due time plus two 30-second loops.
   const deadline = Date.now() + 8 * 60_000;
   while (Date.now() < deadline) {
-    if (rows(`select 1 from "Disputes" where "Id" = '${disputeId}' and "Status" = 'Escalated'`).length > 0) return;
-    await sleep(3000);
+    if (queryRows<Json>(`select 1 from "Disputes" where "Id" = '${disputeId}' and "Status" = 'Escalated'`).length > 0) return;
+    await sleep(3000); // the gap between two reads of the Disputes row while the sweep runs
   }
 });
 
@@ -77,10 +59,10 @@ test('the sweep escalated the demo dispute within one loop of its due time, once
   const lateBySeconds = (Date.parse(`${escalated.At}Z`) - Date.parse(`${dueAt}Z`)) / 1000;
   expect(lateBySeconds).toBeGreaterThanOrEqual(0);
   expect(lateBySeconds).toBeLessThanOrEqual(35);
-  const [row] = rows(`select "Status", "Version", "SlaWarningRaisedAtUtc" is not null as "Warned" from "Disputes" where "Id" = '${disputeId}'`);
+  const [row] = queryRows<Json>(`select "Status", "Version", "SlaWarningRaisedAtUtc" is not null as "Warned" from "Disputes" where "Id" = '${disputeId}'`);
   expect(row).toEqual({ Status: 'Escalated', Version: 4, Warned: true });
   // No audit row for an SLA escalation or warning (NFR-SEC-10).
-  expect(rows(`select 1 from "AuditLogEntries" where "DisputeId" = '${disputeId}' and "ActorType" = 'Automation'`)).toHaveLength(0);
+  expect(queryRows<Json>(`select 1 from "AuditLogEntries" where "DisputeId" = '${disputeId}' and "ActorType" = 'Automation'`)).toHaveLength(0);
 });
 
 test('the warning was recorded once, before the deadline, by the sweep, and never published', async () => {
@@ -90,7 +72,7 @@ test('the warning was recorded once, before the deadline, by the sweep, and neve
   expect(warnings[0]).toMatchObject({ ActorType: 'Automation', ActorId: 'worker:sla-sweep', Version: 3, Data: {} });
   expect(Date.parse(`${warnings[0].At}Z`)).toBeLessThan(Date.parse(`${dueAt}Z`));
   // Stored once on the Disputes row too, at the event's instant.
-  const [warned] = rows(`select to_char("SlaWarningRaisedAtUtc" at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') as "At" from "Disputes" where "Id" = '${disputeId}'`);
+  const [warned] = queryRows<Json>(`select to_char("SlaWarningRaisedAtUtc" at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') as "At" from "Disputes" where "Id" = '${disputeId}'`);
   expect(warned.At).toBe(warnings[0].At);
   // No outbox row, so no record on the topic.
   const outbox = outboxOf(disputeId);
@@ -165,16 +147,16 @@ test('operations cannot escalate it again: 409 action-not-allowed and no second 
 });
 
 test('across every dispute: at most one escalation and one warning, the sweep acts only on open disputes, no personal data in its stored events', async () => {
-  const counts = rows<{ DisputeId: string; EventType: string; N: number }>(
+  const counts = queryRows<{ DisputeId: string; EventType: string; N: number }>(
     `select "DisputeId", "EventType", count(*)::int as "N" from "StoredEvents" where "EventType" in ('DisputeEscalated', 'SlaWarningRaised') group by 1, 2 having count(*) > 1`);
   expect(counts).toEqual([]);
-  const sweepEscalations = rows(`select "Data" from "StoredEvents" where "ActorId" = 'worker:sla-sweep' and "EventType" = 'DisputeEscalated'`);
+  const sweepEscalations = queryRows<Json>(`select "Data" from "StoredEvents" where "ActorId" = 'worker:sla-sweep' and "EventType" = 'DisputeEscalated'`);
   for (const event of sweepEscalations) expect(['submitted', 'underReview']).toContain(event.Data.fromStatus);
   // Resolved, Withdrawn and already escalated disputes past their SLA carry no sweep event.
-  const closedByOthers = rows(
+  const closedByOthers = queryRows<Json>(
     `select d."Id" from "Disputes" d where d."Status" in ('Resolved', 'Withdrawn') and exists (select 1 from "StoredEvents" e where e."DisputeId" = d."Id" and e."ActorId" = 'worker:sla-sweep' and e."EventType" = 'DisputeEscalated' and e."Version" > (select max(x."Version") from "StoredEvents" x where x."DisputeId" = d."Id" and x."EventType" in ('DisputeResolved', 'DisputeWithdrawn')))`);
   expect(closedByOthers).toEqual([]);
-  const sweepData = JSON.stringify(rows(`select "Data" from "StoredEvents" where "ActorId" = 'worker:sla-sweep'`));
+  const sweepData = JSON.stringify(queryRows<Json>(`select "Data" from "StoredEvents" where "ActorId" = 'worker:sla-sweep'`));
   expect(sweepData).not.toMatch(/CUS-|ACC-|TXN-/);
 });
 
@@ -191,16 +173,16 @@ test('the heartbeat is fresh, the Worker is healthy, and its logs hold counts an
 
 test('restarting the Worker after the escalation gives no duplicate, and the Worker is healthy again', async () => {
   test.setTimeout(240_000);
-  const before = rows(`select count(*)::int as "N" from "StoredEvents"`)[0].N;
-  const outboxBefore = rows(`select count(*)::int as "N" from "OutboxMessages"`)[0].N;
+  const before = queryRows<Json>(`select count(*)::int as "N" from "StoredEvents"`)[0].N;
+  const outboxBefore = queryRows<Json>(`select count(*)::int as "N" from "OutboxMessages"`)[0].N;
   docker('restart', worker);
   const deadline = Date.now() + 120_000;
-  while (workerHealth() !== 'healthy' && Date.now() < deadline) await sleep(3000);
+  while (workerHealth() !== 'healthy' && Date.now() < deadline) await sleep(3000); // the gap between two health checks of the restarted worker
   expect(workerHealth()).toBe('healthy');
   await sleep(70_000); // two more loops of the sweep
   expect(eventsOf(disputeId).filter((event) => event.EventType === 'DisputeEscalated')).toHaveLength(1);
   expect(eventsOf(disputeId).filter((event) => event.EventType === 'SlaWarningRaised')).toHaveLength(1);
-  expect(rows(`select count(*)::int as "N" from "StoredEvents"`)[0].N).toBe(before);
-  expect(rows(`select count(*)::int as "N" from "OutboxMessages"`)[0].N).toBe(outboxBefore);
+  expect(queryRows<Json>(`select count(*)::int as "N" from "StoredEvents"`)[0].N).toBe(before);
+  expect(queryRows<Json>(`select count(*)::int as "N" from "OutboxMessages"`)[0].N).toBe(outboxBefore);
   expect(topicRecords().filter((record) => record.key === disputeId && JSON.parse(record.value).data.action === 'escalate')).toHaveLength(1);
 });

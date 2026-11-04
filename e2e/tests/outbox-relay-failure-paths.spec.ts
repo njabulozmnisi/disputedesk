@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './support';
+import { expect, test, type APIRequestContext, type BrowserContext } from '@playwright/test';
+import { ownDisputable, topicRecords, queryRows, signInContext } from './support';
 
 // Story 4.2: the Worker's outbox relay rides out a broker outage and a shutdown.
 // Four hops: the 201 the browser context gets, the OutboxMessages rows (read-only role qa_readonly), the records on the
@@ -11,7 +11,6 @@ import { fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './supp
 type Row = { transactionId: string; accountRef: string; description: string; disputable: boolean };
 type Raised = { disputeId: string; transaction: Row; note: string };
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const dashboard = process.env.ASPIRE_ORIGIN ?? 'http://localhost:18888';
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const outageSeconds = 30;
@@ -20,20 +19,6 @@ let customerA: BrowserContext;
 let customerB: BrowserContext;
 let disputableA: Row[];
 let disputableB: Row[];
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/bff/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 async function raise(api: APIRequestContext, transaction: Row, note: string): Promise<Raised> {
   const token = (await (await api.get('/api/v1/bff/antiforgery')).json()).requestToken as string;
@@ -46,12 +31,9 @@ async function raise(api: APIRequestContext, transaction: Row, note: string): Pr
   return { disputeId: (await response.json()).disputeId as string, transaction, note };
 }
 
-function rows<T>(sql: string): T[] {
-  return JSON.parse(queryDatabase(`select coalesce(json_agg(t), '[]') from (${sql}) t`)) as T[];
-}
 
 const outboxOf = (disputeId: string) =>
-  rows<any>(`select "Id", "Status", "Attempts", "SentAtUtc", "LastError", "NextAttemptAtUtc", "TraceParent", "Payload", "DisputeVersion" from "OutboxMessages" where "DisputeId" = '${disputeId}' order by "DisputeVersion"`);
+  queryRows<any>(`select "Id", "Status", "Attempts", "SentAtUtc", "LastError", "NextAttemptAtUtc", "TraceParent", "Payload", "DisputeVersion" from "OutboxMessages" where "DisputeId" = '${disputeId}' order by "DisputeVersion"`);
 
 const composeEnvironment = {
   ...process.env,
@@ -92,15 +74,15 @@ function workerEntries(since: string, until: string) {
 
 function markersOf(raised: Raised[]): string[] {
   const markers = raised.flatMap(({ disputeId, transaction, note }) => {
-    const [stored] = rows<any>(`select "ActorId", "Data" from "StoredEvents" where "DisputeId" = '${disputeId}'`);
+    const [stored] = queryRows<any>(`select "ActorId", "Data" from "StoredEvents" where "DisputeId" = '${disputeId}'`);
     return [stored.Data.customerId, stored.ActorId, transaction.accountRef, transaction.transactionId, transaction.description, note];
   });
   return markers.filter((value) => value && value !== 'null');
 }
 
 test.beforeAll(async ({ browser }) => {
-  customerA = await signIn(browser, 'customer-a');
-  customerB = await signIn(browser, 'customer-b');
+  customerA = await signInContext(browser, 'customer-a');
+  customerB = await signInContext(browser, 'customer-b');
   const take = async (context: BrowserContext, customer: 'a' | 'b') =>
     ownDisputable((await (await context.request.get('/api/v1/transactions?limit=50')).json()).items as Row[], 'outbox-relay-failure-paths', customer);
   disputableA = await take(customerA, 'a');

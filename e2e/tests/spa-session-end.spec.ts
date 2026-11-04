@@ -115,11 +115,12 @@ test('a page restored from the back/forward cache reloads; a pageshow that is no
   await page.goto('/transactions');
   await expect(page.locator('li')).toHaveCount(20);
   const marker = () => page.evaluate(() => (window as unknown as { qaMarker?: string }).qaMarker ?? null);
+  const noReload = expect(page.waitForEvent('load', { timeout: 1000 })).rejects.toThrow('Timeout');
   await page.evaluate(() => {
     (window as unknown as { qaMarker?: string }).qaMarker = 'before';
     window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }));
   });
-  await page.waitForTimeout(1000);
+  await noReload;
   expect(await marker()).toBe('before');
 
   const reloaded = page.waitForEvent('load');
@@ -138,7 +139,7 @@ test('direct loads of an unknown path and of /signed-out?reason=expired while si
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(path);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    await page.waitForTimeout(500);
+    await expect(page.waitForFunction(() => document.activeElement !== document.body, undefined, { timeout: 500 }), `${path}: focus left alone on load`).rejects.toThrow('Timeout');
     expect(await page.evaluate(() => document.activeElement === document.body), `${path}: focus left alone on load`).toBe(true);
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Skip to main content' }), path).toBeFocused();

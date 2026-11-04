@@ -1,12 +1,11 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase } from './support';
+import { expect, test, type APIRequestContext, type BrowserContext } from '@playwright/test';
+import { expectProblemShape, ownDisputable, queryDatabase, origin, signInContext } from './support';
 
 // Stories 5.1 and 5.5 (token side): operations tools read a dispute with a bearer token from scripts/operations-token.sh.
 // Network level with the real Zitadel token; database facts through qa_readonly. A and B raise disputes through the
 // customer API (a transaction is disputed once: the spec raises on its reserved transactions in support.ts).
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const unknownId = '01a189e2-0000-7000-8000-000000000000';
 const customerNote = 'qa5x-customer-note-do-not-return';
 const contexts: Record<string, BrowserContext> = {};
@@ -16,20 +15,6 @@ let disputeA: string;
 let disputeB: string;
 let customerAId: string;
 let sinceAudit: string;
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/bff/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 async function raiseOnReserved(api: APIRequestContext, accountRef: string, customer: 'a' | 'b'): Promise<string> {
   const list = await api.get('/api/v1/transactions?limit=50');
@@ -56,8 +41,8 @@ test.beforeAll(async ({ browser }) => {
   token = execFileSync('scripts/operations-token.sh', { encoding: 'utf8', cwd: new URL('../..', import.meta.url).pathname }).trim();
   operationsSub = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')).sub;
   sinceAudit = queryDatabase('select now()');
-  contexts.a = await signIn(browser, 'customer-a');
-  contexts.b = await signIn(browser, 'customer-b');
+  contexts.a = await signInContext(browser, 'customer-a');
+  contexts.b = await signInContext(browser, 'customer-b');
   customerAId = 'CUS-000001';
   disputeA = await raiseOnReserved(contexts.a.request, 'ACC-A-1', 'a');
   disputeB = await raiseOnReserved(contexts.b.request, 'ACC-B-1', 'b');

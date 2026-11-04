@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
-import { fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './support';
+import { ownDisputable, queryDatabase, topicRecords, axeTags, origin, signInContext } from './support';
 
 // Story 3.10: dispute status badges on transaction rows, through the real gateway, BFF, API, database and topic,
 // signed in as seeded customer A. The API can only produce `submitted` today (withdraw and the operations actions are
@@ -9,8 +9,6 @@ import { fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './supp
 // the transactions response in the browser (route.fetch, then edit the first rows); the row layout, the badge and
 // the href are the real SPA. The list is not stubbed in the first test.
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
-const axeTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
 const screenshotDir = process.env.QA_SCREENSHOT_DIR;
 
@@ -26,20 +24,6 @@ type ApiRow = {
 type ApiPage = { items: ApiRow[]; nextCursor: string | null };
 
 let customerA: BrowserContext;
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/bff/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 async function axeViolations(page: Page) {
   const result = await new AxeBuilder({ page }).withTags(axeTags).analyze();
@@ -69,7 +53,7 @@ function trackDataRequests(page: Page): string[] {
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-  customerA = await signIn(browser, 'customer-b');
+  customerA = await signInContext(browser, 'customer-b');
 });
 test.afterAll(async () => customerA.close().catch(() => undefined));
 

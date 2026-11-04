@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { fixtureLogin, ownDisputable, queryDatabase } from './support';
+import { ownDisputable, queryDatabase, axeTags, origin, signInContext } from './support';
 
 // Story 3.7: the Disputes history screen (/disputes) and the shell's skip link, through the real gateway, BFF, API and
 // database, signed in as seeded customer A (B for the cross-customer check). The API can only produce `submitted` and
@@ -12,8 +12,6 @@ import { fixtureLogin, ownDisputable, queryDatabase } from './support';
 // proves the SPA itself sends no `limit`. A transaction is disputed once: the spec tops A up to three disputes
 // (one withdrawn) from its reserved transactions (support.ts) and raises nothing else; a full run raises none.
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
-const axeTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
 const problemMessage = 'Something went wrong on our side. Try again.';
 const reasonLabels: Record<string, string> = { unrecognised: 'Unrecognised', duplicateCharge: 'Duplicate charge', wrongAmount: 'Wrong amount', notReceived: 'Not received', cancelledSubscription: 'Cancelled subscription', refundNotProcessed: 'Refund not processed' };
@@ -42,20 +40,6 @@ const statusLabels: Record<string, string> = {
 
 let customerA: BrowserContext;
 let customerB: BrowserContext;
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/bff/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 async function axeViolations(page: Page) {
   const result = await new AxeBuilder({ page }).withTags(axeTags).analyze();
@@ -149,8 +133,8 @@ async function editList(page: Page, edit: (body: ApiPage) => void) {
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-  customerA = await signIn(browser, 'customer-a');
-  customerB = await signIn(browser, 'customer-b');
+  customerA = await signInContext(browser, 'customer-a');
+  customerB = await signInContext(browser, 'customer-b');
   let items = await listDisputes(customerA.request);
   while (items.length < 3) {
     if (!(await raiseOne(customerA.request))) break;
@@ -344,7 +328,8 @@ test('criterion 3: Load more by cursor, Loading… not pressable twice, focus on
   await loading.click({ force: true });
   await page.keyboard.press('Enter');
   await expect.poll(() => seen.length).toBe(2);
-  await page.waitForTimeout(500); // the second request is held, so a second press would show up as a third request here
+  // The second request is held, so a second press would show up as a third request in this 500 ms window.
+  await expect(page.waitForRequest((request) => new URL(request.url()).pathname === '/api/v1/disputes', { timeout: 500 })).rejects.toThrow('Timeout');
   expect(listRequests).toHaveLength(2);
   expect(seen).toHaveLength(2);
   expect(seen[1].query).toBe(`?cursor=${firstCursor}`); // the cursor comes back unchanged
@@ -567,7 +552,7 @@ test('criterion 4: the list works with core banking stopped (stored snapshots, n
 });
 
 test('an unlinked customer (C) does not get the Disputes screen or any dispute data', async ({ browser }) => {
-  const customerC = await signIn(browser, 'customer-c');
+  const customerC = await signInContext(browser, 'customer-c');
   const page = await customerC.newPage();
   const listed: number[] = [];
   page.on('response', (response) => {

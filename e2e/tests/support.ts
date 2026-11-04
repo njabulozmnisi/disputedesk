@@ -7,6 +7,8 @@ const fixturePath = fileURLToPath(new URL('../../backend/fixtures/local.json', i
 
 export const sessionCookieName = 'disputedesk-session';
 export const antiforgeryCookieName = 'disputedesk-antiforgery';
+/** The axe-core rule sets every accessibility scan runs (WCAG 2.2 AA). */
+export const axeTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 export const problemTypeBase = 'https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/';
 
 export function fixtureLogin(key: string): { userId: string; username: string; password: string } {

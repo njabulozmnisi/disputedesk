@@ -365,6 +365,10 @@ jobs:
       - run: npm ci
         working-directory: e2e
 
+      # The e2e lint fails on any timed wait (story 8.6).
+      - run: npm run lint
+        working-directory: e2e
+
       - run: npx playwright install --with-deps chromium
         working-directory: e2e
 

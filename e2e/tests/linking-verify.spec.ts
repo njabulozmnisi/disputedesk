@@ -49,6 +49,7 @@ const everyCodeSeen = new Set<string>();
 
 // ---- sign-in and registration -------------------------------------------------------------------------------------
 
+// Own sign-in: it returns the Login record (sub and e-mail from the new session row) that this spec's fixture flow needs.
 async function signInFixture(browser: Browser, key: string): Promise<Login> {
   const login = fixtureLogin(key);
   const context = await browser.newContext();

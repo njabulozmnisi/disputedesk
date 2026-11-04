@@ -1,32 +1,17 @@
 import { execFileSync } from 'node:child_process';
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase } from './support';
+import { expect, test, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
+import { expectProblemShape, ownDisputable, queryRows, signInContext } from './support';
 
 // Story 3.8: a raise is one stored event, one Disputes row and one outbox row, written together, with no audit row.
-// The SPA has no raise screen until story 3.6, so the raise is sent at network level from browser contexts that
+// The raise is sent at network level (the raise screens are tested in dispute-raise.spec.ts) from browser contexts that
 // signed in through Zitadel (the session cookie and the antiforgery token travel as a browser would send them).
-// Every database fact is read through the read-only qa_readonly role. There is no outbox relay before story 4.1, so
-// the events hop is the outbox row; since story 4.1 the relay publishes it (outbox-relay.spec.ts reads the topic).
+// Every database fact is read through the read-only qa_readonly role; the events hop is the outbox row, which the relay
+// publishes (outbox-relay.spec.ts reads the topic).
 // A transaction is disputed once: the spec raises on its reserved transactions (support.ts).
 
 type Row = { transactionId: string; accountRef: string; description: string; disputable: boolean };
 
 const contexts: Record<string, BrowserContext> = {};
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/bff/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 async function disputableRows(api: APIRequestContext, customer: 'a' | 'b'): Promise<Row[]> {
   const response = await api.get('/api/v1/transactions?limit=50');
@@ -42,12 +27,8 @@ async function raise(api: APIRequestContext, key: string | null, body: object) {
   return api.post('/api/v1/disputes', { headers, data: body, maxRedirects: 0 });
 }
 
-function rows<T>(sql: string): T[] {
-  const text = queryDatabase(`select coalesce(json_agg(t), '[]') from (${sql}) t`);
-  return JSON.parse(text) as T[];
-}
 
-const totals = () => rows<{ disputes: number; stored: number; outbox: number; audit: number }>(
+const totals = () => queryRows<{ disputes: number; stored: number; outbox: number; audit: number }>(
   `select (select count(*) from "Disputes") as disputes, (select count(*) from "StoredEvents") as stored,
           (select count(*) from "OutboxMessages") as outbox, (select count(*) from "AuditLogEntries") as audit`)[0];
 
@@ -67,9 +48,9 @@ let raisedByA: { disputeId: string; body: any; key: string; request: object; tra
 let totalsBeforeRaise: ReturnType<typeof totals>;
 
 test.beforeAll(async ({ browser }) => {
-  contexts.a = await signIn(browser, 'customer-a');
-  contexts.b = await signIn(browser, 'customer-b');
-  contexts.c = await signIn(browser, 'customer-c');
+  contexts.a = await signInContext(browser, 'customer-a');
+  contexts.b = await signInContext(browser, 'customer-b');
+  contexts.c = await signInContext(browser, 'customer-c');
   aRows = await disputableRows(contexts.a.request, 'a');
   bRows = await disputableRows(contexts.b.request, 'b');
   expect(aRows.length, 'two of the spec\'s reserved customer A transactions are disputable (reservedTransactions in support.ts)').toBeGreaterThanOrEqual(2);
@@ -105,18 +86,18 @@ test.describe.serial('raise as customer A', () => {
 
   test('database: one stored event, one read model row with no outcome, one outbox row with the same ID, one instant, one trace, no audit row', async () => {
     const id = raisedByA.disputeId;
-    const stored = rows<any>(`select "Id", "Version", "EventType", "ActorType", "OccurredAtUtc", "TraceId", "Data" from "StoredEvents" where "DisputeId" = '${id}'`);
+    const stored = queryRows<any>(`select "Id", "Version", "EventType", "ActorType", "OccurredAtUtc", "TraceId", "Data" from "StoredEvents" where "DisputeId" = '${id}'`);
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ Version: 1, EventType: 'DisputeRaised', ActorType: 'Customer' });
 
-    const dispute = rows<any>(`select "Status", "Outcome", "Version", "CreatedAtUtc", "Reason", "Note", "TransactionId" from "Disputes" where "Id" = '${id}'`);
+    const dispute = queryRows<any>(`select "Status", "Outcome", "Version", "CreatedAtUtc", "Reason", "Note", "TransactionId" from "Disputes" where "Id" = '${id}'`);
     expect(dispute).toHaveLength(1);
     expect(dispute[0]).toMatchObject({ Status: 'Submitted', Outcome: null, Version: 1, Reason: 'Unrecognised', TransactionId: raisedByA.transaction.transactionId });
 
-    const outbox = rows<any>(`select "Id", "EventType", "DisputeId", "DisputeVersion", "Status", "CreatedAtUtc", "TraceParent", "Payload" from "OutboxMessages" where "Id" = '${stored[0].Id}'`);
+    const outbox = queryRows<any>(`select "Id", "EventType", "DisputeId", "DisputeVersion", "Status", "CreatedAtUtc", "TraceParent", "Payload" from "OutboxMessages" where "Id" = '${stored[0].Id}'`);
     expect(outbox).toHaveLength(1);
     expect(outbox[0]).toMatchObject({ EventType: 'disputedesk.dispute.raised.v1', DisputeId: id, DisputeVersion: 1, Status: expect.stringMatching(/^(Pending|Sent)$/) });
-    expect(rows<any>(`select 1 from "OutboxMessages" where "DisputeId" = '${id}'`)).toHaveLength(1);
+    expect(queryRows<any>(`select 1 from "OutboxMessages" where "DisputeId" = '${id}'`)).toHaveLength(1);
 
     // One instant on all three rows, and the CloudEvent time is that instant.
     expect(stored[0].OccurredAtUtc).toBe(dispute[0].CreatedAtUtc);
@@ -132,7 +113,7 @@ test.describe.serial('raise as customer A', () => {
     expect(outbox[0].TraceParent.split('-')[1]).toBe(stored[0].TraceId);
 
     // No audit row for a successful raise.
-    expect(rows(`select 1 from "AuditLogEntries" where "DisputeId" = '${id}'`)).toHaveLength(0);
+    expect(queryRows(`select 1 from "AuditLogEntries" where "DisputeId" = '${id}'`)).toHaveLength(0);
     const after = totals();
     expect(after.disputes - totalsBeforeRaise.disputes).toBe(1);
     expect(after.stored - totalsBeforeRaise.stored).toBe(1);
@@ -142,14 +123,14 @@ test.describe.serial('raise as customer A', () => {
 
   test('stored event Data holds only the raise fields, and the outbox payload holds no private field', async () => {
     const id = raisedByA.disputeId;
-    const [stored] = rows<any>(`select "Data" from "StoredEvents" where "DisputeId" = '${id}'`);
+    const [stored] = queryRows<any>(`select "Data" from "StoredEvents" where "DisputeId" = '${id}'`);
     expect(Object.keys(stored.Data).sort()).toEqual(
       ['customerId', 'disputedAmount', 'expectedAmount', 'note', 'reason', 'toStatus', 'transaction'].sort());
     // The envelope fields live in columns, never repeated in Data.
     for (const column of ['occurredAtUtc', 'actorType', 'actorId', 'traceId', 'version', 'outcome', 'fromStatus']) {
       expect(stored.Data).not.toHaveProperty(column);
     }
-    const [outbox] = rows<any>(`select "Payload" from "OutboxMessages" where "DisputeId" = '${id}'`);
+    const [outbox] = queryRows<any>(`select "Payload" from "OutboxMessages" where "DisputeId" = '${id}'`);
     const payload = JSON.parse(outbox.Payload);
     expect(Object.keys(payload.data).sort()).toEqual(['disputeId', 'disputeVersion', 'occurredAt', 'reason', 'status']);
     expect(payload).toMatchObject({ specversion: '1.0', type: 'disputedesk.dispute.raised.v1', subject: id, data: { disputeId: id, reason: 'unrecognised', status: 'submitted', disputeVersion: 1 } });
@@ -161,11 +142,11 @@ test.describe.serial('raise as customer A', () => {
 
   test('the 201 timeline equals what the read model and the stream give', async () => {
     const id = raisedByA.disputeId;
-    const [stored] = rows<any>(`select "OccurredAtUtc", "Data" from "StoredEvents" where "DisputeId" = '${id}'`);
-    const [dispute] = rows<any>(`select "CreatedAtUtc", "Status", "Note" from "Disputes" where "Id" = '${id}'`);
+    const [stored] = queryRows<any>(`select "OccurredAtUtc", "Data" from "StoredEvents" where "DisputeId" = '${id}'`);
+    const [dispute] = queryRows<any>(`select "CreatedAtUtc", "Status", "Note" from "Disputes" where "Id" = '${id}'`);
     const entry = raisedByA.body.timeline[0];
     expect(instant(entry.occurredAt)).toBe(instant(stored.OccurredAtUtc));
-    const [outboxRow] = rows<any>(`select "CreatedAtUtc", "Payload" from "OutboxMessages" where "DisputeId" = '${id}'`);
+    const [outboxRow] = queryRows<any>(`select "CreatedAtUtc", "Payload" from "OutboxMessages" where "DisputeId" = '${id}'`);
     const cloudEvent = JSON.parse(outboxRow.Payload);
     // Printed as evidence: the seven instants of one raise, as each hop wrote them (synthetic data, no personal data).
     console.log(JSON.stringify({ created201: raisedByA.body.createdAt, timeline201: entry.occurredAt, disputesCreatedAtUtc: dispute.CreatedAtUtc,
@@ -194,7 +175,7 @@ test.describe.serial('raise as customer A', () => {
     expect(JSON.parse(await first.text()).disputeId).toBe(raisedByA.disputeId);
     expect(JSON.stringify(JSON.parse(await second.text()))).toBe(original);
     expect(totals()).toEqual(before);
-    expect(rows(`select 1 from "StoredEvents" where "DisputeId" = '${raisedByA.disputeId}'`)).toHaveLength(1);
+    expect(queryRows(`select 1 from "StoredEvents" where "DisputeId" = '${raisedByA.disputeId}'`)).toHaveLength(1);
   });
 
   test('another request under the key is 422, and a new key on the same transaction is 409 with the existing dispute', async () => {
@@ -219,11 +200,11 @@ test.describe.serial('raise as customer A', () => {
     const body = await response.json();
     expect(body.note).toBeNull();
     expect(body.expectedAmount).toEqual({ amount: '1.00', currency: 'ZAR' });
-    const [stored] = rows<any>(`select "Version", "EventType", "Data" from "StoredEvents" where "DisputeId" = '${body.disputeId}'`);
+    const [stored] = queryRows<any>(`select "Version", "EventType", "Data" from "StoredEvents" where "DisputeId" = '${body.disputeId}'`);
     expect(stored).toMatchObject({ Version: 1, EventType: 'DisputeRaised' });
     expect(stored.Data.note).toBeNull();
     expect(stored.Data.expectedAmount).toBe(1);
-    const [dispute] = rows<any>(`select "ExpectedAmount", "DisputedAmount", "Outcome" from "Disputes" where "Id" = '${body.disputeId}'`);
+    const [dispute] = queryRows<any>(`select "ExpectedAmount", "DisputedAmount", "Outcome" from "Disputes" where "Id" = '${body.disputeId}'`);
     expect(dispute.Outcome).toBeNull();
     expect(Number(dispute.DisputedAmount)).toBeCloseTo(Number(body.transaction.amount.amount) - 1, 2);
     expect(stored.Data.disputedAmount).toBe(Number(dispute.DisputedAmount));
@@ -258,8 +239,8 @@ test.describe('customer B and the refused requests', () => {
     expect(JSON.stringify(bList)).not.toContain(raisedByA.disputeId);
     // Story 3.4: each refused raise (404) is audited as one Rejected row with no dispute ID; no dispute, event or outbox row is written.
     expect(totals()).toEqual({ ...before, audit: before.audit + 2 });
-    expect(rows(`select 1 from "AuditLogEntries" where "Action" = 'Raise' and "DisputeId" is null and "CustomerId" is not null and "OccurredAtUtc" > now() - interval '1 minute'`).length).toBeGreaterThanOrEqual(2);
-    expect(rows(`select 1 from "StoredEvents" where "DisputeId" = '${raisedByA.disputeId}'`)).toHaveLength(1);
+    expect(queryRows(`select 1 from "AuditLogEntries" where "Action" = 'Raise' and "DisputeId" is null and "CustomerId" is not null and "OccurredAtUtc" > now() - interval '1 minute'`).length).toBeGreaterThanOrEqual(2);
+    expect(queryRows(`select 1 from "StoredEvents" where "DisputeId" = '${raisedByA.disputeId}'`)).toHaveLength(1);
   });
 
   test('B raises their own: its stream and rows are B’s, and A’s dispute is still one event', async () => {
@@ -268,7 +249,7 @@ test.describe('customer B and the refused requests', () => {
     expect(response.status()).toBe(201);
     const body = await response.json();
     raisedByB = { disputeId: body.disputeId, transaction };
-    const owners = rows<{ customer: string; events: number }>(
+    const owners = queryRows<{ customer: string; events: number }>(
       `select d."CustomerId" as customer, count(s.*)::int as events from "Disputes" d join "StoredEvents" s on s."DisputeId" = d."Id" where d."Id" in ('${body.disputeId}', '${raisedByA?.disputeId ?? body.disputeId}') group by 1 order by 1`);
     expect(owners.every((owner) => owner.events === 1)).toBe(true);
     if (raisedByA) expect(owners).toHaveLength(2);
@@ -306,18 +287,18 @@ test.describe('customer B and the refused requests', () => {
 
 test.describe('the data model and the logs', () => {
   test('no timeline table; StoredEvents has only its key and the unique version index; the migration history keeps its IDs', async () => {
-    const tables = rows<{ name: string }>(`select table_name as name from information_schema.tables where table_schema = 'public' order by 1`).map((table) => table.name);
+    const tables = queryRows<{ name: string }>(`select table_name as name from information_schema.tables where table_schema = 'public' order by 1`).map((table) => table.name);
     expect(tables).toContain('StoredEvents');
     expect(tables.filter((name) => /timeline/i.test(name))).toEqual([]);
 
-    const indexes = rows<{ name: string }>(`select indexname as name from pg_indexes where tablename = 'StoredEvents' order by 1`).map((index) => index.name);
+    const indexes = queryRows<{ name: string }>(`select indexname as name from pg_indexes where tablename = 'StoredEvents' order by 1`).map((index) => index.name);
     expect(indexes).toEqual(['PK_StoredEvents', 'UQ_StoredEvents_DisputeId_Version']);
 
-    const foreignKey = rows<{ rule: string }>(
+    const foreignKey = queryRows<{ rule: string }>(
       `select confdeltype::text as rule from pg_constraint where conname = 'FK_StoredEvents_Disputes_DisputeId'`);
     expect(foreignKey).toEqual([{ rule: 'r' }]);
 
-    const columns = rows<{ name: string; type: string }>(
+    const columns = queryRows<{ name: string; type: string }>(
       `select column_name as name, data_type as type from information_schema.columns where table_name = 'StoredEvents' order by ordinal_position`);
     expect(columns).toEqual([
       { name: 'Id', type: 'uuid' }, { name: 'DisputeId', type: 'uuid' }, { name: 'Version', type: 'integer' }, { name: 'EventType', type: 'text' },
@@ -325,11 +306,11 @@ test.describe('the data model and the logs', () => {
       { name: 'TraceId', type: 'text' }, { name: 'Data', type: 'jsonb' },
     ]);
 
-    const disputeColumns = rows<{ name: string }>(`select column_name as name from information_schema.columns where table_name = 'Disputes'`).map((column) => column.name);
+    const disputeColumns = queryRows<{ name: string }>(`select column_name as name from information_schema.columns where table_name = 'Disputes'`).map((column) => column.name);
     expect(disputeColumns).toContain('Outcome');
     expect(disputeColumns.filter((name) => /rowversion|xmin|concurrency/i.test(name))).toEqual([]);
 
-    const migrations = rows<{ id: string }>(`select "MigrationId" as id from "__EFMigrationsHistory" order by 1`).map((migration) => migration.id);
+    const migrations = queryRows<{ id: string }>(`select "MigrationId" as id from "__EFMigrationsHistory" order by 1`).map((migration) => migration.id);
     expect(migrations).toContain('20261028084134_AddDisputes');
     expect(migrations).toContain('20261028150231_AddIdempotencyKeys');
     expect(migrations.filter((id) => /timeline/i.test(id))).toEqual([]);
@@ -346,7 +327,7 @@ test.describe('the data model and the logs', () => {
 test.describe('browser', () => {
   test('the raised transaction shows as already disputed on the transactions screen, with the dispute’s ID in the page’s own request', async ({ browser }) => {
     test.skip(!raisedByB, 'needs the raise from the serial block');
-    const context = await signIn(browser, 'customer-b');
+    const context = await signInContext(browser, 'customer-b');
     const page: Page = await context.newPage();
     const consoleErrors: string[] = [];
     page.on('console', (message) => message.type() === 'error' && consoleErrors.push(message.text()));

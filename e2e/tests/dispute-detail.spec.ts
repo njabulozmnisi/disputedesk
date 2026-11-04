@@ -1,31 +1,16 @@
 import AxeBuilder from '@axe-core/playwright';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { expectProblemShape, fixtureLogin, ownDisputable, queryDatabase, topicRecords } from './support';
+import { expect, test, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
+import { expectProblemShape, ownDisputable, queryDatabase, topicRecords, axeTags, origin, signInContext } from './support';
 
 // Story 3.3: a customer reads one dispute and its timeline. Network level (the detail screen is story 3.12, tested in the last block of this file), signed in
 // through the hosted Zitadel login as the seeded customers. A and B are linked, C is not. Database facts are read through
 // qa_readonly. A transaction is disputed once: the spec raises on its reserved transactions (support.ts).
-// There is no outbox relay before story 4.1, so the events hop is the Pending outbox row and an empty topic.
+// The events hop is the outbox row (Pending or already Sent by the relay); the withdraw test at the end also reads the topic.
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const contexts: Record<string, BrowserContext> = {};
 const unknownId = '01a189e2-0000-7000-8000-000000000000';
-
-async function signIn(browser: Browser, loginKey: string): Promise<BrowserContext> {
-  const login = fixtureLogin(loginKey);
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/api/v1/bff/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
-  await page.close();
-  return context;
-}
 
 async function raiseOnReserved(api: APIRequestContext, accountRef: string, customer: 'a' | 'b') {
   const list = await api.get('/api/v1/transactions?limit=50');
@@ -55,9 +40,9 @@ let own: { path: string; id: string; text: string };
 let otherId: string;
 
 test.beforeAll(async ({ browser }) => {
-  contexts.a = await signIn(browser, 'customer-a');
-  contexts.b = await signIn(browser, 'customer-b');
-  contexts.c = await signIn(browser, 'customer-c');
+  contexts.a = await signInContext(browser, 'customer-a');
+  contexts.b = await signInContext(browser, 'customer-b');
+  contexts.c = await signInContext(browser, 'customer-c');
   const raised = await raiseOnReserved(contexts.a.request, 'ACC-A-1', 'a');
   expect(raised.status()).toBe(201);
   const path = raised.headers().location;
@@ -172,7 +157,6 @@ const knownRadixStyleViolation = /^Applying inline style violates the following 
 const refusedOnPurpose = /^Failed to load resource: the server responded with a status of (404|409|500)/;
 const notFoundTitle = "We can't find that dispute";
 const problemBase = 'https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/';
-const axeTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 if (screenshotDir) mkdirSync(screenshotDir, { recursive: true });
 
 type DetailBody = {
@@ -257,7 +241,7 @@ test.describe('story 3.12: the detail screen', () => {
     openId = await raiseB(['TXN-B-0012'], true);
     openBody = (await (await contexts.b.request.get(`/api/v1/disputes/${openId}`)).json()) as DetailBody;
     openDescription = openBody.transaction.description;
-    thirdContext = await signIn(browser, 'customer-b');
+    thirdContext = await signInContext(browser, 'customer-b');
   });
   test.afterAll(async () => thirdContext?.close());
 
@@ -730,7 +714,7 @@ test.describe('story 3.12: the detail screen', () => {
     await expect(items.nth(1)).toContainText('You withdrew this dispute.');
     await expect(items.nth(1)).toContainText('“changed my mind”');
     await expect(page.getByText("We'll update the timeline")).toHaveCount(0);
-    await page.waitForTimeout(400); // the dialog's fade-out
+    await expect(page.locator('[data-slot="alert-dialog-overlay"]')).toHaveCount(0); // the overlay's fade-out has ended
     await shot(page, 'withdrawn-1280');
     expect(await axeFindings(page, 'withdrawn')).toEqual([]);
     expect(requests.filter((request) => request.includes('/disputes/') && request.startsWith('GET')), 'no detail refetch after a 200').toEqual([]);
@@ -785,7 +769,7 @@ test.describe('story 3.12: the detail screen', () => {
 
   test('criterion 7: after a 401 the sign-in return URL holds /disputes and no dispute ID, in any letter case', async () => {
     for (const path of [`/disputes/${openId}`, `/Disputes/${openId.toUpperCase()}`]) {
-      const context = await signIn(await thirdContext.browser()!, 'customer-b');
+      const context = await signInContext(await thirdContext.browser()!, 'customer-b');
       const page = await context.newPage();
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(openDescription);
@@ -799,7 +783,7 @@ test.describe('story 3.12: the detail screen', () => {
       await context.close();
     }
     // A 401 on the detail load itself (reached from the list through the SPA).
-    const context = await signIn(await thirdContext.browser()!, 'customer-b');
+    const context = await signInContext(await thirdContext.browser()!, 'customer-b');
     const page = await context.newPage();
     await page.goto('/disputes');
     await page.locator(`a[href="/disputes/${openId}"]`).first().waitFor();

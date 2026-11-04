@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Browser, type BrowserContext, type Page, type Response } from '@playwright/test';
-import { holdsCode, queryDatabase, telemetryValues, topicRecords } from './support';
+import { holdsCode, queryDatabase, telemetryValues, topicRecords, axeTags, origin } from './support';
 
 // Story 6.4: the linking screens 2a (/link) and 2b (/link/otp) in a real browser, through the real gateway, BFF, Api,
 // job, database (qa_readonly), Mailpit (the SMS sink) and the Aspire telemetry API. Customer D is the only customer a
@@ -19,11 +19,9 @@ import { holdsCode, queryDatabase, telemetryValues, topicRecords } from './suppo
 // project runs every other journey (D sends: login 1 one, login 3 one).
 test.describe.configure({ mode: 'serial' });
 
-const origin = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const mailpit = process.env.MAILPIT_URL ?? `http://localhost:${process.env.DISPUTEDESK_MAILPIT_PORT ?? '8025'}`;
 const dashboard = process.env.ASPIRE_URL ?? `http://localhost:${process.env.DISPUTEDESK_DASHBOARD_PORT ?? '18888'}`;
 const queueCapacity = Number(process.env.E2E_LINKING_QUEUE_CAPACITY ?? 0);
-const axeTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const startedAt = new Date().toISOString();
 const sql = (statement: string) => queryDatabase(statement);
 const pause = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -82,6 +80,7 @@ async function createLogins(): Promise<Login[]> {
   return created;
 }
 
+// Own sign-in: it returns the signed-in page and records every request it makes, which signInContext does not.
 async function signIn(browser: Browser, login: Login): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -109,6 +108,15 @@ async function restartApi(): Promise<void> {
   throw new Error('the Api did not come back');
 }
 
+/**
+ * Starts a window of `milliseconds` in which the page must send no linking request. Call it before the action and await
+ * the result after: the wait times out (rejects) only if nothing was sent. An unobserved window would pass at once.
+ */
+function expectNoLinkingRequest(page: Page, milliseconds: number): Promise<void> {
+  const linkingRequest = page.waitForRequest((request) => new URL(request.url()).pathname.startsWith('/api/v1/linking/'), { timeout: milliseconds });
+  return expect(linkingRequest).rejects.toThrow('Timeout');
+}
+
 // ---- recording the linking calls of one page -------------------------------------------------------------------------------
 
 type Call = { path: string; status: number; retryAfter: string | null; contentType: string | null; body: string | null; xsrf: boolean; query: string };
@@ -134,15 +142,6 @@ const challengeOf = (sub: string) => sql(`select concat_ws('|', "Attempts", coal
   from "LinkingChallenges" where "LoginSub" = '${sub}' order by "CreatedAtUtc" desc limit 1`);
 const linkRow = (sub: string) => sql(`select "CustomerId" from "CustomerLinks" where "LoginSub" = '${sub}'`);
 
-async function until(description: string, check: () => boolean | Promise<boolean>, seconds = 40): Promise<void> {
-  const deadline = Date.now() + seconds * 1000;
-  while (Date.now() < deadline) {
-    if (await check()) return;
-    await pause(300);
-  }
-  throw new Error(`timed out waiting for ${description}`);
-}
-
 type MailSummary = { ID: string; Created: string; To: { Address: string }[] };
 async function smsToD(): Promise<MailSummary[]> {
   const response = await fetch(`${mailpit}/api/v1/search?query=${encodeURIComponent('subject:"DisputeDesk SMS"')}&limit=500`);
@@ -151,13 +150,12 @@ async function smsToD(): Promise<MailSummary[]> {
 }
 async function nextCodeForD(knownCount: number): Promise<string> {
   let code: string | undefined;
-  await until('the OTP SMS to D', async () => {
+  await expect(async () => {
     const messages = await smsToD();
-    if (messages.length <= knownCount) return false;
+    expect(messages.length, 'the OTP SMS to D').toBeGreaterThan(knownCount);
     const text = ((await (await fetch(`${mailpit}/api/v1/message/${messages[0].ID}`)).json()).Text ?? '') as string;
     code = text.match(/\b(\d{6})\b/)?.[1];
-    return true;
-  });
+  }).toPass({ timeout: 40_000 });
   expect(code).toMatch(/^\d{6}$/);
   everyCodeSeen.add(code!);
   return code!;
@@ -303,7 +301,7 @@ test('login 1: 2a bounds, 202 to 2b, two wrong codes with tries left, the third 
   await expect(page.getByText('The code expires 5 minutes after we send it.')).toBeVisible();
   expect(await page.locator('main').innerText()).not.toMatch(/\+?27\d|\*{2}|\d{3}\s?\*/); // no masked or full cellphone
   await nextCodeForD(smsBefore);
-  await until('the challenge to hold an OTP', () => challengeOf(login.sub).startsWith('0|CUS-000004|true|true'));
+  await expect.poll(() => challengeOf(login.sub).startsWith('0|CUS-000004|true|true'), { message: 'the challenge to hold an OTP', timeout: 40_000 }).toBe(true);
   note(`login 1 DB: LinkingChallenges latest = ${challengeOf(login.sub)} (Attempts|Customer|hasOtp|sent|consumed|superseded)`);
   const otp = code(page);
   await expect(otp).toHaveAttribute('autocomplete', 'one-time-code');
@@ -313,8 +311,9 @@ test('login 1: 2a bounds, 202 to 2b, two wrong codes with tries left, the third 
   await checkState(page, '2b initial');
 
   // 2b: typing five digits, a letter: no request; six digits never submit by themselves.
+  const typingSendsNothing = expectNoLinkingRequest(page, 500);
   await otp.fill('12345');
-  await page.waitForTimeout(500);
+  await typingSendsNothing;
   expect(calls, 'typing sends nothing').toHaveLength(1);
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page.getByText('Enter the 6-digit code.')).toHaveCount(2);
@@ -323,8 +322,9 @@ test('login 1: 2a bounds, 202 to 2b, two wrong codes with tries left, the third 
   await otp.fill('12345a');
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page.getByText('Enter the 6-digit code.')).toHaveCount(2);
+  const pastingSendsNothing = expectNoLinkingRequest(page, 500);
   await otp.fill(wrongCodes[0].slice(0, 3) + ' ' + wrongCodes[0].slice(3)); // pasted with a space
-  await page.waitForTimeout(500);
+  await pastingSendsNothing;
   expect(calls, 'six digits typed or pasted do not submit').toHaveLength(1);
 
   // wrong code 1: "111 111" is sent as "111111".
@@ -379,8 +379,9 @@ test('login 1: 2a bounds, 202 to 2b, two wrong codes with tries left, the third 
   await expect(page.getByRole('button', { name: 'Verify' })).toHaveAttribute('aria-disabled', 'true');
   expect(await otp.inputValue(), 'the field keeps its value').toBe('123456');
   await otp.fill('654321'); // still editable
+  const waitingVerifySendsNothing = expectNoLinkingRequest(page, 700);
   await page.getByRole('button', { name: 'Verify' }).click({ force: true });
-  await page.waitForTimeout(700);
+  await waitingVerifySendsNothing;
   expect(calls, 'the waiting button sends nothing').toHaveLength(6);
   expect(await page.locator('body').innerText()).not.toMatch(/\d+ seconds|\bcount/i);
   await checkState(page, '2b rate limited with Retry-After 900');
@@ -419,8 +420,9 @@ test('login 2: five starts spend the login limit, the sixth shows the 15-minute 
   await expect(page).toHaveURL(`${origin}/link`);
   await expect(page.getByRole('button', { name: 'Continue' })).toHaveAttribute('aria-disabled', 'true');
   await accountNumber(page).fill('1000000050'); // fields stay editable
+  const waitingContinueSendsNothing = expectNoLinkingRequest(page, 700);
   await page.getByRole('button', { name: 'Continue' }).click({ force: true });
-  await page.waitForTimeout(700);
+  await waitingContinueSendsNothing;
   expect(calls, 'the waiting button sends nothing').toHaveLength(6);
   await checkState(page, '2a rate limited with Retry-After 900');
   // 2a rate limited by the same login does not leave /link and does not echo values
@@ -446,7 +448,7 @@ test('full queue: the sixth start gets 429 with no Retry-After, "Try again later
   await restartApi();
   const holder = holdCustomerLock();
   try {
-    await until('the lock holder', () => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and granted and classid = 6005`)) === 1);
+    await expect.poll(() => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and granted and classid = 6005`)) === 1, { message: 'the lock holder', timeout: 40_000 }).toBe(true);
     const accepted = 4 + queueCapacity;
     for (let index = 0; index < accepted; index++) {
       const { context, page } = await signIn(browser, logins[4 + index]);
@@ -458,7 +460,7 @@ test('full queue: the sixth start gets 429 with no Retry-After, "Try again later
       expect(response.status(), `accepted start ${index + 1}`).toBe(202);
       await page.close();
       await context.close();
-      if (index === 3) await until('4 jobs waiting on the lock', () => lockWaiters() === 4);
+      if (index === 3) await expect.poll(() => lockWaiters() === 4, { message: '4 jobs waiting on the lock', timeout: 40_000 }).toBe(true);
     }
     const { context, page } = await signIn(browser, logins[4 + accepted]);
     const calls = recordLinking(page);
@@ -472,7 +474,7 @@ test('full queue: the sixth start gets 429 with no Retry-After, "Try again later
     await checkState(page, '2a rate limited without Retry-After (full queue)');
     // the button works again at once: a second press sends a request
     await page.getByRole('button', { name: 'Continue' }).click();
-    await until('a second start request', () => calls.length === 2, 10);
+    await expect.poll(() => calls.length === 2, { message: 'a second start request', timeout: 10_000 }).toBe(true);
     await expectNothingKept(page, context, [customerD.idNumber, customerD.accountNumber], 'full queue end');
     await context.close();
   } finally {
@@ -484,11 +486,11 @@ test('full queue: the sixth start gets 429 with no Retry-After, "Try again later
   // linked a start ends before it waits on D's lock, so the queue could not fill. It has its own stack, run-regression.sh.)
   const heldSubs = logins.slice(4, 4 + 4 + queueCapacity).map((login) => `'${login.sub}'`).join(', ');
   const jobStops = () => Number(sql(`select count(*) from "AuditLogEntries" where "ActorId" in (${heldSubs}) and "Action" like 'Linking%' and not ("Action" = 'LinkingStart' and "Result" = 'Succeeded') and "OccurredAtUtc" > '${startedAt}'`));
-  await until('the held jobs stopped', () => {
+  await expect(() => {
     const stops = jobStops();
     console.log(`held job stop rows: ${stops} of ${4 + queueCapacity}`);
-    return stops === 4 + queueCapacity;
-  }, 120);
+    expect(stops, 'the held jobs stopped').toBe(4 + queueCapacity);
+  }).toPass({ timeout: 120_000 });
 });
 
 // ---- journey 3: a real link ------------------------------------------------------------------------------------------------------
@@ -541,13 +543,14 @@ test('login 3: 2a -> 202 -> 2b, two wrong codes, the real code from the SMS sink
   expect(JSON.parse(verifyCalls[2].body!)).toEqual({ code: otpCode });
   await expect(page.getByRole('heading', { level: 1 })).not.toHaveText('Enter your OTP');
   expect(await page.evaluate(() => (window as unknown as { announced: string[] }).announced)).toContain('Your login is linked.');
-  await page.waitForTimeout(3000);
-  await expect(page).toHaveURL(`${origin}/transactions`); // stays: no bounce back to /link
-  await until('the transactions request', () => transactionCalls.length > 0, 10);
+  await expect(page.waitForURL((url) => url.pathname !== '/transactions', { timeout: 3000 })).rejects.toThrow('Timeout'); // stays: no bounce back to /link
+  await expect(page).toHaveURL(`${origin}/transactions`);
+  await expect.poll(() => transactionCalls.length > 0, { message: 'the transactions request', timeout: 10_000 }).toBe(true);
   expect(transactionCalls.every((status) => status === 200)).toBe(true);
   // history.replace: Back does not return to 2b
+  const backStaysOffOtp = expect(page.waitForURL((url) => url.pathname === '/link/otp', { timeout: 500 })).rejects.toThrow('Timeout');
   await page.goBack().catch(() => undefined);
-  await page.waitForTimeout(500);
+  await backStaysOffOtp;
   expect(new URL(page.url()).pathname).not.toBe('/link/otp');
   await page.goto('/link');
   await expect(page).toHaveURL(`${origin}/transactions`); // SessionGate sends a linked customer away

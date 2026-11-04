@@ -32,6 +32,7 @@ test.afterAll(async () => {
   await page.context().close();
 });
 
+// Own sign-in: this spec tests the session cookie the sign-in sets, so it keeps the page and the response headers.
 async function signIn() {
   const knownIds = queryDatabase('select "Id" from "Sessions"').split('\n').filter(Boolean);
   await page.goto('/api/v1/bff/login');
