@@ -59,8 +59,6 @@ public static class DisputeEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
         customerRoutes.MapPost(DisputeRoutes.Withdraw, WithdrawAsync)
             .WithTags("Disputes")
-            // The note is checked by the aggregate after the dispute is loaded, so 404 comes before 400 (AD-8).
-            .DisableValidation()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
@@ -91,14 +89,15 @@ public static class DisputeEndpoints
 
     /// <summary>
     /// Withdraws one of the linked customer's open disputes. 200 with the dispute as the detail shows it, its last
-    /// timeline item the withdraw. 404 <c>not-found</c> for an unknown dispute and for another customer's alike; 400
-    /// <c>validation</c> for a note over 500 characters after trimming; 409 <c>action-not-allowed</c> with
-    /// <c>customerStatus</c> for a resolved or withdrawn dispute. A body or <paramref name="disputeId"/> that does not
-    /// bind gets 400 before the lookup.
+    /// timeline item the withdraw. 400 <c>validation</c> for a body or <paramref name="disputeId"/> that does not bind
+    /// and for a note over 500 characters after trimming, before the lookup; 404 <c>not-found</c> for an unknown dispute
+    /// and for another customer's alike; 409 <c>action-not-allowed</c> with <c>customerStatus</c> for a resolved or
+    /// withdrawn dispute.
     /// </summary>
     /// <remarks>
-    /// The checks run 401, 403, 404, 400, 409 (AD-8). Not idempotency-keyed: a repeat gets 409 with
-    /// <c>customerStatus</c> <c>withdrawn</c>, which a client retrying may treat as success (FR-18).
+    /// The checks run 401, 403, 400, 404, 409 (AD-8): the <c>Linked</c> policy runs in the authorization middleware, then
+    /// binding and built-in validation, then the handler's lookup and status. Not idempotency-keyed: a repeat gets 409
+    /// with <c>customerStatus</c> <c>withdrawn</c>, which a client retrying may treat as success (FR-18).
     /// </remarks>
     private static async Task<Results<Ok<DisputeResponse>, ProblemHttpResult>> WithdrawAsync(
         Guid disputeId,
@@ -145,8 +144,10 @@ public static class DisputeEndpoints
     /// the transaction amount; 503 <c>core-banking-unavailable</c>, with nothing written; 504 after 30 seconds.
     /// </summary>
     /// <remarks>
-    /// The checks run 401, 403, 400, 404, 409, 422, 400 (AD-8): the IDs travel in the body, so built-in validation
-    /// runs before the lookup. The <c>Linked</c> policy runs in the authorization middleware, before binding.
+    /// The checks run 401, 403, 400, 404, 409, 422, then 400 for the rule that needs the loaded transaction, the expected
+    /// amount below its amount (AD-8). The <c>Linked</c> policy runs in the authorization middleware, then binding,
+    /// built-in validation and the <c>Idempotency-Key</c> filter, then the handler's lookup and rules. The key's own
+    /// answers before the lookup belong to the key, not to this order (AD-16).
     /// Idempotent under <c>Idempotency-Key</c> (AD-16): the same request with the same key gets the stored 201 or 4xx
     /// again, byte for byte; a different request under the key gets 422 <c>idempotency-mismatch</c>, and one sent while
     /// the first is still running gets 409 <c>idempotency-in-progress</c>. A 5xx releases the key. Keys are scoped to

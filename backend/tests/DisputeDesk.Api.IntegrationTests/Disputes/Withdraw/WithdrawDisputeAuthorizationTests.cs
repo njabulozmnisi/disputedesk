@@ -15,15 +15,18 @@ namespace DisputeDesk.Api.IntegrationTests.Disputes.Withdraw;
 /// </summary>
 public class WithdrawDisputeAuthorizationTests(PostgresFixture postgres, TransactionsStub stub) : IClassFixture<TransactionsStub>
 {
-    [Fact]
-    public async Task Withdraw_BearerTokenOnly_Returns401Unauthorized()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Withdraw_BearerTokenOnly_Returns401Unauthorized(bool withNoteTooLong)
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         Guid disputeId = await OpenDisputeOfBAsync(factory);
         using HttpClient client = factory.CreateBrowser(new CookieContainer());
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(DisputesApi.WithdrawPath(disputeId.ToString()), UriKind.Relative))
         {
-            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+            // A note too long would be a 400, so a 401 with it proves authentication runs first (AD-8).
+            Content = new StringContent(WithdrawBody(withNoteTooLong), Encoding.UTF8, "application/json"),
         };
         // A JWT-shaped token built from its three parts at run time, so the source holds no token for gitleaks to flag.
         string token = string.Join('.', Base64Url.EncodeToString("""{"alg":"RS256"}"""u8), Base64Url.EncodeToString("""{"sub":"login-b"}"""u8), "c2lnbmF0dXJl");
@@ -36,15 +39,18 @@ public class WithdrawDisputeAuthorizationTests(PostgresFixture postgres, Transac
         await AssertUntouchedAsync(factory, disputeId);
     }
 
-    [Fact]
-    public async Task Withdraw_UnlinkedLogin_Returns403LinkingRequired()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Withdraw_UnlinkedLogin_Returns403LinkingRequired(bool withNoteTooLong)
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         Guid disputeId = await OpenDisputeOfBAsync(factory);
         using HttpClient browser = factory.CreateBrowser(new CookieContainer());
         await browser.SignInAsync(factory.Zitadel, "unlinked-login");
 
-        HttpResponseMessage response = await browser.WithdrawAsync(disputeId.ToString());
+        // A note too long would be a 400, so a 403 with it proves authorisation runs first (AD-8).
+        HttpResponseMessage response = await browser.WithdrawAsync(disputeId.ToString(), WithdrawBody(withNoteTooLong));
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal(ProblemType.For(LinkingProblems.LinkingRequired), await response.ProblemTypeAsync());
@@ -65,22 +71,23 @@ public class WithdrawDisputeAuthorizationTests(PostgresFixture postgres, Transac
         await AssertUntouchedAsync(factory, disputeId);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Withdraw_AnotherCustomersOpenDispute_Returns404AndTheirDisputeStaysAsItWas(bool withNoteTooLong)
+    [Fact]
+    public async Task Withdraw_AnotherCustomersOpenDispute_Returns404AndTheirDisputeStaysAsItWas()
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         Guid theirs = await OpenDisputeOfBAsync(factory);
         using HttpClient customerA = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
 
-        HttpResponseMessage response = await customerA.WithdrawAsync(
-            theirs.ToString(), DisputesApi.WithdrawBody(withNoteTooLong ? new string('a', 501) : "Mine now"));
+        // A note too long there gets the 400 before the lookup: Ownership/BodyErrorResponsesTests.
+        HttpResponseMessage response = await customerA.WithdrawAsync(theirs.ToString(), DisputesApi.WithdrawBody("Mine now"));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(ProblemType.For(CommonProblems.NotFound), await response.ProblemTypeAsync());
         await AssertUntouchedAsync(factory, theirs);
     }
+
+    /// <summary>A withdraw body with a note of 501 units, one over the limit, or a note within it.</summary>
+    private static string WithdrawBody(bool withNoteTooLong) => DisputesApi.WithdrawBody(withNoteTooLong ? new string('a', 501) : "Found it");
 
     /// <summary>Customer B's Submitted dispute, raised by B.</summary>
     private static async Task<Guid> OpenDisputeOfBAsync(ApiFactory factory)

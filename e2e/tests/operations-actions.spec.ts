@@ -436,20 +436,25 @@ test.describe('404, and the order of checks', () => {
     });
   }
 
-  test('resolve with a text/plain body: 415 validation, no row; with no token 401 and with a refused token 403 first', async () => {
+  // A body that is not JSON goes to routing's 415 endpoint, which carries no bearer policy, so the cookie fallback policy
+  // answers 401 for any token and no WWW-Authenticate (AD-8, human decision 2026-11-04).
+  test('resolve with a text/plain body: 401 with no WWW-Authenticate for a good, a refused and no token, no row', async () => {
     const before = audit(ids.d5).length;
+    const auditBefore = auditCount();
     const response = await act(ids.d5, 'resolve', { raw: 'outcome=upheld', contentType: 'text/plain' });
-    expect(response.status()).toBe(415);
-    expect(expectProblemShape(await response.json(), 'validation', 415)).toEqual([]);
+    expect(response.status()).toBe(401);
+    expect(response.headers()['www-authenticate']).toBeUndefined();
     expect(audit(ids.d5).length).toBe(before);
     const none = await act(ids.d5, 'resolve', { headers: {}, raw: 'x', contentType: 'text/plain' });
     expect(none.status()).toBe(401);
-    expect(none.headers()['www-authenticate']).toBe('Bearer');
+    expect(none.headers()['www-authenticate']).toBeUndefined();
     const refused = await act(ids.d5, 'resolve', { headers: bearer(machine.noRole.token), raw: 'x', contentType: 'text/plain' });
-    expect(refused.status()).toBe(403);
+    expect(refused.status()).toBe(401);
+    expect(refused.headers()['www-authenticate']).toBeUndefined();
+    expect(auditCount()).toBe(auditBefore);
   });
 
-  // Well-formed bodies: 404 first on the unknown ID, then 400 naming the field on a known one, before the status.
+  // Well-formed bodies: 400 naming the field before the lookup, on the unknown ID too, and before the status (AD-8).
   const wellFormed: [string, Json, string][] = [
     ['no outcome', { note: 'x' }, 'outcome'],
     ['a null outcome', { outcome: null, note: 'x' }, 'outcome'],
@@ -460,9 +465,8 @@ test.describe('404, and the order of checks', () => {
     ['a 501-unit note ending in a surrogate pair straddling the limit', { outcome: 'upheld', note: `${'a'.repeat(499)}😀` }, 'note'],
   ];
   for (const [name, json, field] of wellFormed) {
-    test(`resolve with ${name}: 404 on unknown, 400 naming ${field} on under review and on resolved, never 409`, async () => {
-      expect((await act(unknownId, 'resolve', { json })).status()).toBe(404);
-      for (const id of [ids.d5, ids.d1]) {
+    test(`resolve with ${name}: 400 naming ${field} on unknown, on under review and on resolved, never 404 or 409`, async () => {
+      for (const id of [unknownId, ids.d5, ids.d1]) {
         const before = audit(id).length;
         const response = await act(id, 'resolve', { json });
         expect(response.status(), id).toBe(400);
@@ -526,8 +530,8 @@ test.describe.serial('403: refused tokens, 403 before 404 and 400, each audited 
     expect(events(ids.d5)).toHaveLength(stateBefore); // nothing changed
   });
 
-  test('403 comes before 400 and 415: bad bodies, text/plain and not-a-guid still get 403; not-a-guid records a null DisputeId', async () => {
-    for (const send of [{ raw: '{bad' }, { raw: 'x', contentType: 'text/plain' }, { raw: '[]' }]) {
+  test('403 comes before 400: bad bodies and not-a-guid still get 403; not-a-guid records a null DisputeId (text/plain is 401, above)', async () => {
+    for (const send of [{ raw: '{bad' }, { raw: '[]' }]) {
       const before = auditCount();
       const response = await act(ids.d5, 'resolve', { ...send, headers: bearer(machine.noRole.token) });
       expect(response.status()).toBe(403);

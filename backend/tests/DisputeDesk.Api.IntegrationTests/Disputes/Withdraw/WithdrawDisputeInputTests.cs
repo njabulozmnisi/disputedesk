@@ -8,9 +8,9 @@ using DisputeDesk.Domain.Disputes;
 namespace DisputeDesk.Api.IntegrationTests.Disputes.Withdraw;
 
 /// <summary>
-/// AC2, the input table and the check order (AD-8: 401, 403, 404, 400, 409). Binding failures answer 400 before the
-/// lookup; the note's 500-unit rule runs in the aggregate after the dispute is loaded and before its status. One Api
-/// serves the class; each test withdraws its own dispute, committed directly, so none sees another's.
+/// AC2, the input table and the check order (AD-8: 401, 403, 400, 404, 409). Binding failures and the note's 500-unit
+/// rule, checked by the built-in validation, answer 400 before the lookup. One Api serves the class; each test withdraws
+/// its own dispute, committed directly, so none sees another's.
 /// </summary>
 public sealed class WithdrawDisputeInputTests(WithdrawDisputeInputTests.LinkedCustomerA api) : IClassFixture<WithdrawDisputeInputTests.LinkedCustomerA>
 {
@@ -99,9 +99,19 @@ public sealed class WithdrawDisputeInputTests(WithdrawDisputeInputTests.LinkedCu
     [InlineData("00000000-0000-0000-0000-00000000000g")]
     public async Task Withdraw_DisputeIdNotAGuid_Returns400ValidationWithNoField(string disputeId)
     {
-        HttpResponseMessage response = await Browser.WithdrawAsync(disputeId, DisputesApi.WithdrawBody(Note501));
+        HttpResponseMessage response = await Browser.WithdrawAsync(disputeId, DisputesApi.WithdrawBody(Note500));
 
         await response.AssertValidationProblemWithNoFieldAsync();
+    }
+
+    [Fact]
+    public async Task Withdraw_DisputeIdNotAGuidAndNoteTooLong_Returns400NamingNote()
+    {
+        // The built-in validation still validates the bound body when the route value fails to bind, so its error is
+        // the one named; both are 400 before the lookup (AD-8).
+        HttpResponseMessage response = await Browser.WithdrawAsync("not-a-guid", DisputesApi.WithdrawBody(Note501));
+
+        await response.AssertValidationProblemAsync("note");
     }
 
     [Fact]
@@ -118,22 +128,33 @@ public sealed class WithdrawDisputeInputTests(WithdrawDisputeInputTests.LinkedCu
     }
 
     [Fact]
-    public async Task Withdraw_NoteTooLongOnAnUnknownId_Returns404Before400()
+    public async Task Withdraw_NoteTooLongOnAnUnknownId_Returns400BeforeTheLookup()
     {
         HttpResponseMessage response = await Browser.WithdrawAsync(Guid.CreateVersion7().ToString(), DisputesApi.WithdrawBody(Note501));
+
+        await response.AssertValidationProblemAsync("note");
+    }
+
+    [Fact]
+    public async Task Withdraw_NoteOf500UnitsOnAnUnknownId_Returns404NotFound()
+    {
+        HttpResponseMessage response = await Browser.WithdrawAsync(Guid.CreateVersion7().ToString(), DisputesApi.WithdrawBody(Note500));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(ProblemType.For(CommonProblems.NotFound), await response.ProblemTypeAsync());
     }
 
     [Fact]
-    public async Task Withdraw_NoteTooLongOnTheOwnersResolvedDispute_Returns400Before409()
+    public async Task Withdraw_NoteTooLongOnTheOwnersResolvedDispute_Returns400BeforeTheStatusAndChangesNothing()
     {
         Guid disputeId = await api.DisputeInAsync(DisputeStatus.Resolved);
+        int storedEvents = (await Factory.StreamAsync(disputeId)).Count;
 
         HttpResponseMessage response = await Browser.WithdrawAsync(disputeId.ToString(), DisputesApi.WithdrawBody(Note501));
 
         await response.AssertValidationProblemAsync("note");
+        Assert.Equal(DisputeStatus.Resolved, (await Factory.DisputeRowAsync(disputeId)).Status);
+        Assert.Equal(storedEvents, (await Factory.StreamAsync(disputeId)).Count);
     }
 
     /// <summary>Customer A signed in on one Api whose core banking is never called: withdraw reads only stored events.</summary>

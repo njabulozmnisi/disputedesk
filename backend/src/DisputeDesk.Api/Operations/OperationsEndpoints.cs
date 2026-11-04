@@ -6,7 +6,6 @@ using DisputeDesk.Contracts.Operations;
 using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
 using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Http.Metadata;
 
 namespace DisputeDesk.Api.Operations;
 
@@ -48,20 +47,9 @@ public static class OperationsEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict);
         operations.MapPost(OperationsRoutes.Resolve, ResolveAsync)
             .RequireAuthorization(OperationsAuthentication.ResolvePolicy)
-            // The body is checked after the dispute is loaded, so 404 comes before 400 (AD-8 as amended 2026-10-30).
-            .DisableValidation()
-            // Routing turns a body that is not JSON into a 415 endpoint of its own, which carries no policy, so the
-            // cookie-only fallback policy would answer a bearer caller 401. Accepting every content type at routing
-            // (the last IAcceptsMetadata wins) leaves the 415 to the body binding, after this route's policy. Recorded
-            // under AD-8: an empty content-type list matches any content type in aspnetcore
-            // src/Http/Routing/src/Matching/AcceptsMatcherPolicy.cs (release/10.0), not on Microsoft Learn; pinned by
-            // Resolve_TextPlainBodyWithNoTokenOrARefusedToken_Returns401BearerOr403Before415 and
-            // Resolve_TextPlainBody_Returns415ValidationAndWritesNoRow.
-            .WithMetadata(new AcceptsMetadata([], typeof(ResolveDisputeRequest)))
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict)
-            .ProducesProblem(StatusCodes.Status415UnsupportedMediaType);
+            .ProducesProblem(StatusCodes.Status409Conflict);
         return operations;
     }
 
@@ -129,13 +117,16 @@ public static class OperationsEndpoints
 
     /// <summary>
     /// Resolves an under-review or escalated dispute with an outcome and a note for the customer (FR-23). Needs the
-    /// <c>dispute.resolve</c> role and a mapped token <c>sub</c>. 200 with the dispute as the operations read shows it; 404
-    /// <c>not-found</c> for an unknown dispute; 400 <c>validation</c> naming <c>outcome</c> or <c>note</c>; 409
-    /// <c>action-not-allowed</c> with <c>disputeStatus</c> in any other status.
+    /// <c>dispute.resolve</c> role and a mapped token <c>sub</c>. 200 with the dispute as the operations read shows it; 400
+    /// <c>validation</c> for a body or <paramref name="disputeId"/> that does not bind, and naming <c>outcome</c> or
+    /// <c>note</c>, before the lookup; 404 <c>not-found</c> for an unknown dispute; 409 <c>action-not-allowed</c> with
+    /// <c>disputeStatus</c> in any other status.
     /// </summary>
     /// <remarks>
-    /// The checks run 401, 403, then 400 for a body or <paramref name="disputeId"/> that does not bind (415 for a body that
-    /// is not JSON), 404, 400 for the outcome and the note, and last 409 (AD-8 as amended 2026-10-30).
+    /// The checks run 401, 403, 400, 404, 409 (AD-8): the policy runs in the authorization middleware, then binding and
+    /// built-in validation, then the handler's lookup and status. A body that is not JSON goes to routing's 415 endpoint,
+    /// which carries no bearer policy, so the cookie fallback policy answers 401 for any token (AD-8, human decision
+    /// 2026-11-04).
     /// </remarks>
     private static Task<Results<Ok<OperationsDisputeResponse>, ProblemHttpResult>> ResolveAsync(
         Guid disputeId,

@@ -85,7 +85,9 @@ public sealed class WithdrawDisputeHandler(IAppDbContext db, CurrentCustomer cur
 
         if (withdrawn.IsFailure)
         {
-            // The note's own rule: a validation error, not a refusal on rule or status, so not audited (AD-14a).
+            // The request's validation has already checked the note, so this guards the aggregate's own note rule alone:
+            // without it a refusal would commit the read model with no stored event and answer 200. A validation error,
+            // not a refusal on rule or status, so not audited (AD-14a).
             return withdrawn.Error;
         }
 

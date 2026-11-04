@@ -90,7 +90,9 @@ public sealed class OperationsActionHandler(IAppDbContext db, CurrentOperationsA
 
         if (decided.IsFailure)
         {
-            // The body's own rules: a validation error, not a refusal on rule or status, so not audited (AD-14a).
+            // The request's validation has already checked the outcome and the note, so this guards the aggregate's own note
+            // rule alone: without it a refusal would commit the read model with no stored event and answer 200. A
+            // validation error, not a refusal on rule or status, so not audited (AD-14a).
             return decided.Error;
         }
 
@@ -115,12 +117,7 @@ public sealed class OperationsActionHandler(IAppDbContext db, CurrentOperationsA
             case DisputeAction.Escalate:
                 return dispute.Escalate(operationsActor.Actor, instant);
             case DisputeAction.Resolve:
-                // The outcome before the note and the status, all after the lookup (AD-8).
-                if (resolve?.Outcome is not Contracts.Disputes.Outcome outcome)
-                {
-                    return DisputeErrors.OutcomeRequired;
-                }
-
+                Contracts.Disputes.Outcome outcome = resolve?.Outcome ?? throw new ArgumentException("Built-in validation requires an outcome.", nameof(resolve));
                 return dispute.Resolve(DisputeWire.ToDomain(outcome), resolve.Note, operationsActor.Actor, instant);
             default:
                 throw new ArgumentOutOfRangeException(nameof(action), action, "Not an operations action.");
