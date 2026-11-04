@@ -13,7 +13,7 @@ ARG PROBE_IMAGE=busybox:1.38.0-musl@sha256:ea2b9914a16a4ac1981994af97b318f7c7d4d
 
 FROM ${SDK_IMAGE} AS build
 WORKDIR /src
-COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
+COPY global.json Directory.Build.props Directory.Packages.props BannedSymbols.txt .editorconfig ./
 COPY src/DisputeDesk.Domain/DisputeDesk.Domain.csproj src/DisputeDesk.Domain/
 COPY src/DisputeDesk.Application/DisputeDesk.Application.csproj src/DisputeDesk.Application/
 COPY src/DisputeDesk.Infrastructure/DisputeDesk.Infrastructure.csproj src/DisputeDesk.Infrastructure/
@@ -64,7 +64,7 @@ COPY --from=probe /bin/busybox /usr/local/bin/busybox
 # carries the same wget probe as api-local for its Compose healthcheck.
 FROM ${SDK_IMAGE} AS publish-core-banking
 WORKDIR /src
-COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
+COPY global.json Directory.Build.props Directory.Packages.props BannedSymbols.txt .editorconfig ./
 COPY stubs/DisputeDesk.CoreBankingStub/DisputeDesk.CoreBankingStub.csproj stubs/DisputeDesk.CoreBankingStub/
 RUN dotnet restore stubs/DisputeDesk.CoreBankingStub/DisputeDesk.CoreBankingStub.csproj
 COPY stubs/DisputeDesk.CoreBankingStub/ stubs/DisputeDesk.CoreBankingStub/

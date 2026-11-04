@@ -20,3 +20,4 @@
 | 8.6 | review | `linking-screens.spec.ts:300` and the other absence checks | `.rejects.toThrow(errors.TimeoutError)` states the intent exactly. |
 | 8.5 | review | `backend/tests/DisputeDesk.ArchitectureTests/SourceTrees.cs:21` | A file that fails to parse is not detected (Roslyn recovers); add one fact asserting no error diagnostics for every scanned file. |
 | 8.5 | review | `infra/tests/DisputeDesk.PlatformTests/DisputeDesk.PlatformTests.csproj` | The "change both together" comment no longer holds once backend tests carry BannedApiAnalyzers; reword to "the shared compiler settings". |
+| 8.5 | CI (main red, runs 41823293459, 41823293468) | `backend/Dockerfile` | Every backend project needs `BannedSymbols.txt`, which the Dockerfile did not copy; host builds passed, image builds failed. Fixed in the next commit; escape: a change to `Directory.Build.props` inputs builds the images before reporting (build-story pitfall candidate). |
