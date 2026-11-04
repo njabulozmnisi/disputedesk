@@ -14,3 +14,5 @@ Dismissed as not decisions (fixed in the stories): 8.7's point on `Compose_Api_S
 Also approved 2026-11-04: `CLAUDE.md` points at `docs/process/ad-004-model-roles.md`; the backend builder may write `scripts/` (story 8.1).
 
 Approved 2026-11-04 (8.1, criterion 7): `scripts/check-ready.sh` reads a front-matter field `decisions: settled`, which the supervisor sets after the human answers a story's `[decision]` points, citing the decisions record. The supervisor adds the matching line to `docs/process/agentic-sdlc.md` and the product owner's ticket template when 8.1 lands. Also: 8.3's two `returnUrl` test cases (`Callback_NonLocalReturnUrl_RedirectsToRoot`) go to a backend builder as a test-only change before 8.3 merges.
+
+Approved 2026-11-04 (later): a standing approval to run `docker builder prune --filter until=24h -f` whenever free disk drops under 15 GB (the cache is shared with other projects). 8.7 and 8.9 criterion on `X-Origin-Verify`: the local gateway strips the client's header too, in 8.9 (which rewrites the forwarded-header block), so both gateways behave alike and one test covers both.

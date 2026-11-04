@@ -150,6 +150,10 @@ All three distributions (app, auth and mail) use `CachingDisabled` (AD-28; story
 
 The published api and worker images are the `api-local` and `worker-local` targets: the chiseled .NET images plus a static busybox (named `wget` in the api, full busybox in the worker), because AWS runs Compose on one instance and Compose health checks run inside the container (human decision 2026-10-30, story 7.4 build; AD-22, AD-25). Production runs the shell-free `api` and `worker` targets under an orchestrator whose probes call `/health/live` and `/health/ready` over the network (Kubernetes liveness and readiness probes, or an ECS target group's health check). *Why it waits:* v1 has no orchestrator or load balancer to probe, and the health checks keep AD-22's "the Worker never runs on an old schema" and AD-25's restarts.
 
+### P76. A deadline shared across tabs
+
+Each tab keeps its own idle deadline, 15 minutes after the last API response in that tab, and its own warning; no deadline or message passes between tabs (AD-7). Production can share the deadline across the tabs of one session, for example through `BroadcastChannel` (HTML, *Broadcasting to other browsing contexts*), so activity in one tab moves the warning in all of them and every tab ends together. *Why it waits:* the server's 15-minute idle limit is the authority, so no tab keeps a session the server has ended, and other tabs learn of an end on focus (P77; human decision D2, 2026-11-03; story 8.13).
+
 ## Accepted risks
 
 ### P18. Fencing the relay leader with Kafka transactions
@@ -306,8 +310,12 @@ Story 7.12 adds `Cache-Control: no-store` to the `/api` responses nginx generate
 
 ### P74. Browser memory after the session ends
 
-Story 7.14 clears customer data from the SPA's memory when the session ends: the query and mutation caches, the raise draft, and every detached screen (a `WeakRef` and forced-GC test, and QA's CDP heap snapshots on five paths). Two things remain. TanStack Router's match cache and URL map keep the ID of a dispute the person opened (an ID only, no description, amount or card); and on the person's own sign-out the old document keeps its data for under a second, until the logout form post replaces the page. Production can clear the router's cache on session end (or reload the page to a fixed start URL), and keeps sign-out as a full-page navigation. *Why it waits:* an ID alone identifies nothing without a session, the window on sign-out ends with the navigation, and the demo holds only synthetic data (story 7.14 QA, 2026-11-01).
+Closed by story 8.13 (human decision D2, 2026-11-03). From that story, every session ends in the browser by a document navigation (`location.replace` to the session-ended screen, or the logout form post), which drops the old document's memory, the router's match cache and URL map included, so nothing stays to clear; the story removes story 7.14's in-place clean-up, which this entry's remaining limits came from. Another tab that stays open is covered by P77.
 
 ### P75. Broker durability
 
 The broker runs `--mode=dev-container` with one replica (AD-27; ad-010). That mode bypasses fsync, enables write caching and lets producers create topics, so an `acks=all` acknowledgement is not yet on disk; the relay marks a row `Sent` on that acknowledgement, so a broker crash before the flush can lose an event the outbox never resends ([`rpk redpanda start`](https://docs.redpanda.com/current/reference/rpk/rpk-redpanda/rpk-redpanda-start/); [Manage topics, write caching](https://docs.redpanda.com/current/develop/config-topics/)). Production runs Redpanda in production mode (fsync before each `acks=all` acknowledgement, write caching off) on at least three brokers with replication factor 3, and disables topic auto-creation (`auto_create_topics_enabled`), so only the topic `redpanda-topics` creates exists. *Why it waits:* v1 holds only synthetic data on one node, and the memory budget of the AWS dev instance has no room for a second broker (ad-010).
+
+### P77. Other tabs learn of a session end on focus
+
+A tab learns that the session ended in another tab when it is brought to the front: its session query refetches on window focus (TanStack Query `refetchOnWindowFocus`) and, on a 401 or `anonymous` answer, leaves by a document navigation. A window that stays visible beside another without gaining focus is not covered: it keeps its data on screen until its next request's 401 or its own deadline. A focus also renews a live session, because the session request is authenticated. ASVS 5.0 V14.3.1 (clear data at session end) is met for the leaving tab, and for other tabs on focus. Production can add a cross-tab message (P76). *Why it waits:* the uncovered window shows only what it showed while the session was live, the server refuses any request from it, and the demo holds only synthetic data (human decision 2026-11-04; story 8.13).
