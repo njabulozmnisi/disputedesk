@@ -18,9 +18,6 @@ namespace DisputeDesk.Application.Operations.ReadDispute;
 /// </summary>
 public sealed class ReadDisputeHandler(IAppDbContext db, CurrentOperationsActor operationsActor, TimeProvider time)
 {
-    // AD-3: the message never echoes the ID. The same error as the customer detail, so the 404 bodies match (AD-11).
-    private static readonly Error NotFound = Error.NotFound("not-found", "There is no such dispute.");
-
     public async Task<Result<OperationsDisputeResponse>> HandleAsync(Guid disputeId, CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
@@ -36,7 +33,7 @@ public sealed class ReadDisputeHandler(IAppDbContext db, CurrentOperationsActor 
             // record of its refusal (NFR-SEC-10). The database command timeout still bounds the save. A successful read
             // below keeps the request's token: a cancelled read returns nothing.
             await db.SaveChangesAsync(CancellationToken.None);
-            return NotFound;
+            return DisputeErrors.NotFound;
         }
 
         // shortcut: the row and the stream are two statements under READ COMMITTED, as in the customer detail, so a change

@@ -13,16 +13,13 @@ namespace DisputeDesk.Application.Disputes.GetDispute;
 /// </summary>
 public sealed class GetDisputeHandler(IAppDbContext db)
 {
-    // AD-3: the message never echoes the ID.
-    private static readonly Error NotFound = Error.NotFound("not-found", "There is no such dispute.");
-
     public async Task<Result<Contracts.Disputes.DisputeResponse>> HandleAsync(Guid disputeId, CancellationToken cancellationToken)
     {
         Dispute? dispute = await db.Entities<Dispute>().AsNoTracking()
             .FirstOrDefaultAsync(row => row.Id == disputeId, cancellationToken);
         if (dispute is null)
         {
-            return NotFound;
+            return DisputeErrors.NotFound;
         }
 
         // shortcut: the row and the stream are two statements under READ COMMITTED, so a change committing between them

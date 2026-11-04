@@ -19,11 +19,7 @@ public class Result
 
     public static Result<T> Success<T>(T value) where T : notnull => new(value);
 
-    public static Result Failure(Error error) => new(error ?? throw new ArgumentNullException(nameof(error)));
-
-    public static Result<T> Failure<T>(Error error) where T : notnull => new(error);
-
-    public static implicit operator Result(Error error) => Failure(error);
+    public static implicit operator Result(Error error) => new(error);
 }
 
 /// <summary>The outcome of an operation that returns a value when it succeeds.</summary>
@@ -32,9 +28,9 @@ public sealed class Result<T> : Result
 {
     private readonly T? _value;
 
-    internal Result(T value) : base(null) => _value = value ?? throw new ArgumentNullException(nameof(value));
+    internal Result(T value) : base(null) => _value = value;
 
-    internal Result(Error error) : base(error ?? throw new ArgumentNullException(nameof(error))) { }
+    internal Result(Error error) : base(error) { }
 
     /// <summary>The value. Reading it from a failed result is a programming error.</summary>
     public T Value => IsSuccess && _value is T value

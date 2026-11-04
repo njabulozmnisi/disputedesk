@@ -31,14 +31,6 @@ app.MapPost("/customers/match", (MatchRequest request, Bank bank) =>
         : Results.Ok(new { customer.CustomerId, customer.Cellphone });
 });
 
-app.MapGet("/accounts", ([FromHeader(Name = "X-Customer-Id")] string customerId, Bank bank) =>
-{
-    FixtureCustomer? customer = bank.FindByCustomerId(customerId);
-    return customer is null
-        ? Results.NotFound()
-        : Results.Ok(customer.Accounts.Select(account => new { account.AccountRef, AccountLast4 = account.AccountNumber[^4..] }));
-});
-
 // The cursor is the transaction ID of the last row on the previous page. Over the fixed fixture data this
 // gives the same pages as a keyset on (transaction date, transaction ID).
 app.MapGet("/transactions", ([FromHeader(Name = "X-Customer-Id")] string customerId, string? cursor, int? limit, Bank bank) =>

@@ -15,29 +15,13 @@ public class ResultTests
     }
 
     [Fact]
-    public void Failure_WithError_ExposesError()
-    {
-        var result = Result.Failure(SomeError);
-
-        Assert.True(result.IsFailure);
-        Assert.False(result.IsSuccess);
-        Assert.Same(SomeError, result.Error);
-    }
-
-    [Fact]
     public void ImplicitConversion_FromError_ReturnsFailedResult()
     {
         Result result = SomeError;
 
         Assert.True(result.IsFailure);
+        Assert.False(result.IsSuccess);
         Assert.Same(SomeError, result.Error);
-    }
-
-    [Fact]
-    public void Failure_NullError_ThrowsArgumentNullException()
-    {
-        Assert.Throws<ArgumentNullException>(() => Result.Failure(null!));
-        Assert.Throws<ArgumentNullException>(() => Result.Failure<string>(null!));
     }
 
     [Fact]
@@ -70,22 +54,17 @@ public class ResultTests
     [Fact]
     public void Value_OnFailedResult_ThrowsInvalidOperationException()
     {
-        var result = Result.Failure<int>(SomeError);
+        Result<int> result = SomeError;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => result.Value);
         Assert.Contains(SomeError.Code, exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Success_NullValue_ThrowsArgumentNullException()
-    {
-        Assert.Throws<ArgumentNullException>(() => Result.Success<string>(null!));
-    }
-
-    [Fact]
     public void FailureOfT_AssignedToResult_IsFailure()
     {
-        Result result = Result.Failure<int>(SomeError);
+        Result<int> failed = SomeError;
+        Result result = failed;
 
         Assert.True(result.IsFailure);
     }

@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using System.Text.Json;
 using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Infrastructure.Observability;
 
@@ -35,9 +36,15 @@ public sealed class DisputeActionMetrics
             "disputedesk.disputes.resolved", description: "Disputes resolved, by outcome and whether the SLA sweep had escalated them.");
     }
 
-    /// <summary>Counts an operations action that committed (AD-20): <paramref name="action"/> is <c>startReview</c>, <c>escalate</c> or <c>resolve</c>.</summary>
-    public void RecordOperationsAction(string action) =>
-        _actions.Add(1, new KeyValuePair<string, object?>("action", action), new KeyValuePair<string, object?>("actor_type", "operations"));
+    /// <summary>
+    /// Counts an operations action that committed (AD-20), labelled with its camelCase name: <c>startReview</c>,
+    /// <c>escalate</c> or <c>resolve</c>.
+    /// </summary>
+    public void RecordOperationsAction(Domain.Disputes.DisputeAction action) =>
+        _actions.Add(
+            1,
+            new KeyValuePair<string, object?>("action", JsonNamingPolicy.CamelCase.ConvertName(action.ToString())),
+            new KeyValuePair<string, object?>("actor_type", "operations"));
 
     /// <summary>Counts a committed resolve (SM-4): <paramref name="slaEscalated"/> is whether the SLA sweep had escalated the dispute.</summary>
     public void RecordResolved(Outcome outcome, bool slaEscalated) =>

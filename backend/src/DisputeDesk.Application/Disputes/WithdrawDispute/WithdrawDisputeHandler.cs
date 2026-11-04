@@ -18,59 +18,69 @@ namespace DisputeDesk.Application.Disputes.WithdrawDispute;
 /// </summary>
 public sealed class WithdrawDisputeHandler(IAppDbContext db, CurrentCustomer currentCustomer, TimeProvider time, GetDisputeHandler detail)
 {
-    // AD-3: the message never echoes the ID.
-    private static readonly Error NotFound = Error.NotFound("not-found", "There is no such dispute.");
-
     private Actor Customer => new(ActorType.Customer, currentCustomer.LoginSub);
 
     public async Task<Result<Contracts.Disputes.DisputeResponse>> HandleAsync(
         Guid disputeId, Contracts.Disputes.WithdrawDisputeRequest request, CancellationToken cancellationToken)
     {
         // The one clock reading (AD-4), cut to the whole microseconds a Postgres timestamptz keeps, as the raise does.
-        DateTimeOffset now = ToWholeMicroseconds(time.GetUtcNow());
+        DateTimeOffset now = Instants.ToWholeMicroseconds(time.GetUtcNow());
 
-        Result<Contracts.Disputes.DisputeResponse>? first = await TryWithdrawAsync(disputeId, request.Note, now, isRetry: false, cancellationToken);
-        if (first is not null)
+        // A version clash is the commit refused by the unique stored event version; the commit has cleared the change
+        // tracker (EF Core, Handling concurrency conflicts).
+        try
         {
-            return first;
+            return await WithdrawAsync(disputeId, request.Note, now, isRetry: false, cancellationToken);
+        }
+        catch (UniqueViolationException clash) when (clash.Error == DisputeErrors.VersionClash)
+        {
+            // AD-15: another change appended this version first. Replay the new stream and decide once more, never more.
         }
 
-        // AD-15: another change appended this version first. Replay the new stream and decide once more, never more.
-        Result<Contracts.Disputes.DisputeResponse>? retry = await TryWithdrawAsync(disputeId, request.Note, now, isRetry: true, cancellationToken);
-        if (retry is not null)
+        try
         {
-            return retry;
+            return await WithdrawAsync(disputeId, request.Note, now, isRetry: true, cancellationToken);
+        }
+        catch (UniqueViolationException clash) when (clash.Error == DisputeErrors.VersionClash)
+        {
+            // A second clash: answered below from one read of the read model.
         }
 
-        // A second clash: one read of the read model and no further decision (AD-15, decided 2026-10-30). A change
-        // committed after this read is not reflected. The refusal is decided, so, as for its audit save below, not the
-        // request's token: a client that disconnects cannot cancel the record of its refusal (NFR-SEC-10).
+        // One read of the read model and no further decision (AD-15, decided 2026-10-30). A change committed after this
+        // read is not reflected. The refusal is decided, so, as for its audit save below, not the request's token: a
+        // client that disconnects cannot cancel the record of its refusal (NFR-SEC-10).
         DisputeStatus lastRead = await db.Entities<Dispute>().AsNoTracking()
             .Where(dispute => dispute.Id == disputeId)
             .Select(dispute => dispute.Status)
             .SingleAsync(CancellationToken.None);
-        return await RefuseAsync(DisputeErrors.ActionNotAllowedAs(DisputeWire.ToCustomerStatus(lastRead)), disputeId, now);
+        return await RefuseAsync(DisputeWire.ActionNotAllowedAs(DisputeWire.ToCustomerStatus(lastRead)), disputeId, now);
     }
 
     /// <summary>
-    /// Replays the dispute, decides and commits; null when the commit lost a version clash, after which the override has
-    /// cleared the change tracker. On the retry the instant is the later of <paramref name="now"/> and the stream's
-    /// latest, so time never runs backwards within a stream (AD-15).
+    /// Replays the dispute, decides and commits; a lost version clash throws <see cref="UniqueViolationException"/>. On the
+    /// retry the instant is the later of <paramref name="now"/> and the stream's latest, so time never runs backwards
+    /// within a stream (AD-15).
     /// </summary>
-    private async Task<Result<Contracts.Disputes.DisputeResponse>?> TryWithdrawAsync(
+    private async Task<Result<Contracts.Disputes.DisputeResponse>> WithdrawAsync(
         Guid disputeId, string? note, DateTimeOffset now, bool isRetry, CancellationToken cancellationToken)
     {
-        Dispute? dispute = await db.LoadDisputeAsync(disputeId, cancellationToken);
-        if (dispute is null)
+        // Through the ownership filter (AD-11). A row of an unknown type throws: replay never builds a partial dispute (AD-13).
+        List<StoredEventRow> rows = await db.Entities<StoredEventRow>().AsNoTracking()
+            .Where(row => row.DisputeId == disputeId)
+            .OrderBy(row => row.Version)
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0)
         {
-            return await RefuseAsync(NotFound, disputeId: null, now);
+            return await RefuseAsync(DisputeErrors.NotFound, disputeId: null, now);
         }
 
-        DateTimeOffset instant = isRetry ? Later(now, await LatestOccurredAtAsync(disputeId, cancellationToken)) : now;
+        List<StoredEvent> stream = [.. rows.Select(row => row.ToStoredEvent())];
+        var dispute = Dispute.Replay(stream);
+        DateTimeOffset instant = isRetry ? Instants.Later(now, stream.Max(storedEvent => storedEvent.OccurredAtUtc)) : now;
         Result withdrawn = dispute.Withdraw(note, Customer, instant);
         if (withdrawn.Error == DisputeErrors.ActionNotAllowed)
         {
-            return await RefuseAsync(DisputeErrors.ActionNotAllowedAs(DisputeWire.ToCustomerStatus(dispute.Status)), dispute.Id, now);
+            return await RefuseAsync(DisputeWire.ActionNotAllowedAs(DisputeWire.ToCustomerStatus(dispute.Status)), dispute.Id, now);
         }
 
         if (withdrawn.IsFailure)
@@ -82,14 +92,7 @@ public sealed class WithdrawDisputeHandler(IAppDbContext db, CurrentCustomer cur
         // The replayed dispute is not tracked; Update marks every property modified, so the commit writes the read model
         // with the stored event (EF Core, Disconnected entities).
         db.Entities<Dispute>().Update(dispute);
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (UniqueViolationException clash) when (clash.Error == DisputeErrors.VersionClash)
-        {
-            return null;
-        }
+        await db.SaveChangesAsync(cancellationToken);
 
         // The 200 is the dispute as the detail reads it back, so it equals a following GET.
         return await detail.HandleAsync(disputeId, cancellationToken);
@@ -104,15 +107,4 @@ public sealed class WithdrawDisputeHandler(IAppDbContext db, CurrentCustomer cur
         await db.SaveChangesAsync(CancellationToken.None);
         return error;
     }
-
-    private Task<DateTimeOffset> LatestOccurredAtAsync(Guid disputeId, CancellationToken cancellationToken) =>
-        db.Entities<StoredEventRow>()
-            .Where(row => row.DisputeId == disputeId)
-            .MaxAsync(row => row.OccurredAtUtc, cancellationToken);
-
-    private static DateTimeOffset Later(DateTimeOffset first, DateTimeOffset second) => first > second ? first : second;
-
-    // A Postgres timestamptz keeps whole microseconds (PostgreSQL, Date/Time Types); a DateTimeOffset has 100 ns ticks.
-    private static DateTimeOffset ToWholeMicroseconds(DateTimeOffset instant) =>
-        instant.AddTicks(-(instant.Ticks % TimeSpan.TicksPerMicrosecond));
 }

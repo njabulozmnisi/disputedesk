@@ -35,17 +35,6 @@ public sealed partial class CoreBankingClient(HttpClient http, ILogger<CoreBanki
         return SendAsync<CustomerMatch>(request, cancellationToken);
     }
 
-    public async Task<Result<IReadOnlyList<Account>>> GetAccountsAsync(string customerId, CancellationToken cancellationToken)
-    {
-        Result<IReadOnlyList<Account>> accounts = await SendAsync<IReadOnlyList<Account>>(GetRequest("accounts", customerId), cancellationToken);
-        if (accounts.IsSuccess && !accounts.Value.All(account => Last4Shape().IsMatch(account.AccountLast4)))
-        {
-            return Unmasked();
-        }
-
-        return accounts;
-    }
-
     public async Task<Result<TransactionPage>> GetTransactionsAsync(string customerId, string? cursor, int limit, CancellationToken cancellationToken)
     {
         string path = cursor is null

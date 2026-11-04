@@ -1,4 +1,5 @@
 using DisputeDesk.Application.Abstractions;
+using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -150,11 +151,7 @@ public sealed partial class Seeder(IOptions<SeedOptions> options, TimeProvider t
 
     // The one clock reading of a seed (AD-4), cut to the whole microseconds a Postgres timestamptz keeps, so the SLA demo
     // dispute's stored instants are exactly the ones resolved from it.
-    private DateTimeOffset SeedingInstant()
-    {
-        DateTimeOffset now = time.GetUtcNow();
-        return now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
-    }
+    private DateTimeOffset SeedingInstant() => Instants.ToWholeMicroseconds(time.GetUtcNow());
 
     /// <summary>
     /// A context acting for one customer, so its reads pass the ownership filter with no bypass (AD-11, AD-30). It runs

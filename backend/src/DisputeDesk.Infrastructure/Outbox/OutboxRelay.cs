@@ -5,7 +5,6 @@ using Confluent.Kafka;
 using DisputeDesk.Infrastructure.Observability;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -29,7 +28,7 @@ namespace DisputeDesk.Infrastructure.Outbox;
 /// </summary>
 public sealed partial class OutboxRelay(
     IOptions<KafkaOptions> kafkaOptions,
-    IConfiguration configuration,
+    IOptions<ConnectionStringsOptions> connectionStrings,
     TimeProvider timeProvider,
     IMeterFactory meterFactory,
     ILogger<OutboxRelay> logger,
@@ -112,7 +111,7 @@ public sealed partial class OutboxRelay(
         // Each producer span's parent is the row's stored context or none, never whatever started the host.
         Activity.Current = null;
         IProducer<string, string> producer = BuildProducer();
-        string connectionString = configuration.GetConnectionString(DependencyInjection.ConnectionStringName) ?? "";
+        string connectionString = connectionStrings.Value.DisputeDesk;
         NpgsqlConnection? lockConnection = null;
         int failures = 0;
         try
@@ -121,15 +120,6 @@ public sealed partial class OutboxRelay(
             {
                 TimeSpan wait;
                 TouchHeartbeat();
-                if (connectionString.Length == 0)
-                {
-                    // Nothing to connect to: the same warning and backoff as an unreachable database.
-                    wait = Backoff(++failures);
-                    LogDependencyUnavailable("postgres", "ConnectionStringMissing");
-                    await Task.Delay(wait, timeProvider, stoppingToken);
-                    continue;
-                }
-
                 try
                 {
                     lockConnection ??= await TryTakeLockAsync(connectionString, stoppingToken);

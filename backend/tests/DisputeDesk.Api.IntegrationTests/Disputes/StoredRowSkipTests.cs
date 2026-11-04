@@ -14,7 +14,7 @@ namespace DisputeDesk.Api.IntegrationTests.Disputes;
 /// AC6: a stored row of a type this code does not know is left out of the detail, never a 500 (AD-13); a known-type row
 /// whose data cannot be read is a clean 500. Neither row's data reaches a log line, a span or the body (AD-22; OWASP
 /// Logging Cheat Sheet, data to exclude). Replay keeps refusing the unknown row
-/// (<see cref="StoredEventReplayTests.LoadDispute_RowOfAnUnknownEventType_ThrowsRatherThanReturnADisputeOrNotFound"/>).
+/// (<see cref="StoredEventReplayTests.Replay_RowOfAnUnknownEventType_ThrowsRatherThanReturnADisputeOrNotFound"/>).
 /// </summary>
 public class StoredRowSkipTests(PostgresFixture postgres, TransactionsStub stub) : IClassFixture<TransactionsStub>
 {

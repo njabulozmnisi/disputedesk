@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using DisputeDesk.Application.Linking;
+using DisputeDesk.Application.Linking.StartLinking;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -9,8 +10,8 @@ public static class LinkingRegistration
 {
     /// <summary>
     /// Registers the linking job (AD-12): <see cref="LinkingOptions"/>, checked at start-up; one bounded channel, whose
-    /// writer the start handler takes and whose reader the job service takes; the linking metrics; the job service; and
-    /// the OTP verification.
+    /// writer the start handler takes and whose reader the job service takes; the linking metrics; the job service; the
+    /// start handler; and the OTP verification.
     /// The Api only: only the Api writes <c>LinkingChallenges</c> (AD-22). Needs <c>Linking:OtpHmacKey</c>.
     /// </summary>
     public static IServiceCollection AddLinking(this IServiceCollection services)
@@ -38,6 +39,7 @@ public static class LinkingRegistration
         services.AddSingleton<LinkingMetrics>();
         services.AddScoped<LinkingJobSteps>();
         services.AddHostedService<LinkingJobService>();
+        services.AddScoped<StartLinkingHandler>();
         services.AddScoped<VerifyOtpHandler>();
         return services;
     }

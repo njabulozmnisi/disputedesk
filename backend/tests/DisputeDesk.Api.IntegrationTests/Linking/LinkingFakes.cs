@@ -122,9 +122,6 @@ public static class LinkingFakes
             return customer is null ? CoreBankingErrors.NotFound : new CustomerMatch(customer.CustomerId, customer.Cellphone);
         }
 
-        public Task<Result<IReadOnlyList<Account>>> GetAccountsAsync(string customerId, CancellationToken cancellationToken) =>
-            throw new NotSupportedException("Linking never reads accounts.");
-
         /// <summary>The customer of each transaction read, in order: only a linked login's request reads them.</summary>
         public IReadOnlyCollection<string> TransactionReads => _transactionReads;
 

@@ -113,7 +113,7 @@ public sealed partial class SlaSweep(
     private async Task<(int Claimed, int Changed)> RunBatchAsync(Claim claim, CancellationToken cancellationToken)
     {
         // The batch's one clock reading (AD-4), cut to the whole microseconds a Postgres timestamptz keeps.
-        DateTimeOffset now = ToWholeMicroseconds(timeProvider.GetUtcNow());
+        DateTimeOffset now = Instants.ToWholeMicroseconds(timeProvider.GetUtcNow());
         using Activity? span = Source.StartActivity(BatchSpanName);
         span?.SetTag("disputedesk.sla_sweep.claim", claim == Claim.Overdue ? "overdue" : "warning");
 
@@ -198,7 +198,7 @@ public sealed partial class SlaSweep(
         List<StoredEvent> stream = await LoadStreamAsync(db, disputeId, cancellationToken);
         var dispute = Dispute.Replay(stream);
         // Time never runs backwards within a stream (AD-15).
-        DateTimeOffset instant = Later(now, stream[^1].OccurredAtUtc);
+        DateTimeOffset instant = Instants.Later(now, stream[^1].OccurredAtUtc);
         Result decided = claim == Claim.Overdue ? EscalateIfOverdue(dispute, instant) : dispute.RecordSlaWarning(SweepActor, instant);
         if (decided.IsFailure)
         {
@@ -237,11 +237,6 @@ public sealed partial class SlaSweep(
 
         File.SetLastWriteTimeUtc(HeartbeatPath, timeProvider.GetUtcNow().UtcDateTime);
     }
-
-    private static DateTimeOffset Later(DateTimeOffset first, DateTimeOffset second) => first > second ? first : second;
-
-    private static DateTimeOffset ToWholeMicroseconds(DateTimeOffset instant) =>
-        instant.AddTicks(-(instant.Ticks % TimeSpan.TicksPerMicrosecond));
 
     // Counts and dispute IDs only, never a customer, an account, a transaction or an exception's message (AD-20).
     [LoggerMessage(Level = LogLevel.Information, Message = "SLA sweep {Claim} batch changed {Changed} of {Claimed} claimed disputes")]

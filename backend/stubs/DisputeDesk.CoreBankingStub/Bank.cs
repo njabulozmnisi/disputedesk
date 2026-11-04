@@ -33,9 +33,6 @@ public sealed class Bank
         return new Bank(fixtures, time.GetUtcNow());
     }
 
-    public FixtureCustomer? FindByCustomerId(string customerId) =>
-        _customers.FirstOrDefault(customer => customer.CustomerId == customerId);
-
     public FixtureCustomer? FindByCellphone(string cellphone) =>
         _customers.FirstOrDefault(customer => customer.Cellphone == cellphone);
 

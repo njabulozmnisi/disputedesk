@@ -162,7 +162,7 @@ public class ProblemDetailsTests(PostgresFixture postgres)
         { Error.Validation("validation", "The note is longer than 500 characters.", "Note"), StatusCodes.Status400BadRequest },
         { Error.Forbidden("forbidden", "Not allowed."), StatusCodes.Status403Forbidden },
         { Error.NotFound("not-found", "Dispute not found."), StatusCodes.Status404NotFound },
-        { Error.ActionNotAllowed("action-not-allowed", "A resolved dispute cannot be withdrawn.", "customerStatus", SampleCustomerStatus.Resolved), StatusCodes.Status409Conflict },
+        { Error.ActionNotAllowed("action-not-allowed", "A resolved dispute cannot be withdrawn.", new Dictionary<string, object?> { ["customerStatus"] = SampleCustomerStatus.Resolved }), StatusCodes.Status409Conflict },
         { Error.Conflict("already-disputed", "This transaction already has an open dispute."), StatusCodes.Status409Conflict },
         { Error.BusinessRule("not-disputable", "The transaction is older than 90 days."), StatusCodes.Status422UnprocessableEntity },
         { Error.Unavailable("core-banking-unavailable", "Core banking is unavailable."), StatusCodes.Status503ServiceUnavailable },
@@ -259,7 +259,7 @@ public class ProblemDetailsTests(PostgresFixture postgres)
     [InlineData("Production")]
     public async Task ToProblem_ActionNotAllowed_Writes409WithTheCurrentStatusAsACamelCaseValue(string environment)
     {
-        var error = Error.ActionNotAllowed("action-not-allowed", "This dispute can no longer be withdrawn.", "customerStatus", SampleCustomerStatus.UnderReviewPrioritised);
+        var error = Error.ActionNotAllowed("action-not-allowed", "This dispute can no longer be withdrawn.", new Dictionary<string, object?> { ["customerStatus"] = SampleCustomerStatus.UnderReviewPrioritised });
 
         using JsonDocument problem = await ExecuteAsync(error.ToProblem(), environment);
 

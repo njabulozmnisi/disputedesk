@@ -16,7 +16,7 @@ public class WorkerTelemetryTests
     [Fact]
     public void AddDisputeDeskTelemetry_InWorker_TagsEverySignalWithServiceAndVersion()
     {
-        using IHost host = WorkerHost.CreateBuilder(["--environment", "Development"]).Build();
+        using IHost host = WorkerHost.CreateBuilder(["--environment", "Development", WorkerHostTests.UnreachablePostgresArgument]).Build();
         string? expectedVersion = typeof(WorkerHost).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         Assert.False(string.IsNullOrWhiteSpace(expectedVersion));
 
@@ -39,7 +39,7 @@ public class WorkerTelemetryTests
     public async Task HttpClient_CallFromWorker_ProducesClientSpan()
     {
         var spans = new List<Activity>();
-        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development"]);
+        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development", WorkerHostTests.UnreachablePostgresArgument]);
         // No SLA sweep: a started host would escalate the due disputes of whatever database its configuration names.
         builder.Services.Remove(builder.Services.Single(service => service.ImplementationType == typeof(SlaSweep)));
         builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddInMemoryExporter(spans));
@@ -62,7 +62,7 @@ public class WorkerTelemetryTests
     [InlineData("http://127.0.0.1:4317", true)]
     public void AddDisputeDeskTelemetry_OtlpEndpoint_RegistersExporterOnlyWhenSet(string endpoint, bool expected)
     {
-        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development", $"--OTEL_EXPORTER_OTLP_ENDPOINT={endpoint}"]);
+        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development", WorkerHostTests.UnreachablePostgresArgument, $"--OTEL_EXPORTER_OTLP_ENDPOINT={endpoint}"]);
 
         Assert.Equal(expected, builder.Services.Any(FromOtlpExporter));
     }

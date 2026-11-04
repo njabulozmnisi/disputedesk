@@ -25,11 +25,11 @@ public sealed record Error(ErrorKind Kind, string Code, string Message)
     public static Error Forbidden(string code, string message) => new(ErrorKind.Forbidden, code, message);
 
     /// <summary>
-    /// The action is not allowed in the current status. <paramref name="statusField"/> names the extension that
-    /// carries <paramref name="currentStatus"/>: <c>customerStatus</c> for customers, <c>disputeStatus</c> for operations.
+    /// The action is not allowed in the current status. <paramref name="extensions"/> carry the status as the caller sees
+    /// it: <c>customerStatus</c> for customers, <c>disputeStatus</c> for operations.
     /// </summary>
-    public static Error ActionNotAllowed(string code, string message, string statusField, Enum currentStatus) =>
-        new(ErrorKind.ActionNotAllowed, code, message) { Extensions = new Dictionary<string, object?> { [statusField] = currentStatus } };
+    public static Error ActionNotAllowed(string code, string message, IReadOnlyDictionary<string, object?> extensions) =>
+        new(ErrorKind.ActionNotAllowed, code, message) { Extensions = extensions };
 
     public static Error Conflict(string code, string message) => new(ErrorKind.Conflict, code, message);
 
@@ -39,11 +39,10 @@ public sealed record Error(ErrorKind Kind, string Code, string Message)
 
     public static Error BusinessRule(string code, string message) => new(ErrorKind.BusinessRule, code, message);
 
-    /// <summary>A broken rule whose problem carries <paramref name="value"/> under <paramref name="extension"/>, such as the <c>reason</c> a transaction is not disputable.</summary>
-    public static Error BusinessRule(string code, string message, string extension, Enum value) =>
-        new(ErrorKind.BusinessRule, code, message) { Extensions = new Dictionary<string, object?> { [extension] = value } };
-
-    /// <summary>A broken rule whose problem carries <paramref name="extensions"/>, such as the <c>attemptsRemaining</c> of a wrong OTP.</summary>
+    /// <summary>
+    /// A broken rule whose problem carries <paramref name="extensions"/>, such as the <c>reason</c> a transaction is not
+    /// disputable or the <c>attemptsRemaining</c> of a wrong OTP.
+    /// </summary>
     public static Error BusinessRule(string code, string message, IReadOnlyDictionary<string, object?> extensions) =>
         new(ErrorKind.BusinessRule, code, message) { Extensions = extensions };
 

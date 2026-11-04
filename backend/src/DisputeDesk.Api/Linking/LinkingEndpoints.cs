@@ -1,5 +1,6 @@
 using System.Net;
 using DisputeDesk.Api.Errors;
+using DisputeDesk.Api.Linking.RateLimiting;
 using DisputeDesk.Application.Linking.StartLinking;
 using DisputeDesk.Contracts.Linking;
 using DisputeDesk.Domain;
@@ -11,13 +12,18 @@ namespace DisputeDesk.Api.Linking;
 /// <summary><c>POST /api/v1/linking/start</c> and <c>POST /api/v1/linking/verify</c>, on the linking routes.</summary>
 public static class LinkingEndpoints
 {
-    public static IServiceCollection AddLinkingStart(this IServiceCollection services) =>
-        services.AddScoped<StartLinkingHandler>();
+    /// <summary>The linking endpoints' own services: the linking rate limits (FR-8). The handlers are in Infrastructure's <c>AddLinking</c>.</summary>
+    public static IServiceCollection AddLinkingEndpoints(this IServiceCollection services) => services.AddLinkingRateLimits();
 
-    public static RouteGroupBuilder MapLinkingStart(this RouteGroupBuilder linkingRoutes)
+    public static RouteGroupBuilder MapLinking(this RouteGroupBuilder linkingRoutes)
     {
         linkingRoutes.MapPost("/start", StartAsync)
             .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
+        linkingRoutes.MapPost("/verify", VerifyAsync)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .ProducesProblem(StatusCodes.Status429TooManyRequests);
         return linkingRoutes;
     }
@@ -45,16 +51,6 @@ public static class LinkingEndpoints
         Result started = await handler.HandleAsync(request, loginSub, ClientIp(http), cancellationToken);
         metrics.RecordStarted();
         return started.IsSuccess ? TypedResults.Accepted((string?)null) : started.Error.ToProblem();
-    }
-
-    public static RouteGroupBuilder MapLinkingVerify(this RouteGroupBuilder linkingRoutes)
-    {
-        linkingRoutes.MapPost("/verify", VerifyAsync)
-            .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status409Conflict)
-            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
-            .ProducesProblem(StatusCodes.Status429TooManyRequests);
-        return linkingRoutes;
     }
 
     /// <summary>

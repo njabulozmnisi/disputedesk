@@ -29,7 +29,7 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
     {
         // The one clock reading (AD-4), cut to the whole microseconds a Postgres timestamptz keeps, so the row, the
         // stored event, the outbox row, the 201 and the CloudEvent time all hold the same instant.
-        DateTimeOffset now = ToWholeMicroseconds(time.GetUtcNow());
+        DateTimeOffset now = Instants.ToWholeMicroseconds(time.GetUtcNow());
         Reason reason = DisputeWire.ToDomain(request.Reason ?? throw new ArgumentException("Built-in validation requires a reason.", nameof(request)));
 
         Result<Transaction> found = await coreBanking.GetTransactionAsync(
@@ -111,7 +111,7 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
 
     // AD-13: a customer 409 carries the dispute the customer already has, as they see it.
     private static Error AlreadyDisputed(Dispute dispute) =>
-        DisputeErrors.AlreadyDisputedAs(dispute.Id, DisputeWire.ToCustomerStatus(dispute.Status));
+        DisputeWire.AlreadyDisputedAs(dispute.Id, DisputeWire.ToCustomerStatus(dispute.Status));
 
     // The transaction date in UTC (AD-4) and at the whole microseconds Postgres keeps, cut once here, so the 201 shows
     // the instant the detail reads back.
@@ -119,7 +119,7 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
         transaction.AccountRef,
         transaction.TransactionId,
         transaction.AccountLast4,
-        ToWholeMicroseconds(transaction.TransactionDate.ToUniversalTime()),
+        Instants.ToWholeMicroseconds(transaction.TransactionDate.ToUniversalTime()),
         transaction.Description,
         transaction.Amount,
         transaction.Currency,
@@ -127,10 +127,6 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
         transaction.Direction,
         transaction.Kind,
         transaction.State);
-
-    // A Postgres timestamptz keeps whole microseconds (PostgreSQL, Date/Time Types); a DateTimeOffset has 100 ns ticks.
-    private static DateTimeOffset ToWholeMicroseconds(DateTimeOffset instant) =>
-        instant.AddTicks(-(instant.Ticks % TimeSpan.TicksPerMicrosecond));
 
     // Built-in validation has matched RaiseDisputeRequest.AmountPattern, so the string is a plain non-negative decimal.
     private static decimal? ParseAmount(string? amount) =>

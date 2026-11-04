@@ -1,10 +1,13 @@
+using System.Globalization;
 using DisputeDesk.Contracts.Disputes;
+using DisputeDesk.Contracts.Transactions;
 
 namespace DisputeDesk.Application.Disputes;
 
 /// <summary>
 /// The dispute enums between Domain and the wire. Contracts reference no other project (AD-1), so the wire enums are
-/// their own types; these switches are the one place they meet, for the API and the events alike.
+/// their own types; these switches are the one place they meet, for the API and the events alike. The errors that carry
+/// a wire status and the wire's money format are built here too.
 /// </summary>
 public static class DisputeWire
 {
@@ -88,4 +91,34 @@ public static class DisputeWire
     /// <summary>Who acted, as the customer sees it (AD-13): the customer is "you"; operations and automation are "the bank".</summary>
     public static TimelineActor ToTimelineActor(Domain.Disputes.ActorType actorType) =>
         actorType == Domain.Disputes.ActorType.Customer ? TimelineActor.You : TimelineActor.TheBank;
+
+    /// <summary>An amount on the wire: two decimals, invariant culture, with its ISO currency code.</summary>
+    public static Money ToMoney(decimal amount, string currency) => new(amount.ToString("0.00", CultureInfo.InvariantCulture), currency);
+
+    /// <summary>
+    /// <see cref="Domain.Disputes.DisputeErrors.AlreadyDisputed"/> for a customer: the problem names their dispute and its
+    /// status as they see it (AD-13).
+    /// </summary>
+    public static Domain.Error AlreadyDisputedAs(Guid disputeId, CustomerStatus customerStatus) => Domain.Error.Conflict(
+        "already-disputed",
+        Domain.Disputes.DisputeErrors.AlreadyDisputed.Message,
+        new Dictionary<string, object?> { ["disputeId"] = disputeId, ["customerStatus"] = customerStatus });
+
+    /// <summary>
+    /// <see cref="Domain.Disputes.DisputeErrors.ActionNotAllowed"/> for a customer: the problem carries the status as they
+    /// see it (AD-13).
+    /// </summary>
+    public static Domain.Error ActionNotAllowedAs(CustomerStatus customerStatus) => Domain.Error.ActionNotAllowed(
+        "action-not-allowed",
+        Domain.Disputes.DisputeErrors.ActionNotAllowed.Message,
+        new Dictionary<string, object?> { ["customerStatus"] = customerStatus });
+
+    /// <summary>
+    /// <see cref="Domain.Disputes.DisputeErrors.ActionNotAllowed"/> for operations: the problem carries the internal status
+    /// under <c>disputeStatus</c>, because RFC 9457 §3.1 keeps <c>status</c> for the HTTP status code.
+    /// </summary>
+    public static Domain.Error ActionNotAllowedWithDisputeStatus(DisputeStatus disputeStatus) => Domain.Error.ActionNotAllowed(
+        "action-not-allowed",
+        Domain.Disputes.DisputeErrors.ActionNotAllowed.Message,
+        new Dictionary<string, object?> { ["disputeStatus"] = disputeStatus });
 }

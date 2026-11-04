@@ -20,12 +20,12 @@ public sealed class FixtureTests(CoreBankingStubFactory stub) : IClassFixture<Co
         await using ServiceProvider services = CoreBankingServices.Build(stub.BaseUrl);
         ICoreBankingClient client = services.GetRequiredService<ICoreBankingClient>();
 
-        Result<IReadOnlyList<Account>> accounts = await client.GetAccountsAsync(customerId, CancellationToken);
         Result<TransactionPage> page = await client.GetTransactionsAsync(customerId, cursor: null, limit: 50, CancellationToken);
         IReadOnlyList<Transaction> rows = page.Value.Items;
         DateTimeOffset ninetyDaysAgo = CoreBankingStubFactory.StartOfToday.AddDays(-90);
 
-        Assert.InRange(accounts.Value.Count, 1, 2);
+        // One or two accounts each: the rows carry one or two distinct account references.
+        Assert.InRange(rows.Select(row => row.AccountRef).Distinct().Count(), 1, 2);
         Assert.Null(page.Value.NextCursor);
         Assert.Contains(rows, row => row.State == TransactionState.Pending);
         Assert.Contains(rows, row => row.Direction == TransactionDirection.Credit);

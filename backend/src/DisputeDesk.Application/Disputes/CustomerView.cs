@@ -1,5 +1,3 @@
-using System.Globalization;
-using DisputeDesk.Contracts.Transactions;
 using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Application.Disputes;
@@ -18,8 +16,8 @@ public static class CustomerView
         DisputeWire.ToWire(dispute.Reason),
         dispute.Note,
         ToSnapshot(dispute),
-        dispute.ExpectedAmount is decimal expected ? ToMoney(expected, dispute.Currency) : null,
-        ToMoney(dispute.DisputedAmount, dispute.Currency),
+        dispute.ExpectedAmount is decimal expected ? DisputeWire.ToMoney(expected, dispute.Currency) : null,
+        DisputeWire.ToMoney(dispute.DisputedAmount, dispute.Currency),
         dispute.CreatedAtUtc,
         ToTimeline(storedEvents));
 
@@ -30,7 +28,7 @@ public static class CustomerView
         dispute.Outcome is Outcome outcome ? DisputeWire.ToWire(outcome) : null,
         DisputeWire.ToWire(dispute.Reason),
         ToSnapshot(dispute),
-        ToMoney(dispute.DisputedAmount, dispute.Currency),
+        DisputeWire.ToMoney(dispute.DisputedAmount, dispute.Currency),
         dispute.CreatedAtUtc);
 
     /// <summary>The customer's timeline: one entry for each stored event the allowlist admits, in stream order.</summary>
@@ -64,9 +62,8 @@ public static class CustomerView
         dispute.AccountLast4,
         dispute.TransactionDateUtc,
         dispute.Description,
-        ToMoney(dispute.TransactionAmount, dispute.Currency),
+        DisputeWire.ToMoney(dispute.TransactionAmount, dispute.Currency),
         dispute.MaskedCard);
 
     // AD-4: exactly two decimals, as a string.
-    private static Money ToMoney(decimal amount, string currency) => new(amount.ToString("0.00", CultureInfo.InvariantCulture), currency);
 }
