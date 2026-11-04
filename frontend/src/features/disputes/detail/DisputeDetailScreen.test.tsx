@@ -852,6 +852,34 @@ describe('the note and the confirm', () => {
     expect(request?.url).not.toContain('statement');
   });
 
+  it('keeps the dialog open on Escape pressed before the screen has rendered the pending request', async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    serveWithdraw(async () => {
+      await gate;
+      return HttpResponse.json(withdrawn());
+    });
+    const { user, queryClient } = await openDetail();
+    const dialog = await openWithdrawDialog(user);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Withdraw dispute' }));
+    // Microtasks only: TanStack Query tells React about the pending request in a later task, so no render has seen it yet.
+    for (let turn = 0; turn < 100 && queryClient.isMutating() === 0; turn += 1) {
+      await Promise.resolve();
+    }
+    expect(queryClient.isMutating()).toBe(1);
+    expect(within(dialog).queryByRole('button', { name: 'Withdrawing…' })).not.toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    release();
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+  });
+
   it('shows "Withdrawing…" with aria-disabled while pending, and a second press sends nothing', async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {

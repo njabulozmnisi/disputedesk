@@ -131,15 +131,18 @@ test.describe('anonymous', () => {
     expect(sessionCalls.every((status) => status === 200)).toBe(true);
   });
 
-  test('returnUrl on /signed-out: a local path is kept, every crafted value is dropped', async ({ page }) => {
+  test('returnUrl on /signed-out: any value of 1 to 2048 characters reaches the link encoded, empty and over-long give the plain link', async ({ page }) => {
+    // The SPA does not filter; the API refuses non-local values at the callback.
     const hrefFor = async (returnUrl: string) => {
-      await page.goto(`${spa}/signed-out?reason=expired&returnUrl=${returnUrl}`);
+      await page.goto(`${spa}/signed-out?${new URLSearchParams({ reason: 'expired', returnUrl })}`);
       return page.getByRole('link', { name: 'Sign in again' }).getAttribute('href');
     };
-    expect(await hrefFor('/transactions')).toBe('/api/v1/authentication/login?returnUrl=%2Ftransactions');
-    for (const crafted of ['/%5C', '/%09/evil.example', '//evil.example', '/%0a/evil.example', 'https://evil.example', '/\\', '/%5C%5B']) {
-      expect(await hrefFor(crafted), crafted).toBe('/api/v1/authentication/login');
+    const values = ['/transactions', '/\\', '//evil.example', 'https://evil.example', 'javascript:alert(1)', '/\t/evil.example', '/\r\n/evil.example'];
+    for (const value of values) {
+      expect(await hrefFor(value), value).toBe(`/api/v1/authentication/login?${new URLSearchParams({ returnUrl: value })}`);
     }
+    expect(await hrefFor(''), 'empty').toBe('/api/v1/authentication/login');
+    expect(await hrefFor(`/${'a'.repeat(2048)}`), '2049 characters').toBe('/api/v1/authentication/login');
   });
 
   test('screens: axe, 320 px without horizontal scroll', async ({ page }) => {

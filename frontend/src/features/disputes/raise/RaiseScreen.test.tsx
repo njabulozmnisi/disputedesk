@@ -1,8 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { HttpResponse } from 'msw';
 
+import { getGetApiV1TransactionsInfiniteQueryKey } from '@/api/generated/disputedesk';
 import { problemResponse, makeRow, renderApp, serveTransactions, signInAs } from '@/test/support';
-import { chooseReason, openRaiseScreen, recordRaiseRequests } from '@/test/raise';
+import { chooseReason, continueToReview, openRaiseScreen, recordRaiseRequests } from '@/test/raise';
 import { appSourceFiles } from '@/test/sourceFiles';
 
 const pathOf = (app: { router: { state: { location: { pathname: string } } } }) =>
@@ -64,6 +65,17 @@ describe('opening the raise screen', () => {
     expect(app.router.history.length).toBe(1);
   });
 
+  // The layout route's `beforeLoad` runs again on the form-to-review navigation; the row was admitted once, in the screen.
+  it('keeps the admitted row from 4a to 4b after the list cache entry is collected', async () => {
+    const app = await openRaiseScreen();
+    await chooseReason(app.user, 'Unrecognised');
+    app.queryClient.removeQueries({ queryKey: getGetApiV1TransactionsInfiniteQueryKey() });
+
+    await continueToReview(app.user);
+
+    expect(pathOf(app)).toBe('/transactions/TXN-1/dispute/review');
+  });
+
   it('sends a review with no draft to 4a', async () => {
     const app = await openRaiseScreen();
 
@@ -96,6 +108,16 @@ describe('reason and expected amount', () => {
     ]);
     expect(screen.getByText("I don't recognise this transaction.")).toBeInTheDocument();
     expect(screen.getByText("I was promised a refund that hasn't arrived.")).toBeInTheDocument();
+  });
+
+  // WAI, Grouping Controls: a native fieldset and legend name the group.
+  it('names the radio group with the legend of its fieldset', async () => {
+    await openRaiseScreen();
+
+    const group = screen.getByRole('radiogroup', { name: 'Why are you disputing it?' });
+
+    expect(group.tagName).toBe('FIELDSET');
+    expect(group.querySelector(':scope > legend')).toHaveTextContent('Why are you disputing it?');
   });
 
   it('shows Expected amount only for Wrong amount, and clears it when another reason is chosen', async () => {
@@ -369,6 +391,23 @@ describe('a 400 validation response to Submit', () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Expected amount')).not.toHaveAttribute('aria-invalid', 'true');
   });
+
+  // React runs a child's effects before its parent's, so the summary must mount after the screen's own effects ran,
+  // or the heading (usePageHeading) takes focus from it.
+  it.each([
+    ['an unknown key', { somethingElse: ['x'] }],
+    ['no errors', undefined],
+  ])(
+    'gives the summary focus, not the heading, for a form-level 400 with %s',
+    async (_name, errors) => {
+      await submitWith400(errors);
+
+      const summary = await screen.findByRole('group', { name: 'Check the details below' });
+      await waitFor(() => {
+        expect(summary).toHaveFocus();
+      });
+    },
+  );
 
   it('shows the form-level error for a 400 with no errors (a body binding failure)', async () => {
     await submitWith400(undefined);

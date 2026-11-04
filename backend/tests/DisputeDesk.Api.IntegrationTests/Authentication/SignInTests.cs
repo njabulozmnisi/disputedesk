@@ -191,6 +191,8 @@ public class SignInTests(PostgresFixture postgres)
     [InlineData("https://evil.example/steal")]
     [InlineData("//evil.example/steal")]
     [InlineData("/\\evil.example")]
+    [InlineData("/\t/evil.example")]
+    [InlineData("/\r\n/evil.example")]
     [InlineData("javascript:alert(1)")]
     public async Task Callback_NonLocalReturnUrl_RedirectsToRoot(string returnUrl)
     {

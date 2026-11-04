@@ -9,13 +9,13 @@ import { TopNav } from './Navigation';
 type HeaderProps = {
   /** Undefined until the session request answers; the header then shows only the wordmark. */
   state: SessionState | undefined;
-  /** The start page alone is wider than the rest (DESIGN.md, Layout & Spacing). */
-  wide: boolean;
+  /** The start page alone is wider than the rest and offers Sign in (DESIGN.md, Layout & Spacing). */
+  isStartPage: boolean;
   onSignOut: () => void;
 };
 
 /** One header on every screen (DESIGN.md, Layout & Spacing). What it shows depends on the authorisation state. */
-export function Header({ state, wide, onSignOut }: HeaderProps) {
+export function Header({ state, isStartPage, onSignOut }: HeaderProps) {
   const isSignedIn = state === 'unlinked' || state === 'linked';
 
   return (
@@ -23,7 +23,7 @@ export function Header({ state, wide, onSignOut }: HeaderProps) {
       <div
         className={cn(
           'mx-auto flex min-h-16 w-full items-center gap-6 px-4 py-2 md:px-6',
-          wide ? 'max-w-(--page-max)' : 'max-w-(--content-max)',
+          isStartPage ? 'max-w-(--page-max)' : 'max-w-(--content-max)',
         )}
       >
         <Link
@@ -43,7 +43,7 @@ export function Header({ state, wide, onSignOut }: HeaderProps) {
             Sign out
           </button>
         ) : null}
-        {wide ? (
+        {isStartPage ? (
           <Button asChild variant="secondary" size="compact" className="ml-auto">
             <a href="/api/v1/authentication/login">Sign in</a>
           </Button>

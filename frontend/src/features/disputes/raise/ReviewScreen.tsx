@@ -10,7 +10,7 @@ import {
 } from '@/api/generated/disputedesk';
 import type { TransactionResponse } from '@/api/generated/model';
 import { ApiError } from '@/api/mutator';
-import { isProblem } from '@/api/problems';
+import { isProblem, validationFields } from '@/api/problems';
 import { useAnnounce } from '@/app/LiveRegion';
 import { isSignedIn } from '@/app/sessionEnd';
 import { usePageHeading } from '@/app/usePageHeading';
@@ -45,9 +45,9 @@ function serverErrorsFrom(error: ApiError, transactionAmount: string): ServerErr
     note: messages.noteTooLong,
     expectedAmount: serverAmountMessage(transactionAmount),
   };
-  const named = (error.problem as { errors?: Record<string, unknown> } | undefined)?.errors ?? {};
-  const result: ServerErrors = { fields: {}, formError: Object.keys(named).length === 0 };
-  for (const key of Object.keys(named)) {
+  const named = validationFields(error);
+  const result: ServerErrors = { fields: {}, formError: named.length === 0 };
+  for (const key of named) {
     if (isFieldName(key)) result.fields[key] = fieldCopy[key];
     else result.formError = true;
   }
@@ -78,7 +78,6 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
   const announce = useAnnounce();
   const { markSubmitted, setServerErrors } = useRaiseDraft();
   const raisePath = '/transactions/$transactionId/dispute';
-  const reviewPath = '/transactions/$transactionId/dispute/review';
   // Set synchronously in send(), because isPending only changes on the next render.
   const attemptInFlight = useRef(false);
   // The `dispute.raise.submit` span of the attempt in flight: started by send(), ended when the mutation settles.
@@ -109,10 +108,12 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
         void invalidateTransactions();
         void queryClient.invalidateQueries({ predicate: isDisputesQuery });
         announce('Dispute submitted');
-        const stillOnReview = router.matchRoute({
-          to: reviewPath,
-          params: { transactionId: row.transactionId },
-        });
+        // matchRoute's result types as always truthy once the layout IDs are precise, so the match list is read.
+        const stillOnReview = router.state.matches.some(
+          (match) =>
+            match.routeId === '/_linked/transactions/$transactionId/dispute/review' &&
+            match.params.transactionId === row.transactionId,
+        );
         // After browser Back the customer is elsewhere: mark the draft submitted but do not navigate.
         if (!stillOnReview) {
           markSubmitted(row.transactionId);

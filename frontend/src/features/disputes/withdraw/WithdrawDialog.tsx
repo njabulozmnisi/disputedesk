@@ -1,17 +1,21 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { Controller, useForm, useWatch } from 'react-hook-form';
+import { z } from 'zod';
 
 import {
   getGetApiV1DisputesDisputeIdQueryKey,
   getGetApiV1DisputesInfiniteQueryKey,
   getGetApiV1TransactionsInfiniteQueryKey,
+  getPostApiV1DisputesDisputeIdWithdrawMutationKey,
   usePostApiV1DisputesDisputeIdWithdraw,
 } from '@/api/generated/disputedesk';
 import { CustomerStatus } from '@/api/generated/model';
-import { ApiError } from '@/api/mutator';
-import { isProblem, problemExtension, traceIdOf } from '@/api/problems';
+import { isProblem, problemExtension, traceIdOf, validationFields } from '@/api/problems';
 import { useAnnounce } from '@/app/LiveRegion';
 import { isSignedIn } from '@/app/sessionEnd';
+import { ErrorSummary } from '@/components/ErrorSummary';
 import { ProblemNotice } from '@/components/ProblemNotice';
 import {
   AlertDialog,
@@ -35,6 +39,12 @@ const genericMessage = 'Something went wrong on our side. Try again.';
 
 type Notice = { message: string; traceId?: string };
 
+// The limit counts the trimmed note, which is also what the request sends.
+const withdrawSchema = z.object({
+  note: z.string().refine((note) => note.trim().length <= noteLimit, { error: noteTooLong }),
+});
+type WithdrawFormValues = z.infer<typeof withdrawSchema>;
+
 // The note count is announced once at 90% of the limit and once at the limit (EXPERIENCE.md, Note field).
 function noteLevelFor(length: number): number {
   if (length >= noteLimit) return noteLimit;
@@ -45,41 +55,30 @@ function asCustomerStatus(value: string | undefined): CustomerStatus | undefined
   return Object.values(CustomerStatus).find((known) => known === value);
 }
 
-/** True when a 400's `errors` names the note. */
-function namesNote(error: ApiError): boolean {
-  const named = (error.problem as { errors?: Record<string, unknown> } | undefined)?.errors;
-  return named !== undefined && 'note' in named;
-}
+const mutationKey = getPostApiV1DisputesDisputeIdWithdrawMutationKey();
 
 function WithdrawForm({
   disputeId,
-  busy,
-  setBusy,
   close,
   onNotFound,
 }: {
   disputeId: string;
-  busy: boolean;
-  setBusy: (busy: boolean) => void;
   close: () => void;
   onNotFound: () => void;
 }) {
   const queryClient = useQueryClient();
   const announce = useAnnounce();
-  const withdraw = usePostApiV1DisputesDisputeIdWithdraw({ mutation: { retry: false } });
-  // Set synchronously in confirm(), because `busy` only changes on the next render.
-  const attemptInFlight = useRef(false);
-  const summaryRef = useRef<HTMLDivElement>(null);
-  const [note, setNote] = useState('');
-  const [attempted, setAttempted] = useState(false);
-  const [serverRefusedNote, setServerRefusedNote] = useState(false);
+  const { control, handleSubmit, setError, formState } = useForm<WithdrawFormValues>({
+    resolver: zodResolver(withdrawSchema),
+    defaultValues: { note: '' },
+    // The error summary owns focus (GOV.UK Error summary); the default would move it to the field.
+    shouldFocusError: false,
+  });
   const [summaryRequests, setSummaryRequests] = useState(0);
   const [notice, setNotice] = useState<Notice | undefined>(undefined);
 
-  const trimmed = note.trim();
-  const noteLength = trimmed.length;
+  const noteLength = useWatch({ control, name: 'note' }).trim().length;
   const noteLevel = noteLevelFor(noteLength);
-  const showNoteError = (attempted && noteLength > noteLimit) || serverRefusedNote;
 
   const announcedLevel = useRef(0);
   useEffect(() => {
@@ -93,11 +92,6 @@ function WithdrawForm({
     announcedLevel.current = noteLevel;
   }, [noteLevel, noteLength, announce]);
 
-  // The error summary takes focus each time it appears (GOV.UK Error summary).
-  useEffect(() => {
-    if (summaryRequests > 0) summaryRef.current?.focus();
-  }, [summaryRequests]);
-
   const invalidateDetail = () =>
     queryClient.invalidateQueries({ queryKey: getGetApiV1DisputesDisputeIdQueryKey(disputeId) });
 
@@ -108,72 +102,64 @@ function WithdrawForm({
     close();
   }
 
-  async function handleFailure(error: Error) {
-    if (!(error instanceof ApiError)) {
-      setNotice({ message: genericMessage });
-      return;
-    }
-    const traceId = traceIdOf(error);
-    if (error.status === 404) {
-      onNotFound();
-      return;
-    }
-    if (error.status === 400 && namesNote(error)) {
-      setServerRefusedNote(true);
-      setSummaryRequests((requests) => requests + 1);
-      return;
-    }
-    if (!isProblem(error, 'action-not-allowed')) {
-      setNotice({ message: genericMessage, traceId });
-      return;
-    }
+  const withdraw = usePostApiV1DisputesDisputeIdWithdraw({
+    mutation: {
+      retry: false,
+      onSuccess: (dispute) => {
+        // The session may have ended while the request was in flight: then nothing comes back into memory.
+        if (!isSignedIn(queryClient)) return;
+        queryClient.setQueryData(getGetApiV1DisputesDisputeIdQueryKey(disputeId), dispute);
+        finishWithdrawn();
+      },
+      onError: async (error) => {
+        if (error instanceof TypeError) {
+          setNotice({ message: genericMessage });
+          return;
+        }
+        if (isProblem(error, 'not-found')) {
+          onNotFound();
+          return;
+        }
+        if (isProblem(error, 'validation') && validationFields(error).includes('note')) {
+          setError('note', { message: noteTooLong });
+          setSummaryRequests((requests) => requests + 1);
+          return;
+        }
+        if (!isProblem(error, 'action-not-allowed')) {
+          setNotice({ message: genericMessage, traceId: traceIdOf(error) });
+          return;
+        }
 
-    const status = asCustomerStatus(problemExtension(error, 'customerStatus'));
-    if (status === 'withdrawn') {
-      // The dispute is already withdrawn, which is what the customer asked for. Show it before closing, so a retried
-      // withdraw shows its result and never implies its note was saved (FR-18).
-      await invalidateDetail();
-      finishWithdrawn();
-    } else if (status === 'resolved') {
-      void invalidateDetail();
-      setNotice({ message: "This dispute is now Resolved. It can't be withdrawn." });
-    } else if (status && describeCustomerStatus(status)?.group === 'open') {
-      // A second version clash (FR-24): the dispute is still open, so a retry can succeed.
-      void invalidateDetail();
-      setNotice({ message: genericMessage, traceId });
-    } else {
-      setNotice({ message: "This dispute can't be withdrawn any more." });
-    }
-  }
+        const status = asCustomerStatus(problemExtension(error, 'customerStatus'));
+        if (status === 'withdrawn') {
+          // The dispute is already withdrawn, which is what the customer asked for. Show it before closing, so a retried
+          // withdraw shows its result and never implies its note was saved (FR-18).
+          await invalidateDetail();
+          finishWithdrawn();
+        } else if (status === 'resolved') {
+          void invalidateDetail();
+          setNotice({ message: "This dispute is now Resolved. It can't be withdrawn." });
+        } else if (status && describeCustomerStatus(status)?.group === 'open') {
+          // A second version clash (FR-24): the dispute is still open, so a retry can succeed.
+          void invalidateDetail();
+          setNotice({ message: genericMessage, traceId: traceIdOf(error) });
+        } else {
+          setNotice({ message: "This dispute can't be withdrawn any more." });
+        }
+      },
+    },
+  });
 
-  async function confirm() {
-    if (attemptInFlight.current) return;
-    setAttempted(true);
-    setServerRefusedNote(false);
-    if (noteLength > noteLimit) {
-      setSummaryRequests((requests) => requests + 1);
-      return;
-    }
-
-    attemptInFlight.current = true;
-    setBusy(true);
+  function send({ note }: WithdrawFormValues) {
+    // Read from the cache, not from `isPending`: a second press in the same tick finds the first request pending here
+    // before the screen re-renders (TanStack Query, QueryClient.isMutating).
+    if (queryClient.isMutating({ mutationKey }) > 0) return;
+    const trimmed = note.trim();
     setNotice(undefined);
-    try {
-      const dispute = await withdraw.mutateAsync({
-        disputeId,
-        data: trimmed === '' ? {} : { note: trimmed },
-      });
-      // The session may have ended while the request was in flight: then nothing comes back into memory.
-      if (!isSignedIn(queryClient)) return;
-      queryClient.setQueryData(getGetApiV1DisputesDisputeIdQueryKey(disputeId), dispute);
-      finishWithdrawn();
-    } catch (error) {
-      await handleFailure(error instanceof Error ? error : new TypeError('Request failed'));
-    } finally {
-      attemptInFlight.current = false;
-      setBusy(false);
-    }
+    withdraw.mutate({ disputeId, data: trimmed === '' ? {} : { note: trimmed } });
   }
+
+  const noteError = formState.errors.note;
 
   return (
     <>
@@ -184,73 +170,60 @@ function WithdrawForm({
         </AlertDialogDescription>
       </AlertDialogHeader>
 
-      {showNoteError ? (
-        <div
-          ref={summaryRef}
-          role="group"
-          aria-labelledby="withdraw-error-summary-title"
-          tabIndex={-1}
-          className="rounded-md border-[1.5px] border-destructive bg-status-danger-bg p-4 text-status-danger-fg"
-        >
-          {/* GOV.UK Error summary: the summary takes focus and an inner role="alert" announces it. */}
-          <div role="alert" className="grid gap-2">
-            <h2 id="withdraw-error-summary-title" className="text-body font-strong">
-              Check the details below
-            </h2>
-            <ul className="grid gap-1">
-              <li>
-                <a
-                  href="#withdraw-note"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    document.getElementById('withdraw-note')?.focus();
-                  }}
-                >
-                  {noteTooLong}
-                </a>
-              </li>
-            </ul>
-          </div>
-        </div>
-      ) : null}
+      <form
+        noValidate
+        className="grid gap-4"
+        onSubmit={(event) => {
+          void handleSubmit(send, () => {
+            setSummaryRequests((requests) => requests + 1);
+          })(event);
+        }}
+      >
+        {summaryRequests > 0 && noteError?.message ? (
+          <ErrorSummary
+            items={[{ fieldId: 'withdraw-note', message: noteError.message }]}
+            requests={summaryRequests}
+          />
+        ) : null}
 
-      {notice ? <ProblemNotice message={notice.message} traceId={notice.traceId} /> : null}
+        {notice ? <ProblemNotice message={notice.message} traceId={notice.traceId} /> : null}
 
-      <Field data-invalid={showNoteError}>
-        <FieldLabel htmlFor="withdraw-note">Note (optional)</FieldLabel>
-        <Textarea
-          id="withdraw-note"
-          value={note}
-          onChange={(event) => {
-            setNote(event.target.value);
-          }}
-          aria-invalid={showNoteError}
-          aria-describedby={`${showNoteError ? 'withdraw-note-error ' : ''}withdraw-note-count`}
+        <Controller
+          name="note"
+          control={control}
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <FieldLabel htmlFor="withdraw-note">Note (optional)</FieldLabel>
+              <Textarea
+                {...field}
+                id="withdraw-note"
+                aria-invalid={fieldState.invalid}
+                aria-describedby={`${fieldState.error ? 'withdraw-note-error ' : ''}withdraw-note-count`}
+              />
+              <FieldDescription id="withdraw-note-count">
+                {`${String(noteLength)} / ${String(noteLimit)}`}
+              </FieldDescription>
+              {fieldState.error ? (
+                <FieldError id="withdraw-note-error">{fieldState.error.message}</FieldError>
+              ) : null}
+            </Field>
+          )}
         />
-        <FieldDescription id="withdraw-note-count">
-          {`${String(noteLength)} / ${String(noteLimit)}`}
-        </FieldDescription>
-        {showNoteError ? <FieldError id="withdraw-note-error">{noteTooLong}</FieldError> : null}
-      </Field>
 
-      <AlertDialogFooter>
-        <Button
-          type="button"
-          variant="destructive"
-          aria-disabled={busy}
-          onClick={() => void confirm()}
-        >
-          {busy ? 'Withdrawing…' : 'Withdraw dispute'}
-        </Button>
-        <AlertDialogCancel
-          aria-disabled={busy}
-          onClick={(event) => {
-            if (busy) event.preventDefault();
-          }}
-        >
-          Keep dispute
-        </AlertDialogCancel>
-      </AlertDialogFooter>
+        <AlertDialogFooter>
+          <Button type="submit" variant="destructive" aria-disabled={withdraw.isPending}>
+            {withdraw.isPending ? 'Withdrawing…' : 'Withdraw dispute'}
+          </Button>
+          <AlertDialogCancel
+            aria-disabled={withdraw.isPending}
+            onClick={(event) => {
+              if (withdraw.isPending) event.preventDefault();
+            }}
+          >
+            Keep dispute
+          </AlertDialogCancel>
+        </AlertDialogFooter>
+      </form>
     </>
   );
 }
@@ -272,13 +245,15 @@ export function WithdrawDialog({
   onCloseAutoFocus: () => void;
   onNotFound: () => void;
 }) {
-  const [busy, setBusy] = useState(false);
+  const queryClient = useQueryClient();
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent
         onEscapeKeyDown={(event) => {
-          if (busy) event.preventDefault();
+          // The form owns the request; the dialog reads the cache when Escape is pressed, as `send` does, so it never
+          // acts on a render that has not caught up with the request (TanStack Query, QueryClient.isMutating).
+          if (queryClient.isMutating({ mutationKey }) > 0) event.preventDefault();
         }}
         // The trigger is a plain button that may be gone by now, so the screen decides where focus goes.
         onCloseAutoFocus={(event) => {
@@ -288,8 +263,6 @@ export function WithdrawDialog({
       >
         <WithdrawForm
           disputeId={disputeId}
-          busy={busy}
-          setBusy={setBusy}
           close={() => {
             onOpenChange(false);
           }}

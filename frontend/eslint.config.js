@@ -16,11 +16,16 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
-      // TanStack Router's documented way to show not-found from a route is `throw notFound()`; a NotFoundError is not
-      // an Error.
+      // TanStack Router's documented ways to leave a route are `throw notFound()` and `throw redirect()`; a
+      // NotFoundError is not an Error, and a Redirect is a Response.
       '@typescript-eslint/only-throw-error': [
         'error',
-        { allow: [{ from: 'package', package: '@tanstack/router-core', name: 'NotFoundError' }] },
+        {
+          allow: [
+            { from: 'package', package: '@tanstack/router-core', name: 'NotFoundError' },
+            { from: 'package', package: '@tanstack/router-core', name: 'Redirect' },
+          ],
+        },
       ],
       // A leading underscore names a type parameter that a required signature declares but does not use.
       '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^_' }],

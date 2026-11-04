@@ -1,9 +1,5 @@
 import { z } from 'zod';
 
-// zod 4 compiles object schemas with `new Function` unless told not to; the gateway's CSP has no 'unsafe-eval' (see
-// raiseSchema.ts).
-z.config({ jitless: true });
-
 export const linkingMessages = {
   idNumber: 'Enter a valid 13-digit ID number.',
   accountNumber: 'Enter a valid account number of 6 to 16 digits.',

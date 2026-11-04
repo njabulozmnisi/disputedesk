@@ -1,3 +1,5 @@
+import './zodConfig';
+
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
@@ -13,8 +15,9 @@ import './index.css';
 // exact value `off` turns tracing off; Vite replaces the variable at build time.
 if (import.meta.env.VITE_BROWSER_TELEMETRY !== 'off') startTracing();
 
-const router = createAppRouter();
-const queryClient = createQueryClient(router);
+// The query client's error handlers read the router only when they run, so the client is created first.
+const queryClient = createQueryClient(() => router);
+const router = createAppRouter(queryClient);
 const container = document.getElementById('root');
 if (!container) throw new Error('index.html has no #root element');
 

@@ -6,7 +6,6 @@ import { createContext, useContext, useEffect, useRef, useState, type RefObject 
 
 import { getGetApiV1TransactionsInfiniteQueryKey } from '@/api/generated/disputedesk';
 import type { TransactionPageResponse, TransactionResponse } from '@/api/generated/model';
-import { SessionGate } from '@/app/SessionGate';
 import { recordRaiseOpen } from '@/telemetry/raiseSpans';
 
 import { useRaiseDraft } from './RaiseDraft';
@@ -66,12 +65,8 @@ function RaiseGuard({ transactionId }: { transactionId: string }) {
   return <AdmittedRaise row={row} />;
 }
 
-/** The parent of 4a and 4b: for a linked customer, the cached disputable row, or a redirect to the list. */
+/** The parent of 4a and 4b (under the `_linked` layout route): the cached disputable row, or a redirect to the list. */
 export function RaiseLayout() {
   const { transactionId = '' } = useParams({ strict: false });
-  return (
-    <SessionGate allow="linked">
-      <RaiseGuard key={transactionId} transactionId={transactionId} />
-    </SessionGate>
-  );
+  return <RaiseGuard key={transactionId} transactionId={transactionId} />;
 }

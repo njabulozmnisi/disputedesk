@@ -199,14 +199,13 @@ describe('public routes render for any state', () => {
     },
   );
 
-  // The SPA keeps a value only when the browser's own URL parser (WHATWG) resolves it to this origin: the parser
-  // drops tab and newline and reads "\\" as "/", so each of these would otherwise become another host.
+  // The SPA applies no redirect rule of its own: the API accepts only a local URL (IsLocalUrl, AD-7; OWASP, Unvalidated
+  // Redirects and Forwards), so each of these reaches the login link as an encoded query and the API refuses it.
   it.each([
     'https://evil.example/',
     '//evil.example/',
     '/\\evil.example/',
     'transactions',
-    '',
     '/\t/evil.example',
     '/\n/evil.example',
     '/\r/evil.example',
@@ -215,9 +214,19 @@ describe('public routes render for any state', () => {
     '/\\',
     '/\t/',
     '/\\[',
-  ])('never builds a login link from the non-local returnUrl %j', async (returnUrl) => {
+  ])('hands the returnUrl %j to the sign-in link, which decides', async (returnUrl) => {
     signInAs('anonymous');
     renderApp({ path: `/signed-out?reason=expired&returnUrl=${encodeURIComponent(returnUrl)}` });
+
+    expect(await screen.findByRole('link', { name: 'Sign in again' })).toHaveAttribute(
+      'href',
+      `/api/v1/authentication/login?returnUrl=${encodeURIComponent(returnUrl)}`,
+    );
+  });
+
+  it('builds a plain login link from an empty returnUrl', async () => {
+    signInAs('anonymous');
+    renderApp({ path: '/signed-out?reason=expired&returnUrl=' });
 
     expect(await screen.findByRole('link', { name: 'Sign in again' })).toHaveAttribute(
       'href',
@@ -225,13 +234,24 @@ describe('public routes render for any state', () => {
     );
   });
 
-  it('never builds a login link from a raw %09 (tab) in the query string', async () => {
+  it('hands a raw %09 (tab) in the query string to the sign-in link', async () => {
     signInAs('anonymous');
     renderApp({ path: '/signed-out?reason=expired&returnUrl=/%09/evil.example' });
 
     expect(await screen.findByRole('link', { name: 'Sign in again' })).toHaveAttribute(
       'href',
-      '/api/v1/authentication/login',
+      '/api/v1/authentication/login?returnUrl=%2F%09%2Fevil.example',
+    );
+  });
+
+  it('keeps a returnUrl of exactly the 2048 characters the API accepts', async () => {
+    signInAs('anonymous');
+    const longest = `/${'a'.repeat(2047)}`;
+    renderApp({ path: `/signed-out?reason=expired&returnUrl=${longest}` });
+
+    expect(await screen.findByRole('link', { name: 'Sign in again' })).toHaveAttribute(
+      'href',
+      `/api/v1/authentication/login?returnUrl=${encodeURIComponent(longest)}`,
     );
   });
 
@@ -457,6 +477,36 @@ describe('when the session request fails', () => {
     ).toBeInTheDocument();
   });
 
+  it('runs the guard again on Try again: one more request, then the screen for the answer', async () => {
+    let requests = 0;
+    server.use(
+      http.get('*/api/v1/authentication/session', () => {
+        requests += 1;
+        return requests === 1
+          ? problemResponse('internal', 500)
+          : HttpResponse.json({ state: 'linked' });
+      }),
+    );
+    const { user, router } = renderApp({ path: '/' });
+    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Transactions' }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/transactions');
+    expect(requests).toBe(2);
+  });
+
+  it('shows the not-found screen, not the error, for an unknown path', async () => {
+    failWith('/api/v1/authentication/session', 'core-banking-unavailable', 503);
+    renderApp({ path: '/no/such/page' });
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: notFoundHeading }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+
   it('reads the session once more before it gives up on a 503', async () => {
     let requests = 0;
     server.use(
@@ -480,6 +530,35 @@ describe('when the session request fails', () => {
 
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(screen.queryByText(startHeading)).not.toBeInTheDocument();
+  });
+});
+
+// The screen shows nothing but a busy marker until the session is known, and no redirect happens before it.
+describe('while the session request is pending', () => {
+  it('shows a busy marker at once, then the screen for the answer', async () => {
+    let answer: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    server.use(
+      http.get('*/api/v1/authentication/session', async () => {
+        await held;
+        return HttpResponse.json({ state: 'anonymous' });
+      }),
+    );
+    renderApp({ path: '/' });
+
+    await waitFor(() => {
+      expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    });
+    expect(screen.queryByText(startHeading)).not.toBeInTheDocument();
+
+    answer();
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: startHeading }),
+    ).toBeInTheDocument();
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
   });
 });
 

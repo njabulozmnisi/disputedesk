@@ -20,16 +20,18 @@ function shouldRetryRead(failureCount: number, error: Error): boolean {
  * mutation: a 403 `linking-required` goes to /link, and a 401 while signed in ends the session (clears customer data
  * and shows the session-ended screen).
  */
-export function createQueryClient(router: Pick<AppRouter, 'navigate' | 'state'>): QueryClient {
+export function createQueryClient(
+  getRouter: () => Pick<AppRouter, 'navigate' | 'state'>,
+): QueryClient {
   function handleError(error: Error) {
     if (isProblem(error, 'linking-required') && isSignedIn(queryClient)) {
       // The server says the login is not linked, so the SPA's view of it changes too: /link only shows to `unlinked`.
       queryClient.setQueryData<SessionResponse>(getGetSessionQueryKey(), {
         state: 'unlinked',
       });
-      void router.navigate({ href: '/link' });
+      void getRouter().navigate({ href: '/link' });
     } else if (error instanceof ApiError && error.status === 401 && isSignedIn(queryClient)) {
-      expireSession(queryClient, router);
+      expireSession(queryClient, getRouter());
     }
   }
 
@@ -63,7 +65,7 @@ export function createQueryClient(router: Pick<AppRouter, 'navigate' | 'state'>)
     if (signedInSession && answeredAnonymous) {
       queryClient.setQueryData(getGetSessionQueryKey(), signedInSession);
       // One end per window: while the session is already ending, isSignedIn says no.
-      if (isSignedIn(queryClient)) expireSession(queryClient, router);
+      if (isSignedIn(queryClient)) expireSession(queryClient, getRouter());
     } else {
       signedInSession = session?.state === 'anonymous' ? undefined : session;
     }

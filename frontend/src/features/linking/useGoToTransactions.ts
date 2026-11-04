@@ -7,7 +7,8 @@ import { isSignedIn } from '@/app/sessionEnd';
 
 /**
  * The login is linked (a 204, or a 403 `already-linked` from another tab). The session cache says so before the
- * navigation, because `SessionGate` would otherwise read `unlinked` and send the customer back to /link.
+ * navigation, because the `_linked` layout route's `beforeLoad` would otherwise read `unlinked` and send the customer
+ * back to /link.
  */
 export function useGoToTransactions() {
   const queryClient = useQueryClient();
