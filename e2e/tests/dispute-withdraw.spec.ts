@@ -239,9 +239,10 @@ test.describe.serial('binding failures answer 400 before the lookup', () => {
     expect(expectProblemShape(await response.json(), 'validation', 415)).toEqual([]);
   });
 
-  test('a 501-unit note gets 404 on an unknown ID, and 400 on the owner\'s dispute', async () => {
+  test('a 501-unit note gets 400 naming note on an unknown ID and on the owner\'s dispute (AD-8: validation before the lookup)', async () => {
     const unknown = await withdraw(a(), unknownId, { json: { note: 'q'.repeat(501) } });
-    expect(unknown.status()).toBe(404);
+    expect(unknown.status()).toBe(400);
+    expect(JSON.stringify((await unknown.json()).errors)).toContain('ote');
     const known = await withdraw(a(), openId, { json: { note: 'q'.repeat(501) } });
     expect(known.status()).toBe(400);
   });
@@ -288,16 +289,16 @@ test.describe.serial('only the owner, only through the cookie', () => {
     expect(totals()).toEqual(before); // none of these writes an audit row
   });
 
-  test('A withdrawing B\'s dispute and an unknown ID give the identical 404, with and without a 501-unit note', async () => {
+  test('A withdrawing B\'s dispute and an unknown ID give the identical 404; with a 501-unit note both are the identical 400, before the lookup (AD-8)', async () => {
     const unknownId = '0c2f6b1e-8a3d-4d57-b1a4-3f6e9c7d5e21';
-    for (const json of [{ note: 'because' }, { note: 'q'.repeat(501) }]) {
+    for (const [json, status, type] of [[{ note: 'because' }, 404, 'not-found'], [{ note: 'q'.repeat(501) }, 400, 'validation']] as const) {
       const foreign = await withdraw(a(), bId, { json });
       const unknown = await withdraw(a(), unknownId, { json });
-      expect(foreign.status()).toBe(404);
-      expect(unknown.status()).toBe(404);
+      expect(foreign.status()).toBe(status);
+      expect(unknown.status()).toBe(status);
       const foreignBody = await foreign.json();
       const unknownBody = await unknown.json();
-      expect(expectProblemShape(foreignBody, 'not-found', 404)).toEqual([]);
+      expect(expectProblemShape(foreignBody, type, status)).toEqual([]);
       const { traceId: t1, ...foreignRest } = foreignBody;
       const { traceId: t2, ...unknownRest } = unknownBody;
       expect(foreignRest).toEqual(unknownRest);
@@ -317,7 +318,8 @@ test.describe.serial('only the owner, only through the cookie', () => {
     const bCustomer = bBefore.stream[0].Data.customerId as string;
     expect(aCustomer).not.toBe(bCustomer);
     const entries = queryRows<any>(`select "Action", "Result", "ActorType", "ActorId", "CustomerId", "DisputeId" from "AuditLogEntries" where "Action" = 'Withdraw' and "Result" = 'Rejected' and "DisputeId" is null and "CustomerId" = '${aCustomer}'`);
-    expect(entries.length).toBeGreaterThanOrEqual(4);
+    // The 404 pair only: the 501-unit pair is a 400 before the lookup and is not audited (AD-8, AD-14a).
+    expect(entries.length).toBeGreaterThanOrEqual(2);
     for (const entry of entries) expect(entry).toEqual(entries[0]);
     expect(entries[0]).toEqual({ Action: 'Withdraw', Result: 'Rejected', ActorType: 'Customer', ActorId: aSub, CustomerId: aCustomer, DisputeId: null });
     // Only rows from B's raise on: an earlier spec (dispute-detail) leaves a Withdraw Rejected row for the same login B.

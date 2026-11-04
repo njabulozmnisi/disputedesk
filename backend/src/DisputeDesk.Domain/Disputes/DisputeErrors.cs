@@ -40,9 +40,6 @@ public static class DisputeErrors
     public static readonly Error ResolveNoteInvalid =
         Error.Validation("validation", "A note of 1 to 500 characters after trimming is required.", "Note");
 
-    public static readonly Error OutcomeRequired =
-        Error.Validation("validation", "An outcome is required: upheld or rejected.", "Outcome");
-
     public static readonly Error ExpectedAmountRequired =
         Error.Validation("validation", "An expected amount is required for the reason wrong amount.", "ExpectedAmount");
 

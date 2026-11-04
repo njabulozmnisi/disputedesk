@@ -6,8 +6,9 @@
  */
 
 /**
- * The body of `POST /api/v1/disputes/{disputeId}/withdraw` (FR-18). The note is checked after the dispute is
- * loaded, so an unknown dispute gets 404 before a note too long gets 400 (AD-8). Any other property is ignored.
+ * The body of `POST /api/v1/disputes/{disputeId}/withdraw` (FR-18). Built-in minimal API validation checks the note
+ * before the dispute is looked up, so a note too long gets 400 whether or not the dispute exists (AD-8). Any other
+ * property is ignored.
  */
 export interface WithdrawDisputeRequest {
   /**

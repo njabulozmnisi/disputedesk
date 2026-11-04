@@ -33,17 +33,15 @@ public class NotFoundResponsesTests(PostgresFixture postgres, TransactionsStub s
         await AssertSameNotFoundAsync(forTheirs, forUnknown, theirs.ToString(), unknown);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Withdraw_AnotherCustomersDisputeAndAnUnknownId_GetTheSame404(bool withNoteTooLong)
+    [Fact]
+    public async Task Withdraw_AnotherCustomersDisputeAndAnUnknownId_GetTheSame404()
     {
-        // The note is checked only after the dispute is loaded, so a 501-unit note changes neither 404 (AD-8).
+        // A note too long gets the same 400 for both, before the lookup: BodyErrorResponsesTests.
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         Guid theirs = await RaiseWithEveryStoredEventTypeAsync(factory);
         string unknown = Guid.CreateVersion7().ToString();
         using HttpClient customerA = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
-        string json = DisputesApi.WithdrawBody(withNoteTooLong ? new string('a', 501) : "Found it");
+        string json = DisputesApi.WithdrawBody("Found it");
 
         HttpResponseMessage forTheirs = await customerA.WithdrawAsync(theirs.ToString(), json);
         HttpResponseMessage forUnknown = await customerA.WithdrawAsync(unknown, json);

@@ -7,9 +7,9 @@
 import type { Outcome } from './outcome';
 
 /**
- * The body of `POST /api/v1/operations/disputes/{disputeId}/resolve` (FR-23). Both fields are checked after the
- * dispute is loaded, so an unknown dispute gets 404 before a missing outcome or a bad note gets 400 (AD-8). Any other
- * property is ignored.
+ * The body of `POST /api/v1/operations/disputes/{disputeId}/resolve` (FR-23). Built-in minimal API validation checks
+ * both fields before the dispute is looked up, so a missing outcome or a bad note gets 400 whether or not the dispute
+ * exists (AD-8). Any other property is ignored.
  */
 export interface ResolveDisputeRequest {
   outcome: null | Outcome;

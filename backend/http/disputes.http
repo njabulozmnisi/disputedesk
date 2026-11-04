@@ -133,3 +133,12 @@ X-XSRF-TOKEN: {{token.response.body.requestToken}}
 Content-Type: application/json
 
 {}
+
+### Withdraw an unknown dispute with a note of 501 characters: 400 validation naming note, before the lookup (AD-8)
+# The same 400 for any dispute ID, the customer's own or another's, so a body error never shows whether an ID exists.
+POST {{app}}/api/v1/disputes/{{$guid}}/withdraw
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Content-Type: application/json
+
+{"note": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}

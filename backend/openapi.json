@@ -1003,16 +1003,6 @@
                 }
               }
             }
-          },
-          "415": {
-            "description": "Unsupported Media Type",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
           }
         },
         "security": [
@@ -1689,7 +1679,7 @@
             "description": "Required: the note meant for the customer, 1 to 500 characters (UTF-16 code units) after trimming; stored trimmed."
           }
         },
-        "description": "The body of `POST /api/v1/operations/disputes/{disputeId}/resolve` (FR-23). Both fields are checked after the\ndispute is loaded, so an unknown dispute gets 404 before a missing outcome or a bad note gets 400 (AD-8). Any other\nproperty is ignored."
+        "description": "The body of `POST /api/v1/operations/disputes/{disputeId}/resolve` (FR-23). Built-in minimal API validation checks\nboth fields before the dispute is looked up, so a missing outcome or a bad note gets 400 whether or not the dispute\nexists (AD-8). Any other property is ignored."
       },
       "SessionResponse": {
         "required": [
@@ -1977,7 +1967,7 @@
             "description": "Optional, at most 500 characters (UTF-16 code units) after trimming. Absent, null, empty or only whitespace means no note."
           }
         },
-        "description": "The body of `POST /api/v1/disputes/{disputeId}/withdraw` (FR-18). The note is checked after the dispute is\nloaded, so an unknown dispute gets 404 before a note too long gets 400 (AD-8). Any other property is ignored."
+        "description": "The body of `POST /api/v1/disputes/{disputeId}/withdraw` (FR-18). Built-in minimal API validation checks the note\nbefore the dispute is looked up, so a note too long gets 400 whether or not the dispute exists (AD-8). Any other\nproperty is ignored."
       }
     },
     "securitySchemes": {

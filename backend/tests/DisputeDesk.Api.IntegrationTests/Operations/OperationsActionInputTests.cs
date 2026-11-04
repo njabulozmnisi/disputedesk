@@ -2,16 +2,17 @@ using System.Net;
 using System.Text.Json;
 using DisputeDesk.Api.IntegrationTests.Disputes;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
+using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Api.IntegrationTests.Operations;
 
 /// <summary>
-/// AC3 (FR-23, FR-24; AD-8 as amended 2026-10-30): the check order 401, 403, the framework's binding 400 (415 for a body
-/// that is not JSON), 404, 400 for a well-formed body, then 409. Binding failures name no field for the body and
-/// <c>disputeId</c> for the route value, never echo the input, and are not audited. Start review and escalate ignore any
-/// body.
+/// AC3 (FR-23, FR-24; AD-8): the check order 401, 403, 400 (the framework's binding, then the built-in validation of the
+/// outcome and the note), 404, then 409. Binding failures name no field for the body and <c>disputeId</c> for the route
+/// value, validation errors name their field, neither echoes the input, and neither is audited. A body that is not JSON
+/// is answered by the cookie fallback policy (human decision 2026-11-04). Start review and escalate ignore any body.
 /// </summary>
 public sealed class OperationsActionInputTests(OperationsToolFixture api) : IClassFixture<OperationsToolFixture>
 {
@@ -79,41 +80,55 @@ public sealed class OperationsActionInputTests(OperationsToolFixture api) : ICla
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData(DisputeStatus.UnderReview)]
-    [InlineData(DisputeStatus.Resolved)]
-    public async Task Resolve_TextPlainBody_Returns415ValidationAndWritesNoRow(DisputeStatus? target)
+    [InlineData("none")]
+    [InlineData("refused")]
+    [InlineData("resolve role")]
+    public async Task Resolve_TextPlainBodyWithAnyToken_Returns401FromTheCookieFallbackAndWritesNoRow(string token)
     {
-        Guid disputeId = target is DisputeStatus status ? await api.DisputeInAsync(status) : Guid.CreateVersion7();
+        Guid disputeId = await api.DisputeInAsync(DisputeStatus.UnderReview);
+        int storedEvents = (await Factory.StreamAsync(disputeId)).Count;
+        int outboxRows = (await Factory.OutboxRowsAsync(disputeId)).Count;
+        string? bearer = token switch
+        {
+            "none" => null,
+            "refused" => Factory.Zitadel.Issue(),
+            _ => ResolveToken,
+        };
 
-        HttpResponseMessage response = await Tool.ActAsync(disputeId.ToString(), "resolve", ResolveToken, OperationsApi.ResolveBody(), "text/plain");
+        HttpResponseMessage response = await Tool.ActAsync(disputeId.ToString(), "resolve", bearer, OperationsApi.ResolveBody(), "text/plain");
 
-        Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
-        Assert.Equal(ProblemType.For(CommonProblems.Validation), await response.ProblemTypeAsync());
+        // Routing's 415 endpoint carries no bearer policy, so the cookie fallback answers, and a cookie 401 has no challenge.
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(ProblemType.For(CommonProblems.Unauthorized), await response.ProblemTypeAsync());
+        Assert.Empty(response.Headers.WwwAuthenticate);
+        // No Denied entry for the refused token either (AD-14a, the unaudited case).
         Assert.Empty(await api.AuditRowsAsync(disputeId));
+        Assert.Equal(DisputeStatus.UnderReview, (await Factory.DisputeRowAsync(disputeId)).Status);
+        Assert.Equal(storedEvents, (await Factory.StreamAsync(disputeId)).Count);
+        Assert.Equal(outboxRows, (await Factory.OutboxRowsAsync(disputeId)).Count);
     }
 
     [Fact]
-    public async Task Resolve_TextPlainBodyWithNoTokenOrARefusedToken_Returns401BearerOr403Before415()
+    public async Task Resolve_NoOutcomeWithNoTokenOrARefusedToken_Returns401BearerOr403WithItsDeniedEntryBefore400()
     {
         Guid disputeId = await api.DisputeInAsync(DisputeStatus.UnderReview);
+        const string NoOutcome = """{"note":"Refunded"}""";
 
-        HttpResponseMessage anonymous = await Tool.ActAsync(disputeId.ToString(), "resolve", token: null, OperationsApi.ResolveBody(), "text/plain");
-        HttpResponseMessage refused = await Tool.ActAsync(disputeId.ToString(), "resolve", Factory.Zitadel.Issue(), OperationsApi.ResolveBody(), "text/plain");
+        HttpResponseMessage anonymous = await Tool.ActAsync(disputeId.ToString(), "resolve", token: null, NoOutcome);
+        HttpResponseMessage refused = await Tool.ActAsync(disputeId.ToString(), "resolve", Factory.Zitadel.Issue(), NoOutcome);
 
-        // The route's own JwtBearer policy answers, never the cookie fallback: the 401 carries the Bearer challenge.
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
         Assert.Equal("Bearer", Assert.Single(anonymous.Headers.WwwAuthenticate).Scheme);
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal(ProblemType.For(CommonProblems.Forbidden), await refused.ProblemTypeAsync());
+        Assert.Equal(AuditResult.Denied, Assert.Single(await api.AuditRowsAsync(disputeId)).Result);
     }
 
+    /// <summary>Valid bodies, the note at each end of 1 to 500 units after trimming.</summary>
     public static TheoryData<string> WellFormedBodies => new()
     {
-        """{"note":"Refunded"}""",
-        """{"outcome":null,"note":"Refunded"}""",
-        """{"outcome":"upheld"}""",
-        """{"outcome":"upheld","note":"   "}""",
-        JsonSerializer.Serialize(new { outcome = "upheld", note = new string('a', 501) }),
+        """{"outcome":"upheld","note":" a "}""",
+        JsonSerializer.Serialize(new { outcome = "rejected", note = "  " + new string('a', 500) + "  " }),
         OperationsApi.ResolveBody(),
     };
 
@@ -127,12 +142,16 @@ public sealed class OperationsActionInputTests(OperationsToolFixture api) : ICla
         Assert.Equal(ProblemType.For(CommonProblems.NotFound), await response.ProblemTypeAsync());
     }
 
-    public static TheoryData<DisputeStatus, string, string> BadFieldsOnEachStatus
+    /// <summary>
+    /// Each body that binds but breaks a rule, with the field it names, on an unknown ID (no status), an under-review
+    /// dispute and a resolved one.
+    /// </summary>
+    public static TheoryData<DisputeStatus?, string, string> BadFieldsOnEachTarget
     {
         get
         {
-            var data = new TheoryData<DisputeStatus, string, string>();
-            foreach (DisputeStatus status in new[] { DisputeStatus.UnderReview, DisputeStatus.Resolved })
+            var data = new TheoryData<DisputeStatus?, string, string>();
+            foreach (DisputeStatus? status in new DisputeStatus?[] { null, DisputeStatus.UnderReview, DisputeStatus.Resolved })
             {
                 data.Add(status, """{"note":"Refunded"}""", "outcome");
                 data.Add(status, """{"outcome":null,"note":"Refunded"}""", "outcome");
@@ -147,30 +166,54 @@ public sealed class OperationsActionInputTests(OperationsToolFixture api) : ICla
     }
 
     [Theory]
-    [MemberData(nameof(BadFieldsOnEachStatus))]
-    public async Task Resolve_MissingOutcomeOrBadNoteOnAKnownDispute_Returns400NamingTheFieldBeforeTheStatusAndWritesNoRow(DisputeStatus status, string json, string field)
+    [MemberData(nameof(BadFieldsOnEachTarget))]
+    public async Task Resolve_MissingOutcomeOrBadNote_Returns400NamingTheFieldBeforeTheLookupAndWritesNoRow(DisputeStatus? target, string json, string field)
     {
-        Guid disputeId = await api.DisputeInAsync(status);
+        // A null target is an unknown ID, so a 400 there proves the validation answered before the lookup's 404.
+        Guid disputeId = target is DisputeStatus status ? await api.DisputeInAsync(status) : Guid.CreateVersion7();
 
         HttpResponseMessage response = await Tool.ActAsync(disputeId.ToString(), "resolve", ResolveToken, json);
 
         await response.AssertValidationProblemAsync(field);
         Assert.Empty(await api.AuditRowsAsync(disputeId));
-        Assert.Equal(status, (await Factory.DisputeRowAsync(disputeId)).Status);
+        if (target is DisputeStatus unchanged)
+        {
+            Assert.Equal(unchanged, (await Factory.DisputeRowAsync(disputeId)).Status);
+        }
     }
 
-    [Fact]
-    public async Task Resolve_BadNote_ProblemSays500()
+    /// <summary>A note missing, only whitespace, or 501 units after trimming.</summary>
+    public static TheoryData<string> BadNotes => new()
+    {
+        """{"outcome":"upheld"}""",
+        """{"outcome":"upheld","note":" \t "}""",
+        JsonSerializer.Serialize(new { outcome = "upheld", note = new string('a', 501) }),
+    };
+
+    [Theory]
+    [MemberData(nameof(BadNotes))]
+    public async Task Resolve_BadNote_ProblemSays500(string json)
     {
         Guid disputeId = await api.DisputeInAsync(DisputeStatus.UnderReview);
 
-        HttpResponseMessage response = await Tool.ActAsync(
-            disputeId.ToString(), "resolve", ResolveToken, JsonSerializer.Serialize(new { outcome = "upheld", note = new string('a', 501) }));
+        HttpResponseMessage response = await Tool.ActAsync(disputeId.ToString(), "resolve", ResolveToken, json);
 
         using JsonDocument problem = await response.ReadJsonAsync();
         string? message = problem.RootElement.GetProperty("errors").GetProperty("note")[0].GetString();
         Assert.Equal(DisputeErrors.ResolveNoteInvalid.Message, message);
         Assert.Contains("500", message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"note":"Refunded"}""")]
+    [InlineData("""{"outcome":null,"note":"Refunded"}""")]
+    public async Task Resolve_NoOutcome_ProblemSaysUpheldOrRejected(string json)
+    {
+        HttpResponseMessage response = await Tool.ActAsync(Guid.CreateVersion7().ToString(), "resolve", ResolveToken, json);
+
+        using JsonDocument problem = await response.ReadJsonAsync();
+        string? message = problem.RootElement.GetProperty("errors").GetProperty("outcome")[0].GetString();
+        Assert.Equal("An outcome is required: upheld or rejected.", message);
     }
 
     [Fact]
@@ -206,6 +249,17 @@ public sealed class OperationsActionInputTests(OperationsToolFixture api) : ICla
         HttpResponseMessage response = await Tool.ActAsync("not-a-guid", action, Factory.Zitadel.Issue(roles: role), OperationsApi.BodyFor(action));
 
         await response.AssertValidationProblemAsync("disputeId");
+        Assert.DoesNotContain("not-a-guid", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Resolve_DisputeIdNotAGuidAndNoOutcome_Returns400NamingOutcome()
+    {
+        // The built-in validation still validates the bound body when the route value fails to bind, and runs before
+        // the group's filter that names disputeId; both are 400 before the lookup (AD-8).
+        HttpResponseMessage response = await Tool.ActAsync("not-a-guid", "resolve", ResolveToken, """{"note":"Refunded"}""");
+
+        await response.AssertValidationProblemAsync("outcome");
         Assert.DoesNotContain("not-a-guid", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
     }
 

@@ -47,8 +47,8 @@ Content-Type: application/json
 
 {"outcome": "rejected", "note": "Again."}
 
-### Resolve with no outcome: 400 validation naming outcome, after the lookup and before the status; not audited
-POST {{app}}/api/v1/operations/disputes/{{disputeId}}/resolve
+### Resolve with no outcome: 400 validation naming outcome, before the lookup, so the same for an unknown ID; not audited
+POST {{app}}/api/v1/operations/disputes/00000000-0000-0000-0000-000000000000/resolve
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -60,3 +60,11 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"outcome": 1, "note": "We've reversed this debit."}
+
+### A body that is not JSON: 401 with no WWW-Authenticate header, whatever the token; nothing written, not audited
+# Routing's 415 endpoint has no bearer policy, so the cookie fallback policy answers (AD-8, AD-14a).
+POST {{app}}/api/v1/operations/disputes/{{disputeId}}/resolve
+Authorization: Bearer {{token}}
+Content-Type: text/plain
+
+{"outcome": "upheld", "note": "We've reversed this debit."}
