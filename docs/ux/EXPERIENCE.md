@@ -98,7 +98,7 @@ On a transaction row the badge for a resolved dispute reads plain **Resolved**; 
 | Transfer between own accounts | "Transfer between your accounts. Not disputable." |
 | Settled debit that is not a card transaction (fee, payment to someone else) | "Not a card transaction. Contact the bank about this transaction." |
 
-**Sign-out failed** (problem notice on the start page): message "We couldn't finish signing you out.", next step "Try again.", and a "Sign out" button that tries again.
+**Sign-out failed** (problem notice over the current screen, or inside the inactivity warning when sign-out was pressed there): message "We couldn't finish signing you out.", next step "Try again.", and a "Sign out" button that tries again.
 
 **After a Rejected outcome** (static, FR-17): "If you disagree with this outcome, you can complain to the bank first. If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers." [ASSUMPTION: no bank complaint contact details or ombud contact details are shown; static text only.]
 

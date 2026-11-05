@@ -1,7 +1,13 @@
-import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
+import {
+  focusManager,
+  hashKey,
+  MutationCache,
+  QueryCache,
+  QueryClient,
+} from '@tanstack/react-query';
 
 import type { AppRouter } from '@/app/router';
-import { expireSession, isSignedIn, sessionHash } from '@/app/sessionEnd';
+import { leaveForSessionEnded } from '@/app/sessionEnd';
 
 import { getGetSessionQueryKey } from './generated/disputedesk';
 import type { SessionResponse } from './generated/model';
@@ -15,66 +21,73 @@ function shouldRetryRead(failureCount: number, error: Error): boolean {
   return failureCount < 1 && isTemporary;
 }
 
+// TanStack Query's default focus listener hears `visibilitychange` only, so a visible window that gains focus would not
+// check the session. This is its documented `setEventListener` with `focus` added (TanStack Query, focusManager).
+focusManager.setEventListener((handleFocus) => {
+  const listener = () => {
+    handleFocus();
+  };
+  window.addEventListener('visibilitychange', listener, false);
+  window.addEventListener('focus', listener, false);
+  return () => {
+    window.removeEventListener('visibilitychange', listener);
+    window.removeEventListener('focus', listener);
+  };
+});
+
 /**
  * The one QueryClient. Its caches handle the two errors that send the person elsewhere, once, for every query and
- * mutation: a 403 `linking-required` goes to /link, and a 401 while signed in ends the session (clears customer data
- * and shows the session-ended screen).
+ * mutation: a 403 `linking-required` goes to /link, and a 401 ends the session (the browser leaves for the
+ * session-ended screen). A session answer of `anonymous` after a signed-in one ends it too.
  */
-export function createQueryClient(
-  getRouter: () => Pick<AppRouter, 'navigate' | 'state'>,
-): QueryClient {
+export function createQueryClient(getRouter: () => Pick<AppRouter, 'navigate'>): QueryClient {
   function handleError(error: Error) {
-    if (isProblem(error, 'linking-required') && isSignedIn(queryClient)) {
+    if (isProblem(error, 'linking-required')) {
       // The server says the login is not linked, so the SPA's view of it changes too: /link only shows to `unlinked`.
       queryClient.setQueryData<SessionResponse>(getGetSessionQueryKey(), {
         state: 'unlinked',
       });
       void getRouter().navigate({ href: '/link' });
-    } else if (error instanceof ApiError && error.status === 401 && isSignedIn(queryClient)) {
-      expireSession(queryClient, getRouter());
+    } else if (error instanceof ApiError && error.status === 401) {
+      leaveForSessionEnded();
     }
   }
 
+  // Whether the last session answer fetched from the server was signed in. `onSuccess` runs for fetched data only,
+  // never for `setQueryData`, so the app's own change to `unlinked` is not an answer (TanStack Query, QueryCache).
+  let signedIn = false;
+
+  function handleSuccess(_data: unknown, query: { queryHash: string }) {
+    if (query.queryHash !== hashKey(getGetSessionQueryKey())) return;
+    const state = queryClient.getQueryData<SessionResponse>(getGetSessionQueryKey())?.state;
+    const nowSignedIn = state === 'unlinked' || state === 'linked';
+    if (signedIn && !nowSignedIn) leaveForSessionEnded();
+    signedIn = nowSignedIn;
+  }
+
   const queryClient: QueryClient = new QueryClient({
-    queryCache: new QueryCache({ onError: handleError }),
+    queryCache: new QueryCache({ onError: handleError, onSuccess: handleSuccess }),
     mutationCache: new MutationCache({ onError: handleError }),
     defaultOptions: {
       queries: {
         retry: shouldRetryRead,
         // Only a response to a request the person made counts as activity (see useSessionTabs), so neither a tab
-        // gaining focus nor the network coming back fetches anything by itself.
+        // gaining focus nor the network coming back fetches anything by itself; the session query is the exception.
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
-        // A customer query runs only while the session is signed in, so once a session ends no screen that is still
-        // mounted fetches or fills a query again (TanStack Query, `enabled`). The session query overrides this below.
-        enabled: () => isSignedIn(queryClient),
       },
       mutations: { retry: false },
     },
   });
 
-  // A session request answered `anonymous` while the cache said signed in is the server ending the session, as a 401
-  // is, so it ends the same way: the signed-in answer goes back into the cache until the session-ended screen is
-  // shown (see endSession). A manual write (the clean-up's own `anonymous`, a link) is not an answer.
-  let signedInSession: SessionResponse | undefined;
-  queryClient.getQueryCache().subscribe((event) => {
-    if (event.type !== 'updated' || event.query.queryHash !== sessionHash) return;
-    const session = event.query.state.data as SessionResponse | undefined;
-    const answeredAnonymous =
-      event.action.type === 'success' && !event.action.manual && session?.state === 'anonymous';
-    if (signedInSession && answeredAnonymous) {
-      queryClient.setQueryData(getGetSessionQueryKey(), signedInSession);
-      // One end per window: while the session is already ending, isSignedIn says no.
-      if (isSignedIn(queryClient)) expireSession(queryClient, getRouter());
-    } else {
-      signedInSession = session?.state === 'anonymous' ? undefined : session;
-    }
-  });
-
-  // The session changes only through a sign-in (a full page load) or an explicit refetch.
+  // The session changes through a sign-in (a full page load), an explicit refetch, or a tab being brought to the
+  // front while signed in: that is how a tab learns that the session ended elsewhere. Nobody signed in has nothing to
+  // learn, and the start page must not switch over another tab's sign-in. `'always'` because `true` refetches only
+  // stale data, and this query is never stale (TanStack Query, Window Focus Refetching; `refetchOnWindowFocus` as a
+  // function).
   queryClient.setQueryDefaults(getGetSessionQueryKey(), {
     staleTime: Infinity,
-    enabled: true,
+    refetchOnWindowFocus: () => (signedIn ? 'always' : false),
   });
   return queryClient;
 }

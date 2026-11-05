@@ -1,9 +1,4 @@
-import {
-  focusManager,
-  onlineManager,
-  QueryClientProvider,
-  type QueryClient,
-} from '@tanstack/react-query';
+import { focusManager, onlineManager, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory } from '@tanstack/react-router';
 import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -11,12 +6,12 @@ import type { ReactNode } from 'react';
 
 import { createAppRouter } from '@/app/router';
 import { server } from '@/test/server';
-import { failWith, problemResponse, serveAntiforgeryToken } from '@/test/support';
+import { failWith, problemResponse, serveAntiforgeryToken, signInAs } from '@/test/support';
 
 import {
   getGetSessionQueryKey,
+  getGetSessionQueryOptions,
   useLogout,
-  usePostApiV1DisputesDisputeIdWithdraw,
   useGetApiV1Transactions,
 } from './generated/disputedesk';
 import { createQueryClient } from './queryClient';
@@ -49,7 +44,6 @@ function countRequests(path: string, respond: () => Response) {
 }
 
 const sessionKey = getGetSessionQueryKey();
-const hasSession = (queryClient: QueryClient) => queryClient.getQueryData(sessionKey);
 
 describe('retries (criterion 2)', () => {
   it('retries no 4xx', async () => {
@@ -170,6 +164,10 @@ describe('no refetch the person did not ask for', () => {
 });
 
 describe('errors handled once in the QueryCache and MutationCache (criterion 2)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('sends a 403 linking-required to /link', async () => {
     failWith('/api/v1/transactions', 'linking-required', 403);
     const { router, wrapper } = setUp('unlinked');
@@ -205,104 +203,68 @@ describe('errors handled once in the QueryCache and MutationCache (criterion 2)'
     expect(router.state.location.pathname).toBe('/transactions');
   });
 
-  it('sends a 401 while signed in to /signed-out?reason=expired and ends the session in the cache', async () => {
-    failWith('/api/v1/transactions', 'unauthorized', 401);
-    const { router, queryClient, wrapper } = setUp('linked');
-
-    renderHook(() => useGetApiV1Transactions(), { wrapper });
-
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/signed-out');
-    });
-    expect(router.state.location.search).toEqual({
-      reason: 'expired',
-      returnUrl: '/transactions',
-    });
-    expect(hasSession(queryClient)).toEqual({ state: 'anonymous' });
-  });
-
-  // Story 3.6 criterion 8 (AD-31): no identifier from a raise route reaches the sign-in URL.
-  it.each(['/transactions/TXN-123/dispute', '/transactions/TXN-123/dispute/review'])(
-    'returns to /transactions after a 401 on %s, so the transaction ID is not in returnUrl',
-    async (path) => {
-      failWith('/api/v1/transactions', 'unauthorized', 401);
-      const { router, wrapper } = setUp('linked', path);
-
-      renderHook(() => useGetApiV1Transactions(), { wrapper });
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe('/signed-out');
-      });
-      expect(router.state.location.search).toEqual({
-        reason: 'expired',
-        returnUrl: '/transactions',
-      });
-    },
-  );
-
-  // Story 3.12 criterion 7 (AD-31): no dispute ID reaches the sign-in URL, and the compare ignores case because the
-  // router matches routes case-insensitively.
-  const guid = '0b9a1c7e-5d3f-4a62-9e1b-7c2d8f4a6b10';
-  it.each([
-    [`/disputes/${guid}`, '/disputes'],
-    [`/Disputes/${guid}`, '/disputes'],
-    ['/disputes', '/disputes'],
-    ['/Transactions/TXN-123/dispute', '/transactions'],
-  ])(
-    'returns from %s to %s after a 401, with no identifier in returnUrl',
-    async (path, expected) => {
-      failWith('/api/v1/transactions', 'unauthorized', 401);
-      const { router, wrapper } = setUp('linked', path);
-
-      renderHook(() => useGetApiV1Transactions(), { wrapper });
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe('/signed-out');
-      });
-      expect(router.state.location.search).toEqual({ reason: 'expired', returnUrl: expected });
-    },
-  );
-
-  it('returns to /disputes after a 401 on the withdraw POST from a detail path', async () => {
-    serveAntiforgeryToken();
-    failWith(`/api/v1/disputes/${guid}/withdraw`, 'unauthorized', 401);
-    const { router, wrapper } = setUp('linked', `/disputes/${guid}`);
-
-    const { result } = renderHook(() => usePostApiV1DisputesDisputeIdWithdraw(), { wrapper });
-    result.current.mutate({ disputeId: guid, data: {} });
-
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/signed-out');
-    });
-    expect(router.state.location.search).toEqual({ reason: 'expired', returnUrl: '/disputes' });
-  });
-
-  it('sends a 401 from a mutation to the session-ended screen too', async () => {
+  it('ends the session on a 401 from a mutation: the browser leaves for the session-ended screen', async () => {
+    const replace = vi.fn();
+    vi.stubGlobal('location', { pathname: '/transactions', search: '', replace });
     serveAntiforgeryToken();
     failWith('/api/v1/authentication/logout', 'unauthorized', 401);
-    const { router, wrapper } = setUp('linked');
+    const { wrapper } = setUp('linked');
 
     const { result } = renderHook(() => useLogout(), { wrapper });
     result.current.mutate();
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/signed-out');
+      expect(replace).toHaveBeenCalledTimes(1);
     });
   });
+});
 
-  it('leaves a 401 alone when nobody is signed in', async () => {
-    failWith('/api/v1/transactions', 'unauthorized', 401);
-    const { router, wrapper } = setUp('anonymous');
+// A session answer fetched from the server is the only thing that can show the session ended elsewhere (QueryCache
+// onSuccess runs for fetched data, never for setQueryData).
+describe('a session answer in the QueryCache', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
-    // A customer query is disabled while nobody is signed in, so this one is switched on to send the request anyway.
-    const { result } = renderHook(
-      () => useGetApiV1Transactions(undefined, { query: { enabled: true } }),
-      { wrapper },
-    );
+  function fetchSession(queryClient: ReturnType<typeof setUp>['queryClient']) {
+    return queryClient.query({ ...getGetSessionQueryOptions(), staleTime: 0 });
+  }
 
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-    expect(router.state.location.pathname).toBe('/transactions');
+  it('leaves the document when a signed-in session is later answered anonymous', async () => {
+    const replace = vi.fn();
+    vi.stubGlobal('location', { pathname: '/transactions', search: '', replace });
+    const { queryClient } = setUp();
+    signInAs('linked');
+    await fetchSession(queryClient);
+    expect(replace).not.toHaveBeenCalled();
+
+    signInAs('anonymous');
+    await fetchSession(queryClient);
+
+    expect(replace).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not leave when the first answer is anonymous', async () => {
+    const replace = vi.fn();
+    vi.stubGlobal('location', { pathname: '/', search: '', replace });
+    const { queryClient } = setUp();
+    signInAs('anonymous');
+
+    await fetchSession(queryClient);
+    await fetchSession(queryClient);
+
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('does not leave when the app itself sets the session to anonymous', async () => {
+    const replace = vi.fn();
+    vi.stubGlobal('location', { pathname: '/', search: '', replace });
+    const { queryClient } = setUp();
+    signInAs('linked');
+    await fetchSession(queryClient);
+
+    queryClient.setQueryData(sessionKey, { state: 'anonymous' });
+
+    expect(replace).not.toHaveBeenCalled();
   });
 });

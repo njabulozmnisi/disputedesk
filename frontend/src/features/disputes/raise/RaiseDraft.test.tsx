@@ -8,68 +8,52 @@ import { RaiseDraftProvider, useRaiseDraft } from './RaiseDraft';
 const values = { reason: Reason.unrecognised, note: '', expectedAmount: '' };
 const request = { accountRef: 'acc-1', transactionId: 'tx-1', reason: Reason.unrecognised };
 
-/** Renders the hook inside the provider; `rerender({ signedIn })` changes the provider's prop. */
 function renderDraft() {
   return renderHook(useRaiseDraft, {
     wrapper: ({ children }: { children: ReactNode }) => (
-      <RaiseDraftProvider signedIn={signedInNow}>{children}</RaiseDraftProvider>
+      <RaiseDraftProvider>{children}</RaiseDraftProvider>
     ),
   });
 }
 
-let signedInNow = true;
-
-function setUp() {
-  signedInNow = true;
-  const view = renderDraft();
-  act(() => {
-    view.result.current.continueWith(values, request);
-    view.result.current.markSubmitted('tx-1');
-    view.result.current.setServerErrors({ fields: { note: 'Too long.' }, formError: true });
-  });
-  expect(view.result.current.draftFor('tx-1')).toBeDefined();
-  expect(view.result.current.isSubmitted('tx-1')).toBe(true);
-  expect(view.result.current.serverErrors).toBeDefined();
-  return view;
-}
-
-function changeSignedIn(view: ReturnType<typeof renderDraft>, signedIn: boolean) {
-  signedInNow = signedIn;
-  view.rerender();
-}
-
 describe('RaiseDraftProvider', () => {
-  it('clears the draft when the session stops being signed in', () => {
-    const view = setUp();
+  it('holds the draft for its transaction only', () => {
+    const view = renderDraft();
 
-    changeSignedIn(view, false);
+    act(() => {
+      view.result.current.continueWith(values, request);
+    });
 
-    expect(view.result.current.draftFor('tx-1')).toBeUndefined();
+    expect(view.result.current.draftFor('tx-1')?.request).toEqual(request);
+    expect(view.result.current.draftFor('tx-2')).toBeUndefined();
   });
 
-  it('forgets the submitted transactions when the session stops being signed in', () => {
-    const view = setUp();
+  it('keeps the Idempotency-Key for an equal request and issues a new one for a different request', () => {
+    const view = renderDraft();
+    act(() => {
+      view.result.current.continueWith(values, request);
+    });
+    const firstKey = view.result.current.draftFor('tx-1')?.key;
 
-    changeSignedIn(view, false);
+    act(() => {
+      view.result.current.continueWith(values, { ...request });
+    });
+    expect(view.result.current.draftFor('tx-1')?.key).toBe(firstKey);
 
-    expect(view.result.current.isSubmitted('tx-1')).toBe(false);
+    act(() => {
+      view.result.current.continueWith(values, { ...request, reason: Reason.wrongAmount });
+    });
+    expect(view.result.current.draftFor('tx-1')?.key).not.toBe(firstKey);
   });
 
-  it('clears the server errors when the session stops being signed in', () => {
-    const view = setUp();
+  it('remembers which transactions were submitted', () => {
+    const view = renderDraft();
 
-    changeSignedIn(view, false);
+    act(() => {
+      view.result.current.markSubmitted('tx-1');
+    });
 
-    expect(view.result.current.serverErrors).toBeUndefined();
-  });
-
-  it('keeps everything while the session stays signed in', () => {
-    const view = setUp();
-
-    changeSignedIn(view, true);
-
-    expect(view.result.current.draftFor('tx-1')).toBeDefined();
     expect(view.result.current.isSubmitted('tx-1')).toBe(true);
-    expect(view.result.current.serverErrors).toBeDefined();
+    expect(view.result.current.isSubmitted('tx-2')).toBe(false);
   });
 });

@@ -1,8 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from '@tanstack/react-router';
 import { useState } from 'react';
 
-import { getSession, getGetSessionQueryKey } from '@/api/generated/disputedesk';
+import { getGetSessionQueryOptions } from '@/api/generated/disputedesk';
 import { ApiError } from '@/api/mutator';
 import {
   AlertDialog,
@@ -15,50 +14,45 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 
-import { expireSession, isSignedIn } from './sessionEnd';
+import { signOutFailedMessage } from './useSignOut';
 
 const unexpectedErrorMessage = 'Something went wrong on our side. Try again.';
 
 type InactivityWarningProps = {
   open: boolean;
-  setOpen: (open: boolean) => void;
   onSignOut: () => void;
+  /** The sign-out failed: the modal dialog hides the notice behind it, so the failure shows here too. */
+  signOutFailed: boolean;
 };
 
 /**
  * Mounted while a person is signed in. It presents the warning that `useSessionTabs` opens, 2 minutes before the idle
  * limit (OWASP Session Management, idle timeout).
  */
-export function InactivityWarning({ open, setOpen, onSignOut }: InactivityWarningProps) {
-  const router = useRouter();
+export function InactivityWarning({ open, onSignOut, signOutFailed }: InactivityWarningProps) {
   const queryClient = useQueryClient();
   const [renewFailed, setRenewFailed] = useState(false);
 
-  // The session is asked for outside the query cache, so that an `anonymous` answer reaches the cache only through
-  // `expireSession`, after the session-ended screen is shown (see endSession).
+  // The renewal is a fresh read of the session through the query cache. Its response moves this tab's deadline and
+  // closes the dialog (`useSessionTabs`); an `anonymous` answer or a 401 ends the session (`queryClient`).
+  // Any other failure is shown here.
   async function staySignedIn() {
     setRenewFailed(false);
     try {
-      const renewed = await getSession();
-      // The session ended while the renewal was in flight: its late answer restores nothing.
-      if (!isSignedIn(queryClient)) return;
-      if (renewed.state === 'anonymous') {
-        // The session had already ended: the server answers the session request as anonymous, not with a 401.
-        expireSession(queryClient, router);
-        return;
-      }
-      queryClient.setQueryData(getGetSessionQueryKey(), renewed);
-      setOpen(false);
+      // No retry: one request renews the session, as the person pressed the button once.
+      await queryClient.query({
+        ...getGetSessionQueryOptions(),
+        staleTime: 0,
+        retry: false,
+      });
     } catch (error) {
-      if (!isSignedIn(queryClient)) return;
-      if (error instanceof ApiError && error.status === 401) expireSession(queryClient, router);
-      else setRenewFailed(true);
+      if (!(error instanceof ApiError && error.status === 401)) setRenewFailed(true);
     }
   }
 
   return (
     // Escape acts as "Stay signed in" (WAI-ARIA APG alertdialog pattern). The dialog is controlled, so it closes only
-    // when staySignedIn succeeds and sets `open` to false.
+    // when a renewal succeeds: `useSessionTabs` sets `open` to false on a successful response.
     <AlertDialog
       open={open}
       onOpenChange={(next) => {
@@ -75,6 +69,11 @@ export function InactivityWarning({ open, setOpen, onSignOut }: InactivityWarnin
         {renewFailed ? (
           <p role="alert" className="text-destructive font-strong">
             {unexpectedErrorMessage}
+          </p>
+        ) : null}
+        {signOutFailed ? (
+          <p role="alert" className="text-destructive font-strong">
+            {signOutFailedMessage} Try again.
           </p>
         ) : null}
         <AlertDialogFooter>

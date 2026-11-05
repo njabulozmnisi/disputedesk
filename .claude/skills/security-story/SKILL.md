@@ -20,7 +20,7 @@ Run the scanners that apply and read the diff against this list. The security ag
 
 - A privacy test checks every private field of the record it guards (3.8); sealed `ToString` on records holding personal data is enforced by `PersonalDataRecordTests`.
 - A change that adds or changes infrastructure files (Terraform, Dockerfiles, Compose) gets `scripts/security-local.sh`, the Security workflow's Trivy filesystem and config scan (7.5).
-- A cleared cache is not freed memory: a change that clears customer data in the SPA has a `WeakRef` plus forced-GC test that proves the data is collected (`frontend/src/app/sessionEndCollected.test.tsx`; 7.14).
+- Frontend: a change that ends a session ends it by a document navigation (`location.replace` to the session-ended screen, or the logout form post), so nothing is cleared in place; the e2e "no customer data in the DOM, also after Back" checks prove it for every way out.
 - A test stand-in for a pinned upstream image sends that image's real headers and behaviour, read from the image itself (for example a Next.js `routes-manifest.json`), never assumed (7.12).
 
 ## Report

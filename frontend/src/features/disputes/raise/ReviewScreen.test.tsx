@@ -46,6 +46,10 @@ async function passSeconds(seconds: number) {
   });
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 // Criterion 5: one draft, one request, one key.
 describe('the review screen', () => {
   it('reads the draft back, and Change returns to 4a with the values kept', async () => {
@@ -610,13 +614,23 @@ describe('a refused submit', () => {
     expect(screen.queryByText(/secret/)).not.toBeInTheDocument();
   });
 
-  it('401 goes to the session-ended screen, whose Sign in again returns to /transactions', async () => {
+  it('401 leaves the document for the session-ended screen, whose Sign in again returns to /transactions, not the review route', async () => {
+    const replace = vi.fn();
+    vi.stubGlobal('location', {
+      pathname: '/transactions/TXN-1/dispute/review',
+      search: '',
+      replace,
+    });
     recordRaiseRequests(() => problemResponse('unauthorized', 401));
     const { user } = await openReviewScreen();
 
     await user.click(submit());
 
-    const link = await screen.findByRole('link', { name: 'Sign in again' });
-    expect(link).toHaveAttribute('href', '/api/v1/authentication/login?returnUrl=%2Ftransactions');
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalledTimes(1);
+    });
+    expect(replace).toHaveBeenCalledWith(
+      `/signed-out?reason=expired&returnUrl=${encodeURIComponent('/transactions')}`,
+    );
   });
 });
