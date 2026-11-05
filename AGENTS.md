@@ -37,7 +37,7 @@ A story is ready to build only when:
 - every request input is listed with its bounds;
 - it has no open questions;
 - it has at most about 8 acceptance criteria; a larger story is split into vertical slices;
-- the challenger's verdict is "proceed", or its `[story]` points are fixed in the story and a human has decided on its `[decision]` points (`docs/verification/<story>-challenge.md`).
+- a Feature or High-stakes story has had its pre-build review (`docs/verification/<story>-prebuild-review.md`): its `[story]` points are fixed in the story and a human has decided on its `[decision]` points (`docs/verification/epic-<epic>-decisions.md`).
 
 ## Ticket numbering
 
@@ -63,7 +63,9 @@ Every pipeline agent ends with one JSON object:
 {"status": "built", "assumptions": [], "open_questions": [], "conflicts": []}
 ```
 
-Builders add `"criteria": [{"id": "...", "test": "..."}]` mapping each acceptance criterion to the test that proves it, and `"standards": [{"mechanism": "...", "source": "<link>"}]` naming the documented approach or standard each new mechanism follows.
+Builders add `"criteria": [{"id": "...", "test": "..."}]` mapping each acceptance criterion to the test that proves it, `"standards": [{"mechanism": "...", "source": "<link>"}]` naming the documented approach or standard each new mechanism follows, `"breaks"` listing each deliberate break as a patch with the test it must make fail, and `"test_results"` naming the results files of the one full test run with the diff hash they cover. Builders also write the object to `docs/verification/<story>-build.json` in the story worktree, beside the results files, where the verifier reads it.
+
+The reviewer, the security agent and the verifier add `"record"`, the `docs/verification/<story>-*.md` file they wrote, and `"findings"`, each ranked high, medium or low.
 
 ## Finish checklist
 
@@ -84,40 +86,52 @@ A supervisor session plans, dispatches, tracks and merges. It never writes produ
 
 Nothing is committed, pushed or merged without explicit approval for that change, with one standing approval (2026-10-29): a story below the high-stakes tier is committed and pushed once every stage passes, through `scripts/push-and-watch.sh`, which fails unless CI and Security succeed. A high-stakes story waits for the human's diff review, done while the next story builds; from 2026-10-30 the human waives that wait: every story, any tier, and any Small-tier fix with production code are committed once every stage passes and CI is green, and are reported after. The same standing approval covers a Small-tier fix outside a story that changes no production code (a test or tooling fix) once its checks pass; it is reported after. It also covers a docs-only commit that records the human's decisions, stories readied through the pipeline and pipeline records; a change to the rules or the process (AGENTS.md, CLAUDE.md, the skills) still asks. Otherwise stage the change, show what goes in, wait.
 
+**Branch first, then main.** Main never takes an unverified push.
+
+- A story is committed on its own branch, `story/<story>`, and pushed with `scripts/push-and-watch.sh`, which waits for the CI and Security workflows on the pushed commit. Any other change (a fix, a docs-only commit) goes through a short-lived branch the same way.
+- The branch merges to main by fast-forward only, after a rebase onto main, once CI and Security are green on the branch head. A fast-forward puts on main the exact commit CI tested; a squash or a merge commit would put an untested one there, so neither is used. When the rebase changes the commit, the branch is pushed again (`--force-with-lease`, story branches only; main is never force-pushed) and waits for green again before the merge.
+- A story that depends on an unmerged story builds on that story's branch (stacked), not on main, and rebases onto main once the base story merges.
+- After the fast-forward, `scripts/push-and-watch.sh` on main confirms main's run, which also publishes the images.
+
 ## Story flow
 
 ```
-challenger ∥ pre-build review → builder (self-check) → verifier ∥ security (high-stakes only) ∥ reviewer → one fix round → QA → merge
+pre-build review (Feature, High-stakes) → builder (self-check, one full test run, breaks) → reviewer ∥ verifier ∥ security (High-stakes only)
+  → at most two fix rounds (high and medium findings) → QA (journey, HTTP, data or event stories) → branch CI green → fast-forward to main
 ```
 
-The challenger (`scripts/challenge-with-copilot.sh`, a different model family from the builders) reads only the story, the architecture and the code it would touch, never the supervisor's view, and answers proceed, simplify or rethink, tagging each point `[story]` or `[decision]`. `[story]` points (a bound, a missing criterion, a gap against the code) go to the product owner (Sofia), who fixes the story with no human gate; `[decision]` points contradict a PRD requirement or an architecture decision, so they are a model disagreement and a human decides before the builder starts.
+**Pre-build review.** For a Feature or High-stakes story, one reviewer reads the story as a design against the architecture and the code, with the review and security checklists, and writes `docs/verification/<story>-prebuild-review.md`, tagging each point `[story]` or `[decision]`. `[story]` points (a bound, a missing criterion, a gap against the code) go to the product owner (Sofia), who fixes the story with no human gate; `[decision]` points contradict a PRD requirement or an architecture decision, so a human decides them, batched once per epic in `docs/verification/epic-<epic>-decisions.md`, before the stories they touch build. A Small story has no pre-build review. The builder runs the review and security checklists on its own diff before reporting.
 
-**Pre-build review.** Beside the challenger, the reviewer reads the story as a design against the architecture and the code, and security reads it against its checklist (`docs/verification/<story>-prebuild-review.md`, `-prebuild-security.md`); their `[story]` points go to Sofia with the challenger's, and `[decision]` points to the human. The builder runs the review and security checklists on its own diff before reporting.
+**Decision-time challenge.** The challenger (`scripts/challenge-with-copilot.sh`, a different model family from the builders) runs in decision mode only, never per story. Before stories are written from a new or changed architecture decision, a PRD change or a brief, the supervisor runs it on that document (`scripts/challenge-with-copilot.sh <id> <file> decision`), without the supervisor's evaluation, and brings its findings to the human beside the supervisor's own.
 
-**Decision-time challenge.** Before stories are written from a new or changed architecture decision, a PRD change or a brief, the supervisor runs the challenger in decision mode on that document (`scripts/challenge-with-copilot.sh <id> <file> decision`), without the supervisor's evaluation, and brings its findings to the human beside the supervisor's own. The verifier, security and the reviewer start together the moment a build lands, and their findings make one fix round; QA, the most expensive stage, runs last, once those findings are fixed. For high-stakes stories the human review of the diff (Stakes tiers) happens in the review blocks, before the commit is approved.
+**Post-build review.** The moment a build lands, the reviewer and the verifier start together, with the security agent beside them on a High-stakes story. The reviewer checks correctness, and runs the security checklist on a story below High-stakes. The verifier, a different model family, reads the builder's test results file instead of re-running the suite, runs the builder's `breaks` list, and reports findings. Each writes its own record (`docs/verification/<story>-review.md`, `-verify.md`, `-security.md`) in the main checkout, so a fix round's fresh worktree does not lose it; the supervisor reads the records and never transcribes them. A finding is a correctness or security gap, or a breach of a written rule, ranked high, medium or low; style and taste are not findings.
+
+**QA** runs last, once the high and medium findings are fixed, and only for a story that changes a user journey, the HTTP surface, data or events. QA runs no ZAP scan: CI's ZAP baseline runs on every push. QA holds the `stack` lock for its own run only; no manual pass holds the stack.
+
+For high-stakes stories the human review of the diff (Stakes tiers) happens in the review blocks, after the merge under the 2026-10-30 waiver (Commits).
 
 - **One supervisor session per story.** Start from `docs/tickets/README.md`, the story file and its `docs/verification/<story>-*.md`; hand over in files, not in the conversation; clear the session after the merge and the capture below.
-- **Fix rounds.** Collect every stage's findings for one commit into `docs/verification/<story>-fixes.md` and give them to one fresh builder, not a resumed one; `scripts/story-patch.sh` carries the story's uncommitted change to that builder (`docs/process/agentic-sdlc.md`). At most one fix round per stage pass.
-- **Re-runs after a fix.** The verifier always re-runs; the reviewer reviews only the delta; security re-runs when the delta touches auth, identity, customer data or security headers; QA re-runs when the HTTP surface, data or events change. CI stays the full authoritative run.
-- **One test run per commit.** The builder's full run is the authoritative result for its diff; later stages reuse it and re-run only after a change.
+- **Fix rounds.** Only high and medium findings open a fix round. Collect every stage's high and medium findings for one commit into `docs/verification/<story>-fixes.md` and give them to one fresh builder, not a resumed one; `scripts/story-patch.sh` carries the story's uncommitted change to that builder (`docs/process/agentic-sdlc.md`). At most two fix rounds per story; a story that still has a high or medium finding after the second goes to the human. Low findings never open a round: at merge the supervisor adds them to `docs/verification/epic-<epic>-lows.md` (story, record, finding), and they are fixed in one batch per epic.
+- **Re-runs after a fix.** The verifier always re-runs, on the fix builder's new results file and breaks; the reviewer reviews only the delta; security re-runs when the delta touches auth, identity, customer data or security headers; QA re-runs when the delta changes a user journey, the HTTP surface, data or events. Branch CI stays the full authoritative run.
+- **One test run per commit.** The builder's full run, kept as its test results file, is the authoritative local result for its diff; the verifier and later stages read it and re-run only after a change.
 - **Research.** One agent per question, with a scope and an output file; parallel audits split by file set with one merge owner; no fan-out to more models than the verifier and its backup.
 - **A rule change mid-story** applies from the next story unless the human decides to rework the current one.
 
 Stories run in the order of [docs/tickets/README.md](docs/tickets/README.md); `<story>` is the story ID `<epic>.<story>` (Ticket numbering). Keep the index current when a story merges or the plan changes.
 
-Merge only when every stage passes and CI is green.
+Merge only when every stage passes and CI and Security are green on the story branch (Commits).
 
 ## Dispatch rules
 
-- Two builder lanes at most per machine, one Testcontainers slot, one verifier story at a time, one QA run at a time behind `scripts/test-lock.sh`.
+- Four builder lanes: two machines (M1 and M2), two lanes each. Per machine, one Testcontainers slot, one verifier story at a time, one QA run at a time behind `scripts/test-lock.sh`.
 - Sized for a build machine with 16 GB RAM, 12 cores and the Docker VM capped at 8 GB. A backend lane peaks near 2 GB on the host (build plus the full suite); the Compose stack can take up to 5.8 GB of the VM, so only one stack runs at a time.
-- No machine sits idle while a ready story exists. Memory gate (`sysctl -n kern.memorystatus_vm_pressure_level`): at `1` (normal) dispatch freely within the lane limits; at `2` a machine with no builder lane running may start one (one lane, the suite run once); at `4` (critical) wait for a lane to finish. Read-only stages (reviewer, security, challenger, verifier) cost little locally and may run beside a builder.
+- No lane sits idle while a ready story exists: the supervisor dispatches the next ready story the moment a lane frees. Disk gate: a lane starts only with at least 15 GB free on its machine (`scripts/lane.sh start` checks). Memory gate (`sysctl -n kern.memorystatus_vm_pressure_level`): at `1` (normal) dispatch freely within the lane limits; at `2` a machine with no builder lane running may start one (one lane, the suite run once); at `4` (critical) wait for a lane to finish. Review stages (reviewer, security, challenger, verifier) cost little locally and may run beside a builder.
 - Stop the Compose stack (`docker compose stop`) whenever no one holds the `stack` lock.
 - The story (a vertical slice) is the parallel unit. Start sequentially (platform baseline, then the tracer bullet), run the middle in parallel, finish with a sequential refactor sweep.
-- Collision check before dispatching two stories together: no shared section of a file (a shared file is allowed when the edits are in different sections; the story that merges second rebases and regenerates `openapi.json` and `frontend/src/api/generated/`), never two migrations at once.
-- Frontend work starts once the API contract (`openapi.json`) is merged.
-- The supervisor reads reviewer and security findings directly and writes them to `docs/verification/<story>-review.md` and `<story>-security.md`.
-- Story files given to the verifier hold only criteria it can check read-only. The supervisor reproduces the builder's deliberate breaks and any Docker checks in a throwaway copy, and records the result in `<story>-review.md`.
+- Collision check before dispatching two stories together: no shared section of a file (a shared file is allowed when the edits are in different sections; the story that merges second rebases and regenerates `openapi.json` and `frontend/src/api/generated/`), never two migrations at once. A story that depends on another unmerged story is not held: it builds stacked on that story's branch (Commits).
+- Frontend work starts once the API contract (`openapi.json`) is merged, or stacked on the story branch that changes it.
+- The reviewer, the security agent and the verifier write their own records; the supervisor reads them and writes only the fix list, the epic's lows and the capture.
+- The builder scripts each deliberate break in its `breaks` list; the verifier runs the list in a throwaway copy and records the result in `<story>-verify.md`. A Docker check the story names is QA's, or branch CI's where CI runs it; the supervisor reproduces nothing by hand.
 
 ## Continuous improvement
 

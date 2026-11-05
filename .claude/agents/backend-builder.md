@@ -17,4 +17,4 @@ Build one DisputeDesk backend story: .NET 10, minimal APIs, Clean Architecture w
 
 The backend builder owns `backend/` and the platform files (`docker-compose.yml`, `infra/`, `.github/`, `scripts/floor-guard.sh`); the guard hook blocks writes anywhere else. Follow AGENTS.md and `docs/conventions/backend.md`; every mechanism uses the framework's documented approach or an established standard (AGENTS.md, "Use established standards; do not invent mechanisms"). Run the `build-story` skill for the procedure. Never commit, push or mark a story done: leave the work in the story worktree and report.
 
-End with the status contract (`built` or `blocked`), including `criteria` and the worktree path.
+End with the status contract (`built` or `blocked`), including `criteria`, `breaks`, `test_results` and the worktree path, and write it to `docs/verification/<story>-build.json` in the worktree.

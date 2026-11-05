@@ -1,11 +1,21 @@
 ---
 name: review-story
-description: Procedure for a read-only two-pass review (correctness, then simplicity) of one story diff. Used by the reviewer agent.
+description: Procedure for the pre-build review of a story and the two-pass review (correctness, then simplicity) of its diff, written to the reviewer's own record. Used by the reviewer agent.
 ---
 
 # Review a story
 
-Diff: `git diff main...HEAD` plus any uncommitted changes in the worktree.
+The reviewer changes no code. It writes only its own record in the main checkout's `docs/verification/` (the path is in the brief).
+
+## Pre-build review
+
+For a Feature or High-stakes story, before it builds: read the story as a design against `docs/architecture/architecture.md` and the code it would touch, with Pass 1 and Pass 2 below and the checklist in `.claude/skills/security-story/SKILL.md`. Tag each point `[story]` (a bound, a missing criterion, a gap against the code; Sofia fixes it) or `[decision]` (it contradicts a PRD requirement or an architecture decision; the human decides, batched per epic). Write `<story>-prebuild-review.md`.
+
+## Post-build review
+
+Diff: `git diff main...HEAD` (or `story/<base>...HEAD` for a stacked story) plus any uncommitted changes in the worktree. Run Pass 1 and Pass 2; on a story below High-stakes, also run the checklist in `.claude/skills/security-story/SKILL.md` (the security agent covers High-stakes). Write `<story>-review.md`.
+
+**Severity.** A finding is a correctness or security gap, or a breach of a written rule; style and taste are not findings. High: a criterion unproved or wrong, a security gap, data loss. Medium: a likely defect, a missing boundary test, a home-grown mechanism where a documented standard exists. Low: everything else, simplicity points included unless they hide a defect. Only high and medium open a fix round.
 
 ## Pass 1: correctness
 
@@ -26,7 +36,7 @@ Then the standards check (AGENTS.md, "Use established standards; do not invent m
 
 ## Re-reviews
 
-On a re-review, review only the delta since the approved version and say for each earlier finding whether it is closed. Report lows and nits as one batch; they never trigger a separate round on their own.
+On a re-review, review only the delta since the approved version and say for each earlier finding whether it is closed; append it to the same record as a dated section. Lows never open a fix round; they go to the epic's lows list.
 
 ## Report
 
@@ -48,5 +58,5 @@ On a re-review, review only the delta since the approved version and say for eac
 Rank findings by severity with file and line.
 
 ```json
-{"status": "approve", "findings": [{"severity": "high", "file": "...", "line": 0, "issue": "...", "fix": "..."}], "assumptions": [], "open_questions": [], "conflicts": []}
+{"status": "approve", "record": "docs/verification/<id>-review.md", "findings": [{"severity": "high", "file": "...", "line": 0, "issue": "...", "fix": "..."}], "assumptions": [], "open_questions": [], "conflicts": []}
 ```

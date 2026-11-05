@@ -7,12 +7,14 @@
 #      two `---` lines) is not exactly `decisions: settled`. The supervisor sets that field once the human has answered
 #      every `[decision]` point of the story, citing the decisions record; one field settles them all. The field
 #      records that step, not who decided: the decisions record does;
-#   3. a story in the front matter's `after` list is not `done` in docs/tickets/README.md
-#      (a bare number names a story of the same epic: `after: [4, 5.1]` in story 7.12 means 7.4 and 5.1).
+#   3. a story in the front matter's `after` list is neither `done` in docs/tickets/README.md nor pushed as
+#      story/<id> on origin, which a lane can stack on (a bare number names a story of the same epic:
+#      `after: [4, 5.1]` in story 7.12 means 7.4 and 5.1).
 # A point is a line where the tag opens a list item or a table cell, so prose such as "no `[decision]` point" is
-# not counted. Missing review files are skipped: whether a story needs them is the supervisor's call.
+# not counted. No review file is required: each one present is read, and a missing one is skipped, since the
+# challenge and pre-build security files are no longer written for every story.
 # Usage: scripts/check-ready.sh <story-id>    (for example 7.12)
-# Exit codes: 0 ready; 1 not ready; 2 usage or no story file.
+# Exit codes: 0 ready; 1 not ready; 2 usage, no story file, or git ls-remote failed.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -54,9 +56,14 @@ fi
 after_line=$(grep -m1 '^after:' "$story_file" || true)
 for dependency in $(tr -d '[],' <<<"${after_line#after:}"); do
   [[ "$dependency" == *.* ]] || dependency="$epic.$dependency"
-  if ! grep -Eq "^\| ${dependency//./\\.} \|.*\| done \|$" docs/tickets/README.md; then
-    problems+=("dependency $dependency is not done in docs/tickets/README.md")
-  fi
+  grep -Eq "^\| ${dependency//./\\.} \|.*\| done \|$" docs/tickets/README.md && continue
+  # --exit-code: 2 when no such branch exists on origin (git ls-remote); any other failure is tooling. The full ref
+  # name, because a pattern matches any ref ending in it: story/7.1 would match feature/story/7.1.
+  status=0
+  git ls-remote --exit-code --heads origin "refs/heads/story/$dependency" > /dev/null || status=$?
+  ((status == 0)) && continue
+  ((status == 2)) || { echo "check-ready: git ls-remote origin failed (exit $status)" >&2; exit 2; }
+  problems+=("dependency $dependency is not done in docs/tickets/README.md and story/$dependency is not on origin")
 done
 
 if ((${#problems[@]} > 0)); then

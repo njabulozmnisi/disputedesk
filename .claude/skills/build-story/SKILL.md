@@ -20,11 +20,14 @@ The input is a story file, `docs/tickets/epic-<epic>-<slug>/tickets/story-<epic>
    - Frontend: Vitest, `tsc --noEmit`, lint.
    - Tests that shell out (curl, bash): run that test project once in the Linux SDK container (`mcr.microsoft.com/dotnet/sdk:10.0`), because CI's ubuntu tools differ from macOS's.
    - Both: `scripts/secret-scan.sh` (gitleaks over the whole uncommitted change, untracked files included, as the pre-commit hook will see it). Fix a hit in the source, for example a low-entropy placeholder instead of an example UUID; never an allowlist entry.
+   - **One full run with a results file,** on the final diff (again if the smoke check below leads to a change): from `backend/`, `scripts/test-lock.sh run testcontainers <story> -- dotnet test --solution DisputeDesk.slnx --report-xunit-trx --results-directory "$(git rev-parse --show-toplevel)/TestResults"`, and Vitest's JUnit reporter into the same `TestResults/`. Record the diff hash it covers (`scripts/diff-hash.sh`). The verifier reads these files instead of re-running the suite, so any later edit means a new full run.
+   - **Breaks.** For each criterion, one deliberate break: a small patch that undoes the behaviour, the exact test method it must make fail, and `"expect": "fails"`. The verifier runs each in a throwaway copy; a break whose test still passes is a high finding.
 6. **Developer smoke check, before reporting `built`.**
    - Backend: start the API, its Postgres and the shared dev Zitadel; sign in a seeded user with `scripts/dev-login.sh`; call the endpoints with the committed `backend/http/*.http` requests; confirm the rows landed. No browser, no shared lock except during sign-in.
    - Frontend: run the UI against the real API and do one headless Playwright happy path with a screenshot, under `scripts/test-lock.sh run stack <story> -- ...`.
    - **Any container the builder starts directly** (a throwaway Postgres, a dashboard, the Compose stack) runs under `scripts/test-lock.sh run stack <story> -- ...`, because the stack binds host ports (8080, 8025, 18888, 4317, 4318, 5433, 19092) and other lanes share the Docker daemon. Every port but the gateway's 8080 can be moved with the variables in the `docker-compose.yml` header when another process holds it; never with a throwaway override file. Testcontainers in tests use the `testcontainers` lock instead.
-7. **Stop rules.** After two failed attempts at the same problem, return `blocked`. Never weaken, skip or delete a test to make it pass. Never commit, push, or mark the story done.
+7. **Write the report** to `docs/verification/<story>-build.json` in the worktree as well as ending with it.
+8. **Stop rules.** After two failed attempts at the same problem, return `blocked`. Never weaken, skip or delete a test to make it pass. Never commit, push, or mark the story done.
 
 ## Known pitfalls
 
@@ -48,6 +51,7 @@ End with the status contract:
   "smoke": "the commands run and what they showed",
   "standards": [{"mechanism": "Linked authorization policy", "source": "https://learn.microsoft.com/aspnet/core/security/authorization/policies"}],
   "breaks": [{"patch": "unified diff of one deliberate break", "test_method": "exact --filter-method name", "expect": "fails"}],
+  "test_results": {"files": ["backend/tests/.../TestResults/....trx"], "diff_hash": "..."},
   "assumptions": [],
   "open_questions": [],
   "conflicts": []

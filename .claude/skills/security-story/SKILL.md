@@ -1,11 +1,11 @@
 ---
 name: security-story
-description: Procedure for a read-only security review of a story touching auth, identity, account linking or customer data. Used by the security agent. (Named to avoid clashing with the built-in security-review command.)
+description: Procedure for the security review of a story touching auth, identity, account linking or customer data, written to the security agent's own record. Used by the security agent and, on stories below High-stakes, as a checklist by the reviewer. (Named to avoid clashing with the built-in security-review command.)
 ---
 
 # Security review of a story
 
-Run the scanners that apply and read the diff against this list.
+Run the scanners that apply and read the diff against this list. The security agent changes no code; it writes only `<story>-security.md` in the main checkout's `docs/verification/` (the path is in the brief), and appends a re-run to it as a dated section.
 
 - **AuthN/Z:** every endpoint tested in all three states (anonymous, authenticated-unlinked, linked); customer endpoints accept only the session cookie, action endpoints only bearer JWTs; one policy per action; the customer resolved from the identity link only.
 - **Browser session:** tokens never reach the browser; `__Host-` cookie, HttpOnly, Secure, SameSite=Strict; the antiforgery filter on every unsafe customer method; logout ends both sessions.
@@ -25,8 +25,8 @@ Run the scanners that apply and read the diff against this list.
 
 ## Report
 
-Severity per finding (high, medium, low). Any high finding is escalated for a decision before merge.
+Severity per finding (high, medium, low). High and medium findings open a fix round; lows go to the epic's lows list. Any high finding is escalated for a decision before merge.
 
 ```json
-{"status": "pass", "findings": [], "scanners": {}, "assumptions": [], "open_questions": [], "conflicts": []}
+{"status": "pass", "record": "docs/verification/<id>-security.md", "findings": [], "scanners": {}, "assumptions": [], "open_questions": [], "conflicts": []}
 ```

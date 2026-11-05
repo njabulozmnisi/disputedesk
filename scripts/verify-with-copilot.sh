@@ -9,7 +9,7 @@ models=("${VERIFIER_MODEL:-gpt-6-astra}" "${VERIFIER_FALLBACK_MODEL:-gpt-6-sol}"
 root=$(git rev-parse --show-toplevel)
 sha=$(git rev-parse HEAD)
 # Fingerprint of the change: tracked edits plus new files (agents leave work uncommitted).
-diff_hash=$({ git diff HEAD; git ls-files -o --exclude-standard -z | xargs -0 shasum -a 256; } | shasum -a 256 | cut -c1-12)
+diff_hash=$("$root/scripts/diff-hash.sh" "$root" HEAD)
 out="$root/docs/verification/$story-verify.md"
 mkdir -p "$(dirname "$out")"
 
@@ -34,7 +34,7 @@ run() {
   "$root/scripts/test-lock.sh" run testcontainers "verify-$story" -- \
     copilot -p "$prompt" --model "$1" -s --no-ask-user --add-dir "$(cd "$(dirname "$story_file")" && pwd)" \
       --allow-tool 'shell(dotnet:*)' 'shell(npm:*)' 'shell(npx:*)' 'shell(git diff:*)' 'shell(git log:*)' 'shell(git show:*)' 'shell(ls:*)' 'shell(cat:*)' 'shell(head:*)' 'shell(grep:*)' 'shell(find:*)' 'shell(docker compose config:*)' 'shell(gitleaks:*)' 'shell(scripts/floor-guard.sh)' 'shell(actionlint:*)' 'shell(trivy:*)' 'shell(terraform:*)' \
-        'shell(shellcheck:*)' 'shell(infra/deploy/aws/check-compose.sh)' 'shell(infra/deploy/aws/deploy.test.sh)' 'shell(infra/deploy/aws/gateway.test.sh)' \
+        'shell(shellcheck:*)' 'shell(infra/deploy/aws/check-compose.sh)' 'shell(infra/deploy/aws/deploy.test.sh)' \
         'shell(infra/deploy/aws/rds-init.test.sh)' 'shell(infra/terraform/iam-names.test.sh)' 'read' \
       --deny-tool 'write' 'shell(git commit:*)' 'shell(git push:*)' 'shell(rm:*)' 'shell(terraform apply:*)' 'shell(terraform destroy:*)'
 }
