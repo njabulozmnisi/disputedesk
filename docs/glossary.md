@@ -24,3 +24,4 @@ Domain terms, settled during grilling. Use these words; avoid the synonyms liste
 | **Stored event** | A fact recorded in a dispute's own history when something happens to it; the dispute's status and timeline are rebuilt from its stored events. Private: never published as is. | dispute event (that is published), log entry, audit entry |
 | **Timeline** | The ordered history of a dispute's status changes, with notes meant for the customer, built from the dispute's stored events. | audit log (that is internal), activity feed |
 | **Quality area** | One of the ten areas the solution must meet: architecture and scalability; resilience and operational readiness; data and domain modelling; API design; security (primary); code quality and maintainability; testing; observability; infrastructure and DevOps; documentation and communication. | assessment area, criterion |
+
