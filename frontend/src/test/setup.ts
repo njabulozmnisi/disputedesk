@@ -5,6 +5,8 @@ import { cleanup } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, expect } from 'vitest';
 import * as axeMatchers from 'vitest-axe/matchers';
 
+import { startNewDocument } from '@/app/sessionEnd';
+
 import { server } from './server';
 import { spanExporter, startTestTracing } from './spans';
 
@@ -35,6 +37,7 @@ beforeAll(() => {
 
 afterEach(() => {
   cleanup();
+  startNewDocument();
   spanExporter.reset();
   server.resetHandlers();
   server.events.removeAllListeners();

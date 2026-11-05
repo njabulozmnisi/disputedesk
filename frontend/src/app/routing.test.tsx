@@ -715,7 +715,6 @@ describe('the skip link', () => {
   // A session answer that lands after the first paint must not remount the page: a remount drops the Tab position.
   it.each([
     ['an unknown path', '/no/such/page'],
-    ['the session-ended screen with a reason', '/signed-out?reason=expired'],
     ['the signed-out screen', '/signed-out'],
     ['a dispute with a malformed ID', '/disputes/not-a-guid'],
   ])(
@@ -736,6 +735,20 @@ describe('the skip link', () => {
         expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveFocus();
         unmount();
       }
+    },
+  );
+
+  // The session-ended screen asks for no session, so there is no answer to wait for.
+  it.each(['anonymous', 'unlinked', 'linked'] as const)(
+    'reaches the skip link with the first Tab on a direct load of the session-ended screen with a reason, whatever the session (%s)',
+    async (state) => {
+      signInAs(state);
+      const { user } = renderApp({ path: '/signed-out?reason=expired' });
+      await screen.findByRole('heading', { level: 1, name: "You've been signed out" });
+
+      await user.tab();
+
+      expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveFocus();
     },
   );
 });

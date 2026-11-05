@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -8,7 +7,6 @@ import { usePostApiV1LinkingVerify } from '@/api/generated/disputedesk';
 import { ApiError } from '@/api/mutator';
 import { isProblem, problemInteger, traceIdOf, validationFields } from '@/api/problems';
 import { useAnnounce } from '@/app/LiveRegion';
-import { isSignedIn } from '@/app/sessionEnd';
 import { usePageHeading } from '@/app/usePageHeading';
 import { ErrorSummary } from '@/components/ErrorSummary';
 import { Page } from '@/components/Page';
@@ -57,7 +55,6 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
   const headingRef = usePageHeading('Enter your OTP');
   const announce = useAnnounce();
   const goToTransactions = useGoToTransactions();
-  const queryClient = useQueryClient();
   const rateLimit = useRateLimit();
   // Set synchronously on submit, because isPending only changes on the next render (as in ReviewScreen).
   const attemptInFlight = useRef(false);
@@ -82,8 +79,6 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
     mutation: {
       gcTime: 0,
       onSuccess: () => {
-        // The session ended while the request was in flight: nothing is linked in the person's view.
-        if (!isSignedIn(queryClient)) return;
         announce('Your login is linked.');
         goToTransactions();
       },

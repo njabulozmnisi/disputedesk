@@ -18,6 +18,10 @@ beforeEach(() => {
   serveDisputes();
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 /** Serves two pages by cursor and records the `cursor` query parameter of each request. */
 function serveTwoPages(first: TransactionResponse[], second: TransactionResponse[]) {
   const cursors: (string | null)[] = [];
@@ -263,7 +267,9 @@ describe('Load more', () => {
     expect(await screen.findByText('Second page row 2')).toBeInTheDocument();
   });
 
-  it('ends at the session-ended screen when Load more gets a 401', async () => {
+  it('leaves the document for the session-ended screen when Load more gets a 401', async () => {
+    const replace = vi.fn();
+    vi.stubGlobal('location', { pathname: '/transactions', search: '', replace });
     server.use(
       http.get('*/api/v1/transactions', ({ request }) => {
         const cursor = new URL(request.url).searchParams.get('cursor');
@@ -275,17 +281,17 @@ describe('Load more', () => {
         );
       }),
     );
-    const { user, router } = renderApp({ path: '/transactions' });
+    const { user } = renderApp({ path: '/transactions' });
     await screen.findByText('First page row 1');
 
     await user.click(screen.getByRole('button', { name: 'Load more' }));
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/signed-out');
+      expect(replace).toHaveBeenCalledTimes(1);
     });
-    expect(
-      await screen.findByRole('heading', { level: 1, name: "You've been signed out" }),
-    ).toBeInTheDocument();
+    expect(replace).toHaveBeenCalledWith(
+      `/signed-out?reason=expired&returnUrl=${encodeURIComponent('/transactions')}`,
+    );
   });
 });
 

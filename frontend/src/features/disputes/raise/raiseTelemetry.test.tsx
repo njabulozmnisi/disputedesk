@@ -44,6 +44,10 @@ function traceparentsOf(requests: { headers: Headers }[]) {
   return requests.map((request) => request.headers.get('traceparent'));
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 // Criterion 3: one submit span per attempt, parent of every POST.
 describe('the submit span', () => {
   describe('with resends', () => {
@@ -177,6 +181,8 @@ describe('the submit span', () => {
   );
 
   it('ends as unexpected, with the antiforgery status, when the antiforgery fetch fails', async () => {
+    const replace = vi.fn();
+    vi.stubGlobal('location', { pathname: '/transactions', search: '', replace });
     const requests = recordRaiseRequests();
     const { user } = await openReviewScreen();
     failWith('/api/v1/bff/antiforgery', 'unauthorized', 401);
@@ -186,6 +192,7 @@ describe('the submit span', () => {
     await waitFor(() => {
       expect(submitSpans()).toHaveLength(1);
     });
+    expect(replace).toHaveBeenCalledTimes(1);
     expect(requests).toHaveLength(0);
     expect(submitSpans()[0]?.attributes).toEqual({
       'http.response.status_code': 401,

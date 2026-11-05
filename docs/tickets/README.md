@@ -127,7 +127,7 @@ Source: waves 2 and 3 of [the simplicity audit's mitigation plan](../verificatio
 | 8.10 | [Every route checks in the framework's order: 401, 403, 400, 404, 409, 422](epic-8-simplicity-sweep/tickets/story-8.10-every-route-checks-in-the-framework-order.md) | backend | done |
 | 8.11 | [One enum rule on the wire: exact camelCase names only](epic-8-simplicity-sweep/tickets/story-8.11-one-enum-rule-on-the-wire-exact-camelcase-names-only.md) | backend | done |
 | 8.12 | [Operations callers are a plain allowlist of client subs](epic-8-simplicity-sweep/tickets/story-8.12-operations-callers-are-a-plain-allowlist-of-client-subs.md) | backend | planned |
-| 8.13 | [Every session ends in the browser by a document navigation](epic-8-simplicity-sweep/tickets/story-8.13-every-session-ends-in-the-browser-by-a-document-navigation.md) | frontend | planned |
+| 8.13 | [Every session ends in the browser by a document navigation](epic-8-simplicity-sweep/tickets/story-8.13-every-session-ends-in-the-browser-by-a-document-navigation.md) | frontend | done |
 | 8.14 | [The SLA sweep only escalates: SlaWarningRaised is dropped](epic-8-simplicity-sweep/tickets/story-8.14-the-sla-sweep-only-escalates-slawarningraised-is-dropped.md) | backend | planned |
 | 8.15 | [The seeder is the third named ownership-filter bypass](epic-8-simplicity-sweep/tickets/story-8.15-the-seeder-is-the-third-named-ownership-filter-bypass.md) | backend | planned |
 | 8.16 | [IAM policies are JSON templates checked in the infra tests, and the OIDC jobs become a recorded check](epic-8-simplicity-sweep/tickets/story-8.16-iam-policies-are-json-templates-checked-in-the-infra-tests.md) | backend | planned |

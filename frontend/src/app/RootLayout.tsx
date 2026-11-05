@@ -1,4 +1,4 @@
-import { Outlet, useRouterState } from '@tanstack/react-router';
+import { Outlet, useMatch, useRouterState } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 
 import { useGetApiV1BffSession } from '@/api/generated/disputedesk';
@@ -12,7 +12,7 @@ import { InactivityWarning } from './InactivityWarning';
 import { LiveRegionProvider } from './LiveRegion';
 import { TabBar } from './Navigation';
 import { useSessionTabs } from './useSessionTabs';
-import { useSignOut } from './useSignOut';
+import { signOutFailedMessage, useSignOut } from './useSignOut';
 import { FirstHeadingContext } from './usePageHeading';
 
 function Footer({ wide }: { wide: boolean }) {
@@ -47,13 +47,19 @@ function useReloadOnPageRestore() {
 
 /** The shell around every screen: skip link, header, the page, footer, the phone tab bar and the inactivity warning. */
 export function RootLayout() {
-  const session = useGetApiV1BffSession();
+  // The session-ended screen asks for nothing: any authenticated request would renew the session it reports as ended.
+  const onSessionEndedScreen = useMatch({
+    from: '/signed-out',
+    shouldThrow: false,
+    select: (match) => match.search.reason === 'expired',
+  });
+  const session = useGetApiV1BffSession({ query: { enabled: !onSessionEndedScreen } });
   const state = session.data?.state;
   const isSignedIn = state === 'unlinked' || state === 'linked';
   const pathname = useRouterState({ select: (router) => router.location.pathname });
   const isStartPage = state === 'anonymous' && pathname === '/';
   const { signOut, failed: signOutFailed } = useSignOut();
-  const { warningOpen, setWarningOpen } = useSessionTabs(isSignedIn);
+  const warningOpen = useSessionTabs(isSignedIn);
   useReloadOnPageRestore();
   const mainRef = useRef<HTMLElement>(null);
   const headingSeen = useRef(false);
@@ -78,14 +84,14 @@ export function RootLayout() {
           {signOutFailed ? (
             <div className="mx-auto grid w-full max-w-(--content-max) gap-4 px-4 pt-4 md:px-6">
               <ProblemNotice
-                message="We couldn't finish signing you out."
+                message={signOutFailedMessage}
                 nextStep="Try again."
                 action={<Button onClick={() => void signOut()}>Sign out</Button>}
               />
             </div>
           ) : null}
           <main id="main" ref={mainRef} tabIndex={-1} className="w-full flex-1 focus:outline-none">
-            <RaiseDraftProvider signedIn={isSignedIn}>
+            <RaiseDraftProvider>
               <Outlet />
             </RaiseDraftProvider>
           </main>
@@ -94,8 +100,8 @@ export function RootLayout() {
           {isSignedIn ? (
             <InactivityWarning
               open={warningOpen}
-              setOpen={setWarningOpen}
               onSignOut={() => void signOut()}
+              signOutFailed={signOutFailed}
             />
           ) : null}
         </div>

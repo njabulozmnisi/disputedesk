@@ -1,595 +1,329 @@
-import type { QueryClient } from '@tanstack/react-query';
-import { act, screen, waitFor } from '@testing-library/react';
-import type { UserEvent } from '@testing-library/user-event';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 
-import {
-  getApiV1Transactions,
-  getGetApiV1BffSessionQueryKey,
-  getGetApiV1DisputesDisputeIdQueryKey,
-  getGetApiV1DisputesInfiniteQueryKey,
-  getGetApiV1TransactionsInfiniteQueryKey,
-} from '@/api/generated/disputedesk';
-import { ApiError, type Problem } from '@/api/mutator';
+import { getGetApiV1BffSessionQueryKey } from '@/api/generated/disputedesk';
 import { server } from '@/test/server';
-import { created, openReviewScreen } from '@/test/raise';
 import {
-  disputeGuid,
-  failWith,
   cachedCustomerData,
-  customerQueries,
-  holdSessionEndedRoute,
-  listenToTabs,
-  makeDispute,
+  failWith,
   makeRow,
-  noContent,
-  problemResponse,
   renderApp,
   serveAntiforgeryToken,
-  serveDispute,
-  serveDisputes,
   serveTransactions,
   signInAs,
 } from '@/test/support';
 
-import type { AppRouter } from './router';
-import { clearCustomerData, endSession } from './sessionEnd';
+import { sessionEndedUrl } from './sessionEnd';
 
 const sessionKey = getGetApiV1BffSessionQueryKey();
+const rowText = 'ZXP*GLOBALSVCS 0800';
 
-/** Any request outside the screens that answers 401, as the server does once the session has ended. */
-async function aRequestAnswers401(queryClient: QueryClient) {
-  failWith('/api/v1/transactions', 'unauthorized', 401);
-  await act(() =>
-    queryClient
-      .query({ queryKey: ['probe'], queryFn: () => getApiV1Transactions() })
-      .catch(() => undefined),
-  );
+/** jsdom cannot navigate, so `location.replace` is a recorder; the page keeps what `pathname` and `search` say. */
+function stubLocation(pathname = '/transactions', search = '') {
+  const replace = vi.fn();
+  vi.stubGlobal('location', { pathname, search, replace, reload: vi.fn() });
+  return replace;
 }
 
-/** Lets a late response arrive and its handlers run. */
-async function letRequestsFinish() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
+/** The path of every request the app makes from now on. */
+function recordRequests() {
+  const paths: string[] = [];
+  server.events.on('request:start', ({ request }) => {
+    paths.push(new URL(request.url).pathname);
+  });
+  return paths;
+}
+
+/** The tab is switched to: the browser fires `visibilitychange` on the document, then `focus` on the window. */
+function bringTabToFront() {
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange', { bubbles: true }));
+    window.dispatchEvent(new Event('focus'));
   });
 }
 
-function holdResponse() {
-  let release: () => void = () => undefined;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return {
-    held,
-    release: () => {
-      release();
-    },
-  };
-}
-
-/** A router whose navigation completes only when `open` is called: the window in which a late response can arrive. */
-function holdNavigation(router: AppRouter) {
-  const gate = holdResponse();
-  return {
-    router: {
-      state: router.state,
-      navigate: (async (...args: Parameters<AppRouter['navigate']>) => {
-        await gate.held;
-        return router.navigate(...args);
-      }) as AppRouter['navigate'],
-    },
-    open: gate.release,
-  };
-}
-
-/** Puts the session and the row back, so that only a draft could still change what screen 4a shows, and opens 4a. */
-async function reopenRaiseScreen(
-  queryClient: QueryClient,
-  router: ReturnType<typeof renderApp>['router'],
-) {
-  queryClient.setQueryData(sessionKey, { state: 'linked' });
-  queryClient.setQueryData(getGetApiV1TransactionsInfiniteQueryKey(), {
-    pages: [{ items: [makeRow()], nextCursor: null }],
-    pageParams: [undefined],
-  });
-  await act(() =>
-    router.navigate({
-      to: '/transactions/$transactionId/dispute',
-      params: { transactionId: 'TXN-1' },
-    }),
-  );
-  await screen.findByRole('heading', { level: 1, name: 'Dispute this transaction' });
-}
-
-let tabs: ReturnType<typeof listenToTabs>;
 beforeEach(() => {
   signInAs('linked');
   serveAntiforgeryToken();
-  serveDisputes();
-  serveTransactions();
-  tabs = listenToTabs();
+  serveTransactions([makeRow()]);
 });
+
 afterEach(() => {
-  tabs.close();
+  vi.unstubAllGlobals();
 });
 
-// Criterion 1: one clean-up clears all customer data on every change to anonymous.
-describe('a 401 while signed in', () => {
-  it('removes every query but the session, clears the mutation cache, sets the session to anonymous and posts expired', async () => {
-    serveTransactions([makeRow()]);
-    const { queryClient, router } = renderApp({ path: '/transactions' });
-    await screen.findAllByText('ZXP*GLOBALSVCS 0800');
-    queryClient.setQueryData(getGetApiV1DisputesDisputeIdQueryKey(disputeGuid), makeDispute());
-    queryClient.setQueryData(getGetApiV1DisputesInfiniteQueryKey(), { pages: [], pageParams: [] });
-    queryClient
-      .getMutationCache()
-      .build(queryClient, { mutationFn: () => Promise.resolve('withdraw') });
-    expect(queryClient.getMutationCache().getAll()).toHaveLength(1);
-    await tabs.settle();
+describe('the URL of the session-ended screen', () => {
+  const guid = '0b9a1c7e-5d3f-4a62-9e1b-7c2d8f4a6b10';
+  const longestPath = `/${'a'.repeat(2047)}`;
 
-    await aRequestAnswers401(queryClient);
-
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/signed-out');
-    });
-    expect(cachedCustomerData(queryClient)).toEqual([]);
-    expect(queryClient.getQueryData(sessionKey)).toEqual({ state: 'anonymous' });
-    expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
-    await tabs.flush();
-    expect(tabs.messages).toEqual(['expired']);
-  });
-
-  it('resets the raise draft: coming back to the review screen finds no draft', async () => {
-    const { queryClient, router } = await openReviewScreen();
-
-    await aRequestAnswers401(queryClient);
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/signed-out');
-    });
-    // Put the row and the session back, so that only the draft could still send the person to the review screen.
-    queryClient.setQueryData(sessionKey, { state: 'linked' });
-    queryClient.setQueryData(getGetApiV1TransactionsInfiniteQueryKey(), {
-      pages: [{ items: [makeRow()], nextCursor: null }],
-      pageParams: [undefined],
-    });
-    await act(() =>
-      router.navigate({
-        to: '/transactions/$transactionId/dispute/review',
-        params: { transactionId: 'TXN-1' },
-      }),
+  it.each([
+    ['a transactions list', '/transactions', '', '/transactions'],
+    ['a raise route', '/transactions/TXN-123/dispute', '', '/transactions'],
+    [
+      'a raise review route in another case',
+      '/Transactions/TXN-123/dispute/review',
+      '',
+      '/transactions',
+    ],
+    ['a dispute detail route', `/disputes/${guid}`, '', '/disputes'],
+    [
+      'a dispute detail route in another case, with a search',
+      `/Disputes/${guid}`,
+      '?tab=timeline',
+      '/disputes',
+    ],
+    ['the disputes list', '/disputes', '', '/disputes'],
+    ['another route, with a search', '/link/otp', '?step=2&x=a b', '/link/otp?step=2&x=a b'],
+    ['a path of 2,048 characters', longestPath, '', longestPath],
+    ['a path of 2,049 characters', `${longestPath}a`, '', '/'],
+    ['a path and search of 2,049 characters', '/link', `?${'q'.repeat(2047)}`, '/'],
+  ])('%s returns to the expected path', (_label, pathname, search, returnUrl) => {
+    expect(sessionEndedUrl({ pathname, search })).toBe(
+      `/signed-out?reason=expired&returnUrl=${encodeURIComponent(returnUrl)}`,
     );
+  });
+});
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Dispute this transaction' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { level: 1, name: 'Review your dispute' }),
-    ).not.toBeInTheDocument();
+// Criterion 1: every way a session ends leaves the document, once, with nothing cleaned up in place.
+describe('a session that ends in this tab', () => {
+  async function openTransactions() {
+    const app = renderApp({ path: '/transactions' });
+    await screen.findAllByText(rowText);
+    return app;
+  }
+
+  function expectLeftOnce(replace: ReturnType<typeof stubLocation>) {
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(replace).toHaveBeenCalledWith(
+      `/signed-out?reason=expired&returnUrl=${encodeURIComponent('/transactions')}`,
+    );
+  }
+
+  it('leaves the document when a query gets 401, and neither navigates in the SPA nor clears the cache', async () => {
+    const replace = stubLocation();
+    const { router, queryClient } = await openTransactions();
+    failWith('/api/v1/disputes', 'unauthorized', 401);
+
+    await act(() => router.navigate({ to: '/disputes' }));
+
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalled();
+    });
+    expectLeftOnce(replace);
+    expect(router.state.location.pathname).toBe('/disputes');
+    expect(queryClient.getQueryData(sessionKey)).toEqual({ state: 'linked' });
+    expect(cachedCustomerData(queryClient)).not.toEqual([]);
   });
 
-  it('shows no customer data from memory when the person goes Back from the session-ended screen', async () => {
-    // Not the start page's own sample merchant.
-    serveTransactions([makeRow({ description: 'PRIVATE MERCHANT 4321' })]);
-    const { queryClient, router } = renderApp({ path: '/transactions' });
-    await screen.findAllByText('PRIVATE MERCHANT 4321');
-    await aRequestAnswers401(queryClient);
+  it('leaves the document when a mutation gets 401', async () => {
+    const replace = stubLocation();
+    const { user } = await openTransactions();
+    server.use(http.get('*/api/v1/bff/antiforgery', () => new HttpResponse(null, { status: 401 })));
+
+    await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Sign out' }));
+
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/signed-out');
+      expect(replace).toHaveBeenCalled();
     });
+    expectLeftOnce(replace);
+  });
+
+  it('leaves the document when a session refetch is answered anonymous', async () => {
+    const replace = stubLocation();
+    const { queryClient } = await openTransactions();
+    signInAs('anonymous');
+
+    await act(() => queryClient.refetchQueries({ queryKey: sessionKey }));
+
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalled();
+    });
+    expectLeftOnce(replace);
+  });
+
+  it('leaves once when a tab switch, its session answer and several 401s all end the session', async () => {
+    const replace = stubLocation();
+    const { router } = await openTransactions();
+    signInAs('anonymous');
+    failWith('/api/v1/disputes', 'unauthorized', 401);
+
+    bringTabToFront();
+    await act(() => router.navigate({ to: '/disputes' }));
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expectLeftOnce(replace);
+  });
+
+  it('does not leave when the app itself sets the session to unlinked, on a 403 linking-required', async () => {
+    const replace = stubLocation();
+    const { router, queryClient } = await openTransactions();
+    failWith('/api/v1/disputes', 'linking-required', 403);
+
+    await act(() => router.navigate({ to: '/disputes' }));
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/link');
+    });
+    expect(queryClient.getQueryData(sessionKey)).toEqual({ state: 'unlinked' });
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('does not leave when a session refetch is answered with a signed-in session', async () => {
+    const replace = stubLocation();
+    const { queryClient } = await openTransactions();
+    signInAs('unlinked');
+
+    await act(() => queryClient.refetchQueries({ queryKey: sessionKey }));
+
+    expect(replace).not.toHaveBeenCalled();
+  });
+});
+
+// Criterion 2: the session-ended screen is a fresh document that asks the API for nothing, so it never renews a session.
+describe('the session-ended screen on a direct load', () => {
+  it.each(['linked', 'anonymous'] as const)(
+    'makes no request and shows the no-session header when the session cookie answers %s',
+    async (state) => {
+      signInAs(state);
+      const requests = recordRequests();
+
+      renderApp({ path: '/signed-out?reason=expired&returnUrl=%2Ftransactions' });
+
+      await screen.findByRole('heading', { level: 1, name: "You've been signed out" });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(requests).toEqual([]);
+      expect(screen.getByRole('link', { name: 'DisputeDesk' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+    },
+  );
+
+  it('still asks for the session on another route', async () => {
+    const requests = recordRequests();
+
+    renderApp({ path: '/transactions' });
+
+    await screen.findAllByText(rowText);
+    expect(requests).toContain('/api/v1/bff/session');
+  });
+});
+
+// Criterion 4: another tab learns of the end when it is brought to the front.
+describe('a tab brought to the front', () => {
+  it('asks for the session once, and leaves the document when the answer is anonymous', async () => {
+    const replace = stubLocation();
+    renderApp({ path: '/transactions' });
+    await screen.findAllByText(rowText);
+    const requests = recordRequests();
+    signInAs('anonymous');
+
+    bringTabToFront();
+
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalledTimes(1);
+    });
+    expect(requests).toEqual(['/api/v1/bff/session']);
+  });
+
+  it('asks for the session when an already visible window gains focus', async () => {
+    const replace = stubLocation();
+    renderApp({ path: '/transactions' });
+    await screen.findAllByText(rowText);
+    const requests = recordRequests();
+    signInAs('anonymous');
 
     act(() => {
-      router.history.back();
+      window.dispatchEvent(new Event('focus'));
     });
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/');
+      expect(replace).toHaveBeenCalledTimes(1);
     });
-    expect(screen.queryByText('PRIVATE MERCHANT 4321')).not.toBeInTheDocument();
-    expect(queryClient.getQueryData(getGetApiV1TransactionsInfiniteQueryKey())).toBeUndefined();
+    expect(requests).toEqual(['/api/v1/bff/session']);
   });
 
-  it('writes nothing when the withdraw in flight then succeeds', async () => {
-    serveDispute();
-    const { user, queryClient, router } = renderApp({ path: `/disputes/${disputeGuid}` });
-    await screen.findByRole('heading', { level: 1, name: makeDispute().transaction.description });
-    const response = holdResponse();
-    server.use(
-      http.post(`*/api/v1/disputes/${disputeGuid}/withdraw`, async () => {
-        await response.held;
-        return HttpResponse.json(makeDispute({ customerStatus: 'withdrawn' }));
-      }),
-    );
-    await user.click(screen.getByRole('button', { name: 'Withdraw dispute' }));
-    await user.click(await screen.findByRole('button', { name: 'Withdraw dispute' }));
-    await aRequestAnswers401(queryClient);
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/signed-out');
-    });
-
-    response.release();
-    await letRequestsFinish();
-
-    expect(cachedCustomerData(queryClient)).toEqual([]);
-    expect(router.state.location.pathname).toBe('/signed-out');
-  });
-
-  it('writes nothing and navigates nowhere when the raise in flight then succeeds', async () => {
-    const { user, queryClient, router } = await openReviewScreen();
-    const response = holdResponse();
-    server.use(
-      http.post('*/api/v1/disputes', async () => {
-        await response.held;
-        return created();
-      }),
-    );
-    await user.click(screen.getByRole('button', { name: 'Submit dispute' }));
-    await aRequestAnswers401(queryClient);
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/signed-out');
-    });
-
-    response.release();
-    await letRequestsFinish();
-
-    expect(cachedCustomerData(queryClient)).toEqual([]);
-    expect(router.state.location.pathname).toBe('/signed-out');
-    expect(screen.queryByText('Dispute submitted')).not.toBeInTheDocument();
-    await reopenRaiseScreen(queryClient, router);
-  });
-
-  it('writes nothing and keeps the form clean when the raise in flight then answers 400', async () => {
-    const { user, queryClient, router } = await openReviewScreen();
-    const response = holdResponse();
-    server.use(
-      http.post('*/api/v1/disputes', async () => {
-        await response.held;
-        return problemResponse('validation', 400, 'trace-1', { errors: { reason: ['required'] } });
-      }),
-    );
-    await user.click(screen.getByRole('button', { name: 'Submit dispute' }));
-    await aRequestAnswers401(queryClient);
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/signed-out');
-    });
-
-    response.release();
-    await letRequestsFinish();
-
-    expect(router.state.location.pathname).toBe('/signed-out');
-    await reopenRaiseScreen(queryClient, router);
-    expect(screen.queryByRole('radio', { checked: true })).not.toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  it('leaves the same state when the clean-up runs twice', async () => {
-    const { queryClient } = renderApp({ path: '/transactions' });
-    await screen.findByRole('heading', { level: 1, name: 'Transactions' });
-    queryClient.setQueryData(['customer data'], 'transactions');
-
-    clearCustomerData(queryClient);
-    const once = cachedCustomerData(queryClient);
-    clearCustomerData(queryClient);
-
-    expect(cachedCustomerData(queryClient)).toEqual(once);
-    expect(once).toEqual([]);
-    expect(queryClient.getQueryData(sessionKey)).toEqual({ state: 'anonymous' });
-  });
-});
-
-// Criterion 1: nothing comes back into memory while the session-ended screen is being shown.
-describe('a response that arrives before the session-ended screen is shown', () => {
-  it('brings no query data back', async () => {
-    serveTransactions([makeRow()]);
-    const { queryClient, router } = renderApp({ path: '/transactions' });
-    await screen.findAllByText('ZXP*GLOBALSVCS 0800');
-    const response = holdResponse();
-    server.use(
-      http.get('*/api/v1/disputes/late', async () => {
-        await response.held;
-        return HttpResponse.json({ secret: 'customer data' });
-      }),
-    );
-    const late = queryClient
-      .query({ queryKey: ['late'], queryFn: () => fetch('/api/v1/disputes/late') })
-      .catch(() => undefined);
-    const navigation = holdNavigation(router);
-
-    const ended = endSession(queryClient, navigation.router);
-    response.release();
-    await late;
-    await letRequestsFinish();
-
-    expect(queryClient.getQueryData(['late'])).toBeUndefined();
-    navigation.open();
-    await ended;
-    expect(cachedCustomerData(queryClient)).toEqual([]);
-  });
-
-  it('leaves the raise in flight no way to move the person or fill the draft', async () => {
-    const { user, queryClient, router } = await openReviewScreen();
-    const response = holdResponse();
-    server.use(
-      http.post('*/api/v1/disputes', async () => {
-        await response.held;
-        return created();
-      }),
-    );
-    await user.click(screen.getByRole('button', { name: 'Submit dispute' }));
-    const navigation = holdNavigation(router);
-
-    const ended = endSession(queryClient, navigation.router);
-    response.release();
-    await letRequestsFinish();
-    navigation.open();
-    await ended;
-    await letRequestsFinish();
-
-    expect(router.state.location.pathname).toBe('/signed-out');
-    expect(cachedCustomerData(queryClient)).toEqual([]);
-    expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
-    expect(screen.queryByText('Dispute submitted')).not.toBeInTheDocument();
-  });
-});
-
-// Criterion 1: a session request answered anonymous ends the session as a 401 does.
-describe('a session request answered anonymous while signed in', () => {
-  it('runs the clean-up and posts expired once', async () => {
-    serveTransactions([makeRow()]);
-    const { queryClient, router } = renderApp({ path: '/transactions' });
-    await screen.findAllByText('ZXP*GLOBALSVCS 0800');
-    queryClient.setQueryData(getGetApiV1DisputesDisputeIdQueryKey(disputeGuid), makeDispute());
-    queryClient
-      .getMutationCache()
-      .build(queryClient, { mutationFn: () => Promise.resolve('withdraw') });
-    await tabs.settle();
+  it('does not ask for the session when nobody is signed in', async () => {
     signInAs('anonymous');
+    renderApp({ path: '/' });
+    await screen.findByRole('heading', {
+      level: 1,
+      name: 'Something wrong with a card transaction?',
+    });
+    const requests = recordRequests();
+    signInAs('linked');
 
-    await act(() => queryClient.refetchQueries({ queryKey: sessionKey }));
+    bringTabToFront();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(requests).toEqual([]);
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Something wrong with a card transaction?' }),
+    ).toBeInTheDocument();
+  });
+
+  it('leaves the document on a 401 from the session request', async () => {
+    const replace = stubLocation();
+    renderApp({ path: '/transactions' });
+    await screen.findAllByText(rowText);
+    failWith('/api/v1/bff/session', 'unauthorized', 401);
+
+    bringTabToFront();
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/signed-out');
+      expect(replace).toHaveBeenCalledTimes(1);
     });
-    expect(cachedCustomerData(queryClient)).toEqual([]);
-    expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
-    expect(queryClient.getQueryData(sessionKey)).toEqual({ state: 'anonymous' });
-    await tabs.flush();
-    expect(tabs.messages).toEqual(['expired']);
   });
-});
 
-// Criterion 1: a response that arrives after a 401 restores nothing.
-describe('a response that arrives after a 401', () => {
-  async function fillDetailsAndContinue(user: UserEvent) {
-    await user.click(await screen.findByLabelText('ID number'));
-    await user.paste('8001015009087');
-    await user.click(screen.getByLabelText('Account number'));
-    await user.paste('1234567890');
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-  }
+  it('stays where it is when the session is live, and refetches no other query', async () => {
+    const replace = stubLocation();
+    renderApp({ path: '/transactions' });
+    await screen.findAllByText(rowText);
+    const requests = recordRequests();
 
-  /** Starts a request that is held, ends the session with a 401, then lets the held answer arrive. */
-  async function answerArrivesAfterA401(
-    held: { method: 'get' | 'post'; path: string; answer: () => Response },
-    startRequest: (app: ReturnType<typeof renderApp>) => Promise<void>,
-  ) {
-    const response = holdResponse();
-    server.use(
-      http[held.method](held.path, async () => {
-        await response.held;
-        return held.answer();
-      }),
-    );
-    signInAs('unlinked');
-    const app = renderApp({ path: '/link' });
-    await screen.findByRole('heading', { level: 1, name: 'Link your login' });
-    await startRequest(app);
-    await aRequestAnswers401(app.queryClient);
+    bringTabToFront();
+
     await waitFor(() => {
-      expect(app.router.state.location.pathname).toBe('/signed-out');
+      expect(requests).toEqual(['/api/v1/bff/session']);
     });
-    serveTransactions(); // the 401 was for the probe only: a screen the late answer opens must not meet it again
-
-    response.release();
-    await letRequestsFinish();
-
-    expect(app.queryClient.getQueryData(sessionKey)).toEqual({ state: 'anonymous' });
-    expect(app.router.state.location.pathname).toBe('/signed-out');
-  }
-
-  it('does not link the login when the verify in flight then succeeds', async () => {
-    await answerArrivesAfterA401(
-      { method: 'post', path: '*/api/v1/linking/verify', answer: noContent },
-      async ({ user, router }) => {
-        await act(() => router.navigate({ to: '/link/otp' }));
-        await user.click(await screen.findByLabelText('6-digit one-time code'));
-        await user.paste('481516');
-        await user.click(screen.getByRole('button', { name: 'Verify' }));
-      },
-    );
-    expect(screen.queryByText('Your login is linked.')).not.toBeInTheDocument();
-  });
-
-  it('does not go to the code screen when the start in flight then succeeds', async () => {
-    await answerArrivesAfterA401(
-      {
-        method: 'post',
-        path: '*/api/v1/linking/start',
-        answer: () => new HttpResponse(null, { status: 202 }),
-      },
-      async ({ user }) => {
-        await fillDetailsAndContinue(user);
-      },
-    );
-  });
-
-  it('does not link the login when the start in flight then answers already-linked', async () => {
-    await answerArrivesAfterA401(
-      {
-        method: 'post',
-        path: '*/api/v1/linking/start',
-        answer: () => problemResponse('already-linked', 409),
-      },
-      async ({ user }) => {
-        await fillDetailsAndContinue(user);
-      },
-    );
-  });
-
-  it('does not make the session unlinked when a request in flight then answers 403 linking-required', async () => {
-    await answerArrivesAfterA401(
-      {
-        method: 'get',
-        path: '*/api/v1/disputes/late',
-        answer: () => problemResponse('linking-required', 403),
-      },
-      ({ queryClient }) => {
-        void queryClient
-          .getMutationCache()
-          .build(queryClient, {
-            mutationFn: async () => {
-              const reply = await fetch('/api/v1/disputes/late');
-              throw new ApiError(reply.status, (await reply.json()) as Problem);
-            },
-          })
-          .execute(undefined)
-          .catch(() => undefined);
-        return Promise.resolve();
-      },
-    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(requests).toEqual(['/api/v1/bff/session']);
+    expect(replace).not.toHaveBeenCalled();
   });
 });
 
-// Criterion 1: customer data is gone from the moment the session starts ending, not when the screen has changed.
-describe('a session that has started ending', () => {
-  it('holds no customer query data and no mutation, and starts no request, while the screen is still changing', async () => {
-    serveTransactions([makeRow()]);
-    const { queryClient, router } = renderApp({ path: '/transactions' });
-    await screen.findAllByText('ZXP*GLOBALSVCS 0800');
-    queryClient
-      .getMutationCache()
-      .build(queryClient, { mutationFn: () => Promise.resolve('withdraw') });
-    const requests: string[] = [];
-    server.events.on('request:start', ({ request }) => {
-      requests.push(new URL(request.url).pathname);
-    });
-    const navigation = holdNavigation(router);
+// Criterion 8: a page the browser restores from the back/forward cache still reloads.
+describe('pageshow', () => {
+  it('reloads the page when it was restored from the back/forward cache', async () => {
+    renderApp({ path: '/transactions' });
+    await screen.findAllByText(rowText);
+    const reload = vi.fn();
+    vi.stubGlobal('location', { reload });
 
-    const ended = endSession(queryClient, navigation.router);
-    await letRequestsFinish();
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
 
-    expect(cachedCustomerData(queryClient)).toEqual([]);
-    expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
-    expect(requests).toEqual([]);
-    // Only the session query still says signed in, so that a layout route's beforeLoad does not race the session-ended screen.
-    expect(queryClient.getQueryData(sessionKey)).toEqual({ state: 'linked' });
-    navigation.open();
-    await ended;
-    expect(queryClient.getQueryData(sessionKey)).toEqual({ state: 'anonymous' });
-  });
-});
-
-// Criterion 1 and 4: a session answer that lands after the clean-up restores nothing.
-describe('a session answer that arrives after the session ended', () => {
-  it('is not written back as signed in', async () => {
-    serveTransactions([makeRow()]);
-    const { queryClient, router } = renderApp({ path: '/transactions' });
-    await screen.findAllByText('ZXP*GLOBALSVCS 0800');
-    const response = holdResponse();
-    server.use(
-      http.get('*/api/v1/bff/session', async () => {
-        await response.held;
-        return HttpResponse.json({ state: 'linked' });
-      }),
-    );
-    const refetch = queryClient.refetchQueries({ queryKey: sessionKey }).catch(() => undefined);
-
-    await act(() => endSession(queryClient, router));
-    response.release();
-    await refetch;
-    await letRequestsFinish();
-
-    expect(queryClient.getQueryData(sessionKey)).toEqual({ state: 'anonymous' });
-    expect(router.state.location.pathname).toBe('/signed-out');
-  });
-});
-
-// Criteria 1 and 4: no customer query is fetched or left behind once the session ends (ASVS 5.0.0 V14.3.1).
-describe('a screen still mounted while the session-ended navigation is pending', () => {
-  it('starts no customer request and leaves no customer query: transactions', async () => {
-    serveTransactions([makeRow()]);
-    const { queryClient, router } = renderApp({ path: '/transactions' });
-    await screen.findAllByText('ZXP*GLOBALSVCS 0800');
-    const requests: string[] = [];
-    server.events.on('request:start', ({ request }) => {
-      requests.push(new URL(request.url).pathname);
-    });
-    const open = holdSessionEndedRoute(router);
-
-    const ended = endSession(queryClient, router);
-    await letRequestsFinish();
-    expect(requests).toEqual([]);
-
-    open();
-    await act(() => ended);
-    await letRequestsFinish();
-    expect(router.state.location.pathname).toBe('/signed-out');
-    expect(requests).toEqual([]);
-    expect(customerQueries(queryClient)).toEqual([]);
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it('starts no customer request and leaves no customer query: dispute detail just submitted', async () => {
-    serveDispute();
-    const { queryClient, router } = renderApp({ path: '/disputes' });
-    await act(() =>
-      router.navigate({
-        to: '/disputes/$disputeId',
-        params: { disputeId: disputeGuid },
-        state: { justSubmitted: true },
-      }),
-    );
-    await screen.findByText('Dispute submitted');
-    const requests: string[] = [];
-    server.events.on('request:start', ({ request }) => {
-      requests.push(new URL(request.url).pathname);
-    });
-    const open = holdSessionEndedRoute(router);
+  it('does nothing on an ordinary page show', async () => {
+    renderApp({ path: '/transactions' });
+    await screen.findAllByText(rowText);
+    const reload = vi.fn();
+    vi.stubGlobal('location', { reload });
 
-    const ended = endSession(queryClient, router);
-    await letRequestsFinish();
-    expect(requests).toEqual([]);
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }));
 
-    open();
-    await act(() => ended);
-    await letRequestsFinish();
-    expect(requests).toEqual([]);
-    expect(customerQueries(queryClient)).toEqual([]);
-  });
-});
-
-// Criterion 1: one end per window.
-describe('a second anonymous session answer while the session is ending', () => {
-  it('posts expired once', async () => {
-    serveTransactions([makeRow()]);
-    const { queryClient, router } = renderApp({ path: '/transactions' });
-    await screen.findAllByText('ZXP*GLOBALSVCS 0800');
-    await tabs.settle();
-    const gate = holdResponse();
-    const navigate = router.navigate.bind(router);
-    vi.spyOn(router, 'navigate').mockImplementation((async (
-      ...args: Parameters<AppRouter['navigate']>
-    ) => {
-      await gate.held;
-      return navigate(...args);
-    }) as AppRouter['navigate']);
-    signInAs('anonymous');
-
-    await act(() => queryClient.refetchQueries({ queryKey: sessionKey }));
-    await act(() => queryClient.refetchQueries({ queryKey: sessionKey }));
-    gate.release();
-    await letRequestsFinish();
-
-    await tabs.flush();
-    // The screen the end leaves may still post activity for its own responses; only expired is under test.
-    expect(tabs.messages.filter((message) => message === 'expired')).toEqual(['expired']);
+    expect(reload).not.toHaveBeenCalled();
   });
 });

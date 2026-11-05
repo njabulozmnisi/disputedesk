@@ -374,24 +374,25 @@ test.describe('linked customer A', () => {
     await signOutContext.close();
   });
 
-  test('a failed antiforgery fetch clears the data, shows the start page with the sign-out notice and submits nothing', async ({ browser }) => {
+  test('a failed antiforgery fetch keeps the screen and its data under the sign-out notice and submits nothing', async ({ browser }) => {
     const { context: failContext, page: failPage } = await signIn(browser, 'customer-a');
     await failPage.goto(`${spa}/transactions`);
     await expect(failPage.getByRole('button', { name: 'Sign out' })).toBeVisible();
+    await expect(failPage.locator('li')).toHaveCount(20);
     await failPage.route('**/api/v1/bff/antiforgery', (route) => route.fulfill({ status: 503, contentType: 'application/problem+json', body: '{}' }));
     let logoutPosts = 0;
     failPage.on('request', (request) => {
       if (request.url().endsWith('/bff/logout')) logoutPosts += 1;
     });
-    await failPage.getByRole('button', { name: 'Sign out' }).click();
-    // Story 7.14 criterion 3: the data is cleared first, so the start page shows, with the notice and a retry button inside it.
-    await expect(failPage).toHaveURL(`${spa}/`);
+    await failPage.getByRole('button', { name: 'Sign out' }).first().click();
+    // Story 8.13 criterion 5: the server session is still live, so the screen keeps its data, with the notice above it.
     const notice = failPage.getByRole('alert');
     await expect(notice).toContainText("We couldn't finish signing you out.");
     await expect(notice).toContainText('Try again.');
     await expect(notice.getByRole('button', { name: 'Sign out' })).toBeVisible();
-    await expect(failPage.getByRole('link', { name: 'Sign in' }).first()).toBeVisible();
-    expect(await pageText(failPage)).not.toMatch(/Dispute this transaction|Load more/);
+    await expect(failPage).toHaveURL(`${spa}/transactions`);
+    await expect(failPage.locator('li')).toHaveCount(20);
+    expect(await pageText(failPage)).toMatch(/Load more/);
     expect(logoutPosts).toBe(0);
     await failContext.close();
   });

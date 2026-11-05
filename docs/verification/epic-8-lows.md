@@ -26,3 +26,7 @@
 | 8.10 | review | `WithdrawDisputeInputTests.cs:108`, `OperationsActionInputTests.cs:256` | Contract note: a non-GUID route ID plus a bad body now answers 400 naming the body field. |
 | 8.11 | review | `RaiseDisputeInputTests.cs:165-182` | The hand-built rejection body is never shown to bind with `"wrongAmount"`; build it with `Body(...)` or add the valid case. |
 | 8.11 | review | same test | The no-echo check reads the note marker, not the refused reason value; add the reason value check for the string cases. |
+| 8.13 | delta review L1 | `frontend/src/app/InactivityWarning.tsx:74` | `signOutFailed` resets only on the next sign-out, so a later warning can open with a stale failure alert; reset when the warning closes. |
+| 8.13 | delta review L2, L3 | `sessionEnd.test.tsx:144`, `queryClient.ts:59` | Rename the "several 401s" test; comment why `handleSuccess` re-reads the typed cache. |
+| 8.8 | review L2 | `infra/tests/DisputeDesk.PlatformTests/ShellHarnessTests.cs:11` | Assert each named exception file exists, so 8.16 must remove the `iam-names.test.sh` exception. |
+| 8.8 | review L3 | `ComposeRenderTests.cs:120-126` | Delete the temporary env file in a `finally`. |

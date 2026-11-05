@@ -32,7 +32,7 @@ The input is a story file, `docs/tickets/epic-<epic>-<slug>/tickets/story-<epic>
 ## Known pitfalls
 
 - A change that adds or changes infrastructure files (Terraform, Dockerfiles, Compose) runs `scripts/security-local.sh`, the Security workflow's Trivy filesystem and config scan, before reporting (7.5).
-- Frontend: a cleared cache is not freed memory. A change that clears customer data adds a `WeakRef` plus forced-GC test that proves the data is collected (`frontend/src/app/sessionEndCollected.test.tsx`; 7.14).
+- A change that ends a session ends it by a document navigation (`location.replace` to the session-ended screen, or the logout form post), so nothing is cleared in place; the e2e "no customer data in the DOM, also after Back" checks prove it for every way out (8.13, replacing 7.14's in-memory clean-up test).
 - Platform: a health check covers every route the service fronts, and no test relies on a stopped container refusing connections, which hangs on CI's network; use an upstream that closes the connection (7.3, 7.12).
 - Run the full suite with a results file (`--report-xunit-trx`), never through `tail`, so a failure can be named (tf-aws-override).
 - Tag throwaway comparison images `disputedesk-*` and remove them before reporting; the Docker daemon and disk are shared (tf-gateway-spa).

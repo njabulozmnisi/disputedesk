@@ -8,7 +8,6 @@ import {
 import { server } from '@/test/server';
 import {
   failWith,
-  listenToTabs,
   makeRow,
   renderApp,
   serveAntiforgeryToken,
@@ -44,6 +43,10 @@ beforeEach(() => {
   serveTransactions([makeRow({ description: 'PRIVATE MERCHANT 4321' })]);
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 // Criterion 4: sign-out is a form POST carrying a fresh token.
 describe('Sign out', () => {
   it('fetches a fresh token, then submits a top-level form POST to the BFF logout with it', async () => {
@@ -76,7 +79,7 @@ describe('Sign out', () => {
     expect(calls).not.toContain('POST /api/v1/bff/logout'); // the browser navigates; the SPA sends no fetch
   });
 
-  it('clears customer data and shows the start page before the token is fetched, then posts signed-out and submits', async () => {
+  it('leaves the screen and its data alone until the token arrives', async () => {
     let release: () => void = () => undefined;
     const held = new Promise<void>((resolve) => {
       release = resolve;
@@ -88,31 +91,19 @@ describe('Sign out', () => {
       }),
     );
     const submitted = recordFormSubmissions();
-    const tabs = listenToTabs();
     const { user, router, queryClient } = renderApp({ path: '/transactions' });
     await screen.findByText('PRIVATE MERCHANT 4321');
-    await tabs.settle();
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
 
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/');
-    });
-    expect(queryClient.getQueryData(getGetApiV1TransactionsInfiniteQueryKey())).toBeUndefined();
-    expect(queryClient.getQueryData(getGetApiV1BffSessionQueryKey())).toEqual({
-      state: 'anonymous',
-    });
-    await tabs.flush();
-    expect(tabs.messages).toEqual([]); // nothing posted until the token is fetched
+    expect(router.state.location.pathname).toBe('/transactions');
+    expect(queryClient.getQueryData(getGetApiV1TransactionsInfiniteQueryKey())).toBeDefined();
     expect(submitted).toHaveLength(0);
 
     release();
     await waitFor(() => {
       expect(submitted).toHaveLength(1);
     });
-    await tabs.flush();
-    expect(tabs.messages).toEqual(['signed-out']);
-    tabs.close();
   });
 
   it.each([
@@ -129,34 +120,24 @@ describe('Sign out', () => {
       },
     ],
   ])(
-    'when the token fetch fails with %s: nothing comes back, nothing is posted, the other tab keeps its session, and Sign out tries again',
+    'when the token fetch fails with %s: the data stays on screen under the notice, nothing is submitted, and Sign out tries again',
     async (_name, failTokenFetch) => {
       failTokenFetch();
       const submitted = recordFormSubmissions();
-      const tabs = listenToTabs();
-      const other = renderApp({ path: '/transactions' });
-      await screen.findAllByText('PRIVATE MERCHANT 4321');
-      const rowsPerTab = screen.getAllByText('PRIVATE MERCHANT 4321').length;
       const { user, router, queryClient } = renderApp({ path: '/transactions' });
-      await waitFor(() => {
-        expect(screen.getAllByText('PRIVATE MERCHANT 4321')).toHaveLength(2 * rowsPerTab);
-      });
-      await tabs.settle();
+      await screen.findByText('PRIVATE MERCHANT 4321');
 
-      await user.click(screen.getAllByRole('button', { name: 'Sign out' })[1] as HTMLElement);
+      await user.click(screen.getByRole('button', { name: 'Sign out' }));
 
       const notice = await screen.findByRole('alert');
       expect(notice).toHaveTextContent("We couldn't finish signing you out.");
       expect(notice).toHaveTextContent('Try again.');
-      expect(router.state.location.pathname).toBe('/');
-      expect(queryClient.getQueryData(getGetApiV1TransactionsInfiniteQueryKey())).toBeUndefined();
+      expect(router.state.location.pathname).toBe('/transactions');
+      expect(screen.getByText('PRIVATE MERCHANT 4321')).toBeInTheDocument();
+      expect(queryClient.getQueryData(getGetApiV1BffSessionQueryKey())).toEqual({
+        state: 'linked',
+      });
       expect(submitted).toHaveLength(0);
-      await tabs.flush();
-      // Both instances share this test's one module state, so the other instance posts activity for this tab's
-      // failed response; two real tabs would not.
-      expect(tabs.messages.filter((message) => message !== 'activity')).toEqual([]);
-      expect(other.router.state.location.pathname).toBe('/transactions');
-      expect(screen.getAllByText('PRIVATE MERCHANT 4321')).toHaveLength(rowsPerTab);
 
       serveAntiforgeryToken('retry-token');
       // The retry belongs to the notice (EXPERIENCE.md, Problem notice), so it sits inside the alert.
@@ -165,30 +146,24 @@ describe('Sign out', () => {
         expect(submitted).toHaveLength(1);
       });
       expect(submitted[0]?.token).toBe('retry-token');
-      await tabs.flush();
-      expect(tabs.messages.filter((message) => message !== 'activity')).toEqual(['signed-out']);
-      tabs.close();
     },
   );
 
-  it('shows the start page with no notice and tells the other tabs expired when the token fetch answers 401', async () => {
+  it('leaves the document, with no notice, when the token fetch answers 401', async () => {
+    const replace = vi.fn();
+    vi.stubGlobal('location', { pathname: '/transactions', search: '', replace });
     failWith('/api/v1/bff/antiforgery', 'unauthorized', 401);
     const submitted = recordFormSubmissions();
-    const tabs = listenToTabs();
-    const { user, router } = renderApp({ path: '/transactions' });
+    const { user } = renderApp({ path: '/transactions' });
     await screen.findByText('PRIVATE MERCHANT 4321');
-    await tabs.settle();
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/');
+      expect(replace).toHaveBeenCalledTimes(1);
     });
-    await tabs.flush();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(tabs.messages).toEqual(['expired']); // the other tabs learn the session is over
     expect(submitted).toHaveLength(0);
-    tabs.close();
   });
 
   it('is available to an unlinked login', async () => {
