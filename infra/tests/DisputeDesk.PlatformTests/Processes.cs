@@ -7,7 +7,7 @@ internal sealed record ProcessResult(int ExitCode, string Output, string Errors)
 
 /// <summary>
 /// How the tests run docker, docker compose, bash and curl: no shell, the arguments as a list, only the environment the
-/// caller gives, standard input closed, both outputs read while the process runs (so a full pipe never blocks it), and
+/// caller gives, standard input the given text or closed, both outputs read while the process runs (so a full pipe never blocks it), and
 /// the whole process tree killed when the timeout passes.
 /// </summary>
 internal static class Processes
@@ -31,9 +31,9 @@ internal static class Processes
         return environment;
     }
 
-    /// <summary>Runs the program from the repository root with the given environment and returns how it ended.</summary>
+    /// <summary>Runs the program from the repository root with the given environment and input, and returns how it ended.</summary>
     public static async Task<ProcessResult> RunAsync(
-        string program, IEnumerable<string> arguments, IReadOnlyDictionary<string, string> environment, TimeSpan timeout)
+        string program, IEnumerable<string> arguments, IReadOnlyDictionary<string, string> environment, TimeSpan timeout, string input = "")
     {
         var start = new ProcessStartInfo(program)
         {
@@ -54,9 +54,10 @@ internal static class Processes
         }
 
         using Process process = Process.Start(start) ?? throw new InvalidOperationException($"{program} did not start.");
-        process.StandardInput.Close();
         Task<string> output = process.StandardOutput.ReadToEndAsync();
         Task<string> errors = process.StandardError.ReadToEndAsync();
+        await process.StandardInput.WriteAsync(input);
+        process.StandardInput.Close();
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         deadline.CancelAfter(timeout);
         try

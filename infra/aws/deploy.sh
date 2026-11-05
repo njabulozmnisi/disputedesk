@@ -11,8 +11,8 @@
 # 5. Lets only the api and the otel-collector containers reach the instance metadata service.
 # 6. Starts the stack and exits with Compose's exit code.
 #
-# It never prints a value it reads: no set -x, no .env, no `docker compose config` or `logs`. infra/aws/deploy.test.sh
-# runs it with stubs.
+# It never prints a value it reads: no set -x, no .env, no `docker compose config` or `logs`. DeployScriptTests
+# (infra/tests) runs it with stubs.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 # shellcheck source=infra/aws/input-bounds.sh
@@ -33,7 +33,7 @@ FROM_SSM=(
 
 # RDS's master user; infra/terraform/modules/database uses the same constant.
 RDS_MASTER_USER=dbmaster
-# The pinned image of docker-compose.yml's postgres service, for psql (deploy.test.sh checks they match).
+# The pinned image of docker-compose.yml's postgres service, for psql (DeployScriptTests checks they match).
 POSTGRES_IMAGE=postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
 # infra/aws/compose.yml's fixed subnet and the two addresses allowed to reach the instance metadata service.
 COMPOSE_SUBNET=10.201.89.0/24

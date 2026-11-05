@@ -15,7 +15,7 @@ namespace DisputeDesk.PlatformTests;
 /// The provision.sh cases read the file because no run on this machine reaches a Zitadel call: the script first runs
 /// /label-policy.sh and reads /brand/, which only the provisioner image holds.
 /// </summary>
-[UnsupportedOSPlatform("windows")] // the stub curl needs its execute bit
+[UnsupportedOSPlatform("windows")] // the stubs need their execute bit
 public partial class PlatformScriptTests
 {
     private static readonly string ProvisionScript = File.ReadAllText(Path.Combine(SourceRoots.Repo, "infra/zitadel/provision/provision.sh"));
@@ -90,24 +90,21 @@ public partial class PlatformScriptTests
     public async Task ProvisionScript_DevelopmentModeNotABoolean_FailsBeforeCallingZitadel()
     {
         // Expected: no curl call, exit 1, one message on standard error.
-        string bin = Directory.CreateTempSubdirectory("provision-").FullName;
-        await WriteStubAsync(bin, "curl");
-        Dictionary<string, string> environment = StubEnvironment(bin);
+        using var stubs = new PathStubs("curl");
+        Dictionary<string, string> environment = stubs.Environment();
         environment["ZITADEL_URL"] = "http://zitadel.invalid";
-        environment["OUT_DIR"] = bin;
+        environment["OUT_DIR"] = stubs.Directory;
         environment["OUT_UID"] = "1654";
         environment["FIXTURES_FILE"] = "unused.json";
         environment["APP_ORIGINS"] = "http://localhost:8080";
         environment["BFF_DEVELOPMENT_MODE"] = "yes";
 
         ProcessResult run = await Processes.RunAsync("bash", ["infra/zitadel/provision/provision.sh"], environment, TimeSpan.FromSeconds(30));
-        string[][] calls = StubCalls(bin, "curl");
-        Directory.Delete(bin, recursive: true);
 
         Assert.Equal(1, run.ExitCode);
         Assert.Equal("[provision] BFF_DEVELOPMENT_MODE must be true or false, not 'yes'\n", run.Errors);
         Assert.Empty(run.Output);
-        Assert.Empty(calls);
+        Assert.Empty(stubs.Calls());
     }
 
     [Fact]
@@ -122,24 +119,22 @@ public partial class PlatformScriptTests
     public async Task VerifyScript_FirstZitadelCall_SetsAMaxTime()
     {
         // Every Zitadel call in verify.sh goes through curl "${CURL_OPTS[@]}". Expected: one curl call, to GetProject with
-        // --max-time 30 first; the stub answers as curl does on an HTTP error (exit 22), which ends the run with that code.
-        string bin = Directory.CreateTempSubdirectory("verify-").FullName;
-        await WriteStubAsync(bin, "curl", ("", "", 22));
-        await File.WriteAllTextAsync(Path.Combine(bin, "zitadel-clients.json"), """{"Zitadel":{"ProjectId":"p1","Bff":{"ClientId":"c1"}}}""", TestContext.Current.CancellationToken);
-        await File.WriteAllTextAsync(Path.Combine(bin, "pat"), "test-only-pat", TestContext.Current.CancellationToken);
-        Dictionary<string, string> environment = StubEnvironment(bin);
+        // --max-time 30 first. Its arguments name a random header file, so the stub has no answer for it: the call exits
+        // 97, which ends the run with that code.
+        using var stubs = new PathStubs("curl");
+        await File.WriteAllTextAsync(Path.Combine(stubs.Directory, "zitadel-clients.json"), """{"Zitadel":{"ProjectId":"p1","Bff":{"ClientId":"c1"}}}""", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(stubs.Directory, "pat"), "test-only-pat", TestContext.Current.CancellationToken);
+        Dictionary<string, string> environment = stubs.Environment();
         environment["ZITADEL_URL"] = "http://zitadel.invalid";
         environment["FIXTURES_FILE"] = "unused.json";
-        environment["OUT_DIR"] = bin;
-        environment["PAT_FILE"] = Path.Combine(bin, "pat");
+        environment["OUT_DIR"] = stubs.Directory;
+        environment["PAT_FILE"] = Path.Combine(stubs.Directory, "pat");
 
         ProcessResult run = await Processes.RunAsync("bash", ["infra/zitadel/provision/verify.sh"], environment, TimeSpan.FromSeconds(30));
-        string[][] calls = StubCalls(bin, "curl");
-        Directory.Delete(bin, recursive: true);
 
-        Assert.Equal(22, run.ExitCode);
+        Assert.Equal(97, run.ExitCode);
         Assert.Empty(run.Output);
-        string[] call = Assert.Single(calls);
+        string[] call = Assert.Single(stubs.Calls("curl")).Arguments;
         Assert.Equal(["--max-time", "30"], call[..2]);
         Assert.Contains("http://zitadel.invalid/zitadel.project.v2.ProjectService/GetProject", call);
     }
@@ -285,54 +280,6 @@ public partial class PlatformScriptTests
             Processes.BaseEnvironment(), TimeSpan.FromSeconds(60));
         File.Delete(body);
         return curl.Output;
-    }
-
-    /// <summary>
-    /// A stand-in for a command, first on PATH: each call writes its arguments (one per line) to NAME.N.args and its
-    /// standard input to NAME.N.stdin, then prints the N-th answer's output and errors and exits with its code. A call
-    /// with no answer fails, naming itself.
-    /// </summary>
-    private static async Task WriteStubAsync(string bin, string name, params (string Output, string Errors, int Exit)[] answers)
-    {
-        string stub = Path.Combine(bin, name);
-        await File.WriteAllTextAsync(stub, """
-            #!/usr/bin/env bash
-            dir=$(dirname "$0"); name=$(basename "$0")
-            n=1; while [ -e "$dir/$name.$n.args" ]; do n=$((n + 1)); done
-            printf '%s\n' "$@" > "$dir/$name.$n.args"
-            cat > "$dir/$name.$n.stdin"
-            if [ ! -e "$dir/$name.$n.exit" ]; then echo "unexpected $name call $n: $*" >&2; exit 99; fi
-            cat "$dir/$name.$n.out"; cat "$dir/$name.$n.err" >&2
-            exit "$(cat "$dir/$name.$n.exit")"
-            """, TestContext.Current.CancellationToken);
-        File.SetUnixFileMode(stub, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        for (int call = 1; call <= answers.Length; call++)
-        {
-            (string output, string errors, int exit) = answers[call - 1];
-            await File.WriteAllTextAsync(Path.Combine(bin, $"{name}.{call}.out"), output, TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(Path.Combine(bin, $"{name}.{call}.err"), errors, TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(Path.Combine(bin, $"{name}.{call}.exit"), $"{exit}", TestContext.Current.CancellationToken);
-        }
-    }
-
-    /// <summary>The arguments of each call the stub received, in order.</summary>
-    private static string[][] StubCalls(string bin, string name)
-    {
-        List<string[]> calls = [];
-        for (int call = 1; File.Exists(Path.Combine(bin, $"{name}.{call}.args")); call++)
-        {
-            calls.Add(File.ReadAllLines(Path.Combine(bin, $"{name}.{call}.args")));
-        }
-
-        return [.. calls];
-    }
-
-    /// <summary>The base environment with the stubs in this folder first on PATH.</summary>
-    private static Dictionary<string, string> StubEnvironment(string bin)
-    {
-        Dictionary<string, string> environment = Processes.BaseEnvironment();
-        environment["PATH"] = $"{bin}{Path.PathSeparator}{environment["PATH"]}";
-        return environment;
     }
 
     /// <summary>A stand-in for Zitadel on a loopback port (0 picks a free one): every request gets the given answer.</summary>

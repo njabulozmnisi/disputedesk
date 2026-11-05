@@ -89,7 +89,7 @@ services:
     mem_limit: 256m
 
   # Optional and local only: started only with the `console` profile, so a plain `up` and the AWS deploy never run it
-  # (infra/aws/check-compose.sh). No sign-in: it is published on loopback only.
+  # (ComposeRenderTests in infra/tests). No sign-in: it is published on loopback only.
   redpanda-console:
     image: docker.redpanda.com/redpandadata/console:v3.13.1@sha256:d72608f64c65a5631adca6c99b44d157cefb9edb0473ed58451f91affcfcfa1b
     profiles: [console]
@@ -348,7 +348,7 @@ services:
 
   # Build-only: the built SPA files (frontend/Dockerfile, at /dist/) that the gateway image copies in. The profile
   # keeps it from ever getting a container; `up --build` still builds it, because the gateway's build names it
-  # (Compose, additional_contexts "service:"). infra/aws/check-compose.sh checks that it stays behind the profile.
+  # (Compose, additional_contexts "service:"). ComposeRenderTests (infra/tests) checks that it stays behind the profile.
   spa:
     image: disputedesk-spa:local
     build: ./frontend

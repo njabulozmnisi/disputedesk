@@ -1,0 +1,187 @@
+{
+  "status": "built",
+  "round": "fix round 2 (the last): docs/verification/8.8-fixes.md items 1 to 3",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a4b3118fe412a2486",
+  "base": "0177b43 (current main). 8.8-r2-base.patch applied with git apply --index --3way --binary --exclude='docs/*': every file applied cleanly, no conflict to resolve. The round-1 change is staged; this round's delta is the unstaged diff of DatabaseInitFixture.cs and DeployScriptTests.cs (DatabaseInitTests.cs's one-line change is staged, so a break could be taken as a git diff against it).",
+  "fix": [
+    "Item 1 (medium, criterion 3): DatabaseInitFixture reads dbmaster's shape (rolsuper, rolreplication, rolbypassrls, rolcreatedb, rolcreaterole, membership count) once, in its start-up right after creating dbmaster and before any test runs, into MasterShape, as it already records CaText and ServerCertificateText. Server_IsShapedLikeRdsWithNoHostPort asserts MasterShape instead of querying the live server, so it holds before and after the init's createrole_self_grant memberships. One server per class is kept. The ports and postgres-password checks still query live; the init changes neither.",
+    "Item 2 (low): OTEL_LOG_GROUP at its shortest length, 'a' (1 character), is a new Input_AtItsBound_IsAccepted row; the empty value is a new fact, EmptyLogGroup_IsRefusedBeforeDockerAsMissing, because deploy.sh refuses an empty input as 'OTEL_LOG_GROUP is missing' before its bound is checked (deploy.sh:68), so the PastTheirBounds theory's 'is outside its bound' message does not apply to it.",
+    "Item 3 (low): every break below is the output of git diff of a real edit against the fixed tree, with full @@ headers and context, and passes git apply --check in this worktree."
+  ],
+  "order_proof": {
+    "what": "Item 1's two tests, Server_IsShapedLikeRdsWithNoHostPort and FirstThenLaterDeploy_CreatesTheRolesAndDatabasesOnceOverVerifyFull, run alone in both orders with two --filter-method values, each order a separate run under 'scripts/test-lock.sh run stack 8.8'.",
+    "how": "xUnit 4 orders test methods (not test cases) with ITestMethodOrderer, and --seed does not change the order within a class (checked: seeds 1, 7 and 99 gave the same order). The default order of the two filtered methods is FirstThenLater first. The other order used a throwaway assembly-level [TestMethodOrderer] that reverses DefaultTestMethodOrderer, added for that one run and deleted before the full run; it is not in the diff.",
+    "runs": [
+      "Before the fix, default order (FirstThenLater, then Server): Server_IsShapedLikeRdsWithNoHostPort failed, Expected f|f|f|t|t|0, Actual f|f|f|t|t|6 (TestResults/order/default-order-before-fix.trx).",
+      "After the fix, default order (FirstThenLater, then Server): 2 of 2 passed (TestResults/order/default-order-after-fix.trx).",
+      "After the fix, reversed order (Server, then FirstThenLater): 2 of 2 passed (TestResults/order/reversed-order-after-fix.trx).",
+      "The full run's own order was also FirstThenLater before Server, and passed (TestResults/8.8-platform.trx)."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "R35 (INF-1)",
+      "test": "PathStubs is used by every DeployScriptTests and DatabaseInitTests case and by PlatformScriptTests.ProvisionScript_DevelopmentModeNotABoolean_FailsBeforeCallingZitadel and VerifyScript_FirstZitadelCall_SetsAMaxTime; exit 97 on an unexpected call: VerifyScript_FirstZitadelCall_SetsAMaxTime and break 5; docker run passed through with --network: DatabaseInitTests.FirstThenLaterDeploy_CreatesTheRolesAndDatabasesOnceOverVerifyFull (unchanged this round)"
+    },
+    {
+      "id": "AC2",
+      "requirement": "R38, story 7.5 criterion 6",
+      "test": "DeployScriptTests: FirstDeploy_*, LaterDeploy_*, MissingParameter_FailsBeforeDockerNamingIt, TwoMissingParameters_FailBeforeDockerNamingTheFirst, FourImageArguments_FailBeforeDockerWithTheUsage, MissingRegion_FailsBeforeDocker, SsmPathWithATrailingSlash_FailsBeforeDocker, Failed*_FailsBeforeDocker, NoOriginFacingIpv4Range_FailsBeforeDocker, RangeThatIsNotIpv4_FailsBeforeDocker, HalfDoneDatabaseInit_FailsBeforeCompose, FailedInit_FailsBeforeCompose, Source_NeverPrintsWhatItReads, PostgresImage_IsDockerComposesPinnedPostgres (unchanged this round)"
+    },
+    {
+      "id": "AC3",
+      "requirement": "R38, story 7.17",
+      "test": "DatabaseInitTests: Certificates_AreATestCaAndAServerCertificateForTheRdsHostAlone, Server_IsShapedLikeRdsWithNoHostPort (now asserts the fixture's MasterShape, read before any init), ConnectionWithoutTls_IsRefusedByTheHostsslRule, WrongCaOrHostName_FailsVerifyFullBeforeTheInit, FirstThenLaterDeploy_CreatesTheRolesAndDatabasesOnceOverVerifyFull; order independence: order_proof above"
+    },
+    {
+      "id": "AC4",
+      "requirement": "R38, story 7.4 criteria 1, 2 and 5",
+      "test": "ComposeRenderTests (render, required-input, source and collector checks; unchanged this round)"
+    },
+    {
+      "id": "AC5",
+      "requirement": "R38 (INF-10)",
+      "test": "DeployScriptTests.Input_AtItsBound_IsAccepted (25 cases, OTEL_LOG_GROUP 'a' new), DeployScriptTests.Input_PastItsBound_IsRefusedBeforeDockerNamingIt (78 cases), DeployScriptTests.EmptyLogGroup_IsRefusedBeforeDockerAsMissing (new), through the deploy; DeployScriptTests.DerivedPath_IsCheckedAgainstItsBound; ComposeRenderTests.TestEnvValues_MeetTheirBounds"
+    },
+    {
+      "id": "AC6",
+      "requirement": "R38 (INF-10)",
+      "test": "ComposeRenderTests.OverriddenService_EnvironmentAndDependsOn_AreExactlyTheOverrides (unchanged this round)"
+    },
+    {
+      "id": "AC7",
+      "requirement": "wave 4 item 1, INF-1",
+      "test": "ShellHarnessTests.Infra_HoldsNoShellTestHarness (unchanged this round)"
+    }
+  ],
+  "smoke": "Test-only round: no service, endpoint or Compose file changed, so there is no API smoke. The infra test project ran once in full (GatewayTests included) under 'scripts/test-lock.sh run stack 8.8': 319 of 319 passed. Before it: dotnet build of the infra project, 0 warnings; dotnet format style and whitespace --verify-no-changes on the infra project, clean; scripts/secret-scan.sh, no leaks; scripts/floor-guard.sh, clean. Not re-run this round, because the delta touches no backend, shell, Compose or Dockerfile: the backend suite, the OpenAPI drift check, the Linux SDK container run of DeployScriptTests (round 1: 126/126), scripts/security-local.sh and infra/smoke.sh.",
+  "standards": [
+    {
+      "mechanism": "Class fixture shared by one test class, set up once in IAsyncLifetime.InitializeAsync, with the server's starting state recorded there",
+      "source": "https://xunit.net/docs/shared-context"
+    },
+    {
+      "mechanism": "Boundary-value analysis: OTEL_LOG_GROUP's shortest length accepted and the empty value refused, through the deploy",
+      "source": "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/README"
+    },
+    {
+      "mechanism": "CloudWatch Logs log group name: 1 to 512 characters",
+      "source": "https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_CreateLogGroup.html"
+    },
+    {
+      "mechanism": "Order proof only (not in the diff): xUnit ITestMethodOrderer applied with [assembly: TestMethodOrderer], reversing DefaultTestMethodOrderer; method selection with --filter-method",
+      "source": "https://xunit.net/docs/getting-started/v3/cmdline"
+    },
+    {
+      "mechanism": "PostgreSQL createrole_self_grant: a CREATEROLE user is granted membership in the roles it creates, which is why the master's shape is read before the init",
+      "source": "https://www.postgresql.org/docs/18/runtime-config-client.html#GUC-CREATEROLE-SELF-GRANT"
+    }
+  ],
+  "breaks": [
+    {
+      "patch": "diff --git a/infra/aws/input-bounds.sh b/infra/aws/input-bounds.sh\nindex 924f5f2..ebfba3d 100644\n--- a/infra/aws/input-bounds.sh\n+++ b/infra/aws/input-bounds.sh\n@@ -56,7 +56,7 @@ within_bounds() {\n       [[ $value =~ ^(/[A-Za-z0-9_.-]+)+$ ]] ;;\n     API_IMAGE | WORKER_IMAGE | GATEWAY_IMAGE | CORE_BANKING_IMAGE | PROVISION_IMAGE)\n       # A published GHCR image by digest (AD-32), never by tag.\n-      [[ $value =~ ^ghcr\\.io/[a-z0-9-]+/[a-z0-9._-]+@sha256:[0-9a-f]{64}$ ]] ;;\n+      [[ $value =~ ^[a-z0-9.-]+/[a-z0-9-]+/[a-z0-9._-]+@sha256:[0-9a-f]{64}$ ]] ;;\n     *)\n       return 1 ;;\n   esac\n",
+      "test_method": "DisputeDesk.PlatformTests.DeployScriptTests.Input_PastItsBound_IsRefusedBeforeDockerNamingIt",
+      "expect": "fails",
+      "note": "any registry; verifier round 1: 1 of 78 failed"
+    },
+    {
+      "patch": "diff --git a/infra/aws/input-bounds.sh b/infra/aws/input-bounds.sh\nindex 924f5f2..452e557 100644\n--- a/infra/aws/input-bounds.sh\n+++ b/infra/aws/input-bounds.sh\n@@ -51,7 +51,7 @@ within_bounds() {\n     DATAPROTECTION_KMS_KEY_ID)\n       # The customer-managed key by its ARN, or by its key ID alone (the ARN's last part), never an alias, which could\n       # be SSM's default alias/aws/ssm. Both name the one key; the key ID form keeps account IDs out of test data.\n-      [[ $value =~ ^(arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/)?$KMS_KEY_UUID$ ]] ;;\n+      [[ $value =~ ^(arn:aws:kms:[a-z0-9-]+:[0-9]{11,12}:(key/$KMS_KEY_UUID|alias/[a-z/]+)|$KMS_KEY_UUID)$ ]] ;;\n     RDS_CA_BUNDLE | GATEWAY_REALIP_CONF)\n       [[ $value =~ ^(/[A-Za-z0-9_.-]+)+$ ]] ;;\n     API_IMAGE | WORKER_IMAGE | GATEWAY_IMAGE | CORE_BANKING_IMAGE | PROVISION_IMAGE)\n",
+      "test_method": "DisputeDesk.PlatformTests.DeployScriptTests.Input_PastItsBound_IsRefusedBeforeDockerNamingIt",
+      "expect": "fails",
+      "note": "KMS alias ARN and 11-digit account accepted; verifier round 1: 2 of 78 failed"
+    },
+    {
+      "patch": "diff --git a/infra/aws/input-bounds.sh b/infra/aws/input-bounds.sh\nindex 924f5f2..e5848a4 100644\n--- a/infra/aws/input-bounds.sh\n+++ b/infra/aws/input-bounds.sh\n@@ -16,7 +16,7 @@ AWS_INPUTS=(\n )\n \n # A DNS host name: lower-case labels of letters, digits and inner hyphens, at least two of them, no scheme or port.\n-HOST_NAME='^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$'\n+HOST_NAME='^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$'\n \n # A KMS key ID (the key's UUID, lower-case hex).\n KMS_KEY_UUID='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'\n",
+      "test_method": "DisputeDesk.PlatformTests.DeployScriptTests.Input_PastItsBound_IsRefusedBeforeDockerNamingIt",
+      "expect": "fails",
+      "note": "a host name with one label; verifier round 1: 4 of 78 failed"
+    },
+    {
+      "patch": "diff --git a/infra/aws/deploy.sh b/infra/aws/deploy.sh\nindex e590f7d..7c8878d 100755\n--- a/infra/aws/deploy.sh\n+++ b/infra/aws/deploy.sh\n@@ -74,6 +74,7 @@ done\n # The shape of the database module's ephemeral random_password (length 64, special false), which a Terraform test\n # cannot assert; RDS rejects /, @, \" and spaces in a master password.\n [[ $RDS_MASTER_PASSWORD =~ ^[A-Za-z0-9]{64}$ ]] || fail \"RDS_MASTER_PASSWORD is outside its bound\"\n+echo \"$APP_DB_PASSWORD\"\n step \"all ${#AWS_INPUTS[@]} inputs, QA_DB_PASSWORD and RDS_MASTER_PASSWORD are present and within their bounds\"\n \n # replace_file DESTINATION MODE: writes standard input to a temporary file beside DESTINATION, then renames it over\n",
+      "test_method": "DisputeDesk.PlatformTests.DeployScriptTests.FirstDeploy_ReadsSsmWritesTheFilesInitsSetsTheRulesThenStartsCompose",
+      "expect": "fails",
+      "note": "the deploy prints a secret (Supervisor check 1)"
+    },
+    {
+      "patch": "diff --git a/infra/aws/deploy.sh b/infra/aws/deploy.sh\nindex e590f7d..fa1b5ab 100755\n--- a/infra/aws/deploy.sh\n+++ b/infra/aws/deploy.sh\n@@ -54,6 +54,7 @@ done\n RDS_CA_BUNDLE=$PWD/rds-ca-bundle.pem\n GATEWAY_REALIP_CONF=$PWD/cloudfront-realip.conf\n \n+iptables -L DOCKER-USER\n step \"reading the parameters under $SSM_PATH\"\n parameters=$(aws ssm get-parameters-by-path --region \"$AWS_REGION\" --path \"$SSM_PATH\" --recursive --with-decryption \\\n   --output json) || fail \"reading the parameters under $SSM_PATH failed\"\n",
+      "test_method": "DisputeDesk.PlatformTests.DeployScriptTests.FirstDeploy_ReadsSsmWritesTheFilesInitsSetsTheRulesThenStartsCompose",
+      "expect": "fails",
+      "note": "an unexpected iptables call; the stub exits 97 naming it (Supervisor check 2)"
+    },
+    {
+      "patch": "diff --git a/infra/aws/deploy.sh b/infra/aws/deploy.sh\nindex e590f7d..cc0e43a 100755\n--- a/infra/aws/deploy.sh\n+++ b/infra/aws/deploy.sh\n@@ -117,7 +117,7 @@ step \"wrote .env\"\n # psql runs in the pinned postgres image against RDS, verifying its certificate. Every value reaches the container by\n # name (-e NAME, read from this subshell's environment), never in docker's arguments.\n export_rds_connection(){\n-  export PGHOST=$DB_HOST PGSSLMODE=verify-full PGSSLROOTCERT=/run/rds/ca-bundle.pem PGUSER=$RDS_MASTER_USER \\\n+  export PGHOST=$DB_HOST PGSSLMODE=require PGSSLROOTCERT=/run/rds/ca-bundle.pem PGUSER=$RDS_MASTER_USER \\\n     PGPASSWORD=$RDS_MASTER_PASSWORD PGDATABASE=postgres\n }\n rds_connection=(-e PGHOST -e PGSSLMODE -e PGSSLROOTCERT -e PGUSER -e PGPASSWORD -e PGDATABASE\n",
+      "test_method": "DisputeDesk.PlatformTests.DatabaseInitTests.WrongCaOrHostName_FailsVerifyFullBeforeTheInit",
+      "expect": "fails",
+      "note": "PGSSLMODE=require (Supervisor check 3); needs Docker and the stack lock"
+    },
+    {
+      "patch": "diff --git a/infra/aws/compose.yml b/infra/aws/compose.yml\nindex 4976145..086527a 100644\n--- a/infra/aws/compose.yml\n+++ b/infra/aws/compose.yml\n@@ -138,7 +138,7 @@ services:\n     build: !reset null\n     # The health checks stay the base file's: the published api and worker images are the api-local and worker-local\n     # targets, which carry the wget and busybox probes (P57, story 7.3).\n-    environment: !override\n+    environment:\n       <<: *aws-app-config\n       ASPNETCORE_ENVIRONMENT: Production\n       OTEL_SERVICE_NAME: disputedesk-api\n",
+      "test_method": "DisputeDesk.PlatformTests.ComposeRenderTests.OverriddenService_EnvironmentAndDependsOn_AreExactlyTheOverrides",
+      "expect": "fails",
+      "note": "the api service's environment !override dropped (the worker's is unobservable, epic-8-lows.md)"
+    },
+    {
+      "patch": "diff --git a/infra/aws/compose.yml b/infra/aws/compose.yml\nindex 4976145..fdbfabc 100644\n--- a/infra/aws/compose.yml\n+++ b/infra/aws/compose.yml\n@@ -152,7 +152,7 @@ services:\n       Scalar__Enabled: \"true\"\n       Linking__OtpHmacKey: ${LINKING_OTP_HMAC_KEY:?LINKING_OTP_HMAC_KEY is required}\n       ForwardedHeaders__TrustedNetwork: 10.201.89.12/32   # the gateway alone, so no other container can spoof X-Forwarded-*\n-      ForwardedHeaders__AllowedHosts: ${APP_HOST:?APP_HOST is required}\n+      ForwardedHeaders__AllowedHosts: app.disputedesk.test\n       # The key ring in SSM Parameter Store, encrypted with the one customer-managed KMS key (AD-7).\n       DataProtection__SsmParameterPath: ${DATAPROTECTION_SSM_PATH:?DATAPROTECTION_SSM_PATH is required}\n       DataProtection__KmsKeyId: ${DATAPROTECTION_KMS_KEY_ID:?DATAPROTECTION_KMS_KEY_ID is required}\n",
+      "test_method": "DisputeDesk.PlatformTests.ComposeRenderTests.EachInput_IsReferencedWhereverItIsUsed",
+      "expect": "fails",
+      "note": "a literal host for APP_HOST (Supervisor check 5)"
+    },
+    {
+      "patch": "diff --git a/infra/aws/input-bounds.sh b/infra/aws/input-bounds.sh\nindex 924f5f2..2f95d5d 100644\n--- a/infra/aws/input-bounds.sh\n+++ b/infra/aws/input-bounds.sh\n@@ -26,7 +26,7 @@ within_bounds() {\n   local name=$1 value=$2\n   case $name in\n     APP_DB_PASSWORD | ZITADEL_DB_PASSWORD | LOGIN_SESSION_COOKIE_SECRET | GATEWAY_ORIGIN_VERIFY)\n-      [[ $value =~ ^[A-Za-z0-9]{32,128}$ ]] ;;\n+      [[ $value =~ ^[A-Za-z0-9]{32,129}$ ]] ;;\n     ZITADEL_MASTERKEY)\n       [[ $value =~ ^[A-Za-z0-9]{32}$ ]] ;;\n     ZITADEL_ADMIN_PASSWORD)\n",
+      "test_method": "DisputeDesk.PlatformTests.DeployScriptTests.Input_PastItsBound_IsRefusedBeforeDockerNamingIt",
+      "expect": "fails",
+      "note": "the password bound widened to {32,129} (Supervisor check 6)"
+    },
+    {
+      "patch": "diff --git a/infra/aws/new.test.sh b/infra/aws/new.test.sh\nnew file mode 100644\nindex 0000000..f1f641a\n--- /dev/null\n+++ b/infra/aws/new.test.sh\n@@ -0,0 +1 @@\n+#!/usr/bin/env bash\n",
+      "test_method": "DisputeDesk.PlatformTests.ShellHarnessTests.Infra_HoldsNoShellTestHarness",
+      "expect": "fails",
+      "note": "a new infra/aws/new.test.sh (Supervisor check 7)"
+    },
+    {
+      "patch": "diff --git a/infra/aws/input-bounds.sh b/infra/aws/input-bounds.sh\nindex 924f5f2..c339244 100644\n--- a/infra/aws/input-bounds.sh\n+++ b/infra/aws/input-bounds.sh\n@@ -44,7 +44,7 @@ within_bounds() {\n     OTEL_LOG_GROUP)\n       # CloudWatch Logs' log group name rules: 1 to 512 of these characters (a length test, because 512 is over the\n       # largest repeat count POSIX regular expressions must support).\n-      (( ${#value} <= 512 )) && [[ $value =~ ^[A-Za-z0-9_./#-]+$ ]] ;;\n+      (( ${#value} >= 2 && ${#value} <= 512 )) && [[ $value =~ ^[A-Za-z0-9_./#-]+$ ]] ;;\n     DATAPROTECTION_SSM_PATH)\n       # Starts with / and has no trailing /, as DataProtection:SsmParameterPath's validation requires.\n       [[ $value =~ ^(/[A-Za-z0-9_.-]+)+$ ]] ;;\n",
+      "test_method": "DisputeDesk.PlatformTests.DeployScriptTests.Input_AtItsBound_IsAccepted",
+      "expect": "fails",
+      "note": "new, item 2: the 1-character log group refused; run this round: 1 of 25 failed, the OTEL_LOG_GROUP 'a' row"
+    },
+    {
+      "patch": "diff --git a/infra/aws/deploy.sh b/infra/aws/deploy.sh\nindex e590f7d..cda09f1 100755\n--- a/infra/aws/deploy.sh\n+++ b/infra/aws/deploy.sh\n@@ -65,7 +65,7 @@ done\n \n # Every value is checked, in input-bounds.sh's order, before anything is written or started.\n for name in \"${AWS_INPUTS[@]}\"; do\n-  [ -n \"${!name}\" ] || fail \"$name is missing\"\n+  [ -n \"${!name}\" ] || [ \"$name\" = OTEL_LOG_GROUP ] || fail \"$name is missing\"\n   within_bounds \"$name\" \"${!name}\" || fail \"$name is outside its bound\"\n done\n [ -n \"$QA_DB_PASSWORD\" ] || fail \"QA_DB_PASSWORD is missing\"\ndiff --git a/infra/aws/input-bounds.sh b/infra/aws/input-bounds.sh\nindex 924f5f2..01e4b47 100644\n--- a/infra/aws/input-bounds.sh\n+++ b/infra/aws/input-bounds.sh\n@@ -44,7 +44,7 @@ within_bounds() {\n     OTEL_LOG_GROUP)\n       # CloudWatch Logs' log group name rules: 1 to 512 of these characters (a length test, because 512 is over the\n       # largest repeat count POSIX regular expressions must support).\n-      (( ${#value} <= 512 )) && [[ $value =~ ^[A-Za-z0-9_./#-]+$ ]] ;;\n+      (( ${#value} <= 512 )) && [[ $value =~ ^[A-Za-z0-9_./#-]*$ ]] ;;\n     DATAPROTECTION_SSM_PATH)\n       # Starts with / and has no trailing /, as DataProtection:SsmParameterPath's validation requires.\n       [[ $value =~ ^(/[A-Za-z0-9_.-]+)+$ ]] ;;\n",
+      "test_method": "DisputeDesk.PlatformTests.DeployScriptTests.EmptyLogGroup_IsRefusedBeforeDockerAsMissing",
+      "expect": "fails",
+      "note": "new, item 2: an empty log group accepted; run this round: failed, the deploy exited 0"
+    },
+    {
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/DatabaseInitTests.cs b/infra/tests/DisputeDesk.PlatformTests/DatabaseInitTests.cs\nindex a5fc2b6..041ff98 100644\n--- a/infra/tests/DisputeDesk.PlatformTests/DatabaseInitTests.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/DatabaseInitTests.cs\n@@ -32,7 +32,10 @@ public sealed class DatabaseInitTests(DatabaseInitFixture database) : IClassFixt\n         Assert.Equal(\"{}\", ports.Output.Trim());\n         Assert.Equal(\"t\", postgresHasNoPassword);\n         // dbmaster as created, before any init: CREATEDB and CREATEROLE; not superuser, REPLICATION or BYPASSRLS; no role memberships.\n-        Assert.Equal(\"f|f|f|t|t|0\", database.MasterShape);\n+        Assert.Equal(\"f|f|f|t|t|0\", await database.SqlAsync(\"postgres\", \"\"\"\n+            SELECT rolsuper, rolreplication, rolbypassrls, rolcreatedb, rolcreaterole,\n+              (SELECT count(*) FROM pg_auth_members WHERE member = r.oid) FROM pg_roles r WHERE rolname = 'dbmaster'\n+            \"\"\"));\n     }\n \n     [Fact]\n",
+      "test_method": "DisputeDesk.PlatformTests.DatabaseInitTests.*",
+      "expect": "fails",
+      "note": "new, item 1: undoes the fix (the test reads the live membership count again). Run with the whole class, whose order puts FirstThenLater first; run this round: Server_IsShapedLikeRdsWithNoHostPort failed, Actual f|f|f|t|t|6, 1 of 6. Needs Docker and the stack lock. A filter naming only Server_IsShapedLikeRdsWithNoHostPort runs it alone and passes, so use the class wildcard."
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/8.8-platform.trx"
+    ],
+    "scope": "infra/tests DisputeDesk.PlatformTests, the whole project (GatewayTests included), under scripts/test-lock.sh run stack 8.8: 319 total, 319 passed, 0 failed, 0 skipped",
+    "proof_files": [
+      "TestResults/order/default-order-before-fix.trx",
+      "TestResults/order/default-order-after-fix.trx",
+      "TestResults/order/reversed-order-after-fix.trx",
+      "TestResults/breaks/break13-class.trx"
+    ],
+    "diff_hash": "ae6859bb02a1",
+    "diff_hash_base": "0177b43 (HEAD)"
+  },
+  "assumptions": [
+    "Item 1 takes the fix list's second option (record the shape once in the fixture before any test runs) rather than weakening the assertion: the membership count stays in the check, so a master created with a role membership still fails it.",
+    "Item 2: the empty OTEL_LOG_GROUP is a fact of its own because deploy.sh names an empty input 'missing', not 'outside its bound'; adding a message branch to the PastTheirBounds theory would be a conditional in the test.",
+    "Breaks 1 to 10 are round 1's breaks regenerated as git diff patches against this tree and checked with git apply --check; they were not re-run this round (the verifier ran all ten in round 1 and each failed, and this round changes none of the files they patch or the tests they name). Breaks 11 to 13 were run this round and each failed its test.",
+    "Break 13 patches a test file, because item 1's behaviour is the test's independence of order; there is no production line to break for it.",
+    "The disputedesk-gateway:aws-test, :local-test and disputedesk-spa:aws-test, :local-test images are GatewayFixture's fixed tags, rebuilt and kept by every run as before this story; they were left in place. No container or network of the test fixtures is left; the Compose stack's containers present on the daemon were already stopped and are not this lane's.",
+    "The guard blocks writes to the scratchpad, so the break patches and proof TRX files sit in the worktree's TestResults/ (gitignored, and left out of the diff hash)."
+  ],
+  "open_questions": [],
+  "conflicts": [
+    "The fix list's 'xUnit v3 --method filters' cannot set an order by themselves: a filter selects methods, and xUnit 4.0.2 runs them in DefaultTestMethodOrderer's stable order whatever the filter or seed. The reversed order needed a throwaway ITestMethodOrderer (order_proof). scripts/run-breaks.sh still has no path for infra/tests (epic-8-lows.md), so breaks 6 and 13 need the stack lock and a manual run."
+  ]
+}

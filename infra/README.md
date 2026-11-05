@@ -24,7 +24,7 @@ stack, whichever worktree started it. Run it only under the `stack` lock.
 
 Redpanda Console (topics, messages and consumer groups in a browser) is optional and local only. It sits in the
 `console` Compose profile, so it adds a container only when asked: a plain `docker compose up` never starts it, and
-the AWS deploy never enables the profile (`infra/aws/check-compose.sh` and `infra/aws/deploy.test.sh` fail if either
+the AWS deploy never enables the profile (`ComposeRenderTests` and `DeployScriptTests` in `infra/tests` fail if either
 would). It has no sign-in and listens on loopback only.
 
 ```sh
@@ -51,24 +51,25 @@ A second stack beside this one (another worktree or a throwaway copy) sets anoth
 | `zitadel/provision/` | One-shot, idempotent provisioner (`provision.sh`: project, roles, BFF app, operations machine user, fixture logins) and its read-only check of facts invisible from outside (`verify.sh`). |
 | `probe/` | The Aspire dashboard image plus a static `wget` so Compose can healthcheck it (the api gets the same probe from the `api-local` stage in `backend/Dockerfile`). |
 | `smoke.sh` | The black-box smoke check through the gateway: the stack is up and wired (the real Api's Scalar page, Zitadel's headers merged with the gateway's, provisioning, Postgres, Redpanda, Mailpit, the dashboard); every check fails the run. The gateway's own headers are `tests/`'s. |
-| `aws/` | The AWS deploy and its offline checks (`compose.yml`, the AWS override merged onto the root `docker-compose.yml`, AD-28): `deploy.sh` runs on the instance through SSM (writes `.env`, fetches the RDS CA bundle, runs the database init on first deploy, blocks container access to instance metadata, starts Compose); `input-bounds.sh` holds each input's bound, shared with the deploy script; `deploy.test.sh` runs `deploy.sh` with its external commands stubbed; `rds-init.test.sh` runs it unchanged against a throwaway PostgreSQL 18 with TLS and a non-superuser master (story 7.17); `check-compose.sh` renders the override with the dummy inputs in `compose.test.env` and checks it and the collector config; `test-realip.conf` is the trusted range the gateway tests in `tests/` mount. |
+| `aws/` | The AWS deploy and its offline checks (`compose.yml`, the AWS override merged onto the root `docker-compose.yml`, AD-28): `deploy.sh` runs on the instance through SSM (writes `.env`, fetches the RDS CA bundle, runs the database init on first deploy, blocks container access to instance metadata, starts Compose); `input-bounds.sh` holds each input's bound, shared with the deploy script; `compose.test.env` holds a dummy value for each input, for the tests in `tests/`; `test-realip.conf` is the trusted range the gateway tests in `tests/` mount. |
 | `terraform/` | The AWS dev environment (never applied: there is no account): `bootstrap/` (the state bucket), `envs/dev/` with its mocked-provider tests (`tests/`, and `tests-oidc/` for the deploy role's GitHub subject, story 7.15), the modules (network, compute, database, edge, observability, deploy-role, budget), and `iam-names.test.sh`, which checks every IAM name against AWS's public service reference (story 7.16). See `terraform/README.md`. |
 | `nginx/templates-aws/` | The AWS gateway's config, selected by `NGINX_ENVSUBST_TEMPLATE_DIR`: three server blocks (app, identity, Mailpit), each refusing requests without CloudFront's origin-verify header, with the client address and scheme from CloudFront's headers. |
 | `otel-collector/` | The OpenTelemetry Collector config in AWS: OTLP in from the Api and the Worker, traces to X-Ray, logs and metrics to CloudWatch (AD-29). |
-| `tests/` | `DisputeDesk.PlatformTests`, the xUnit tests of the provisioner and the gateway (ad-011): `GatewayTests` builds both gateway images and checks their responses and what each upstream receives on a throwaway Docker network (stories 7.4 and 7.12), the one place the gateway's own headers are checked; `PlatformScriptTests` runs the provisioning scripts with a stub `curl`, curls `provision.sh`'s retry options against an in-process stand-in for Zitadel, reads the Compose model from `docker compose config`, and reads a file only where no run can show the property. A standalone project with its own `global.json` (the SDK and Microsoft.Testing.Platform) and `.editorconfig`; nothing under `backend/` is referenced. CI's `platform` job runs it. |
+| `tests/` | `DisputeDesk.PlatformTests`, the xUnit tests of infra/'s files (ad-011): `GatewayTests` builds both gateway images and checks their responses and what each upstream receives on a throwaway Docker network (stories 7.4 and 7.12), the one place the gateway's own headers are checked; `ComposeRenderTests` renders the AWS override with the dummy inputs in `aws/compose.test.env` and checks the model and the collector config (story 7.4); `DeployScriptTests` runs `aws/deploy.sh` in a throwaway copy with its external commands stubbed (`PathStubs`), and tests each input's bound once (story 7.5); `DatabaseInitTests` runs it unchanged against a throwaway PostgreSQL 18 with TLS and a non-superuser master (story 7.17); `ShellHarnessTests` keeps shell test harnesses out of `infra/`; `PlatformScriptTests` runs the provisioning scripts with a stub `curl`, curls `provision.sh`'s retry options against an in-process stand-in for Zitadel, reads the Compose model from `docker compose config`, and reads a file only where no run can show the property. A standalone project with its own `global.json` (the SDK and Microsoft.Testing.Platform) and `.editorconfig`; nothing under `backend/` is referenced. CI's `platform` job runs it. |
 
 ## Tests
 
 The infra tests need the .NET SDK pinned in `tests/global.json`, plus `bash`, `curl`, `jq` and Docker with Compose
-v5.6.1 (as CI installs it). The gateway tests start containers on the shared Docker daemon, so run them under the
-`stack` lock; they bind no host port. Run them from `infra/tests`, where `dotnet` finds that `global.json`:
+v5.6.1 (as CI installs it; the Compose render is authoritative only on that version), and `openssl`. The gateway and
+database-init tests start containers on the shared Docker daemon, so run them under the `stack` lock; they bind no host
+port. Run them from `infra/tests`, where `dotnet` finds that `global.json`:
 
 ```sh
 scripts/test-lock.sh run stack <owner> -- bash -c 'cd infra/tests && dotnet test --project DisputeDesk.PlatformTests'
 ```
 
-The shell tests of the AWS deploy (`aws/*.test.sh`) and of the IAM names (`terraform/iam-names.test.sh`) run on their
-own; see the folder table above.
+The shell test of the IAM names (`terraform/iam-names.test.sh`) runs on its own until story 8.16 moves it here; see the
+folder table above.
 
 ## Credentials
 
