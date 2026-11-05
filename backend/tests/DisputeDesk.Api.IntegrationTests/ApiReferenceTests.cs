@@ -94,7 +94,7 @@ public partial class ApiReferenceTests(PostgresFixture postgres)
         {
             ["Zitadel:Issuer"] = "https://issuer-other.invalid",
             ["Zitadel:ProjectId"] = "project-other",
-            ["Operations:Actors:ops-tool-other"] = "operations",
+            ["Operations:AllowedClients:0"] = "ops-tool-other",
         };
         await using ApiFactory first = Production("true");
         await using var second = new ApiFactory(postgres.ConnectionString, "Production", settings: other);

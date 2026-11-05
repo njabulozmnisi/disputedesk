@@ -4,8 +4,8 @@ namespace DisputeDesk.Application.Abstractions;
 
 /// <summary>
 /// The operations actor a request acts as (AD-9, AD-10). Scoped, one per request. The operations policies' actor
-/// handler in the Api sets it from <c>Operations:Actors</c> by the token's <c>sub</c> before an operations route runs;
-/// handlers read only this, never the request or the token. It is recorded, never used to decide.
+/// handler in the Api sets it from the token's <c>sub</c>, when <c>Operations:AllowedClients</c> lists it, before an
+/// operations route runs; handlers read only this, never the request or the token. It is recorded, never used to decide.
 /// </summary>
 public sealed class CurrentOperationsActor
 {

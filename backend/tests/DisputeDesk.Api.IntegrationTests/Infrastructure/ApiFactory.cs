@@ -38,7 +38,7 @@ public sealed class ApiFactory(
         ["Zitadel:WebApp:ClientId"] = FakeZitadel.ClientId,
         ["Zitadel:WebApp:ClientSecret"] = FakeZitadel.ClientSecret,
         ["Zitadel:ProjectId"] = FakeZitadel.ProjectId,
-        [$"Operations:Actors:{FakeZitadel.OperationsSub}"] = "operations",
+        ["Operations:AllowedClients:0"] = FakeZitadel.OperationsSub,
         ["Authentication:SessionCookie:Name"] = SessionCookieName,
         ["Authentication:AntiforgeryCookie:Name"] = AntiforgeryCookieName,
         ["Authentication:CorrelationCookie:Name"] = CorrelationCookieName,
