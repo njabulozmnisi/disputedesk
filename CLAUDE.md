@@ -6,7 +6,7 @@ Every rule is in AGENTS.md. This file adds only how Claude Code carries those ru
 
 ## Supervisor
 
-The main session is the supervisor (AGENTS.md, Roles). The guard hook (`.claude/hooks/guard.py`) enforces the role: it blocks the supervisor from writing production or test code, limits each agent's writes to its paths, and turns every `git commit`, `push` and `merge` into a permission prompt. `.claude/hooks/status_contract.py` checks that every pipeline agent ends with the status contract.
+The main session is the supervisor (AGENTS.md, Roles). The guard hook (`.claude/hooks/guard.py`) enforces the role: it blocks the supervisor from writing production or test code, limits each agent's writes to its paths, keeps pipeline agents from committing, pushing or merging, and turns only actions on a deployed environment (`terraform apply`, `destroy` and `import`, any `aws` call, and a deploy) into a permission prompt. `.claude/hooks/status_contract.py` checks that every pipeline agent ends with the status contract.
 
 ## Agents and skills
 
