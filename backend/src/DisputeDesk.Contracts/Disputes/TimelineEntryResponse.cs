@@ -1,3 +1,5 @@
+using DisputeDesk.Domain.Disputes;
+
 namespace DisputeDesk.Contracts.Disputes;
 
 /// <summary>One timeline entry as the customer sees it: the action, the status it led to, who acted, when, and any note meant for the customer.</summary>

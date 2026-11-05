@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Contracts.Json;
+using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Api.IntegrationTests;
 

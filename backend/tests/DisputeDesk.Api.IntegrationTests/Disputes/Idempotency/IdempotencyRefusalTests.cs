@@ -6,6 +6,7 @@ using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Application.Disputes.RaiseDispute;
 using DisputeDesk.Contracts.Disputes;
+using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -53,7 +54,7 @@ public class IdempotencyRefusalTests(PostgresFixture postgres, TransactionsStub 
         string key = DisputesApi.NewKey();
 
         HttpResponseMessage original = await browser.RaiseWithKeyAsync(DisputesApi.Body(reason: "duplicateCharge"), key);
-        await factory.SetStatusAsync(Domain.Disputes.DisputeStatus.Resolved);
+        await factory.SetStatusAsync(DisputeStatus.Resolved);
         HttpResponseMessage replay = await browser.RaiseWithKeyAsync(DisputesApi.Body(reason: "duplicateCharge"), key);
 
         Assert.Equal(HttpStatusCode.Conflict, original.StatusCode);

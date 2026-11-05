@@ -1,4 +1,5 @@
 using DisputeDesk.Contracts.Disputes;
+using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Api.IntegrationTests.Disputes;
 

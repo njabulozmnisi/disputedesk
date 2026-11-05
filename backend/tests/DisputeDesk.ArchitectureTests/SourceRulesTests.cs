@@ -66,6 +66,54 @@ public class SourceRulesTests
         Assert.NotEmpty(AutomationActorTypes(Path.Combine(SourceRoot, "DisputeDesk.Worker", "Sla", "SlaSweep.cs")));
     }
 
+    /// <summary>
+    /// AD-1: the enums identical on the wire exist once, in Domain, so the backend names them through
+    /// their namespace's <c>using</c>, never qualified. The one exception is <c>RaiseDisputeRequest</c>, where the
+    /// property <c>Reason</c> hides the type of the same name.
+    /// </summary>
+    [Fact]
+    public void BackendSource_EnumIdenticalOnTheWire_IsNeverNamespaceQualified()
+    {
+        var violations = new[] { SourceRoots.Src, SourceRoots.Tests, SourceRoots.Stubs }
+            .SelectMany(root => Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+            .Where(file => !SourceRoots.IsBuildOutput(file) && file != RaiseDisputeRequestFile)
+            .SelectMany(QualifiedEnumsIdenticalOnTheWire)
+            .Select(node => SourceTrees.Describe(node.GetLocation()))
+            .ToList();
+
+        Assert.True(violations.Count == 0, "Qualified names of an enum identical on the wire:\n" + string.Join('\n', violations));
+    }
+
+    [Fact]
+    public void BackendSource_EnumIdenticalOnTheWire_QualifiedIsFoundInRaiseDisputeRequest()
+    {
+        // Proves the scan finds the one qualified name the rule exempts, so an empty violation list is not a scan that found nothing.
+        Assert.NotEmpty(QualifiedEnumsIdenticalOnTheWire(RaiseDisputeRequestFile));
+    }
+
+    private static readonly string[] EnumsIdenticalOnTheWire =
+    [
+        "Outcome", "DisputeAction", "Reason", "ActorType", "DisputeStatus",
+        "TransactionKind", "NotDisputableReason", "TransactionDirection", "TransactionState",
+    ];
+
+    private static string RaiseDisputeRequestFile => Path.Combine(SourceRoot, "DisputeDesk.Contracts", "Disputes", "RaiseDisputeRequest.cs");
+
+    /// <summary>
+    /// Each name of one of the nine enums written after its namespace, <c>Disputes.Reason</c> or
+    /// <c>Domain.Transactions.TransactionKind</c>: a qualified name, or a member access in an expression.
+    /// </summary>
+    private static IEnumerable<SyntaxNode> QualifiedEnumsIdenticalOnTheWire(string file) =>
+        SourceTrees.Root(file).DescendantNodes().Where(node => node switch
+        {
+            QualifiedNameSyntax name => IsEnumIdenticalOnTheWire(name.Right.Identifier.ValueText, name.Left),
+            MemberAccessExpressionSyntax access => IsEnumIdenticalOnTheWire(access.Name.Identifier.ValueText, access.Expression),
+            _ => false,
+        });
+
+    private static bool IsEnumIdenticalOnTheWire(string name, SyntaxNode qualifier) =>
+        EnumsIdenticalOnTheWire.Contains(name) && SourceTrees.LastName(qualifier) is "Disputes" or "Transactions";
+
     private static IEnumerable<SyntaxTrivia> LineComments(string file) =>
         SourceTrees.Root(file).DescendantTrivia().Where(trivia => trivia.IsKind(SyntaxKind.SingleLineCommentTrivia));
 

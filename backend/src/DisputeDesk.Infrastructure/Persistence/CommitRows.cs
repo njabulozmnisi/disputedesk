@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using DisputeDesk.Application.Disputes;
 using DisputeDesk.Contracts.Events;
 using DisputeDesk.Contracts.Json;
 using DisputeDesk.Domain.Disputes;
@@ -24,29 +23,29 @@ internal static class CommitRows
             id,
             raised,
             DisputeEvents.RaisedV1,
-            new DisputeRaisedV1(raised.DisputeId, DisputeWire.ToWire(raised.Reason), DisputeWire.ToWire(raised.ToStatus), Utc(raised), raised.Version),
+            new DisputeRaisedV1(raised.DisputeId, raised.Reason, raised.ToStatus, Utc(raised), raised.Version),
             activity),
-        ReviewStarted started => StatusChanged(id, started, started.FromStatus, started.ToStatus, Contracts.Disputes.DisputeAction.StartReview, outcome: null, activity),
-        DisputeEscalated escalated => StatusChanged(id, escalated, escalated.FromStatus, escalated.ToStatus, Contracts.Disputes.DisputeAction.Escalate, outcome: null, activity),
-        DisputeResolved resolved => StatusChanged(id, resolved, resolved.FromStatus, resolved.ToStatus, Contracts.Disputes.DisputeAction.Resolve, DisputeWire.ToWire(resolved.Outcome), activity),
-        DisputeWithdrawn withdrawn => StatusChanged(id, withdrawn, withdrawn.FromStatus, withdrawn.ToStatus, Contracts.Disputes.DisputeAction.Withdraw, outcome: null, activity),
+        ReviewStarted started => StatusChanged(id, started, started.FromStatus, started.ToStatus, DisputeAction.StartReview, outcome: null, activity),
+        DisputeEscalated escalated => StatusChanged(id, escalated, escalated.FromStatus, escalated.ToStatus, DisputeAction.Escalate, outcome: null, activity),
+        DisputeResolved resolved => StatusChanged(id, resolved, resolved.FromStatus, resolved.ToStatus, DisputeAction.Resolve, resolved.Outcome, activity),
+        DisputeWithdrawn withdrawn => StatusChanged(id, withdrawn, withdrawn.FromStatus, withdrawn.ToStatus, DisputeAction.Withdraw, outcome: null, activity),
         // For operations only: never published (AD-18).
         SlaWarningRaised => null,
         _ => throw new ArgumentOutOfRangeException(nameof(storedEvent), storedEvent.GetType().Name, "No publish mapping for this stored event type."),
     };
 
     private static OutboxMessage StatusChanged(
-        Guid id, StoredEvent storedEvent, DisputeStatus from, DisputeStatus to, Contracts.Disputes.DisputeAction action, Contracts.Disputes.Outcome? outcome, Activity? activity) =>
+        Guid id, StoredEvent storedEvent, DisputeStatus from, DisputeStatus to, DisputeAction action, Outcome? outcome, Activity? activity) =>
         Message(
             id,
             storedEvent,
             DisputeEvents.StatusChangedV1,
             new DisputeStatusChangedV1(
                 storedEvent.DisputeId,
-                DisputeWire.ToWire(from),
-                DisputeWire.ToWire(to),
+                from,
+                to,
                 action,
-                DisputeWire.ToWire(storedEvent.ActorType),
+                storedEvent.ActorType,
                 outcome,
                 Utc(storedEvent),
                 storedEvent.Version),

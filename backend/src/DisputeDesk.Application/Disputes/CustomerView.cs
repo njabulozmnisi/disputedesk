@@ -1,3 +1,4 @@
+using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Application.Disputes;
@@ -9,11 +10,11 @@ namespace DisputeDesk.Application.Disputes;
 /// </summary>
 public static class CustomerView
 {
-    public static Contracts.Disputes.DisputeResponse ToResponse(Dispute dispute, IEnumerable<StoredEvent> storedEvents) => new(
+    public static DisputeResponse ToResponse(Dispute dispute, IEnumerable<StoredEvent> storedEvents) => new(
         dispute.Id,
         DisputeWire.ToCustomerStatus(dispute.Status),
-        dispute.Outcome is Outcome outcome ? DisputeWire.ToWire(outcome) : null,
-        DisputeWire.ToWire(dispute.Reason),
+        dispute.Outcome,
+        dispute.Reason,
         dispute.Note,
         ToSnapshot(dispute),
         dispute.ExpectedAmount is decimal expected ? DisputeWire.ToMoney(expected, dispute.Currency) : null,
@@ -22,24 +23,24 @@ public static class CustomerView
         ToTimeline(storedEvents));
 
     /// <summary>One row of the history list: the same fields as <see cref="ToResponse"/>, without the note, expected amount or timeline.</summary>
-    public static Contracts.Disputes.DisputeSummaryResponse ToSummary(Dispute dispute) => new(
+    public static DisputeSummaryResponse ToSummary(Dispute dispute) => new(
         dispute.Id,
         DisputeWire.ToCustomerStatus(dispute.Status),
-        dispute.Outcome is Outcome outcome ? DisputeWire.ToWire(outcome) : null,
-        DisputeWire.ToWire(dispute.Reason),
+        dispute.Outcome,
+        dispute.Reason,
         ToSnapshot(dispute),
         DisputeWire.ToMoney(dispute.DisputedAmount, dispute.Currency),
         dispute.CreatedAtUtc);
 
     /// <summary>The customer's timeline: one entry for each stored event the allowlist admits, in stream order.</summary>
-    public static IReadOnlyList<Contracts.Disputes.TimelineEntryResponse> ToTimeline(IEnumerable<StoredEvent> storedEvents) =>
-        [.. storedEvents.Select(ToTimelineEntry).OfType<Contracts.Disputes.TimelineEntryResponse>()];
+    public static IReadOnlyList<TimelineEntryResponse> ToTimeline(IEnumerable<StoredEvent> storedEvents) =>
+        [.. storedEvents.Select(ToTimelineEntry).OfType<TimelineEntryResponse>()];
 
     /// <summary>
     /// The allowlist (AD-13; OWASP Authorization Cheat Sheet, deny by default): a type test admits exactly the five
     /// lifecycle types. Every other type, <see cref="SlaWarningRaised"/> and any type added later, gives no entry.
     /// </summary>
-    private static Contracts.Disputes.TimelineEntryResponse? ToTimelineEntry(StoredEvent storedEvent) => storedEvent switch
+    private static TimelineEntryResponse? ToTimelineEntry(StoredEvent storedEvent) => storedEvent switch
     {
         DisputeRaised raised => Entry(raised, DisputeAction.Raise, raised.ToStatus, raised.Note),
         ReviewStarted started => Entry(started, DisputeAction.StartReview, started.ToStatus, note: null),
@@ -49,14 +50,14 @@ public static class CustomerView
         _ => null,
     };
 
-    private static Contracts.Disputes.TimelineEntryResponse Entry(StoredEvent storedEvent, DisputeAction action, DisputeStatus toStatus, string? note) => new(
-        DisputeWire.ToWire(action),
+    private static TimelineEntryResponse Entry(StoredEvent storedEvent, DisputeAction action, DisputeStatus toStatus, string? note) => new(
+        action,
         DisputeWire.ToCustomerStatus(toStatus),
         DisputeWire.ToTimelineActor(storedEvent.ActorType),
         storedEvent.OccurredAtUtc,
         note);
 
-    private static Contracts.Disputes.TransactionSnapshotResponse ToSnapshot(Dispute dispute) => new(
+    private static TransactionSnapshotResponse ToSnapshot(Dispute dispute) => new(
         dispute.TransactionId,
         dispute.AccountRef,
         dispute.AccountLast4,

@@ -31,12 +31,27 @@ public class LayerTests
         AssertReferencesNone(DomainAssembly, forbidden);
     }
 
+    /// <summary>Contracts uses the Domain enums that are identical on the wire (AD-1, D14b), and no other solution assembly.</summary>
     [Fact]
-    public void ContractsAssembly_References_NoOtherSolutionAssembly()
+    public void ContractsAssembly_References_OnlyDomainOfTheSolution()
     {
-        IEnumerable<string> forbidden = SolutionAssemblies.Where(assembly => assembly != ContractsAssembly).Select(NameOf);
+        IEnumerable<string> solutionNames = SolutionAssemblies.Select(NameOf);
 
-        AssertReferencesNone(ContractsAssembly, forbidden);
+        IEnumerable<string> referenced = ReferencedNames(ContractsAssembly).Intersect(solutionNames, StringComparer.Ordinal);
+
+        Assert.Equal([NameOf(DomainAssembly)], referenced);
+    }
+
+    /// <summary>
+    /// The enums identical on the wire exist once, in Domain (D14b). Contracts keeps only the two customer-view enums,
+    /// whose members differ from Domain's, and the four enums with no Domain twin.
+    /// </summary>
+    [Fact]
+    public void ContractsAssembly_Enums_AreOnlyThoseWithNoIdenticalDomainTwin()
+    {
+        IEnumerable<string> enums = ContractsAssembly.GetTypes().Where(type => type.IsEnum).Select(type => type.Name).Order(StringComparer.Ordinal);
+
+        Assert.Equal(["AuditAction", "AuditResult", "CustomerStatus", "SessionState", "StoredEventType", "TimelineActor"], enums);
     }
 
     [Fact]

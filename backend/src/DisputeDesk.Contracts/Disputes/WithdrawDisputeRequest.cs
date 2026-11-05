@@ -12,7 +12,7 @@ namespace DisputeDesk.Contracts.Disputes;
 /// </param>
 public sealed record WithdrawDisputeRequest(string? Note = null) : IValidatableObject
 {
-    /// <summary>The same limit as <c>Dispute.WithdrawNoteMaxLength</c>, which Contracts cannot reference (AD-1).</summary>
+    /// <summary>The same limit as <c>Dispute.WithdrawNoteMaxLength</c>; Contracts uses Domain only for the enums identical on the wire (AD-1).</summary>
     public const int NoteMaxLength = 500;
 
     /// <summary>

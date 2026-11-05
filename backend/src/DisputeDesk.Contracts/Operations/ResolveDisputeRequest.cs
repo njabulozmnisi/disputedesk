@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using DisputeDesk.Contracts.Disputes;
+using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Contracts.Operations;
 
@@ -20,7 +20,7 @@ public sealed record ResolveDisputeRequest(
     [property: Required(ErrorMessage = "An outcome is required: upheld or rejected.")] Outcome? Outcome,
     [property: Required(ErrorMessage = ResolveDisputeRequest.NoteInvalid)] string? Note) : IValidatableObject
 {
-    /// <summary>The same limit as <c>Dispute.ResolveNoteMaxLength</c>, which Contracts cannot reference (AD-1).</summary>
+    /// <summary>The same limit as <c>Dispute.ResolveNoteMaxLength</c>; Contracts uses Domain only for the enums identical on the wire (AD-1).</summary>
     public const int NoteMaxLength = 500;
 
     private const string NoteInvalid = "A note of 1 to 500 characters after trimming is required.";

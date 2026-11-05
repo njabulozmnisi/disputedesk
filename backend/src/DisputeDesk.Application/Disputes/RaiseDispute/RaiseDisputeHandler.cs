@@ -3,6 +3,7 @@ using System.Text.Json;
 using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Application.Audit;
 using DisputeDesk.Contracts.Audit;
+using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Contracts.Json;
 using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
@@ -25,12 +26,12 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
     /// built before the one save and stored on the key, so the dispute and the completed key commit together or not at
     /// all; a lease lost to a take-over makes that save throw <see cref="DbUpdateConcurrencyException"/> and roll back.
     /// </summary>
-    public async Task<Result<Contracts.Disputes.DisputeResponse>> HandleAsync(Contracts.Disputes.RaiseDisputeRequest request, IdempotencyKey key, CancellationToken cancellationToken)
+    public async Task<Result<DisputeResponse>> HandleAsync(RaiseDisputeRequest request, IdempotencyKey key, CancellationToken cancellationToken)
     {
         // The one clock reading (AD-4), cut to the whole microseconds a Postgres timestamptz keeps, so the row, the
         // stored event, the outbox row, the 201 and the CloudEvent time all hold the same instant.
         DateTimeOffset now = Instants.ToWholeMicroseconds(time.GetUtcNow());
-        Reason reason = DisputeWire.ToDomain(request.Reason ?? throw new ArgumentException("Built-in validation requires a reason.", nameof(request)));
+        Reason reason = request.Reason ?? throw new ArgumentException("Built-in validation requires a reason.", nameof(request));
 
         Result<Transaction> found = await coreBanking.GetTransactionAsync(
             currentCustomer.CustomerId, request.AccountRef, request.TransactionId, cancellationToken);
@@ -67,8 +68,8 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
         }
 
         // A new dispute's stream is the one stored event the raise appended.
-        Contracts.Disputes.DisputeResponse response = CustomerView.ToResponse(raised.Value, raised.Value.PendingChanges);
-        key.CompleteCreated(JsonSerializer.Serialize(response, DisputeDeskJson.Options), Contracts.Disputes.DisputeRoutes.DetailPath(response.DisputeId));
+        DisputeResponse response = CustomerView.ToResponse(raised.Value, raised.Value.PendingChanges);
+        key.CompleteCreated(JsonSerializer.Serialize(response, DisputeDeskJson.Options), DisputeRoutes.DetailPath(response.DisputeId));
         db.Entities<Dispute>().Add(raised.Value);
         try
         {
@@ -93,7 +94,7 @@ public sealed class RaiseDisputeHandler(IAppDbContext db, CurrentCustomer curren
     /// Audits the refusal as <c>Rejected</c> through <see cref="AuditLog.Record"/> (AD-14a), saves it and returns it.
     /// The Api's idempotency filter then stores the 4xx on the key in its own commit (AD-16).
     /// </summary>
-    private async Task<Result<Contracts.Disputes.DisputeResponse>> RefuseAsync(Error error, Guid? disputeId, DateTimeOffset now)
+    private async Task<Result<DisputeResponse>> RefuseAsync(Error error, Guid? disputeId, DateTimeOffset now)
     {
         AuditLog.Record(
             db, AuditAction.Raise, AuditResult.Rejected, new Actor(ActorType.Customer, currentCustomer.LoginSub), now, currentCustomer.CustomerId, disputeId);

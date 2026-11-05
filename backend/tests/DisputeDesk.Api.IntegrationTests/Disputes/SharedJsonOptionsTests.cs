@@ -2,6 +2,7 @@ using System.Text.Json;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Contracts.Json;
+using DisputeDesk.Domain.Disputes;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;

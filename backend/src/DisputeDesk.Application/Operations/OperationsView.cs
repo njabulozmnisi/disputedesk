@@ -1,4 +1,5 @@
 using DisputeDesk.Application.Disputes;
+using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Contracts.Operations;
 using DisputeDesk.Domain.Disputes;
 
@@ -14,10 +15,10 @@ public static class OperationsView
 {
     public static OperationsDisputeResponse ToResponse(Dispute dispute, IEnumerable<StoredEvent> storedEvents) => new(
         dispute.Id,
-        DisputeWire.ToWire(dispute.Status),
-        dispute.Outcome is Outcome outcome ? DisputeWire.ToWire(outcome) : null,
-        DisputeWire.ToWire(dispute.Reason),
-        new Contracts.Disputes.TransactionSnapshotResponse(
+        dispute.Status,
+        dispute.Outcome,
+        dispute.Reason,
+        new TransactionSnapshotResponse(
             dispute.TransactionId,
             dispute.AccountRef,
             dispute.AccountLast4,
@@ -48,10 +49,10 @@ public static class OperationsView
     private static OperationsTimelineEntryResponse Entry(
         StoredEvent storedEvent, StoredEventType eventType, DisputeStatus? fromStatus, DisputeStatus? toStatus, string? note) => new(
         eventType,
-        DisputeWire.ToWire(storedEvent.ActorType),
+        storedEvent.ActorType,
         storedEvent.OccurredAtUtc,
-        fromStatus is DisputeStatus from ? DisputeWire.ToWire(from) : null,
-        toStatus is DisputeStatus to ? DisputeWire.ToWire(to) : null,
+        fromStatus,
+        toStatus,
         note);
 
     // AD-4: exactly two decimals, as a string.

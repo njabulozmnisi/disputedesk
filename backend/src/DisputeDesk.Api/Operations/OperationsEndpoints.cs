@@ -153,7 +153,7 @@ public static class OperationsEndpoints
 
         OperationsDisputeResponse dispute = result.Value.Dispute;
         metrics.RecordOperationsAction(action);
-        if (action == DisputeAction.Resolve && dispute.Outcome is Contracts.Disputes.Outcome outcome)
+        if (action == DisputeAction.Resolve && dispute.Outcome is Outcome outcome)
         {
             metrics.RecordResolved(outcome, result.Value.SlaEscalated);
         }
