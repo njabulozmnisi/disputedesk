@@ -6,12 +6,12 @@
 
 | Rule | Value |
 | --- | --- |
-| Stored event types | `DisputeRaised`, `ReviewStarted`, `DisputeEscalated`, `DisputeResolved`, `DisputeWithdrawn`, `SlaWarningRaised` |
+| Stored event types | `DisputeRaised`, `ReviewStarted`, `DisputeEscalated`, `DisputeResolved`, `DisputeWithdrawn`, `SlaWarningRaised` (superseded 2026-11-03, see the note below) |
 | Loading | Replay the stream in `Version` order through `Dispute.Replay`, which uses the same `Apply` cases as the aggregate's methods (AD-13) |
 | Order and concurrency | `Version` within one dispute, unique `(DisputeId, Version)`; no order across disputes. The unique index is the only concurrency check: `Disputes` has no concurrency token, because every write to it commits with a stored event (AD-15; [EF Core: Handling concurrency conflicts](https://learn.microsoft.com/ef/core/saving/concurrency)) |
 | Immutability | Insert only: the commit refuses a Modified or Deleted stored event, as it does for the audit log |
 | Identity | Stored event ID = outbox row ID = CloudEvent `id` ([CloudEvents 1.0 `id`](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md#id)); 3.8 tests stored event ID = outbox ID, 4.1 tests published `id` = outbox ID |
-| Published | `DisputeRaised` as `disputedesk.dispute.raised.v1`; the four status changes as `disputedesk.dispute.status-changed.v1`; `SlaWarningRaised` never (no outbox row) |
+| Published | `DisputeRaised` as `disputedesk.dispute.raised.v1`; the four status changes as `disputedesk.dispute.status-changed.v1`; `SlaWarningRaised` never (no outbox row) (superseded 2026-11-03, see the note below) |
 | Privacy | `DisputeRaised` holds `CustomerId`, `AccountRef`, `TransactionId` and the transaction snapshot: same access as `Disputes`, never logged or traced, kept under NFR-DATA-7 |
 | Audit log | Keeps linking, refused or forbidden actions, operations reads (`DisputeRead`), sign-in and sign-out; no row for a successful dispute change |
 
@@ -26,3 +26,5 @@
 - *An `xmin` concurrency token on `Disputes` beside the unique index:* a second check of the same conflict.
 
 **Consequences.** A lost update is caught by the unique `(DisputeId, Version)`, and a handler that loses replays the stream again and decides once more (AD-15). Published `disputeVersion` values can skip the versions of unpublished stored events. The customer timeline reads stored events through a deny-by-default allowlist. Seeded disputes go through the same commit, so each seeded action has one stored event and one outbox row, a restart adds none, and they are published at least once like any other event (consumers deduplicate by CloudEvent `id`; wording settled 2026-10-30, story 5.4). Crypto-shredding for erasure is a production-path item.
+
+**Superseded in part, 2026-11-03 (human decision).** `SlaWarningRaised` is dropped: no journey, metric or consumer read it. The stored event types are `DisputeRaised`, `ReviewStarted`, `DisputeEscalated`, `DisputeResolved` and `DisputeWithdrawn`, and every one is published: `DisputeRaised` as `disputedesk.dispute.raised.v1` and the four status changes as `disputedesk.dispute.status-changed.v1`, so each stored event has an outbox row. The versions written for a dispute therefore have no gaps, and the version gaps named in the Trade-off and Consequences above no longer occur; delivery stays at least once (AD-17). A stored row with the old type name is an unknown type, which replay refuses; such a database is recreated (AD-22).

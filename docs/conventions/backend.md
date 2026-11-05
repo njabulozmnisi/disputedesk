@@ -11,7 +11,7 @@
 - **Results for expected failures, exceptions for the unexpected.** The hand-written `Result`/`Error` type in Domain. 400 for malformed input (built-in minimal API validation), 404 for not found or owned by another customer, 409 for an action not allowed in the current status, 422 for a well-formed request that breaks a business rule; the built-in exception handler (`UseExceptionHandler` with an `IExceptionHandler`) returns a clean 500 ProblemDetails without a stack trace.
 - **Methods returning `Task`/`ValueTask` end in `Async`** (test methods exempt).
 - **One top-level type per file.**
-- **No `using` alias directives.** Domain and Contracts deliberately share enum names (AD-14a), so a file imports one side and writes the other qualified from the `DisputeDesk` root (`Contracts.Disputes.ActorType.Customer`). An architecture test fails on any `using X = ...;`.
+- **No `using` alias directives.** An alias gives a type a second name, so the ban stays. The enums identical on the wire exist once, in Domain, and Contracts uses them (AD-1, AD-14a), so their names are written unqualified through their namespace's `using`. Only where a Contracts type and a Domain type still share a name does a file import one side and write the other qualified from the `DisputeDesk` root. An architecture test fails on any `using X = ...;`.
 - **SOLID and patterns with judgement.** No factories DI already provides. (Framework-first and the allowed interfaces are in AGENTS.md.)
 - **Actions are actor-agnostic.** A status change is a named action (`start-review`, `escalate`, `resolve`, `withdraw`) authorised by one policy per action. Who acted is recorded for audit, never used to decide.
 
