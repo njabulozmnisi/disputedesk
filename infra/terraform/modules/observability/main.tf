@@ -29,22 +29,10 @@ resource "aws_cloudwatch_log_stream" "otlp" {
 # API (CloudWatch, "Enable transaction search").
 resource "aws_cloudwatch_log_resource_policy" "transaction_search" {
   policy_name = "${var.name}-transaction-search"
-  policy_document = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Sid       = "TransactionSearchXRayAccess"
-      Effect    = "Allow"
-      Principal = { Service = "xray.amazonaws.com" }
-      Action    = "logs:PutLogEvents"
-      Resource = [
-        "arn:aws:logs:${var.aws_region}:${var.account_id}:log-group:aws/spans:*",
-        "arn:aws:logs:${var.aws_region}:${var.account_id}:log-group:/aws/application-signals/data:*",
-      ]
-      Condition = {
-        ArnLike      = { "aws:SourceArn" = "arn:aws:xray:${var.aws_region}:${var.account_id}:*" }
-        StringEquals = { "aws:SourceAccount" = var.account_id }
-      }
-    }]
+  # A JSON template whose names the infra tests' IamNamesTests check.
+  policy_document = templatefile("${path.module}/transaction-search-policy.json.tftpl", {
+    aws_region = var.aws_region
+    account_id = var.account_id
   })
 }
 

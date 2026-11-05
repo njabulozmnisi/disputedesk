@@ -115,14 +115,8 @@ resource "aws_security_group" "instance" {
 
 resource "aws_iam_role" "instance" {
   name = "${var.name}-instance"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
+  # Every IAM policy here is a JSON template whose names the infra tests' IamNamesTests check.
+  assume_role_policy = templatefile("${path.module}/trust-policy.json.tftpl", {})
 }
 
 # SSM Session Manager and Run Command, and the collector's CloudWatch and X-Ray writes (AD-29). Both are broader than
@@ -137,56 +131,20 @@ resource "aws_iam_role_policy_attachment" "managed" {
 
 # Least privilege for what the managed policies do not cover (AWS IAM, "Security best practices"; AWS KMS, "How AWS
 # Systems Manager Parameter Store uses AWS KMS"). Both paths are granted as the path itself and everything under it.
+# EncryptKeyRing: Parameter Store calls Encrypt with the parameter's ARN as encryption context, so only key-ring
+# parameters can be written. XRayOtlpSpans: the X-Ray OTLP endpoint's span upload actions, which
+# CloudWatchAgentServerPolicy (v3) does not list (Amazon CloudWatch, "OTLP endpoints", traces endpoint; Service
+# Authorization Reference, "Actions, resources, and condition keys for AWS X-Ray": PutSpans, PutSpansForIndexing, no
+# resource type).
 resource "aws_iam_role_policy" "instance" {
   name = "${var.name}-instance"
   role = aws_iam_role.instance.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "DeployParameters"
-        Effect = "Allow"
-        Action = "ssm:GetParametersByPath"
-        Resource = [
-          "${local.ssm_parameter_arn}${var.ssm_path}",
-          "${local.ssm_parameter_arn}${var.ssm_path}/*",
-        ]
-      },
-      {
-        Sid    = "DataProtectionKeyRing"
-        Effect = "Allow"
-        Action = ["ssm:GetParametersByPath", "ssm:PutParameter"]
-        Resource = [
-          "${local.ssm_parameter_arn}${var.dataprotection_ssm_path}",
-          "${local.ssm_parameter_arn}${var.dataprotection_ssm_path}/*",
-        ]
-      },
-      {
-        Sid       = "DecryptThroughSsm"
-        Effect    = "Allow"
-        Action    = "kms:Decrypt"
-        Resource  = var.kms_key_arn
-        Condition = { StringEquals = { "kms:ViaService" = "ssm.${var.aws_region}.amazonaws.com" } }
-      },
-      {
-        # Parameter Store calls Encrypt with the parameter's ARN as encryption context, so only key-ring parameters
-        # can be written.
-        Sid       = "EncryptKeyRing"
-        Effect    = "Allow"
-        Action    = "kms:Encrypt"
-        Resource  = var.kms_key_arn
-        Condition = { StringLike = { "kms:EncryptionContext:PARAMETER_ARN" = "${local.ssm_parameter_arn}${var.dataprotection_ssm_path}/*" } }
-      },
-      {
-        # The X-Ray OTLP endpoint's span upload actions, which CloudWatchAgentServerPolicy (v3) does not list (Amazon
-        # CloudWatch, "OTLP endpoints", traces endpoint; Service Authorization Reference, "Actions, resources, and
-        # condition keys for AWS X-Ray": PutSpans, PutSpansForIndexing, no resource type).
-        Sid      = "XRayOtlpSpans"
-        Effect   = "Allow"
-        Action   = ["xray:PutSpans", "xray:PutSpansForIndexing"]
-        Resource = "*"
-      },
-    ]
+  policy = templatefile("${path.module}/instance-policy.json.tftpl", {
+    ssm_parameter_arn       = local.ssm_parameter_arn
+    ssm_path                = var.ssm_path
+    dataprotection_ssm_path = var.dataprotection_ssm_path
+    kms_key_arn             = var.kms_key_arn
+    aws_region              = var.aws_region
   })
 }
 

@@ -65,19 +65,10 @@ resource "aws_iam_role" "deploy" {
   max_session_duration = 3600
 
   # Exact matches only: the audience, and the subject of a job on this repository's main branch with no environment.
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringEquals = {
-          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = local.oidc_subject
-        }
-      }
-    }]
+  # Every IAM policy here is a JSON template whose names the infra tests' IamNamesTests check.
+  assume_role_policy = templatefile("${path.module}/trust-policy.json.tftpl", {
+    provider_arn = aws_iam_openid_connect_provider.github.arn
+    subject      = local.oidc_subject
   })
 }
 
@@ -135,22 +126,9 @@ resource "aws_ssm_document" "deploy" {
 resource "aws_iam_role_policy" "deploy" {
   name = "${var.name}-deploy"
   role = aws_iam_role.deploy.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "SendDeployCommand"
-        Effect   = "Allow"
-        Action   = "ssm:SendCommand"
-        Resource = [var.instance_arn, aws_ssm_document.deploy.arn]
-      },
-      {
-        Sid      = "ReadDeployResult"
-        Effect   = "Allow"
-        Action   = ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations"]
-        Resource = "*"
-      },
-    ]
+  policy = templatefile("${path.module}/deploy-policy.json.tftpl", {
+    instance_arn = var.instance_arn
+    document_arn = aws_ssm_document.deploy.arn
   })
 }
 
