@@ -14,7 +14,10 @@
 #     header CloudFront adds (CloudFront, "Adding custom headers to origin requests"), and no upstream ever sees it.
 #   - The client address and scheme come from CloudFront's headers, trusted only from CloudFront's origin-facing ranges.
 #     As locally, every proxied location drops a client's RFC 7239 Forwarded header (Forwarded "": an empty value is not
-#     passed), because Zitadel resolves its instance from it.
+#     passed), because Zitadel resolves its instance from it. The app and identity servers set this block once, and
+#     every location that sets no proxy_set_header of its own inherits it; one that sets any inherits none (nginx,
+#     proxy_set_header: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_set_header). Only the Mailpit
+#     location sets its own.
 #   - Upstreams are resolved through Docker's DNS while running (upstream "resolve"), not once at start: provisioning
 #     reaches Zitadel through CloudFront and so through this gateway, which therefore starts before the api and the
 #     login exist.
@@ -93,6 +96,16 @@ http {
 
     include /etc/nginx/security-headers.conf;
 
+    # What every proxied location here sends upstream (see the header comment).
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host ${GATEWAY_APP_HOST};
+    proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
+    proxy_set_header X-Forwarded-Proto $forwarded_proto;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header Forwarded "";
+    proxy_set_header X-Origin-Verify "";
+
     # The gateway's own 429 as RFC 9457 problem details, with no-store, as locally (AD-3, AD-23).
     error_page 429 @rate_limited;
     location @rate_limited {
@@ -142,14 +155,6 @@ http {
       error_page 429 @rate_limited;
       error_page 413 500 502 504 @gateway_error;
       proxy_pass http://api/health/;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host ${GATEWAY_APP_HOST};
-      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
-      proxy_set_header X-Forwarded-Proto $forwarded_proto;
-      proxy_set_header X-Forwarded-For $remote_addr;
-      proxy_set_header Forwarded "";
-      proxy_set_header X-Origin-Verify "";
     }
 
     location /api/ {
@@ -157,56 +162,24 @@ http {
       error_page 429 @rate_limited;
       error_page 413 500 502 504 @gateway_error;
       proxy_pass http://api;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host ${GATEWAY_APP_HOST};
-      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
-      proxy_set_header X-Forwarded-Proto $forwarded_proto;
-      proxy_set_header X-Forwarded-For $remote_addr;
-      proxy_set_header Forwarded "";
-      proxy_set_header X-Origin-Verify "";
     }
 
     location = /scalar {
       include /etc/nginx/scalar-headers.conf;
       limit_req zone=coarse burst=20 nodelay;
       proxy_pass http://api;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host ${GATEWAY_APP_HOST};
-      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
-      proxy_set_header X-Forwarded-Proto $forwarded_proto;
-      proxy_set_header X-Forwarded-For $remote_addr;
-      proxy_set_header Forwarded "";
-      proxy_set_header X-Origin-Verify "";
     }
 
     location /scalar/ {
       include /etc/nginx/scalar-headers.conf;
       limit_req zone=coarse burst=20 nodelay;
       proxy_pass http://api;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host ${GATEWAY_APP_HOST};
-      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
-      proxy_set_header X-Forwarded-Proto $forwarded_proto;
-      proxy_set_header X-Forwarded-For $remote_addr;
-      proxy_set_header Forwarded "";
-      proxy_set_header X-Origin-Verify "";
     }
 
     location = /openapi/v1.json {
       include /etc/nginx/scalar-headers.conf;
       limit_req zone=coarse burst=20 nodelay;
       proxy_pass http://api;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host ${GATEWAY_APP_HOST};
-      proxy_set_header X-Forwarded-Host ${GATEWAY_APP_HOST};
-      proxy_set_header X-Forwarded-Proto $forwarded_proto;
-      proxy_set_header X-Forwarded-For $remote_addr;
-      proxy_set_header Forwarded "";
-      proxy_set_header X-Origin-Verify "";
     }
   }
 
@@ -225,6 +198,16 @@ http {
     # gateway's strict-origin-when-cross-origin on the 403, the 404, the 302 and discovery.
     include /etc/nginx/identity-headers.conf;
 
+    # What every proxied location here sends upstream (see the header comment).
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host ${GATEWAY_AUTH_HOST};
+    proxy_set_header X-Forwarded-Host ${GATEWAY_AUTH_HOST};
+    proxy_set_header X-Forwarded-Proto $forwarded_proto;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header Forwarded "";
+    proxy_set_header X-Origin-Verify "";
+
     # The console is an admin interface behind a password-only admin; provisioning uses the API instead (ASVS 5.0
     # V13.4). The prefix match covers /ui/console, /ui/console/ and everything below.
     location ^~ /ui/console { return 404; }
@@ -235,14 +218,6 @@ http {
     # OIDC, REST, Connect (HTTP/1.1) and assets.
     location / {
       proxy_pass http://zitadel_api;
-      proxy_http_version 1.1;
-      proxy_set_header Connection "";
-      proxy_set_header Host ${GATEWAY_AUTH_HOST};
-      proxy_set_header X-Forwarded-Host ${GATEWAY_AUTH_HOST};
-      proxy_set_header X-Forwarded-Proto $forwarded_proto;
-      proxy_set_header X-Forwarded-For $remote_addr;
-      proxy_set_header Forwarded "";
-      proxy_set_header X-Origin-Verify "";
       proxy_buffering off;
     }
   }
