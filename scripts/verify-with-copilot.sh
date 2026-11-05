@@ -18,7 +18,7 @@ Act as an independent verifier that did not write this code. Check code only.
 The work is deliberately uncommitted: treat every file in this worktree, including untracked ones, as the change under review.
 Story file: $story_file. Read it, then:
 1. Build: dotnet build backend (warnings are errors) and/or npm run build in frontend, whichever the diff touches.
-2. Run the tests: unit, integration (Testcontainers) and architecture tests; Vitest, type check and lint for the frontend; shellcheck and any infra/ test script the story names, run by its path (for example infra/deploy/aws/rds-init.test.sh, not bash infra/deploy/aws/rds-init.test.sh).
+2. Do not re-run the test suites. Read the builder's results instead: the files listed in docs/verification/$story-build.json under test_results.files (TRX, and JUnit for Vitest). A missing results file, or a failed test in one, is a failure. Then run only the checks that need no suite: dotnet format style and whitespace --verify-no-changes on the backend solution (and on infra/tests' DisputeDesk.PlatformTests when the diff touches it), npm run typecheck, lint and format for the frontend, and shellcheck on every shell script in the diff.
 3. Check OpenAPI drift: the committed backend openapi.json matches the build output.
 4. Compare the diff (git diff main...HEAD plus uncommitted changes) against each acceptance criterion. For each, name the test that proves it, or say it is unproved.
 5. Standards: list any mechanism in the diff that replaces the documented framework approach or an established industry standard (Microsoft Learn, RFCs, OWASP), with the standard it should use. Report these under "Standards"; they do not change the verdict.
