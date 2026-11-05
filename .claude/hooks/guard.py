@@ -44,12 +44,16 @@ BASH_DENY = [
     (r"docker\s+(system|volume)\s+prune", "No Docker prunes; other lanes share the daemon."),
     (rf"dotnet\s+add\s+\S*\s*package\s+({BANNED_PACKAGES})\b", "Banned package (see AGENTS.md)."),
 ]
+# Only actions that change a deployed environment ask the human (decision 2026-11-05).
 BASH_ASK = [
-    (r"\bgit\b[^;&|\n]*\s(commit|push|merge)\b|\bgh\s+pr\s+merge\b",
-     "Every commit, push and merge requires explicit approval."),
     (r"\bterraform\s+(apply|destroy|import)\b", "Infrastructure changes are irreversible: requires explicit approval."),
     (r"(^|[\s;&|])aws\s", "AWS calls require explicit approval (the target account may not exist yet)."),
+    (r"\bgh\s+workflow\s+run\s+\S*deploy|/actions/workflows/\S*deploy\S*/dispatches|\bdeploy\.sh\b",
+     "Deploying to an environment requires explicit approval."),
 ]
+# The supervisor commits; pipeline agents never commit, push or merge.
+AGENT_DENY = (r"\bgit\b[^;&|\n]*\s(commit|push|merge)\b|\bgh\s+pr\s+merge\b",
+              "Pipeline agents never commit, push or merge; the supervisor does.")
 
 
 def decide(kind: str, reason: str) -> None:
@@ -104,9 +108,11 @@ def check_bash(command: str, agent: str | None) -> None:
     for pattern, reason in BASH_DENY:
         if re.search(pattern, command):
             decide("deny", reason)
+    if agent and re.search(AGENT_DENY[0], command):
+        decide("deny", AGENT_DENY[1])
     for pattern, reason in BASH_ASK:
         if re.search(pattern, command):
-            # Subagents never commit, push, merge or touch infrastructure; an "ask" can be
+            # Subagents never touch a deployed environment; an "ask" can be
             # auto-resolved in a background run, so only the main session gets the prompt.
             decide("deny" if agent else "ask", reason)
 
