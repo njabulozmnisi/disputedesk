@@ -13,7 +13,9 @@ diff_hash=$("$root/scripts/diff-hash.sh" "$root" HEAD)
 out="$root/docs/verification/$story-verify.md"
 mkdir -p "$(dirname "$out")"
 
-prompt=$(cat <<PROMPT
+# The heredoc is read outside $(...): bash 3.2 (macOS /bin/bash) ends a command substitution early on the
+# apostrophes and parentheses in the text. read -d '' stops at end of input and returns 1, hence || true.
+read -r -d '' prompt <<PROMPT || true
 Act as an independent verifier that did not write this code. Check code only.
 The work is deliberately uncommitted: treat every file in this worktree, including untracked ones, as the change under review.
 Story file: $story_file. Read it, then:
@@ -26,7 +28,6 @@ For .NET API questions, use: npx -y @microsoft/learn-cli search "<query>".
 Do not modify any file. Reply in Markdown with a first line exactly "VERDICT: PASS" or "VERDICT: FAIL",
 then a table of criterion | test | proved (yes/no), then failures with evidence, then a "Standards" section (or "Standards: none").
 PROMPT
-)
 
 # The whole run holds the testcontainers lock, so the verifier runs dotnet test directly. scripts/test-lock.sh is not
 # allowed: a nested `test-lock.sh run testcontainers` would wait on this run's own lock until it timed out.
