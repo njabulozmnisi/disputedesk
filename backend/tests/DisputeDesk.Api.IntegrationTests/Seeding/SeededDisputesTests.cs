@@ -119,7 +119,7 @@ public class SeededDisputesTests(PostgresFixture postgres)
             .ToListAsync(CancellationToken);
 
         Assert.Contains(open, dispute => dispute.CustomerId == CustomerB);
-        // Criterion 6's bound; it holds the disputes well clear of story 5.3's 48-hour SLA warning lead time.
+        // Criterion 6's bound: no open dispute but the SLA demo one is escalated soon after seeding.
         Assert.All(open, dispute => Assert.True(
             dispute.SlaDueAtUtc > seededAt.AddDays(7), $"An open {dispute.Status} dispute is due within 7 days of the seeding instant."));
     }

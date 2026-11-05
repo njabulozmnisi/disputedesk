@@ -69,10 +69,9 @@ public class NotFoundResponsesTests(PostgresFixture postgres, TransactionsStub s
         StoredEvent[] later =
         [
             At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, ActorType.Operations),
-            At(new SlaWarningRaised(), 3, ActorType.Automation),
-            At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 4, ActorType.Automation),
-            At(new DisputeResolved(DisputeStatus.Escalated, DisputeStatus.Resolved, Outcome.Rejected, "Checked"), 5, ActorType.Operations),
-            At(new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, "Found it"), 6, ActorType.Customer),
+            At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 3, ActorType.Automation),
+            At(new DisputeResolved(DisputeStatus.Escalated, DisputeStatus.Resolved, Outcome.Rejected, "Checked"), 4, ActorType.Operations),
+            At(new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, "Found it"), 5, ActorType.Customer),
         ];
         // Every type the Domain declares is in the stream: DisputeRaised from the raise, the rest above.
         Assert.Equal(

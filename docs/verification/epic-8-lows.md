@@ -56,3 +56,4 @@
 | 8.16 | review L2 | `IamNamesTests.cs:10`, `ServiceReferenceFixture.Deadline` | The 5-minute whole-check deadline is not asserted (private); make it internal and assert it in `CreateClient_HasTheBoundsInTheStory`. |
 | 8.16 | review L4 | `scripts/verify-with-copilot.sh:38` | Still allows `shell(infra/terraform/iam-names.test.sh)`, a deleted file. |
 | 8.16 | verify L1 | AC5 | Same as review L1: the User-Agent header against the "no extra header" input; story wording fix. |
+| 8.14 | QA (escape) | e2e regression project | Five regression failures in 8.14's QA run: three logout specs already failing on main since 8.13 (fixed on their own branch, `e2e-baseline-qa.md`), two `dispute-withdraw` cases not reproduced on main (`:113` may race the relay). |

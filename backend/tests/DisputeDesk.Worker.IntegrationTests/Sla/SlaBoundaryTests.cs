@@ -35,7 +35,7 @@ public class SlaBoundaryTests(SlaFixture fixture)
         {
             List<StoredEventRow> stream = await rig.StreamAsync(disputeId);
             StoredEventRow row = Assert.Single(stream, row => row.EventType == nameof(DisputeEscalated));
-            // The next version after the warning the first run recorded: the escalation was decided on the replayed stream.
+            // The next version after the stream's last: the escalation was decided on the replayed stream.
             Assert.Equal(stream.Count, row.Version);
             Assert.Equal(ActorType.Automation, row.ActorType);
             Assert.Equal("worker:sla-sweep", row.ActorId);
@@ -65,7 +65,6 @@ public class SlaBoundaryTests(SlaFixture fixture)
         Dispute row = await rig.DisputeRowAsync(disputeId);
         Assert.Equal(status, row.Status);
         Assert.Equal(before.Count, row.Version);
-        Assert.Null(row.SlaWarningRaisedAtUtc);
     }
 
     [Fact]

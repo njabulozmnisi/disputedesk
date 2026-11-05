@@ -88,8 +88,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
     }
 
     /// <summary>
-    /// AD-14: each pending stored event of a tracked dispute becomes one <c>StoredEvents</c> row and, when its type is
-    /// published, one outbox row under the same ID, which EF Core then commits in the same transaction as the dispute
+    /// AD-14: each pending stored event of a tracked dispute becomes one <c>StoredEvents</c> row and one outbox row under
+    /// the same ID, which EF Core then commits in the same transaction as the dispute
     /// (EF Core docs, Transactions: one SaveChanges is one transaction). Stored events and audit entries are insert
     /// only, so a modified or deleted one stops the commit before anything is written. A dispute is written only with
     /// its stored event, so an added or modified dispute with none pending stops it too: the unique version is then the
@@ -130,10 +130,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
                 // One ID for the stored event, its outbox row and the CloudEvent id: a UUIDv7 from its instant (AD-4).
                 var id = Guid.CreateVersion7(storedEvent.OccurredAtUtc);
                 Set<StoredEventRow>().Add(StoredEventRow.From(id, dispute, storedEvent, activity?.TraceId.ToHexString()));
-                if (CommitRows.OutboxMessage(id, storedEvent, activity) is OutboxMessage message)
-                {
-                    Set<OutboxMessage>().Add(message);
-                }
+                Set<OutboxMessage>().Add(CommitRows.OutboxMessage(id, storedEvent, activity));
             }
         }
     }

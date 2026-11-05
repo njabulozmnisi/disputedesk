@@ -91,7 +91,6 @@ public sealed class StoredEventRow
         nameof(DisputeEscalated) => typeof(DisputeEscalated),
         nameof(DisputeResolved) => typeof(DisputeResolved),
         nameof(DisputeWithdrawn) => typeof(DisputeWithdrawn),
-        nameof(SlaWarningRaised) => typeof(SlaWarningRaised),
         _ => null,
     };
 }

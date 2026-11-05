@@ -61,8 +61,10 @@ public class StoredEventReplayTests(PostgresFixture postgres, TransactionsStub s
         Assert.Null(await ReplayVisibleAsync(db, Guid.CreateVersion7(stub.Now)));
     }
 
-    [Fact]
-    public async Task Replay_RowOfAnUnknownEventType_ThrowsRatherThanReturnADisputeOrNotFound()
+    [Theory]
+    [InlineData("DisputeReopened")]
+    [InlineData("SlaWarningRaised")] // Dropped in 8.14 (D3): a leftover row of it is unknown like any other.
+    public async Task Replay_RowOfAnUnknownEventType_ThrowsRatherThanReturnADisputeOrNotFound(string eventType)
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         Guid mine = await RaiseAsync(factory, "login-a", TransactionsApi.CustomerA, DisputesApi.Body());
@@ -74,7 +76,7 @@ public class StoredEventReplayTests(PostgresFixture postgres, TransactionsStub s
                 Id = Guid.CreateVersion7(stub.Now),
                 DisputeId = mine,
                 Version = 2,
-                EventType = "DisputeReopened",
+                EventType = eventType,
                 OccurredAtUtc = stub.Now,
                 ActorType = ActorType.Customer,
                 ActorId = "login-a",

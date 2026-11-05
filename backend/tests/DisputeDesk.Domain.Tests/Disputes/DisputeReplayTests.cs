@@ -59,22 +59,6 @@ public class DisputeReplayTests
     };
 
     [Fact]
-    public void Replay_StreamWithAnSlaWarning_SetsTheWarningInstantAndKeepsTheStatus()
-    {
-        Assert.Null(Dispute.Replay([RaisedEvent(), Started(2)]).SlaWarningRaisedAtUtc);
-        var warning = new SlaWarningRaised { DisputeId = DisputeId, Version = 3, OccurredAtUtc = Now.AddDays(9) };
-
-        var warned = Dispute.Replay([RaisedEvent(), Started(2), warning]);
-        var escalated = Dispute.Replay([RaisedEvent(), Started(2), warning, Escalated(4, DisputeStatus.UnderReview)]);
-
-        Assert.Equal(DisputeStatus.UnderReview, warned.Status);
-        Assert.Equal(3, warned.Version);
-        Assert.Equal(Now.AddDays(9), warned.SlaWarningRaisedAtUtc);
-        Assert.Equal(DisputeStatus.Escalated, escalated.Status);
-        Assert.Equal(Now.AddDays(9), escalated.SlaWarningRaisedAtUtc);
-    }
-
-    [Fact]
     public void Replay_ResolveStream_TakesTheOutcomeOfDisputeResolved()
     {
         Assert.Null(Dispute.Replay([RaisedEvent(), Started(2)]).Outcome);

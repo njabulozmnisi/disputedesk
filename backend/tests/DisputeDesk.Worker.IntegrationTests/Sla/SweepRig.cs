@@ -95,9 +95,9 @@ public sealed class SweepRig : IAsyncDisposable
     /// <summary>The sweep's own log lines and values, without EF Core's or Npgsql's.</summary>
     public IReadOnlyList<string> SweepLogLines => [.. LogLines.Where(line => line.Category == typeof(SlaSweep).FullName).Select(line => line.Line)];
 
-    /// <summary>The ended batch spans whose claim was <paramref name="claim"/> (<c>overdue</c> or <c>warning</c>), in the order they ended.</summary>
-    public IReadOnlyList<Activity> BatchSpans(string claim) =>
-        [.. Spans.Snapshot().Where(span => span.OperationName == SlaSweep.BatchSpanName && span.GetTagItem("disputedesk.sla_sweep.claim") as string == claim)];
+    /// <summary>The ended batch spans, in the order they ended.</summary>
+    public IReadOnlyList<Activity> BatchSpans() =>
+        [.. Spans.Snapshot().Where(span => span.OperationName == SlaSweep.BatchSpanName)];
 
     public static async Task<SweepRig> CreateAsync(SlaFixture fixture, params IInterceptor[] interceptors) =>
         new(await fixture.CreateMigratedDatabaseAsync(), interceptors);
@@ -105,7 +105,7 @@ public sealed class SweepRig : IAsyncDisposable
     /// <summary>A second sweep on the same database, as a second Worker would be.</summary>
     public static SweepRig OnSameDatabase(SweepRig other, params IInterceptor[] interceptors) => new(other.ConnectionString, interceptors);
 
-    /// <summary>One loop of the sweep: the escalation batches, then the warning batches.</summary>
+    /// <summary>One loop of the sweep: its escalation batches.</summary>
     public Task SweepAsync() => Sweep.SweepAsync(TestContext.Current.CancellationToken);
 
     /// <summary>The sum of the measurements in <paramref name="counter"/> with all of <paramref name="tags"/>.</summary>

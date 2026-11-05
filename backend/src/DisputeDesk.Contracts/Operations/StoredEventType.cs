@@ -8,5 +8,4 @@ public enum StoredEventType
     DisputeEscalated,
     DisputeResolved,
     DisputeWithdrawn,
-    SlaWarningRaised,
 }

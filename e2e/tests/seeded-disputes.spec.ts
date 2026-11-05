@@ -20,10 +20,10 @@ const transactionList = (entries: FixtureDispute[]) => entries.map((entry) => `'
 
 const statusAfter: Record<string, string> = { raise: 'Submitted', startReview: 'UnderReview', escalate: 'Escalated', resolve: 'Resolved', withdraw: 'Withdrawn' };
 const eventTypeOf: Record<string, string> = { raise: 'DisputeRaised', startReview: 'ReviewStarted', escalate: 'DisputeEscalated', resolve: 'DisputeResolved', withdraw: 'DisputeWithdrawn' };
-// Story 5.3: the SLA demo dispute falls due 5 minutes after seeding and the Worker's sweep then records SlaWarningRaised
-// (at the first loop, it is inside the 48-hour lead time) and escalates it as worker:sla-sweep, so beforeAll waits for that and
-// the demo dispute is expected Escalated, with those two events after its seeded actions (and one more outbox row).
-const sweepEventTypes = ['SlaWarningRaised', 'DisputeEscalated'];
+// Story 5.3 and 8.14: the SLA demo dispute falls due 5 minutes after seeding and the Worker's sweep then escalates it as
+// worker:sla-sweep, so beforeAll waits for that and the demo dispute is expected Escalated, with that one event after its
+// seeded actions (and one more outbox row).
+const sweepEventTypes = ['DisputeEscalated'];
 const finalStatus = (entry: FixtureDispute) => (entry.slaDemo ? 'Escalated' : statusAfter[entry.actions[entry.actions.length - 1].action]);
 const customerActions = ['raise', 'withdraw'];
 
@@ -129,7 +129,7 @@ test.describe.serial('seeded disputes', () => {
       const detail = await customerA.request.get(`/api/v1/disputes/${row.Id}`);
       expect(detail.status()).toBe(200);
       const body = await detail.json();
-      // The warning is never a timeline step; the sweep's escalation is.
+      // The sweep's escalation is a timeline step.
       expect(body.timeline.map((step: { action: string }) => step.action)).toEqual([...entry.actions.map((action) => action.action), ...(entry.slaDemo ? ['escalate'] : [])]);
       expect(body.customerStatus).toBe(customerStatusOf[finalStatus(entry)]);
     }
@@ -191,8 +191,8 @@ test.describe.serial('seeded disputes', () => {
   test('one stored event and one outbox row per seeded action, all sent, no audit row from seeding', () => {
     const ids = queryRows<{ Id: string }>(`select "Id" from "Disputes" where "TransactionId" in (${transactionList(seeded)})`).map((row) => `'${row.Id}'`).join(',');
     const expected = seeded.reduce((sum, entry) => sum + entry.actions.length, 0);
-    // The sweep's two events on the demo dispute: the warning (stored only) and the escalation (stored and published).
-    expect(Number(queryDatabase(`select count(*) from "StoredEvents" where "DisputeId" in (${ids})`))).toBe(expected + 2);
+    // The sweep's one event on the demo dispute: the escalation (stored and published), so every stored event has an outbox row.
+    expect(Number(queryDatabase(`select count(*) from "StoredEvents" where "DisputeId" in (${ids})`))).toBe(expected + 1);
     expect(Number(queryDatabase(`select count(*) from "OutboxMessages" where "DisputeId" in (${ids})`))).toBe(expected + 1);
     expect(Number(queryDatabase(`select count(*) from "OutboxMessages" o join "StoredEvents" e on e."Id" = o."Id" and e."DisputeId" = o."DisputeId" and e."Version" = o."DisputeVersion" where o."DisputeId" in (${ids})`))).toBe(expected + 1);
     expect(Number(queryDatabase(`select count(*) from "OutboxMessages" where "DisputeId" in (${ids}) and "Status" <> 'Sent'`))).toBe(0);

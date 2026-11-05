@@ -14,8 +14,7 @@ namespace DisputeDesk.Api.IntegrationTests.Disputes;
 
 /// <summary>
 /// AC2, AD-13 (Customer wire view; OWASP Authorization Cheat Sheet, deny by default): the detail of a dispute that
-/// operations and automation acted on, escalated and with an SLA warning in its stream, shows the customer only the
-/// allowed fields, and none of the private values of its <c>Disputes</c> row or its <c>StoredEvents</c> rows.
+/// operations and automation acted on, escalated by the SLA sweep, shows the customer only the allowed fields, and none of the private values of its <c>Disputes</c> row or its <c>StoredEvents</c> rows.
 /// </summary>
 public class CustomerPrivacyTests(PostgresFixture postgres, TransactionsStub stub) : IClassFixture<TransactionsStub>
 {
@@ -54,8 +53,8 @@ public class CustomerPrivacyTests(PostgresFixture postgres, TransactionsStub stu
         using HttpClient browser = await factory.SignInLinkedAsync(LoginSub, TransactionsApi.CustomerA);
         Guid disputeId = await RaiseActedOnDisputeAsync(factory, browser);
         (string customerId, string slaDueAt, string[] actorIds, string[] traceIds) = await PrivateValuesAsync(factory, disputeId);
-        Assert.Equal([LoginSub, "worker:seeder", "worker:sla-sweep", OperationsSub], actorIds);
-        Assert.Equal(4, traceIds.Length);
+        Assert.Equal([LoginSub, OperationsSub, "worker:sla-sweep"], actorIds);
+        Assert.Equal(3, traceIds.Length);
 
         HttpResponseMessage response = await browser.GetDisputeAsync(disputeId.ToString());
 
@@ -65,7 +64,7 @@ public class CustomerPrivacyTests(PostgresFixture postgres, TransactionsStub stu
         List<string> values = [.. StringValues(body.RootElement)];
         string[] forbiddenValues = ["customer", "operations", "automation", "escalated"];
         Assert.All(values, value => Assert.DoesNotContain(value, forbiddenValues));
-        string[] forbiddenParts = [customerId, slaDueAt, .. actorIds, .. traceIds, nameof(SlaWarningRaised), "slaWarning"];
+        string[] forbiddenParts = [customerId, slaDueAt, .. actorIds, .. traceIds];
         Assert.All(forbiddenParts, part => Assert.DoesNotContain(part, raw, StringComparison.OrdinalIgnoreCase));
         Assert.Equal("underReviewPrioritised", body.RootElement.GetProperty("customerStatus").GetString());
         Assert.Equal(
@@ -110,25 +109,24 @@ public class CustomerPrivacyTests(PostgresFixture postgres, TransactionsStub stu
         using JsonDocument page = await response.ReadJsonAsync();
         string[] forbiddenValues = ["customer", "operations", "automation", "escalated"];
         Assert.All([.. StringValues(page.RootElement)], value => Assert.DoesNotContain(value, forbiddenValues));
-        string[] forbiddenParts = [customerId, slaDueAt, .. actorIds, .. traceIds, nameof(SlaWarningRaised), "slaWarning", "CustomerId", "SlaDueAtUtc", "ActorId", "TraceId"];
+        string[] forbiddenParts = [customerId, slaDueAt, .. actorIds, .. traceIds, "CustomerId", "SlaDueAtUtc", "ActorId", "TraceId"];
         Assert.All(forbiddenParts, part => Assert.DoesNotContain(part, raw, StringComparison.OrdinalIgnoreCase));
         JsonElement item = Assert.Single(page.RootElement.GetProperty("items").EnumerateArray());
         Assert.Equal("underReviewPrioritised", item.GetProperty("customerStatus").GetString());
     }
 
     /// <summary>
-    /// A wrong-amount dispute (so every money object is present) raised by the customer, then started by the seeder,
-    /// warned by the SLA sweep and escalated by operations, each with a trace ID of its own.
+    /// A wrong-amount dispute (so every money object is present) raised by the customer, then started by operations and
+    /// escalated by the SLA sweep, each with a trace ID of its own.
     /// </summary>
     private async Task<Guid> RaiseActedOnDisputeAsync(ApiFactory factory, HttpClient browser)
     {
         JsonElement created = await browser.RaiseCreatedAsync(DisputesApi.Body(reason: "wrongAmount", expectedAmount: "80.00", note: "Not me"));
         Guid disputeId = created.GetProperty("disputeId").GetGuid();
-        // Written directly: the test chooses each actor (the seeder, the SLA sweep) and a trace ID per event.
+        // Written directly: the test chooses each actor (operations, the SLA sweep) and a trace ID per event.
         await factory.AppendDirectlyAsync(disputeId, DisputeStatus.Escalated, outcome: null,
-            At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, ActorType.Automation, "worker:seeder"),
-            At(new SlaWarningRaised(), 3, ActorType.Automation, "worker:sla-sweep"),
-            At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 4, ActorType.Operations, OperationsSub));
+            At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, ActorType.Operations, OperationsSub),
+            At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 3, ActorType.Automation, "worker:sla-sweep"));
         return disputeId;
     }
 

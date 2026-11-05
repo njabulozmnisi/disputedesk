@@ -38,7 +38,7 @@ public static class CustomerView
 
     /// <summary>
     /// The allowlist (AD-13; OWASP Authorization Cheat Sheet, deny by default): a type test admits exactly the five
-    /// lifecycle types. Every other type, <see cref="SlaWarningRaised"/> and any type added later, gives no entry.
+    /// lifecycle types. Any other type, including one added later, gives no entry.
     /// </summary>
     private static TimelineEntryResponse? ToTimelineEntry(StoredEvent storedEvent) => storedEvent switch
     {

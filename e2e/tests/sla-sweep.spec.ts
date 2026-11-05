@@ -5,9 +5,8 @@ import { expect, request as playwrightRequest, test, type APIRequestContext, typ
 import { expectProblemShape, topicRecords, origin, queryRows, signInContext } from './support';
 
 // Story 5.3: the Worker's SLA sweep on the real stack. The seeded SLA demo dispute (customer A, due 5 minutes after the
-// seeding instant) is escalated by the sweep as `automation` / `worker:sla-sweep`; the sweep first records one
-// `SlaWarningRaised` (the dispute is inside the 48-hour lead time from the start), which is never published and never
-// shown to the customer. Four hops: the SPA badge, the API response, the database (qa_readonly) and the topic.
+// seeding instant) is escalated by the sweep as `automation` / `worker:sla-sweep`. Story 8.14: the sweep only escalates, so
+// the stored stream and the outbox hold versions 1, 2, 3 with no gap and the warning column and index are gone. Four hops: the SPA badge, the API response, the database (qa_readonly) and the topic.
 // Needs a fresh stack with the committed fixture (the demo dispute is due at seed time + 5 minutes); the spec waits for it.
 // The spec reads only. The one write is the operations escalate that is refused on the already escalated demo dispute.
 
@@ -50,47 +49,47 @@ test.beforeAll(async ({ browser }) => {
 
 test('the sweep escalated the demo dispute within one loop of its due time, once, as automation', async () => {
   const events = eventsOf(disputeId);
-  expect(events.map((event) => event.EventType)).toEqual(['DisputeRaised', 'ReviewStarted', 'SlaWarningRaised', 'DisputeEscalated']);
-  expect(events.map((event) => event.Version)).toEqual([1, 2, 3, 4]);
-  const escalated = events[3];
+  expect(events.map((event) => event.EventType)).toEqual(['DisputeRaised', 'ReviewStarted', 'DisputeEscalated']);
+  expect(events.map((event) => event.Version)).toEqual([1, 2, 3]);
+  const escalated = events[2];
   expect(escalated).toMatchObject({ ActorType: 'Automation', ActorId: 'worker:sla-sweep' });
   expect(escalated.Data).toEqual({ fromStatus: 'underReview', toStatus: 'escalated' });
   // Not before the SLA is due (FR-26), and within a 30-second loop of it (plus the batch's own time).
   const lateBySeconds = (Date.parse(`${escalated.At}Z`) - Date.parse(`${dueAt}Z`)) / 1000;
   expect(lateBySeconds).toBeGreaterThanOrEqual(0);
   expect(lateBySeconds).toBeLessThanOrEqual(35);
-  const [row] = queryRows<Json>(`select "Status", "Version", "SlaWarningRaisedAtUtc" is not null as "Warned" from "Disputes" where "Id" = '${disputeId}'`);
-  expect(row).toEqual({ Status: 'Escalated', Version: 4, Warned: true });
-  // No audit row for an SLA escalation or warning (NFR-SEC-10).
+  const [row] = queryRows<Json>(`select "Status", "Version" from "Disputes" where "Id" = '${disputeId}'`);
+  expect(row).toEqual({ Status: 'Escalated', Version: 3 });
+  // No audit row for an SLA escalation (NFR-SEC-10).
   expect(queryRows<Json>(`select 1 from "AuditLogEntries" where "DisputeId" = '${disputeId}' and "ActorType" = 'Automation'`)).toHaveLength(0);
 });
 
-test('the warning was recorded once, before the deadline, by the sweep, and never published', async () => {
+test('no warning anywhere: the DropSlaWarning migration applied, the stream and the outbox have versions 1..n with no gap, the topic agrees', async () => {
   const events = eventsOf(disputeId);
-  const warnings = events.filter((event) => event.EventType === 'SlaWarningRaised');
-  expect(warnings).toHaveLength(1);
-  expect(warnings[0]).toMatchObject({ ActorType: 'Automation', ActorId: 'worker:sla-sweep', Version: 3, Data: {} });
-  expect(Date.parse(`${warnings[0].At}Z`)).toBeLessThan(Date.parse(`${dueAt}Z`));
-  // Stored once on the Disputes row too, at the event's instant.
-  const [warned] = queryRows<Json>(`select to_char("SlaWarningRaisedAtUtc" at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') as "At" from "Disputes" where "Id" = '${disputeId}'`);
-  expect(warned.At).toBe(warnings[0].At);
-  // No outbox row, so no record on the topic.
+  expect(events.filter((event) => event.EventType === 'SlaWarningRaised')).toHaveLength(0);
+  expect(queryRows<Json>(`select 1 from "StoredEvents" where "EventType" = 'SlaWarningRaised'`)).toHaveLength(0);
+  expect(queryRows<Json>(`select 1 from information_schema.columns where table_name = 'Disputes' and column_name = 'SlaWarningRaisedAtUtc'`)).toHaveLength(0);
+  expect(queryRows<Json>(`select 1 from pg_indexes where tablename = 'Disputes' and indexname = 'IX_Disputes_SlaWarning'`)).toHaveLength(0);
+  expect(queryRows<Json>(`select 1 from "__EFMigrationsHistory" where "MigrationId" like '%_DropSlaWarning'`)).toHaveLength(1);
+  // Every stored event is published: one outbox row per event, with the stored event's ID and version.
   const outbox = outboxOf(disputeId);
-  expect(outbox.map((message) => message.Id)).not.toContain(warnings[0].Id);
-  expect(outbox.filter((message) => message.EventType.includes('sla'))).toHaveLength(0);
-  expect(topicRecords().filter((record) => record.key === disputeId).map((record) => JSON.parse(record.value).id)).not.toContain(warnings[0].Id);
+  expect(outbox.map((message) => message.DisputeVersion)).toEqual([1, 2, 3]);
+  expect(outbox.map((message) => message.Id)).toEqual(events.map((event) => event.Id));
+  const onTopic = topicRecords().filter((record) => record.key === disputeId).map((record) => JSON.parse(record.value) as Json);
+  expect(onTopic.map((record) => record.data.disputeVersion).sort()).toEqual([1, 2, 3]);
+  expect(onTopic.map((record) => record.id).sort()).toEqual(events.map((event) => event.Id).sort());
 });
 
 test('one status-changed event with actor type automation and no actor identity: outbox row and topic record agree', async () => {
   const events = eventsOf(disputeId);
-  const escalated = events[3];
+  const escalated = events[2];
   const rowsOfEscalation = outboxOf(disputeId).filter((message) => message.Id === escalated.Id);
   expect(rowsOfEscalation).toHaveLength(1);
   const [message] = rowsOfEscalation;
-  expect(message).toMatchObject({ EventType: 'disputedesk.dispute.status-changed.v1', DisputeVersion: 4 });
+  expect(message).toMatchObject({ EventType: 'disputedesk.dispute.status-changed.v1', DisputeVersion: 3 });
   expect(message.TraceParent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/);
   const published = JSON.parse(message.Payload);
-  expect(published.data).toMatchObject({ disputeId, fromStatus: 'underReview', toStatus: 'escalated', action: 'escalate', actorType: 'automation', disputeVersion: 4 });
+  expect(published.data).toMatchObject({ disputeId, fromStatus: 'underReview', toStatus: 'escalated', action: 'escalate', actorType: 'automation', disputeVersion: 3 });
   expect(JSON.stringify(published)).not.toMatch(/worker:sla-sweep|actorId|"sub"/);
 
   const onTopic = topicRecords().filter((record) => record.key === disputeId && JSON.parse(record.value).data.action === 'escalate');
@@ -104,7 +103,7 @@ test('one status-changed event with actor type automation and no actor identity:
   expect(topicTrace.split('-')[1]).toBe(message.TraceParent.split('-')[1]);
 });
 
-test('the customer sees one Under review (prioritised) entry from the bank, never the warning; another customer gets 404', async () => {
+test('the customer sees one Under review (prioritised) entry from the bank, from the bank; another customer gets 404', async () => {
   const response = await customerA.request.get(`/api/v1/disputes/${disputeId}`);
   expect(response.status()).toBe(200);
   const text = await response.text();
@@ -113,7 +112,7 @@ test('the customer sees one Under review (prioritised) entry from the bank, neve
   const prioritised = body.timeline.filter((entry: Json) => entry.customerStatus === 'underReviewPrioritised');
   expect(prioritised).toHaveLength(1);
   expect(prioritised[0]).toMatchObject({ action: 'escalate', actor: 'theBank' });
-  expect(body.timeline).toHaveLength(3); // raise, start review, escalate: the warning is not an entry
+  expect(body.timeline).toHaveLength(3); // raise, start review, escalate
   expect(text).not.toMatch(/worker:sla-sweep|automation|slaWarning|warning|actorId/i);
 
   const other = await customerB.request.get(`/api/v1/disputes/${disputeId}`);
@@ -146,9 +145,9 @@ test('operations cannot escalate it again: 409 action-not-allowed and no second 
   await ops.dispose();
 });
 
-test('across every dispute: at most one escalation and one warning, the sweep acts only on open disputes, no personal data in its stored events', async () => {
+test('across every dispute: at most one escalation, the sweep acts only on open disputes, no personal data in its stored events', async () => {
   const counts = queryRows<{ DisputeId: string; EventType: string; N: number }>(
-    `select "DisputeId", "EventType", count(*)::int as "N" from "StoredEvents" where "EventType" in ('DisputeEscalated', 'SlaWarningRaised') group by 1, 2 having count(*) > 1`);
+    `select "DisputeId", "EventType", count(*)::int as "N" from "StoredEvents" where "EventType" = 'DisputeEscalated' group by 1, 2 having count(*) > 1`);
   expect(counts).toEqual([]);
   const sweepEscalations = queryRows<Json>(`select "Data" from "StoredEvents" where "ActorId" = 'worker:sla-sweep' and "EventType" = 'DisputeEscalated'`);
   for (const event of sweepEscalations) expect(['submitted', 'underReview']).toContain(event.Data.fromStatus);
@@ -166,7 +165,7 @@ test('the heartbeat is fresh, the Worker is healthy, and its logs hold counts an
   const age = busybox('date', '+%s') - busybox('stat', '-c', '%Y', '/tmp/heartbeat-sweep');
   expect(age).toBeLessThanOrEqual(35);
   const log = docker('logs', worker);
-  expect(log).toMatch(/SLA sweep (Overdue|Warning) batch changed \d+ of \d+ claimed disputes/);
+  expect(log).toMatch(/SLA sweep batch changed \d+ of \d+ claimed disputes/);
   expect(log).not.toMatch(/CUS-|ACC-|TXN-|Password=|Bearer /);
   expect(log).not.toMatch(/SLA sweep could not change|SLA sweep loop failed/);
 });
@@ -181,7 +180,6 @@ test('restarting the Worker after the escalation gives no duplicate, and the Wor
   expect(workerHealth()).toBe('healthy');
   await sleep(70_000); // two more loops of the sweep
   expect(eventsOf(disputeId).filter((event) => event.EventType === 'DisputeEscalated')).toHaveLength(1);
-  expect(eventsOf(disputeId).filter((event) => event.EventType === 'SlaWarningRaised')).toHaveLength(1);
   expect(queryRows<Json>(`select count(*)::int as "N" from "StoredEvents"`)[0].N).toBe(before);
   expect(queryRows<Json>(`select count(*)::int as "N" from "OutboxMessages"`)[0].N).toBe(outboxBefore);
   expect(topicRecords().filter((record) => record.key === disputeId && JSON.parse(record.value).data.action === 'escalate')).toHaveLength(1);
