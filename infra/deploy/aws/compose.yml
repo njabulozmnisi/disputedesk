@@ -5,7 +5,7 @@
 #
 # Every secret and deployment value comes from .env, which the deploy script writes from SSM (AD-26): each is
 # ${VAR:?message}, with no default, so a missing one stops Compose before anything starts (Compose, "Interpolation").
-# infra/tests/fixtures/compose.test.env holds a dummy value for each, for infra/deploy/aws/check-compose.sh only.
+# infra/tests/fixtures/compose.test.env holds a dummy value for each, for the tests in infra/tests only.
 #
 # Compose merges this file into the base one (Compose, "Merge Compose files"): scalar values are replaced, but maps
 # (environment, depends_on) are merged and sequences (ports) are appended. So every service whose environment,

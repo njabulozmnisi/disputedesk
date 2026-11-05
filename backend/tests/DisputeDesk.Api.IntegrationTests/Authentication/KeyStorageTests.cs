@@ -23,8 +23,7 @@ public class KeyStorageTests(PostgresFixture postgres)
     private const string KeyRingPath = "/disputedesk-dataprotection/test";
     // A placeholder key ID.
     private const string KmsKeyId = "00000000-0000-0000-0000-00000000000a";
-    // A placeholder account for the ARNs, built in two halves like check-compose.sh's $(repeat 0 12), so the secret scan's
-    // aws-account-id rule does not flag it.
+    // A placeholder account for the ARNs, built in two halves, so the secret scan's aws-account-id rule does not flag it.
     private const string ZeroAccount = "000000" + "000000";
 
     [Fact]
