@@ -1,0 +1,177 @@
+{
+  "status": "built",
+  "story": "9.1",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/disputedesk/.claude/worktrees/9.1",
+  "base": "7764c9e7ab3fe6795a012c647dc7573e886228dc (origin/story/docs-9.1)",
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "R33, NFR-INFRA-2",
+      "test": "scripts/ci-gates.test.sh, case 'ci.yml: ci-passed needs every check job' (scripts/ci-gates.sh fails any job-level if:/needs: other than the gate and publish; cases 'a check job with its own if:/needs: is named'); the base commit's files fail it, naming the five conditional jobs (TestResults/9.1-ci-gates-before.txt); the changes job and scripts/ci-changes*.sh are deleted; triggers and concurrency blocks are unchanged in the diff"
+    },
+    {
+      "id": "AC2",
+      "requirement": "R33",
+      "test": "scripts/ci-gates.test.sh: 'ci-passed: needs [...], if: always(), timeout 5, no permissions, NEEDS from toJSON(needs)' and the run: script cases 'every job succeeded', 'e2e failure|cancelled|skipped fails, naming it', 'two bad jobs' and 'a NEEDS that is not JSON fails'"
+    },
+    {
+      "id": "AC3",
+      "requirement": "R33, NFR-SEC-8",
+      "test": "scripts/ci-gates.test.sh: 'security.yml: security-passed needs every check job', the security-passed settings case, 'codeql failure fails, naming it' and 'trivy skipped fails, naming it'; the trivy job's build and image-scan steps are unchanged in the diff. The one-leg codeql combined result is the supervisor's runtime check"
+    },
+    {
+      "id": "AC4",
+      "requirement": "R33",
+      "test": "scripts/ci-gates.test.sh: './.github/actions/install-compose runs after the checkout in: backend e2e platform'; TestResults/9.1-install-actions-smoke.txt (install.sh on ubuntu:24.04, curl 8.5.0: checksum OK, Compose v5.6.1, a wrong SHA-256 fails); shellcheck over CI's new pathspec (TestResults/9.1-shellcheck.txt)"
+    },
+    {
+      "id": "AC5",
+      "requirement": "R33",
+      "test": "scripts/ci-gates.test.sh: './.github/actions/install-trivy runs after the checkout in: publish' and '... in: trivy'; TestResults/9.1-install-actions-smoke.txt (Trivy 0.76.1, checksum OK, GITHUB_PATH written); no Trivy version or SHA-256 in either workflow (diff)"
+    },
+    {
+      "id": "AC6",
+      "requirement": "R33",
+      "test": "scripts/ci-gates.test.sh: 'publish: if and needs unchanged'; the rest (permissions, build, scan and push steps unchanged apart from the action) is shown by the diff; publish's runtime proof is main's CI run after the fast-forward (supervisor)"
+    },
+    {
+      "id": "AC7",
+      "requirement": "R33",
+      "test": "runtime on GitHub, the supervisor's: a pull request from story/9.1 to main showing ci-passed and security-passed successful (steps in supervisor_checks)"
+    },
+    {
+      "id": "AC8",
+      "requirement": "R33",
+      "test": "scripts/ci-gates.test.sh cases 'a check job left out of the gate is named', 'a main-only job in the gate's needs is named', 'a missing gate fails'; the new floor-guard step 'Gates need every check job' runs scripts/ci-gates.sh on both workflows (TestResults/9.1-ci-gates.txt)"
+    }
+  ],
+  "smoke": "No API or UI change, so there is no stack smoke check. Both install scripts ran on ubuntu:24.04 (linux/amd64, curl 8.5.0, CI's runner OS) under the stack lock, with RUNNER_TEMP and GITHUB_PATH set and a docker shim that runs the installed plugin: Compose 'docker-compose: OK', 'Docker Compose version v5.6.1'; Trivy 'trivy.tar.gz: OK', 'Version: 0.76.1', GITHUB_PATH holds $RUNNER_TEMP/bin; a changed Compose SHA-256 fails at sha256sum (TestResults/9.1-install-actions-smoke.txt). Each gate's run: script was run as GitHub runs a bash step (bash --noprofile --norc -eo pipefail) on sample needs contexts in ci-gates.test.sh.",
+  "standards": [
+    {
+      "mechanism": "Gate job reading every needed job's result, run with if: always() (a skipped job reports success to a required check)",
+      "source": "https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks"
+    },
+    {
+      "mechanism": "always() runs even when the run is cancelled; default success()",
+      "source": "https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#status-check-functions"
+    },
+    {
+      "mechanism": "needs context, needs.<job_id>.result values (success, failure, cancelled, skipped), toJSON",
+      "source": "https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#needs-context"
+    },
+    {
+      "mechanism": "Expression values into a run: script only through env",
+      "source": "https://docs.github.com/en/actions/reference/security/secure-use"
+    },
+    {
+      "mechanism": "Local composite action (runs.using: composite, shell required on run, a script beside action.yml through GITHUB_ACTION_PATH, called with uses: ./path after checkout)",
+      "source": "https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action ; https://docs.github.com/en/actions/reference/workflows-and-actions/metadata-syntax"
+    },
+    {
+      "mechanism": "curl --max-time, --retry with its built-in backoff, --retry-all-errors (partial output removed before a retry)",
+      "source": "https://curl.se/docs/manpage.html"
+    },
+    {
+      "mechanism": "yq v4 and jq preinstalled on ubuntu-24.04 (checked locally with yq 4.54.1, the runner's version)",
+      "source": "https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md"
+    },
+    {
+      "mechanism": "Download pinned by version and SHA-256, sha256sum --check --strict (unchanged pins, moved)",
+      "source": "https://docs.docker.com/compose/install/linux/#install-the-plugin-manually"
+    }
+  ],
+  "breaks": [
+    {
+      "id": "b1",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\nindex dc7441c..353205d 100644\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -183,6 +183,7 @@ jobs:\n   # applies run only from the maintainer's machine (infra/terraform/README.md); here every test plans against mocked\n   # providers.\n   terraform:\n+    if: github.event_name == 'push'\n     runs-on: ubuntu-24.04\n     timeout-minutes: 10\n     steps:\n",
+      "test_method": "scripts/ci-gates.test.sh",
+      "expect": "fails",
+      "why": "AC1: a check job with a job-level if: fails the structural check (ci.yml: ci-passed needs every check job)"
+    },
+    {
+      "id": "b2",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\nindex dc7441c..fd091ad 100644\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -444,7 +444,7 @@ jobs:\n   # lives only in needs: NEEDS is the whole needs context, and floor-guard checks it names every check job.\n   ci-passed:\n     needs: [backend, frontend, platform, terraform, floor-guard, e2e]\n-    if: always()\n+    if: ${{ !cancelled() }}\n     runs-on: ubuntu-24.04\n     timeout-minutes: 5\n     steps:\n",
+      "test_method": "scripts/ci-gates.test.sh",
+      "expect": "fails",
+      "why": "AC2: ci-passed with !cancelled() instead of always() fails the gate settings check"
+    },
+    {
+      "id": "b3",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\nindex dc7441c..f59d627 100644\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -452,7 +452,7 @@ jobs:\n         env:\n           NEEDS: ${{ toJSON(needs) }}\n         run: |\n-          not_passed=$(jq -r 'to_entries[] | select(.value.result != \"success\") | \"\\(.key): \\(.value.result)\"' <<< \"$NEEDS\")\n+          not_passed=$(jq -r 'to_entries[] | select(.value.result != \"success\" and .value.result != \"skipped\") | \"\\(.key): \\(.value.result)\"' <<< \"$NEEDS\")\n           if [[ -n \"$not_passed\" ]]; then\n             while IFS= read -r line; do echo \"::error::$line\"; done <<< \"$not_passed\"\n             exit 1\n",
+      "test_method": "scripts/ci-gates.test.sh",
+      "expect": "fails",
+      "why": "AC2: a gate that lets skipped through fails \"ci-passed: e2e skipped fails, naming it\""
+    },
+    {
+      "id": "b4",
+      "patch": "diff --git a/.github/workflows/security.yml b/.github/workflows/security.yml\nindex 79f2168..78f98df 100644\n--- a/.github/workflows/security.yml\n+++ b/.github/workflows/security.yml\n@@ -145,7 +145,7 @@ jobs:\n   # always() runs it even when the run is cancelled. For the codeql matrix, needs.codeql.result is the legs' combined\n   # result; GitHub Docs do not say how legs combine, so story 9.1's Supervisor checks prove one failing leg fails it.\n   security-passed:\n-    needs: [gitleaks, codeql, vulnerable-packages, trivy]\n+    needs: [gitleaks, codeql, vulnerable-packages]\n     if: always()\n     runs-on: ubuntu-24.04\n     timeout-minutes: 5\n",
+      "test_method": "scripts/ci-gates.test.sh",
+      "expect": "fails",
+      "why": "AC3: security-passed without trivy in its needs fails ci-gates.sh and the settings check"
+    },
+    {
+      "id": "b5",
+      "patch": "diff --git a/.github/actions/install-compose/install.sh b/.github/actions/install-compose/install.sh\nindex 220e305..8426f34 100755\n--- a/.github/actions/install-compose/install.sh\n+++ b/.github/actions/install-compose/install.sh\n@@ -9,7 +9,7 @@\n set -euo pipefail\n \n version=5.6.1\n-sha256=47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0\n+sha256=57737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0\n \n plugins=\"${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins\"\n mkdir -p \"$plugins\"\n",
+      "test_method": "scripts/test-lock.sh run stack 9.1-break -- docker run --rm --platform linux/amd64 -v \"$PWD/.github/actions/install-compose:/action:ro\" ubuntu:24.04 bash -c 'apt-get update -qq && apt-get install -y -qq curl ca-certificates > /dev/null && mkdir -p /shim && printf \"#!/bin/bash\\nshift\\nexec \\\"\\$HOME/.docker/cli-plugins/docker-compose\\\" \\\"\\$@\\\"\\n\" > /shim/docker && chmod +x /shim/docker && PATH=/shim:$PATH RUNNER_TEMP=$(mktemp -d) /action/install.sh'",
+      "expect": "fails",
+      "why": "AC4: one character of the Compose SHA-256 changed; the install script fails at sha256sum --check (needs Docker and network)"
+    },
+    {
+      "id": "b6",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\nindex dc7441c..3176490 100644\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -393,12 +393,12 @@ jobs:\n     env:\n       TRIVY_NO_PROGRESS: \"true\" # no download progress bars in the log\n     steps:\n+      - uses: ./.github/actions/install-trivy\n+\n       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           persist-credentials: false\n \n-      - uses: ./.github/actions/install-trivy\n-\n       - name: Log in to GHCR\n         env:\n           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n",
+      "test_method": "scripts/ci-gates.test.sh",
+      "expect": "fails",
+      "why": "AC5: publish calls install-trivy before its checkout; \"install-trivy is not after its checkout\" fails"
+    },
+    {
+      "id": "b7",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\nindex dc7441c..8773c89 100644\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -384,7 +384,7 @@ jobs:\n   # Each image is built, scanned and only then pushed, so the pushed bytes are the scanned bytes.\n   publish:\n     if: github.event_name == 'push' && github.ref == 'refs/heads/main'\n-    needs: [backend, frontend, platform, floor-guard, e2e]\n+    needs: [backend, frontend, platform, floor-guard]\n     runs-on: ubuntu-24.04\n     timeout-minutes: 40\n     permissions:\n",
+      "test_method": "scripts/ci-gates.test.sh",
+      "expect": "fails",
+      "why": "AC6: publish loses e2e from its needs; \"publish: its needs changed\" fails"
+    },
+    {
+      "id": "b8",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\nindex dc7441c..42d2aef 100644\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -442,6 +442,11 @@ jobs:\n   # reads each needed job's result and passes only when every one is success. always() runs it even when the run is\n   # cancelled; with !cancelled() it would be skipped then, and a skipped required check counts as passing. The job list\n   # lives only in needs: NEEDS is the whole needs context, and floor-guard checks it names every check job.\n+  dummy:\n+    runs-on: ubuntu-24.04\n+    steps:\n+      - run: \"true\"\n+\n   ci-passed:\n     needs: [backend, frontend, platform, terraform, floor-guard, e2e]\n     if: always()\n",
+      "test_method": "scripts/ci-gates.sh .github/workflows/ci.yml ci-passed publish",
+      "expect": "fails",
+      "why": "AC8: a job added to ci.yml and left out of ci-passed needs; ci-gates.sh fails naming dummy"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/9.1-ci-gates-test.txt",
+      "TestResults/9.1-ci-gates.txt",
+      "TestResults/9.1-actionlint.txt",
+      "TestResults/9.1-shellcheck.txt",
+      "TestResults/9.1-floor-guard.txt",
+      "TestResults/9.1-run-breaks-test.txt",
+      "TestResults/9.1-secret-scan.txt",
+      "TestResults/9.1-security-local.txt",
+      "TestResults/9.1-tf-fmt.txt",
+      "TestResults/9.1-install-actions-smoke.txt",
+      "TestResults/9.1-ci-gates-before.txt",
+      "TestResults/9.1-breaks-dry-run.txt"
+    ],
+    "diff_hash": "e3b1c1103971",
+    "diff_hash_command": "scripts/diff-hash.sh <worktree> HEAD",
+    "backend_suite": "not run: no backend, frontend or infra/tests file changes (the only infra/ change is one comment in infra/terraform/modules/compute/main.tf; terraform fmt and the Trivy config scan pass)"
+  },
+  "supervisor_checks": [
+    "AC7: push story/9.1 with scripts/push-and-watch.sh, then gh pr create --base main --head story/9.1 --title '<conventional title>' --body '<summary>'; wait for both events; gh pr checks <n> lists ci-passed and security-passed as pass (GitHub Actions app), every check of the push and pull_request runs passing; only then scripts/merge-story.sh. After the fast-forward: gh pr view <n> --json state (MERGED), else gh pr close <n>.",
+    "After the fast-forward: main's CI run succeeds with publish (proof of publish's install-trivy call after its checkout).",
+    "Throwaway branch from story/9.1 with a pull request to main, never merged, one change at a time, each must fail as named: (1) exit 1 step in vulnerable-packages, so security-passed shows 'vulnerable-packages: failure'; (2) exit 1 step with if: matrix.language == 'csharp' in codeql, so security-passed shows 'codeql: failure' (the undocumented combined result); (3) if: false on e2e, so floor-guard fails (ci-gates.sh: e2e has a job-level if:) and ci-passed shows 'e2e: skipped' (floor-guard: failure too); (4) gh run cancel <id> while e2e runs, so ci-passed still runs and shows each cancelled job; (5) one character of sha256 in .github/actions/install-compose/install.sh, so backend, platform and e2e fail at the checksum and ci-passed names all three; (6) one character of sha256 in .github/actions/install-trivy/install.sh, so trivy fails and security-passed shows 'trivy: failure'; (7) a failing assertion in one backend test, so ci-passed shows 'backend: failure'; (8) a dummy job in ci.yml left out of ci-passed's needs, so floor-guard fails naming it.",
+    "Against today's files: scripts/ci-gates.sh on the base commit's ci.yml and security.yml already fails, naming the five conditional jobs (TestResults/9.1-ci-gates-before.txt); the supervisor can repeat it with git show 7764c9e:.github/workflows/ci.yml > /tmp/ci.yml && scripts/ci-gates.sh /tmp/ci.yml ci-passed publish"
+  ],
+  "assumptions": [
+    "Criterion 8's floor-guard step calls a new script, scripts/ci-gates.sh, with a test, scripts/ci-gates.test.sh, rather than inline yq in the step, so the check is test-first and shellcheck-linted; the script also fails a check job with a job-level if: or needs:, which enforces criterion 1's structure in CI. Neither file is in the story's Touches list.",
+    "ci-gates.test.sh also asserts each gate's settings, publish's if and needs, and that each local install action runs after its job's checkout in exactly the expected jobs. actionlint 1.7.12 does not report a uses: ./ path to a missing local action (checked in a scratch copy), and publish runs only on main, so this test is the pre-merge guard for criterion 5's 'after their checkout'.",
+    "The gate's run: script with a NEEDS that is not JSON exits with jq's code 5 (the step's -e stops it), so it fails closed; the test asserts non-zero, not exactly 1.",
+    "With if: false on e2e (Supervisor check 3), floor-guard also fails, because ci-gates.sh rejects a job-level if:, so ci-passed names 'e2e: skipped' and 'floor-guard: failure'.",
+    "Local tools for the checks: actionlint 1.7.12 and yq 4.54.1 darwin_arm64 and Trivy 0.76.1 macOS-ARM64, each checked against its release's checksums file, in /tmp/dd91tools.g2wK (outside the repo). The breaks and ci-gates.test.sh need yq v4 and jq on PATH; break b5 needs Docker and the network.",
+    "The smoke container pulled the public ubuntu:24.04 image (a newer digest than the one on the shared daemon); it is not a disputedesk build, so it was left in place.",
+    "The two gates' run: scripts are the same five lines in two workflows; kept as plain duplication (two copies; AGENTS.md abstracts on the third)."
+  ],
+  "open_questions": [],
+  "conflicts": []
+}

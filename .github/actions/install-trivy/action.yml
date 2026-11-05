@@ -1,0 +1,8 @@
+name: Install Trivy
+description: Installs the pinned Trivy release, checked against its SHA-256, and puts it on PATH (install.sh).
+runs:
+  using: composite
+  steps:
+    # The script sits beside this file so shellcheck lints it (actionlint does not lint a composite action's run:).
+    - run: '"$GITHUB_ACTION_PATH/install.sh"'
+      shell: bash

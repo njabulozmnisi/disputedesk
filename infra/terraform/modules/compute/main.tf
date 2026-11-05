@@ -56,7 +56,7 @@ variable "kms_key_arn" {
 locals {
   # The Docker Compose plugin, pinned by version and by the SHA-256 the release publishes for this file
   # (docker-compose-linux-x86_64.sha256), checked before install (Docker, "Install the plugin manually").
-  # CI installs the same pin (.github/workflows/ci.yml, COMPOSE_VERSION and COMPOSE_SHA256); change them together.
+  # CI installs the same pin (.github/actions/install-compose/install.sh, version and sha256); change them together.
   compose_version = "5.6.1"
   compose_sha256  = "47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0"
 
