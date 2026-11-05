@@ -1,9 +1,7 @@
-using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -13,14 +11,15 @@ namespace DisputeDesk.Infrastructure.Seeding;
 /// Seeds the demo data from <c>backend/fixtures/local.json</c> when <c>Seed:Enabled</c> is on (AD-30). EF Core calls it after
 /// every migrate (Microsoft Learn: "Data Seeding", <c>UseSeeding</c> and <c>UseAsyncSeeding</c>), so it only adds what
 /// is missing. First the customer links: each customer marked <c>linked</c> is linked to their fixture login
-/// (<c>LoginSub</c> = the login's <c>userId</c>). Then the disputes: per customer, a context acting for that customer
-/// reads each fixture dispute through the ownership filter and raises only the missing ones, each committed whole
-/// through the AD-14 commit in one <c>SaveChanges</c>.
+/// (<c>LoginSub</c> = the login's <c>userId</c>). Then the disputes: the migrating context reads each fixture dispute
+/// past the ownership filter, AD-11's third named bypass, by its customer as well as its transaction
+/// (<see cref="SeedDispute.Matches"/>), and raises only the missing ones, each committed whole through the AD-14 commit
+/// in one <c>SaveChanges</c>.
 /// <para>
-/// With no migration pending, EF Core seeds inside its migration transaction, which holds the Npgsql migration lock.
-/// After it applies pending migrations it has already committed them, which releases that lock, so it seeds with no
-/// transaction and no lock and two instances can seed at once. Idempotency then rests on the unique
-/// <c>(AccountRef, TransactionId)</c> index, one <c>SaveChanges</c> per stream, and the migrator's retry.
+/// The writes run on the migrating context's connection, in the transaction EF Core holds there when no migration was
+/// pending. Inside that transaction each <c>SaveChanges</c> is its own savepoint (EF Core docs, Transactions:
+/// savepoints), so a dispute's stream is still all or nothing. The unique <c>(AccountRef, TransactionId)</c> index
+/// refuses a duplicate.
 /// </para>
 /// </summary>
 public sealed partial class Seeder(IOptions<SeedOptions> options, TimeProvider time, ILogger<Seeder> logger)
@@ -53,24 +52,20 @@ public sealed partial class Seeder(IOptions<SeedOptions> options, TimeProvider t
             return;
         }
 
-        // Every fixture dispute is checked before any is written, then grouped by its customer in file order.
+        // Every fixture dispute is checked before any is written, then each is seeded in file order.
         List<SeedDispute> planned = SeedDispute.Plan(fixtures, now);
         int added = 0;
-        foreach (IGrouping<(string CustomerId, string LoginSub), SeedDispute> customer in planned.GroupBy(dispute => (dispute.CustomerId, dispute.LoginSub)))
+        foreach (SeedDispute dispute in planned)
         {
-            await using AppDbContext customerDb = ContextFor(db, customer.Key);
-            foreach (SeedDispute dispute in customer)
+            bool everDisputed = await db.Set<Dispute>().IgnoreQueryFilters([AppDbContext.OwnershipFilter]).AnyAsync(dispute.Matches(), cancellationToken);
+            if (everDisputed)
             {
-                bool everDisputed = await customerDb.Entities<Dispute>().AnyAsync(dispute.Matches(), cancellationToken);
-                if (everDisputed)
-                {
-                    continue;
-                }
-
-                customerDb.Entities<Dispute>().Add(dispute.Write(everDisputed));
-                await customerDb.SaveChangesAsync(cancellationToken);
-                added++;
+                continue;
             }
+
+            db.Set<Dispute>().Add(dispute.Write(everDisputed));
+            await db.SaveChangesAsync(cancellationToken);
+            added++;
         }
 
         LogSeededDisputes(logger, added);
@@ -101,24 +96,20 @@ public sealed partial class Seeder(IOptions<SeedOptions> options, TimeProvider t
             return;
         }
 
-        // Every fixture dispute is checked before any is written, then grouped by its customer in file order.
+        // Every fixture dispute is checked before any is written, then each is seeded in file order.
         List<SeedDispute> planned = SeedDispute.Plan(fixtures, now);
         int added = 0;
-        foreach (IGrouping<(string CustomerId, string LoginSub), SeedDispute> customer in planned.GroupBy(dispute => (dispute.CustomerId, dispute.LoginSub)))
+        foreach (SeedDispute dispute in planned)
         {
-            using AppDbContext customerDb = ContextFor(db, customer.Key);
-            foreach (SeedDispute dispute in customer)
+            bool everDisputed = db.Set<Dispute>().IgnoreQueryFilters([AppDbContext.OwnershipFilter]).Any(dispute.Matches());
+            if (everDisputed)
             {
-                bool everDisputed = customerDb.Entities<Dispute>().Any(dispute.Matches());
-                if (everDisputed)
-                {
-                    continue;
-                }
-
-                customerDb.Entities<Dispute>().Add(dispute.Write(everDisputed));
-                customerDb.SaveChanges();
-                added++;
+                continue;
             }
+
+            db.Set<Dispute>().Add(dispute.Write(everDisputed));
+            db.SaveChanges();
+            added++;
         }
 
         LogSeededDisputes(logger, added);
@@ -152,25 +143,6 @@ public sealed partial class Seeder(IOptions<SeedOptions> options, TimeProvider t
     // The one clock reading of a seed (AD-4), cut to the whole microseconds a Postgres timestamptz keeps, so the SLA demo
     // dispute's stored instants are exactly the ones resolved from it.
     private DateTimeOffset SeedingInstant() => Instants.ToWholeMicroseconds(time.GetUtcNow());
-
-    /// <summary>
-    /// A context acting for one customer, so its reads pass the ownership filter with no bypass (AD-11, AD-30). It runs
-    /// on the migrating context's connection and does not own it, as <c>OutboxRelay</c> builds its context on its lock
-    /// connection, and joins the transaction EF Core holds there when no migration was pending (EF Core docs,
-    /// Transactions: cross-context transaction). Inside that transaction each <c>SaveChanges</c> is its own savepoint
-    /// (EF Core docs, Transactions: savepoints), so a dispute's stream is still all or nothing.
-    /// </summary>
-    private static AppDbContext ContextFor(DbContext migrating, (string CustomerId, string LoginSub) customer)
-    {
-        var currentCustomer = new CurrentCustomer();
-        currentCustomer.Set(customer.CustomerId, customer.LoginSub);
-        DbContextOptions<AppDbContext> options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseNpgsql(migrating.Database.GetDbConnection())
-            .Options;
-        var customerDb = new AppDbContext(options, currentCustomer);
-        customerDb.Database.UseTransaction(migrating.Database.CurrentTransaction?.GetDbTransaction());
-        return customerDb;
-    }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Seeded {Count} customer links")]
     private static partial void LogSeeded(ILogger logger, int count);
