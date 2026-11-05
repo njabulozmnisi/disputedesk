@@ -4,7 +4,7 @@
 # and the jobs named after it, which run only on main after the checks. A check job left out of the gate would never
 # block a merge once the gate is the required check, so this fails, naming each job that is wrong.
 # Usage: scripts/ci-gates.sh <workflow file> <gate job> [<main-only job>...]
-#        (CI's floor-guard job: ci.yml ci-passed publish; security.yml security-passed)
+#        (CI's floor-guard job: ci.yml ci-passed publish deploy deploy-switched-off; security.yml security-passed)
 # Needs yq v4 (preinstalled on ubuntu-24.04). Exit codes: 0 ok; 1 a job is wrong; 2 usage.
 set -euo pipefail
 

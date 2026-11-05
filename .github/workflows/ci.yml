@@ -249,16 +249,18 @@ jobs:
 
       - run: scripts/floor-guard.sh
 
-      # ad-012 clauses 1 and 3: each gate needs every check job, and every check job runs unconditionally. publish runs
-      # only on main after the checks, so ci-passed does not need it. yq is preinstalled on the runner image.
+      # ad-012 clauses 1 and 3: each gate needs every check job, and every check job runs unconditionally. publish,
+      # deploy and deploy-switched-off run only on main after the checks, so ci-passed does not need them. yq is
+      # preinstalled on the runner image.
       - name: Gates need every check job
         run: |
-          scripts/ci-gates.sh .github/workflows/ci.yml ci-passed publish
+          scripts/ci-gates.sh .github/workflows/ci.yml ci-passed publish deploy deploy-switched-off
           scripts/ci-gates.sh .github/workflows/security.yml security-passed
 
       # The flow scripts' own tests, on scratch repositories and files with stubs: no network, no Docker.
       - run: scripts/ci-gates.test.sh
       - run: scripts/run-breaks.test.sh
+      - run: scripts/deploy-workflow.test.sh
 
       - name: Install actionlint
         run: |
@@ -382,6 +384,7 @@ jobs:
   # Story 7.3 (AD-32): the only job that can write packages, on main only and only after the jobs in its needs pass;
   # terraform is not among them (story 7.16).
   # Each image is built, scanned and only then pushed, so the pushed bytes are the scanned bytes.
+  # Its outputs are the five pushed images by digest, which deploy and deploy-switched-off read (ad-012 clause 3).
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [backend, frontend, platform, floor-guard, e2e]
@@ -390,6 +393,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      api: ${{ steps.images.outputs.api }}
+      worker: ${{ steps.images.outputs.worker }}
+      gateway: ${{ steps.images.outputs.gateway }}
+      core-banking: ${{ steps.images.outputs.core-banking }}
+      provision: ${{ steps.images.outputs.provision }}
     env:
       TRIVY_NO_PROGRESS: "true" # no download progress bars in the log
     steps:
@@ -405,8 +414,10 @@ jobs:
         run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
       # Each image is tagged sha-<the first 12 characters of the commit>, never latest. A failed build, scan or push
-      # stops the step before the next image.
+      # stops the step before the next image. Each pushed image by digest is a step output, and one that is not
+      # ghcr.io/njabulozmnisi/disputedesk-<name>@sha256:<64 hex> (deploy.yml's bound) fails the step.
       - name: Build, scan and push the five images
+        id: images
         run: |
           publish(){ # name context [options passed on to docker build]
             image="ghcr.io/njabulozmnisi/disputedesk-$1:sha-${GITHUB_SHA::12}"
@@ -419,6 +430,12 @@ jobs:
             digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image")
             revision=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
             echo "| $1 | \`$digest\` | \`$revision\` |" >> "$GITHUB_STEP_SUMMARY"
+            pattern="^ghcr\.io/njabulozmnisi/disputedesk-$1@sha256:[0-9a-f]{64}$"
+            if [[ ! $digest =~ $pattern ]]; then
+              echo "::error::$1 was pushed, but its reference '$digest' is not its image by digest."
+              exit 1
+            fi
+            echo "$1=$digest" >> "$GITHUB_OUTPUT"
           }
           printf '| Image | Digest | Revision |\n|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
           # api and worker are the -local targets: they carry the probe Compose's health checks call (P57).
@@ -437,6 +454,53 @@ jobs:
       - name: Log out of GHCR
         if: always()
         run: docker logout ghcr.io
+
+  # ad-012 clause 4 (AD-28): deploy follows publish on main behind one switch, the repository variable DEPLOY_ENABLED.
+  # Two jobs with opposite ifs, because a job that calls a reusable workflow has no steps of its own and a skipped job
+  # writes no notice (GitHub, "Reusing workflow configurations", supported keywords). An unset variable reads as an
+  # empty string, so deploy is off until it is set to true (GitHub, "Contexts", vars).
+  # The one job that holds id-token: write; deploy.yml's job runs in the environment dev, which only main may deploy to.
+  deploy:
+    needs: publish
+    if: vars.DEPLOY_ENABLED == 'true'
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      sha: ${{ github.sha }}
+      api: ${{ needs.publish.outputs.api }}
+      worker: ${{ needs.publish.outputs.worker }}
+      gateway: ${{ needs.publish.outputs.gateway }}
+      core-banking: ${{ needs.publish.outputs.core-banking }}
+      provision: ${{ needs.publish.outputs.provision }}
+
+  # Runs when deploy is switched off, so every main run shows publish's five references and that nothing was sent.
+  deploy-switched-off:
+    needs: publish
+    if: vars.DEPLOY_ENABLED != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Show the five image references; send nothing
+        env:
+          API: ${{ needs.publish.outputs.api }}
+          WORKER: ${{ needs.publish.outputs.worker }}
+          GATEWAY: ${{ needs.publish.outputs.gateway }}
+          CORE_BANKING: ${{ needs.publish.outputs.core-banking }}
+          PROVISION: ${{ needs.publish.outputs.provision }}
+        run: |
+          for pair in "api=$API" "worker=$WORKER" "gateway=$GATEWAY" "core-banking=$CORE_BANKING" "provision=$PROVISION"; do
+            name=${pair%%=*}
+            reference=${pair#*=}
+            if [[ -z $reference ]]; then
+              echo "::error::publish gave no $name reference."
+              exit 1
+            fi
+            echo "$name  $reference"
+          done
+          echo "Nothing was sent to AWS."
+          echo "::notice::Deploy is switched off: the repository variable DEPLOY_ENABLED is not true, so nothing was sent to AWS."
 
   # ad-012 clause 1: the CI required check (story 9.3). A skipped job reports success to a required check, so this job
   # reads each needed job's result and passes only when every one is success. always() runs it even when the run is

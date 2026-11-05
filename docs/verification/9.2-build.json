@@ -1,0 +1,236 @@
+{
+  "status": "built",
+  "story": "9.2",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/disputedesk/.claude/worktrees/9.2",
+  "base": "76a258352e351b7b9234245ec7bbf28c955bc101 (origin/story/docs-9.2 plus the index commit; the work is uncommitted on it)",
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "R33",
+      "test": "scripts/deploy-workflow.test.sh: 'publish: declares the five outputs from the step images', 'publish: the build step's id is images', 'publish: writes the five references to GITHUB_OUTPUT', 'publish: the summary table has its header, rule and five rows', and 'publish: api's reference ... fails the step' for a tag reference, another image's digest, an upper-case digest and an empty reference (the step is run as GitHub runs it, with docker and trivy stubbed)"
+    },
+    {
+      "id": "AC2",
+      "requirement": "R38",
+      "test": "scripts/deploy-workflow.test.sh: 'deploy.yml: workflow_call takes six required strings', '...workflow_dispatch takes sha alone', '...no workflow-level concurrency', '...the job runs on main only', '...the job is in the environment dev', '...the job holds deploy-dev without cancelling', '...the job's permissions', '...the images step comes just before configure-aws-credentials', '...the deploy step reads the images step's outputs', '...the images step reads the event and the five inputs through env'; the SHA bound (39, 41, upper case and empty fail; 40 passes); the call path's bounds (tag reference, another image's digest, upper case, 63 and 65 hex, trailing space, empty, an api reference given as worker each fail; five valid references pass and are written); actionlint (TestResults/9.2-actionlint.txt)"
+    },
+    {
+      "id": "AC3",
+      "requirement": "R38",
+      "test": "scripts/deploy-workflow.test.sh: 'ci.yml deploy: calls deploy.yml', 'ci.yml: both deploy jobs need publish', the two opposite ifs, 'ci.yml deploy: grants id-token: write and contents: read', 'ci.yml deploy: passes the SHA and publish's five outputs', 'ci.yml deploy-switched-off: timeout 5', '...only the workflow's contents: read', 'ci.yml: one job holds id-token: write', 'deploy-switched-off: writes the notice', '...prints the five references', '...an empty output fails'; scripts/ci-gates.test.sh and scripts/ci-gates.sh with floor-guard's new arguments (TestResults/9.2-ci-gates.txt), which fails naming both new jobs with the old arguments (TestResults/9.2-ci-gates-old-args.txt); actionlint. The run on main is the supervisor's GitHub-side check G2."
+    },
+    {
+      "id": "AC4",
+      "requirement": "R38",
+      "test": "scripts/deploy-workflow.test.sh: 'deploy.yml dispatch: resolves the five digests from GHCR', '...writes the same five outputs', '...an image built from another commit fails', plus the job's one concurrency group (AC2). The README rollback section is a document, reviewed, not tested."
+    },
+    {
+      "id": "AC5",
+      "requirement": "R38, NFR-INFRA-4",
+      "test": "No automated test: the human creates dev (hitl) and the security agent records the GET read-back in docs/verification/9.2-security.md. The two gh api commands are in infra/terraform/README.md section 8, before the repository variables (reviewed)."
+    },
+    {
+      "id": "AC6",
+      "requirement": "R38, NFR-INFRA-4",
+      "test": "infra/terraform/envs/dev/tests/deploy_role.tftest.hcl: criterion_5_the_role_trusts_only_this_repository_dev_environment (the exact trust policy with ...:environment:dev, no StringLike) and criterion_5_the_image_pattern_names_this_repository_owner_in_lower_case (the owner-case subject ...:environment:dev); 2 failed before the module change, 50 passed after (TestResults/9.2-terraform.txt)"
+    },
+    {
+      "id": "AC7",
+      "requirement": "R39",
+      "test": "No automated test: infra/terraform/README.md's modules/deploy-role row and section 8 (use_default true, the environment subject, dev created first, the four variables, the first deploy by dispatch, then DEPLOY_ENABLED=true, the offline-limit sentence) are documents, reviewed."
+    }
+  ],
+  "smoke": "No API or UI change, so no stack smoke check. Every changed run: step (publish's build step, deploy.yml's SHA check and images step on both paths, deploy-switched-off's step) was run as GitHub runs a bash step (bash --noprofile --norc -eo pipefail) with docker and trivy stubbed, in scripts/deploy-workflow.test.sh. No AWS command, no AWS API call, no gh write; the GitHub environment was not created.",
+  "standards": [
+    {
+      "mechanism": "Reusable workflow: workflow_call inputs, same-repository ./.github/workflows/deploy.yml at the caller's commit, calling-job keywords limited to uses/with/needs/if/permissions, the github context of the caller",
+      "source": "https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows ; https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations"
+    },
+    {
+      "mechanism": "environment on the called job (the calling job cannot set one); deployment protection rules pass before the job is sent to a runner",
+      "source": "https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows ; https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax"
+    },
+    {
+      "mechanism": "Job outputs from GITHUB_OUTPUT, read with needs.<job>.outputs through env",
+      "source": "https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/pass-job-outputs"
+    },
+    {
+      "mechanism": "vars context in jobs.<job_id>.if and with; an unset variable reads as an empty string",
+      "source": "https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#vars-context"
+    },
+    {
+      "mechanism": "The notice workflow command",
+      "source": "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands"
+    },
+    {
+      "mechanism": "Job-level concurrency group with cancel-in-progress: false; the queue: single default marked as a shortcut",
+      "source": "https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency"
+    },
+    {
+      "mechanism": "OIDC subject of a job that references an environment, with immutable owner and repository IDs; a reusable workflow's token carries the caller's claims",
+      "source": "https://docs.github.com/en/actions/reference/security/oidc ; https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-with-reusable-workflows"
+    },
+    {
+      "mechanism": "AWS IAM web-identity trust: exact StringEquals on aud and sub; environments restricted to deployment branches",
+      "source": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-idp_oidc.html ; https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws"
+    },
+    {
+      "mechanism": "Environment with a custom deployment branch policy (README commands, typed -F fields)",
+      "source": "https://docs.github.com/en/rest/deployments/environments ; https://docs.github.com/en/rest/deployments/branch-policies ; https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments ; https://cli.github.com/manual/gh_api"
+    },
+    {
+      "mechanism": "Deploy the published digest; roll back by redeploying an earlier release",
+      "source": "https://12factor.net/build-release-run"
+    },
+    {
+      "mechanism": "terraform test against mocked providers",
+      "source": "https://developer.hashicorp.com/terraform/language/tests/mocking"
+    }
+  ],
+  "breaks": [
+    {
+      "id": "b1-publish-shape",
+      "criterion": "AC1",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -431,10 +431,6 @@\n             revision=$(docker inspect --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' \"$image\")\n             echo \"| $1 | \\`$digest\\` | \\`$revision\\` |\" >> \"$GITHUB_STEP_SUMMARY\"\n             pattern=\"^ghcr\\.io/njabulozmnisi/disputedesk-$1@sha256:[0-9a-f]{64}$\"\n-            if [[ ! $digest =~ $pattern ]]; then\n-              echo \"::error::$1 was pushed, but its reference '$digest' is not its image by digest.\"\n-              exit 1\n-            fi\n             echo \"$1=$digest\" >> \"$GITHUB_OUTPUT\"\n           }\n           printf '| Image | Digest | Revision |\\n|---|---|---|\\n' >> \"$GITHUB_STEP_SUMMARY\"\n",
+      "test_method": "scripts/deploy-workflow.test.sh",
+      "expect": "fails: publish: api's reference '…:sha-<12>' fails the step (exit 0, want 1); supervisor check 5 locally"
+    },
+    {
+      "id": "b1-publish-outputs",
+      "criterion": "AC1",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -435,7 +435,6 @@\n               echo \"::error::$1 was pushed, but its reference '$digest' is not its image by digest.\"\n               exit 1\n             fi\n-            echo \"$1=$digest\" >> \"$GITHUB_OUTPUT\"\n           }\n           printf '| Image | Digest | Revision |\\n|---|---|---|\\n' >> \"$GITHUB_STEP_SUMMARY\"\n           # api and worker are the -local targets: they carry the probe Compose's health checks call (P57).\n",
+      "test_method": "scripts/deploy-workflow.test.sh",
+      "expect": "fails: publish: writes the five references to GITHUB_OUTPUT"
+    },
+    {
+      "id": "b2-environment",
+      "criterion": "AC2",
+      "patch": "diff --git a/.github/workflows/deploy.yml b/.github/workflows/deploy.yml\n--- a/.github/workflows/deploy.yml\n+++ b/.github/workflows/deploy.yml\n@@ -48,7 +48,6 @@\n     # The environment is set here, on the called job: a job that calls a reusable workflow cannot set one (GitHub,\n     # \"Reuse workflows\"). The main guard keeps a dispatch from another branch from even asking for the environment.\n     if: github.ref == 'refs/heads/main'\n-    environment: dev\n     # Two deploys never interleave on the one instance, whether called by CI or dispatched for rollback; a second one\n     # waits for the first to finish. The group is held only here, not by the caller, so the two never share it.\n     # shortcut: one pending deploy per group; use queue: max once the actionlint pin accepts it\n",
+      "test_method": "scripts/deploy-workflow.test.sh",
+      "expect": "fails: deploy.yml: the job is in the environment dev"
+    },
+    {
+      "id": "b2-call-bound",
+      "criterion": "AC2",
+      "patch": "diff --git a/.github/workflows/deploy.yml b/.github/workflows/deploy.yml\n--- a/.github/workflows/deploy.yml\n+++ b/.github/workflows/deploy.yml\n@@ -95,7 +95,7 @@\n               name=${pair%%=*}\n               reference=${pair#*=}\n               pattern=\"^ghcr\\.io/njabulozmnisi/disputedesk-$name@sha256:[0-9a-f]{64}$\"\n-              if [[ ! $reference =~ $pattern ]]; then\n+              if false; then\n                 echo \"::error::$name must be ghcr.io/njabulozmnisi/disputedesk-$name@sha256: and 64 lower-case hex characters.\"\n                 exit 1\n               fi\n",
+      "test_method": "scripts/deploy-workflow.test.sh",
+      "expect": "fails: deploy.yml call: api '…:sha-<12>' fails (exit 0, want 1); supervisor check 6 locally"
+    },
+    {
+      "id": "b3-switch",
+      "criterion": "AC3",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -478,7 +478,7 @@\n   # Runs when deploy is switched off, so every main run shows publish's five references and that nothing was sent.\n   deploy-switched-off:\n     needs: publish\n-    if: vars.DEPLOY_ENABLED != 'true'\n+    if: always()\n     runs-on: ubuntu-24.04\n     timeout-minutes: 5\n     steps:\n",
+      "test_method": "scripts/deploy-workflow.test.sh",
+      "expect": "fails: ci.yml deploy-switched-off: only when DEPLOY_ENABLED is not true"
+    },
+    {
+      "id": "b3-apii",
+      "criterion": "AC3",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -469,7 +469,7 @@\n     uses: ./.github/workflows/deploy.yml\n     with:\n       sha: ${{ github.sha }}\n-      api: ${{ needs.publish.outputs.api }}\n+      api: ${{ needs.publish.outputs.apii }}\n       worker: ${{ needs.publish.outputs.worker }}\n       gateway: ${{ needs.publish.outputs.gateway }}\n       core-banking: ${{ needs.publish.outputs.core-banking }}\n",
+      "test_method": "actionlint .github/workflows/*.yml",
+      "expect": "fails: actionlint reports property \"apii\" is not defined (supervisor check 3)"
+    },
+    {
+      "id": "b3-empty-output",
+      "criterion": "AC3",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -493,7 +493,7 @@\n           for pair in \"api=$API\" \"worker=$WORKER\" \"gateway=$GATEWAY\" \"core-banking=$CORE_BANKING\" \"provision=$PROVISION\"; do\n             name=${pair%%=*}\n             reference=${pair#*=}\n-            if [[ -z $reference ]]; then\n+            if false; then\n               echo \"::error::publish gave no $name reference.\"\n               exit 1\n             fi\n",
+      "test_method": "scripts/deploy-workflow.test.sh",
+      "expect": "fails: deploy-switched-off: an empty output fails (exit 0, want 1)"
+    },
+    {
+      "id": "b4-concurrency",
+      "criterion": "AC4",
+      "patch": "diff --git a/.github/workflows/deploy.yml b/.github/workflows/deploy.yml\n--- a/.github/workflows/deploy.yml\n+++ b/.github/workflows/deploy.yml\n@@ -54,7 +54,7 @@\n     # shortcut: one pending deploy per group; use queue: max once the actionlint pin accepts it\n     concurrency:\n       group: deploy-dev\n-      cancel-in-progress: false\n+      cancel-in-progress: true\n     runs-on: ubuntu-24.04\n     # The document's 1800-second step, plus its delivery and the digest lookups.\n     timeout-minutes: 40\n",
+      "test_method": "scripts/deploy-workflow.test.sh",
+      "expect": "fails: deploy.yml: the job holds deploy-dev without cancelling"
+    },
+    {
+      "id": "b4-dispatch-revision",
+      "criterion": "AC4",
+      "patch": "diff --git a/.github/workflows/deploy.yml b/.github/workflows/deploy.yml\n--- a/.github/workflows/deploy.yml\n+++ b/.github/workflows/deploy.yml\n@@ -117,7 +117,6 @@\n               | jq -r '(.config // .[\"linux/amd64\"].config).Labels[\"org.opencontainers.image.revision\"] // empty')\n             if [[ $revision != \"$SHA\" ]]; then\n               echo \"::error::$image@$digest was built from '$revision', not $SHA.\"\n-              exit 1\n             fi\n             echo \"$name=$image@$digest\" >> \"$GITHUB_OUTPUT\"\n             echo \"ok  $image@$digest\"\n",
+      "test_method": "scripts/deploy-workflow.test.sh",
+      "expect": "fails: deploy.yml dispatch: an image built from another commit fails (exit 0, want 1)"
+    },
+    {
+      "id": "b6-subject",
+      "criterion": "AC6",
+      "patch": "diff --git a/infra/terraform/modules/deploy-role/main.tf b/infra/terraform/modules/deploy-role/main.tf\n--- a/infra/terraform/modules/deploy-role/main.tf\n+++ b/infra/terraform/modules/deploy-role/main.tf\n@@ -49,10 +49,9 @@\n   # repo:<owner>@<owner-id>/<name>@<repo-id>:environment:<environment> (GitHub, \"OpenID Connect reference\", filtering\n   # for a specific environment and immutable subject claims). The owner and name keep GitHub's case: StringEquals is\n   # case-sensitive.\n-  oidc_subject = format(\"repo:%s@%s/%s@%s:environment:%s\",\n+  oidc_subject = format(\"repo:%s@%s/%s@%s:ref:refs/heads/main\",\n     split(\"/\", var.github_repository)[0], var.github_repository_owner_id,\n     split(\"/\", var.github_repository)[1], var.github_repository_id,\n-    var.github_environment,\n   )\n \n   # A published GHCR image by digest (AD-32), the shape infra/aws/input-bounds.sh checks, narrowed to this repository's\n",
+      "test_method": "terraform -chdir=infra/terraform/envs/dev init -backend=false -input=false -lockfile=readonly > /dev/null && terraform -chdir=infra/terraform/envs/dev test -filter=tests/deploy_role.tftest.hcl",
+      "expect": "fails: criterion_5_the_role_trusts_only_this_repository_dev_environment, trust-policy assertion (supervisor check 1)"
+    },
+    {
+      "id": "b6-stringlike",
+      "criterion": "AC6",
+      "patch": "diff --git a/infra/terraform/modules/deploy-role/trust-policy.json.tftpl b/infra/terraform/modules/deploy-role/trust-policy.json.tftpl\n--- a/infra/terraform/modules/deploy-role/trust-policy.json.tftpl\n+++ b/infra/terraform/modules/deploy-role/trust-policy.json.tftpl\n@@ -7,7 +7,9 @@\n       \"Action\": \"sts:AssumeRoleWithWebIdentity\",\n       \"Condition\": {\n         \"StringEquals\": {\n-          \"token.actions.githubusercontent.com:aud\": \"sts.amazonaws.com\",\n+          \"token.actions.githubusercontent.com:aud\": \"sts.amazonaws.com\"\n+        },\n+        \"StringLike\": {\n           \"token.actions.githubusercontent.com:sub\": \"${subject}\"\n         }\n       }\n",
+      "test_method": "terraform -chdir=infra/terraform/envs/dev init -backend=false -input=false -lockfile=readonly > /dev/null && terraform -chdir=infra/terraform/envs/dev test -filter=tests/deploy_role.tftest.hcl",
+      "expect": "fails: criterion_5_the_role_trusts_only_this_repository_dev_environment, exact policy and no-StringLike assertions (supervisor check 2)"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/9.2-deploy-workflow-test.txt",
+      "TestResults/9.2-deploy-workflow-test-before.txt",
+      "TestResults/9.2-ci-gates-test.txt",
+      "TestResults/9.2-ci-gates.txt",
+      "TestResults/9.2-ci-gates-old-args.txt",
+      "TestResults/9.2-run-breaks-test.txt",
+      "TestResults/9.2-actionlint.txt",
+      "TestResults/9.2-shellcheck.txt",
+      "TestResults/9.2-floor-guard.txt",
+      "TestResults/9.2-terraform.txt",
+      "TestResults/9.2-terraform-greps.txt",
+      "TestResults/9.2-secret-scan.txt",
+      "TestResults/9.2-security-local.txt",
+      "TestResults/9.2-breaks-dry-run.txt"
+    ],
+    "diff_hash": "87ddc12a450f",
+    "diff_hash_command": "scripts/diff-hash.sh <worktree> HEAD",
+    "backend_suite": "not run: no backend, frontend or infra/tests file changes; the trust-policy template and the IAM names IamNamesTests reads are unchanged"
+  },
+  "supervisor_checks": [
+    {
+      "id": "G1",
+      "when": "after the build, on the supervisor's pull request from story/9.2 (as 9.1; the merge stays the fast-forward)",
+      "steps": "Open the pull request from story/9.2 to main. Confirm ci-passed and security-passed both succeed, floor-guard ran scripts/deploy-workflow.test.sh, and deploy and deploy-switched-off are skipped (publish is skipped on a pull request)."
+    },
+    {
+      "id": "G2",
+      "when": "after the fast-forward to main, with DEPLOY_ENABLED unset",
+      "steps": "gh run list --workflow ci.yml --branch main --limit 1, then gh run view <run id>: publish succeeded, deploy is skipped, deploy-switched-off succeeded. gh run view <run id> --log --job <deploy-switched-off job id> shows five lines '<name>  ghcr.io/njabulozmnisi/disputedesk-<name>@sha256:<64 hex>', 'Nothing was sent to AWS.' and the notice 'Deploy is switched off: the repository variable DEPLOY_ENABLED is not true, so nothing was sent to AWS.'. No job ran configure-aws-credentials: gh run view <run id> --json jobs --jq '.jobs[] | [.name, .conclusion] | @tsv' lists no deploy-dev job that ran."
+    },
+    {
+      "id": "G3 (story check 4)",
+      "when": "only after the human created dev and the security agent's read-back",
+      "steps": "Push a throwaway branch from main. Dispatch the Deploy (dev) workflow with --ref <throwaway branch> and -f sha=<a main SHA>: its deploy job is skipped by the main guard. On that branch remove the job's if: line, push, dispatch again the same way: the run is refused by dev's branch policy before any step runs (the job shows the environment's branch protection error and no step log). Delete the branch."
+    },
+    {
+      "id": "G4 (story check 5)",
+      "when": "any time, on a scratch branch",
+      "steps": "On a scratch branch, a scratch workflow holding a copy of ci.yml's publish job with its if:, the GHCR login, docker push and logout removed, and its RepoDigests line replaced (a) by echo ghcr.io/njabulozmnisi/disputedesk-api:sha-<12 hex> for api: the step fails before api's output is written; (b) by a real reference copied from an earlier main run's publish summary: the step passes. Nothing reaches GHCR. Covered locally by b1-publish-shape."
+    },
+    {
+      "id": "G5 (story check 6)",
+      "when": "any time, on a scratch branch",
+      "steps": "On a scratch branch, a copy of deploy.yml with the job's if:, environment: and the steps from configure-aws-credentials on removed, and a scratch caller (on: push to that branch) calling it: a valid set of six inputs passes the images step; then, one at a time, api as ...:sha-<12>, an upper-case digest, ghcr.io/njabulozmnisi/disputedesk-worker@sha256:<64 hex> given as api, and a 39-character sha each fail (the SHA check or the images step). Delete the branch. Covered locally by scripts/deploy-workflow.test.sh and b2-call-bound."
+    },
+    {
+      "id": "hitl",
+      "when": "before the post-build stages",
+      "steps": "The human runs the two gh api commands of criterion 5 (infra/terraform/README.md section 8); the security agent reads them back with GET only."
+    }
+  ],
+  "assumptions": [
+    "A new script, scripts/deploy-workflow.test.sh, and a floor-guard step that runs it, are not in the story's Touches: they are the test-first proof of criteria 1 to 4 (each changed run: step run as GitHub runs it, docker and trivy stubbed), the pattern 9.1 used for scripts/ci-gates.test.sh. scripts/ci-gates.sh's usage comment and scripts/ci-gates.test.sh's floor-guard arguments follow the two new main-only jobs.",
+    "deploy-switched-off sets no job-level permissions, so it has the workflow's contents: read (the story's 'no permissions beyond contents: read'); the test pins both.",
+    "The call path's SHA bound is today's 'Check the SHA' step, which runs on both paths (the job's SHA reads inputs.sha for either trigger); the images step checks the five references.",
+    "The images step tells the paths apart by github.event_name passed through env (a called workflow sees the caller's push); any event other than workflow_dispatch is treated as a call and checked.",
+    "The deploy step and every step from configure-aws-credentials on are byte for byte unchanged (git diff shows no change there); the test pins that the deploy step reads steps.images.outputs.*.",
+    "publish's shape check runs after its summary row is written, so the job summary table is unchanged even for a reference that then fails the step.",
+    "Criteria 5 and 7 are README text and a human step, with no automated test or break; criterion 5's proof is the security agent's read-back.",
+    "Local tools: actionlint 1.7.12, yq 4.54.1 and Trivy 0.76.1 darwin_arm64, each checked against its release checksums (/tmp/dd91tools.g2wK, outside the repo); shellcheck 0.11.0; Terraform 1.17.1. The verifier needs yq v4, jq and actionlint on PATH; the Terraform breaks run terraform init in the copy, which downloads the locked providers."
+  ],
+  "open_questions": [
+    "P13 (pre-build review): whether GitHub checks the caller's id-token: write at run creation on a fork pull request; not reproducible here (no forks)."
+  ],
+  "conflicts": []
+}

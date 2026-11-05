@@ -71,6 +71,7 @@ module "deploy_role" {
   github_repository          = var.github_repository
   github_repository_owner_id = var.github_repository_owner_id
   github_repository_id       = var.github_repository_id
+  github_environment         = "dev"
   instance_arn               = module.compute.instance_arn
   clone_directory            = local.clone_directory
   ssm_path                   = var.ssm_path

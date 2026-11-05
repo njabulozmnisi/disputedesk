@@ -90,7 +90,8 @@ expect 2 'usage' "no arguments is a usage error" "$gates"
 # --- the real workflows, with floor-guard's arguments ---
 ci="$root/.github/workflows/ci.yml"
 security="$root/.github/workflows/security.yml"
-expect 0 'needs every check job' "ci.yml: ci-passed needs every check job" "$gates" "$ci" ci-passed publish
+expect 0 'needs every check job' "ci.yml: ci-passed needs every check job" \
+  "$gates" "$ci" ci-passed publish deploy deploy-switched-off
 expect 0 'needs every check job' "security.yml: security-passed needs every check job" \
   "$gates" "$security" security-passed
 

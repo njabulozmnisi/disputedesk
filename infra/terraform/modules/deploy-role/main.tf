@@ -1,5 +1,6 @@
-# The role .github/workflows/deploy.yml assumes through GitHub's OIDC provider, with no long-lived key (AD-28; GitHub,
-# "Configuring OpenID Connect in Amazon Web Services"), and the one Run Command document it may send.
+# The role .github/workflows/deploy.yml's job in the GitHub environment dev assumes through GitHub's OIDC provider, with
+# no long-lived key (AD-28; GitHub, "Configuring OpenID Connect in Amazon Web Services"), and the one Run Command
+# document it may send.
 
 variable "name" {
   description = "The prefix for every resource name."
@@ -11,7 +12,7 @@ variable "aws_region" {
 }
 
 variable "github_repository" {
-  description = "<owner>/<name>; only its main branch may assume the role."
+  description = "<owner>/<name>; only its jobs in the environment github_environment may assume the role."
   type        = string
 }
 
@@ -22,6 +23,12 @@ variable "github_repository_owner_id" {
 
 variable "github_repository_id" {
   description = "The repository's numeric ID, as digits."
+  type        = string
+}
+
+# Not validated: envs/dev passes the literal "dev" (validate at boundaries).
+variable "github_environment" {
+  description = "The GitHub environment whose jobs may assume the role; it allows only main (infra/terraform/README.md, step 8)."
   type        = string
 }
 
@@ -38,12 +45,14 @@ variable "ssm_path" {
 }
 
 locals {
-  # GitHub's immutable subject of a job on this repository's main branch with no environment,
-  # repo:<owner>@<owner-id>/<name>@<repo-id>:ref:refs/heads/main (GitHub, "OpenID Connect reference", immutable subject
-  # claims). The owner and name keep GitHub's case: StringEquals is case-sensitive.
-  oidc_subject = format("repo:%s@%s/%s@%s:ref:refs/heads/main",
+  # GitHub's immutable subject of a job on this repository that references the environment,
+  # repo:<owner>@<owner-id>/<name>@<repo-id>:environment:<environment> (GitHub, "OpenID Connect reference", filtering
+  # for a specific environment and immutable subject claims). The owner and name keep GitHub's case: StringEquals is
+  # case-sensitive.
+  oidc_subject = format("repo:%s@%s/%s@%s:environment:%s",
     split("/", var.github_repository)[0], var.github_repository_owner_id,
     split("/", var.github_repository)[1], var.github_repository_id,
+    var.github_environment,
   )
 
   # A published GHCR image by digest (AD-32), the shape infra/aws/input-bounds.sh checks, narrowed to this repository's
@@ -64,7 +73,7 @@ resource "aws_iam_role" "deploy" {
   name                 = "${var.name}-deploy"
   max_session_duration = 3600
 
-  # Exact matches only: the audience, and the subject of a job on this repository's main branch with no environment.
+  # Exact matches only: the audience, and the subject of a job on this repository in the environment.
   # Every IAM policy here is a JSON template (story 8.16) whose names the infra tests' IamNamesTests check.
   assume_role_policy = templatefile("${path.module}/trust-policy.json.tftpl", {
     provider_arn = aws_iam_openid_connect_provider.github.arn

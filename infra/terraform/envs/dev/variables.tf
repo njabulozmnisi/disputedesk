@@ -10,7 +10,7 @@ variable "aws_region" {
 }
 
 variable "github_repository" {
-  description = "The repository as <owner>/<name>: the instance clones it, and only its main branch may assume the deploy role."
+  description = "The repository as <owner>/<name>: the instance clones it, and only its jobs in the environment dev may assume the deploy role."
   type        = string
 
   validation {
