@@ -134,3 +134,15 @@ Source: waves 2 and 3 of [the simplicity audit's mitigation plan](../verificatio
 | 8.17 | [Contracts references Domain for the enums that are identical on the wire](epic-8-simplicity-sweep/tickets/story-8.17-contracts-references-domain-for-the-enums-identical-on-the-wire.md) | backend | planned |
 
 Build-order constraint (decided 2026-11-04): wave 2 first. 8.1 (CI linters) lands before the infra stories 8.7 and 8.8; 8.2, 8.3, 8.4 and 8.6 wait on nothing in this epic and may build in parallel within the lane limits; 8.5 follows 8.4 (it bans what 8.4 removes); 8.8 follows 8.7 (shared helpers) and 8.9 follows 8.7 (its header tests prove the nginx change). Wave 3 runs one at a time in the order 8.10, 8.11, 8.12, 8.14, 8.15, 8.17, because they touch the same endpoints and types; 8.10 also waits on 8.2 and 8.4, and 8.15 on 8.5. 8.13 (frontend) waits only on 8.3 and may build beside 8.12; 8.16 (infra) waits only on 8.8. 8.14 is the epic's one migration, so no other migration runs beside it.
+
+## Epic 9: [Production CI on GitHub flow](epic-9-github-flow-ci/epic-9-github-flow-ci.md)
+
+Source: [ad-012, CI and deploy follow GitHub flow](../decisions/ad-012-github-flow-ci.md) (accepted 2026-11-05) and its [challenge](../verification/ad-012-challenge.md). Needs: epic 8 (every story merged on today's flow).
+
+| Story | Title | Owner | Status |
+|---|---|---|---|
+| 9.1 | [Every check runs on pull requests and reports through two gate jobs](epic-9-github-flow-ci/tickets/story-9.1-every-check-runs-on-pull-requests-and-reports-through-two-gate-jobs.md) | backend | planned |
+| 9.2 | [Deploy follows publish on main, behind a switch, and the deploy role trusts the dev environment](epic-9-github-flow-ci/tickets/story-9.2-deploy-follows-publish-on-main-behind-a-switch.md) | backend | planned |
+| 9.3 | [Main is protected by a ruleset, and stories merge by squash through their pull request](epic-9-github-flow-ci/tickets/story-9.3-main-is-protected-and-stories-merge-by-squash-through-their-pull-request.md) | backend | planned |
+
+Build-order constraint (decided 2026-11-05): ad-012's rollout order, one lane, one story at a time. 9.1 starts once every epic 8 story has merged; 9.2 follows 9.1 (both change `ci.yml`'s `publish` job); 9.3 follows 9.2. 9.1 and 9.2 merge on today's flow; the human applies 9.3's ruleset once its pull request shows both gates, nothing else merges until 9.3 does, and 9.3 is the first squash merge. The epic 8 lows batch and retrospective run after epic 9, on the new flow.

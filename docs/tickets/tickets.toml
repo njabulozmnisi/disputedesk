@@ -61,3 +61,11 @@ slug = "epic-8-simplicity-sweep"
 title = "Simplicity sweep"
 description = "Waves 2 and 3 of the 2026-11-03 simplicity audit's mitigation plan are merged: framework helpers and standard test tools in place of copies, one infra test style, linters in CI, and the human's decisions D1 to D6, D9 and D14b; each finding maps to a merged criterion and CI is green."
 covers = ["R2", "R3", "R9", "R10", "R13", "R16", "R17", "R19", "R20", "R21", "R22", "R23", "R24", "R25", "R27", "R29", "R30", "R32", "R33", "R34", "R35", "R37", "R38", "R39", "R40"]
+
+[[epic]]
+id = 9
+slug = "epic-9-github-flow-ci"
+title = "Production CI on GitHub flow"
+description = "Checks run on pull requests and report through the ci-passed and security-passed gates, a ruleset protects main, a story merges by squash through its pull request, and deploy follows publish on main behind the DEPLOY_ENABLED switch, with the deploy role trusting the dev environment (ad-012, accepted 2026-11-05)."
+covers = ["R33", "R38", "R39"]
+after = [{ epic = 8, needs = "every epic 8 story merged on today's flow (ad-012, Timing)" }]
