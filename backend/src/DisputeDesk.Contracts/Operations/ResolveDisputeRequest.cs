@@ -1,7 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
 using DisputeDesk.Contracts.Disputes;
-using DisputeDesk.Contracts.Json;
 
 namespace DisputeDesk.Contracts.Operations;
 
@@ -19,7 +17,7 @@ namespace DisputeDesk.Contracts.Operations;
 // Outcome stays nullable: a missing outcome would otherwise bind as Upheld, the enum's first member, and pass [Required].
 // [Required] refuses a note that is null, empty or only whitespace, so the lower bound of 1 after trimming needs no rule.
 public sealed record ResolveDisputeRequest(
-    [property: Required(ErrorMessage = "An outcome is required: upheld or rejected."), JsonConverter(typeof(CamelCaseNameOnlyEnumConverter<Outcome>))] Outcome? Outcome,
+    [property: Required(ErrorMessage = "An outcome is required: upheld or rejected.")] Outcome? Outcome,
     [property: Required(ErrorMessage = ResolveDisputeRequest.NoteInvalid)] string? Note) : IValidatableObject
 {
     /// <summary>The same limit as <c>Dispute.ResolveNoteMaxLength</c>, which Contracts cannot reference (AD-1).</summary>

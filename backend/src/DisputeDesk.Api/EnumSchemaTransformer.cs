@@ -7,9 +7,9 @@ namespace DisputeDesk.Api;
 
 /// <summary>
 /// Writes each enum schema's values as the shared JSON settings write them (AD-5), and nothing else. The generator
-/// reads enum names only from the built-in enum converter, which the shared settings wrap
-/// (<see cref="Contracts.Json.SingleNameEnumConverter"/>), and it would add <c>null</c> to a shared enum component when
-/// any usage is nullable; a nullable usage already says so itself, as <c>oneOf</c> with <c>null</c>.
+/// reads enum names only from the built-in enum converter, not from the shared settings' own
+/// (<see cref="Contracts.Json.CamelCaseNameOnlyEnumConverterFactory"/>), and it would add <c>null</c> to a shared enum
+/// component when any usage is nullable; a nullable usage already says so itself, as <c>oneOf</c> with <c>null</c>.
 /// </summary>
 internal sealed class EnumSchemaTransformer : IOpenApiSchemaTransformer
 {

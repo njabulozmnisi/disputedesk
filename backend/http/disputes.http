@@ -82,6 +82,15 @@ Content-Type: application/json
 
 {"accountRef": "ACC-A-1", "transactionId": "TXN-A-0027", "reason": "unrecognised", "expectedAmount": "10.00"}
 
+### A reason in another casing: 400 validation naming no field, before any lookup (enums are read only from their exact camelCase name)
+POST {{app}}/api/v1/disputes
+Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}
+X-XSRF-TOKEN: {{token.response.body.requestToken}}
+Idempotency-Key: "{{$guid}}"
+Content-Type: application/json
+
+{"accountRef": "ACC-A-1", "transactionId": "TXN-A-0027", "reason": "Unrecognised"}
+
 ### An unquoted key: 400 validation (the key must be an RFC 9651 String)
 POST {{app}}/api/v1/disputes
 Cookie: disputedesk-session={{session}}; disputedesk-antiforgery={{antiforgery}}

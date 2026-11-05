@@ -5,8 +5,8 @@ using DisputeDesk.Contracts.Json;
 namespace DisputeDesk.Api.IntegrationTests;
 
 /// <summary>
-/// The shared JSON settings (AD-5): an enum on the wire is exactly one member name in camelCase, so a list of names, an
-/// unknown name or a number fails to bind instead of becoming another member or an undefined value.
+/// The shared JSON settings (AD-5, D5): an enum on the wire is exactly one member name in camelCase, so a list of names,
+/// an unknown name, another casing or a number fails to bind instead of becoming another member or an undefined value.
 /// </summary>
 public class DisputeDeskJsonTests
 {
@@ -36,9 +36,23 @@ public class DisputeDeskJsonTests
     [InlineData("\"\"")]
     [InlineData("\"6\"")]
     [InlineData("6")]
-    public void Deserialize_UndefinedNameOrNumber_Throws(string json)
+    [InlineData("[\"wrongAmount\"]")]
+    // Another casing (D5): the built-in converter alone reads these as wrongAmount.
+    [InlineData("\"WrongAmount\"")]
+    [InlineData("\"WRONGAMOUNT\"")]
+    [InlineData("\"wrongamount\"")]
+    [InlineData("\" wrongAmount\"")]
+    public void Deserialize_NotTheExactNameOfOneMember_Throws(string json)
     {
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Reason>(json, Options));
+    }
+
+    [Fact]
+    public void Serialize_UndefinedValue_ThrowsOnTheSharedOptions()
+    {
+        // Never a number written as a string ("6"): the built-in converter with integer values off refuses it too.
+        Assert.Throws<JsonException>(() => JsonSerializer.Serialize((Reason)6, DisputeDeskJson.Options));
+        Assert.Throws<JsonException>(() => JsonSerializer.Serialize<Reason?>((Reason)6, DisputeDeskJson.Options));
     }
 
     [Fact]

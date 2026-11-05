@@ -12,11 +12,13 @@ namespace DisputeDesk.Api.IntegrationTests.Disputes;
 /// <summary>
 /// AC2 and AC4, the input table: each body that breaks it gets 400 <c>validation</c> before the transaction is looked
 /// up. Core banking here is a fake that fails and counts requests, so "before the lookup" is proved by the count not
-/// moving. One Api serves the class, and no test on it writes a row; the reason-case tests raise on an Api of their own.
+/// moving. One Api serves the class, and no test on it writes a row; the exact-reason test raises on an Api of its own.
 /// </summary>
 public sealed class RaiseDisputeInputTests(PostgresFixture postgres, RaiseDisputeInputTests.LinkedCustomerA api)
     : IClassFixture<RaiseDisputeInputTests.LinkedCustomerA>
 {
+    private const string Marker = "echo-marker-8d1";
+
     private static readonly string Id33 = new('A', 33);
 
     private FakeCoreBankingServer CoreBanking => api.CoreBanking;
@@ -77,8 +79,8 @@ public sealed class RaiseDisputeInputTests(PostgresFixture postgres, RaiseDisput
         Assert.Equal(RowCounts.None, await Factory.CountRowsAsync());
     }
 
-    // Story 3.9 AC7: a name of no member ("fraud") and comma lists of names are refused here; any casing of one name
-    // binds (Raise_ReasonInEitherCase_BindsToThatReason).
+    // Story 3.9 AC7: a name of no member ("fraud") and comma lists of names are refused here; another casing of a name
+    // is refused too (Raise_ReasonNotItsExactCamelCaseName_Returns400).
     public static TheoryData<string> BodiesThatDoNotBind => new()
     {
         Body(reason: "fraud"),
@@ -145,20 +147,38 @@ public sealed class RaiseDisputeInputTests(PostgresFixture postgres, RaiseDisput
         Assert.True(CoreBanking.RequestCount > coreBankingRequests);
     }
 
-    [Theory]
-    [InlineData("wrongAmount")]
-    [InlineData("WrongAmount")]
-    public async Task Raise_ReasonInEitherCase_BindsToThatReason(string reason)
+    [Fact]
+    public async Task Raise_ReasonItsExactCamelCaseName_BindsToThatReason()
     {
-        // SingleNameEnumConverter wraps the framework's JsonStringEnumConverter, whose reads ignore case (AD-5). An Api
-        // of its own against the real stub, so the class's failing core banking keeps its circuit closed.
+        // An Api of its own against the real stub, so the class's failing core banking keeps its circuit closed.
         await using var coreBanking = new TransactionsStub();
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, coreBanking);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
 
-        JsonElement created = await browser.RaiseCreatedAsync(Body(reason: reason, expectedAmount: "80.00"));
+        JsonElement created = await browser.RaiseCreatedAsync(Body(reason: "wrongAmount", expectedAmount: "80.00"));
 
         Assert.Equal("wrongAmount", created.GetProperty("reason").GetString());
+    }
+
+    // D5 (AD-5): the shared converter factory reads an enum only from its exact camelCase name, so another casing, a
+    // number or a list of names fails to bind like an unknown name.
+    [Theory]
+    [InlineData("\"WrongAmount\"")]
+    [InlineData("\"WRONGAMOUNT\"")]
+    [InlineData("1")]
+    [InlineData("\"wrongAmount, notReceived\"")]
+    public async Task Raise_ReasonNotItsExactCamelCaseName_Returns400(string reason)
+    {
+        int coreBankingRequests = CoreBanking.RequestCount;
+        string json = $$"""{"accountRef":"{{DisputesApi.AccountA}}","transactionId":"{{DisputesApi.Disputable}}","reason":{{reason}},"expectedAmount":"80.00","note":"{{Marker}}"}""";
+
+        HttpResponseMessage response = await Browser.RaiseAsync(json);
+
+        await response.AssertValidationProblemWithNoFieldAsync();
+        Assert.DoesNotContain(Marker, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        Assert.Equal(coreBankingRequests, CoreBanking.RequestCount);
+        Assert.Equal(RowCounts.None, await Factory.CountRowsAsync());
+        Assert.Empty(await Factory.KeyRowsAsync());
     }
 
     [Fact]

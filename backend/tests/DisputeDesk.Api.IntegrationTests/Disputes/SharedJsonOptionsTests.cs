@@ -22,6 +22,7 @@ public class SharedJsonOptionsTests(PostgresFixture postgres)
         Assert.Same(JsonNamingPolicy.CamelCase, DisputeDeskJson.Options.PropertyNamingPolicy);
         Assert.Equal("\"underReviewPrioritised\"", JsonSerializer.Serialize(CustomerStatus.UnderReviewPrioritised, DisputeDeskJson.Options));
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Reason>("\"wrongAmount, unrecognised\"", DisputeDeskJson.Options));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Reason>("\"WrongAmount\"", DisputeDeskJson.Options));
     }
 
     [Fact]
