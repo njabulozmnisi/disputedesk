@@ -57,3 +57,7 @@
 | 8.16 | review L4 | `scripts/verify-with-copilot.sh:38` | Still allows `shell(infra/terraform/iam-names.test.sh)`, a deleted file. |
 | 8.16 | verify L1 | AC5 | Same as review L1: the User-Agent header against the "no extra header" input; story wording fix. |
 | 8.14 | QA (escape) | e2e regression project | Five regression failures in 8.14's QA run: three logout specs already failing on main since 8.13 (fixed on their own branch, `e2e-baseline-qa.md`), two `dispute-withdraw` cases not reproduced on main (`:113` may race the relay). |
+| 8.15 | security L1 | `AppDbContext.cs:22` | The `OwnershipFilter` doc comment still says only `Operations/` and `Sla/` may ignore the filter; AD-11 now names the seeder as the third place. |
+| 8.15 | review L2 | `SeededDisputesTests.cs:218` | Comment "the customer contexts must join it" describes the deleted per-customer context; reword: the seeder writes on the migrating context, inside that transaction. |
+| 8.15 | review L3 | `OwnershipRulesTests.cs:213` | `CreatedTypeName` sees a target-typed `new()` only in a declaration, so `return new(options, currentCustomer);` would pass the no-second-context guard; flag it too or mark the limit with a `// shortcut:` comment. |
+| 8.15 | verify F1 (process) | M1 lane | The builder staged its base (8.14 and the 8.15 docs-first change) instead of committing it as briefed, so the diff hash reproduced only against a commit built from its index; `lane.sh collect` should refuse a worktree whose index differs from HEAD. |

@@ -1,0 +1,116 @@
+{
+  "status": "built",
+  "story": "8.15",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/disputedesk/.claude/worktrees/8.15",
+  "base": {
+    "note": "The base (8.14-rebased.patch then docs-8.15.patch, both applied cleanly with no conflict) is not committed: the guard hook requires explicit approval for every commit, so the requested local base commit was refused. It is staged in the index (tree 11f09d24c5e54bcb98576f11e86014a8071472bc); the story's work is unstaged and untracked on top of it. Once the index is committed as the base, scripts/diff-hash.sh <worktree> HEAD prints the same fingerprint: a diff against that base commit and the index-to-worktree diff are byte-identical.",
+    "tree": "11f09d24c5e54bcb98576f11e86014a8071472bc"
+  },
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "R17, R24, AD-11 (D6, DES-7)",
+      "test": "DisputeDesk.Api.IntegrationTests.Seeding.SeederOwnershipTests.Seed_AnotherCustomersDisputeOnAFixtureTransaction_FailsOnTheUniqueIndexInsteadOfSkipping (synchronous: true and false)"
+    },
+    {
+      "id": "AC2",
+      "requirement": "R26 (D6, DES-7)",
+      "test": "DisputeDesk.ArchitectureTests.OwnershipRulesTests.SeedingSource_ConstructsNoAppDbContextAndNoCurrentCustomer"
+    },
+    {
+      "id": "AC3",
+      "requirement": "R25, NFR-SEC-6 (D6)",
+      "test": "DisputeDesk.ArchitectureTests.OwnershipRulesTests.ProductionSource_IgnoreQueryFilters_AppearsOnlyInOperationsSlaAndTheSeeder; DisputeDesk.ArchitectureTests.OwnershipRulesTests.IsInBypassPlace_SamplePath_IsTrueOnlyForTheThreePlaces; DisputeDesk.ArchitectureTests.OwnershipRulesTests.CustomerFeatureSource_OperationsSlaOrSeedingNamespace_IsNeverReferenced; DisputeDesk.ArchitectureTests.OwnershipRulesTests.BypassNamespaceReferences_SampleLine_FindsOnlyAnOperationsSlaOrSeedingNamespace; DisputeDesk.ArchitectureTests.OwnershipRulesTests.ProductionSource_ParameterlessIgnoreQueryFilters_IsAbsent (unchanged)"
+    },
+    {
+      "id": "AC4",
+      "requirement": "R24 (D6)",
+      "test": "Seeding/SeededDisputesTests, SeedFixtureTests, InvalidFixtureDisputesTests unchanged and passing; DisputeDesk.Api.IntegrationTests.Transactions.SeededLinksTests.Seeder_FreshStartThenRunAgain_LinksAAndBOnceAndNotCOrD"
+    }
+  ],
+  "smoke": "Under scripts/test-lock.sh run stack 8.15 (memory pressure 2, no other builder lane of mine running): docker compose down -v (wipes this stack's volumes), docker compose up --wait --build; api log 'Seeded 2 customer links', 'Seeded 8 disputes'; Disputes|StoredEvents|CustomerLinks = 8|18|2. docker compose restart api, up --wait api; log since restart 'Seeded 0 customer links', 'Seeded 0 disputes'; counts still 8|18|2. docker compose stop. No endpoint changed, so no .http requests or dev-login were needed; the e2e seeded-disputes.spec.ts run is QA's/CI's.",
+  "standards": [
+    {
+      "mechanism": "Disabling the named query filter Ownership with IgnoreQueryFilters([\"Ownership\"]) (AD-11's third named bypass)",
+      "source": "https://learn.microsoft.com/ef/core/querying/filters"
+    },
+    {
+      "mechanism": "Seeding in UseAsyncSeeding/UseSeeding on the migrating context, idempotent per migrate",
+      "source": "https://learn.microsoft.com/ef/core/modeling/data-seeding"
+    },
+    {
+      "mechanism": "Savepoint per SaveChanges inside EF Core's existing transaction (wording kept from the deleted ContextFor comment)",
+      "source": "https://learn.microsoft.com/ef/core/saving/transactions#savepoints"
+    },
+    {
+      "mechanism": "Architecture rules on Roslyn syntax trees (existing approach; sample lines parsed with CSharpSyntaxTree.ParseText)",
+      "source": "https://learn.microsoft.com/dotnet/csharp/roslyn-sdk/get-started/syntax-analysis"
+    }
+  ],
+  "breaks": [
+    {
+      "id": "AC1",
+      "patch": "diff --git a/backend/src/DisputeDesk.Infrastructure/Seeding/SeedDispute.cs b/backend/src/DisputeDesk.Infrastructure/Seeding/SeedDispute.cs\nindex 04fc0d4..41604eb 100644\n--- a/backend/src/DisputeDesk.Infrastructure/Seeding/SeedDispute.cs\n+++ b/backend/src/DisputeDesk.Infrastructure/Seeding/SeedDispute.cs\n@@ -53,10 +53,9 @@ internal sealed record SeedDispute(\n     /// </summary>\n     public Expression<Func<Dispute, bool>> Matches()\n     {\n-        string customerId = CustomerId;\n         string accountRef = Transaction.AccountRef;\n         string transactionId = Transaction.TransactionId;\n-        return dispute => dispute.CustomerId == customerId && dispute.AccountRef == accountRef && dispute.TransactionId == transactionId;\n+        return dispute => dispute.AccountRef == accountRef && dispute.TransactionId == transactionId;\n     }\n \n     /// <summary>\n",
+      "test_method": "DisputeDesk.Api.IntegrationTests.Seeding.SeederOwnershipTests.Seed_AnotherCustomersDisputeOnAFixtureTransaction_FailsOnTheUniqueIndexInsteadOfSkipping",
+      "expect": "fails",
+      "checked": "both cases fail: Assert.Throws() Failure: No exception was thrown"
+    },
+    {
+      "id": "AC2",
+      "patch": "diff --git a/backend/src/DisputeDesk.Infrastructure/Seeding/Seeder.cs b/backend/src/DisputeDesk.Infrastructure/Seeding/Seeder.cs\nindex 1e1d22f..a4e2ce1 100644\n--- a/backend/src/DisputeDesk.Infrastructure/Seeding/Seeder.cs\n+++ b/backend/src/DisputeDesk.Infrastructure/Seeding/Seeder.cs\n@@ -98,6 +98,7 @@ public sealed partial class Seeder(IOptions<SeedOptions> options, TimeProvider t\n \n         // Every fixture dispute is checked before any is written, then each is seeded in file order.\n         List<SeedDispute> planned = SeedDispute.Plan(fixtures, now);\n+        using var customerDb = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(db.Database.GetDbConnection()).Options);\n         int added = 0;\n         foreach (SeedDispute dispute in planned)\n         {\n",
+      "test_method": "DisputeDesk.ArchitectureTests.OwnershipRulesTests.SeedingSource_ConstructsNoAppDbContextAndNoCurrentCustomer",
+      "expect": "fails",
+      "checked": "fails"
+    },
+    {
+      "id": "AC3-linking",
+      "patch": "diff --git a/backend/src/DisputeDesk.Infrastructure/Linking/LinkingJobSteps.cs b/backend/src/DisputeDesk.Infrastructure/Linking/LinkingJobSteps.cs\nindex 2aa7e87..2135dab 100644\n--- a/backend/src/DisputeDesk.Infrastructure/Linking/LinkingJobSteps.cs\n+++ b/backend/src/DisputeDesk.Infrastructure/Linking/LinkingJobSteps.cs\n@@ -88,7 +88,7 @@ public sealed partial class LinkingJobSteps(\n \n             CustomerMatch match = matched.Value;\n             customerId = match.CustomerId;\n-            bool isLinked = await db.Set<CustomerLink>().AnyAsync(link => link.CustomerId == match.CustomerId, budget.Token);\n+            bool isLinked = await db.Set<CustomerLink>().IgnoreQueryFilters([\"Ownership\"]).AnyAsync(link => link.CustomerId == match.CustomerId, budget.Token);\n             if (isLinked)\n             {\n                 await RecordAsync(db, job, span, now, AuditAction.LinkingAlreadyLinked, AuditResult.Rejected, customerId);\n",
+      "test_method": "DisputeDesk.ArchitectureTests.OwnershipRulesTests.ProductionSource_IgnoreQueryFilters_AppearsOnlyInOperationsSlaAndTheSeeder",
+      "expect": "fails",
+      "checked": "fails (Supervisor check: bypass in Infrastructure/Linking/)"
+    },
+    {
+      "id": "AC3-new-seeding-file",
+      "patch": "diff --git a/backend/src/DisputeDesk.Infrastructure/Seeding/SeedLookup.cs b/backend/src/DisputeDesk.Infrastructure/Seeding/SeedLookup.cs\nnew file mode 100644\nindex 0000000..cd13ec5\n--- /dev/null\n+++ b/backend/src/DisputeDesk.Infrastructure/Seeding/SeedLookup.cs\n@@ -0,0 +1,9 @@\n+using DisputeDesk.Domain.Disputes;\n+using Microsoft.EntityFrameworkCore;\n+\n+namespace DisputeDesk.Infrastructure.Seeding;\n+\n+internal static class SeedLookup\n+{\n+    public static IQueryable<Dispute> Every(DbContext db) => db.Set<Dispute>().IgnoreQueryFilters([\"Ownership\"]);\n+}\n",
+      "test_method": "DisputeDesk.ArchitectureTests.OwnershipRulesTests.ProductionSource_IgnoreQueryFilters_AppearsOnlyInOperationsSlaAndTheSeeder",
+      "expect": "fails",
+      "checked": "fails (Supervisor check: bypass in a new file in Infrastructure/Seeding/)"
+    },
+    {
+      "id": "AC3-namespace",
+      "patch": "diff --git a/backend/tests/DisputeDesk.ArchitectureTests/OwnershipRulesTests.cs b/backend/tests/DisputeDesk.ArchitectureTests/OwnershipRulesTests.cs\nindex dfe9c9b..58f1314 100644\n--- a/backend/tests/DisputeDesk.ArchitectureTests/OwnershipRulesTests.cs\n+++ b/backend/tests/DisputeDesk.ArchitectureTests/OwnershipRulesTests.cs\n@@ -34,7 +34,7 @@ public class OwnershipRulesTests\n     private static readonly HashSet<string> BypassNamespaces =\n     [\n         .. new[] { \"Api\", \"Application\", \"Contracts\", \"Domain\", \"Infrastructure\", \"Worker\" }\n-            .SelectMany(project => new[] { $\"{project}.Operations\", $\"{project}.Sla\", $\"{project}.Seeding\" })\n+            .SelectMany(project => new[] { $\"{project}.Operations\", $\"{project}.Sla\" })\n             .SelectMany(name => new[] { name, \"DisputeDesk.\" + name }),\n     ];\n \n",
+      "test_method": "DisputeDesk.ArchitectureTests.OwnershipRulesTests.BypassNamespaceReferences_SampleLine_FindsOnlyAnOperationsSlaOrSeedingNamespace",
+      "expect": "fails",
+      "checked": "the three Seeding sample lines fail"
+    },
+    {
+      "id": "AC4",
+      "patch": "diff --git a/backend/src/DisputeDesk.Infrastructure/Seeding/Seeder.cs b/backend/src/DisputeDesk.Infrastructure/Seeding/Seeder.cs\nindex 1e1d22f..0d4d9e7 100644\n--- a/backend/src/DisputeDesk.Infrastructure/Seeding/Seeder.cs\n+++ b/backend/src/DisputeDesk.Infrastructure/Seeding/Seeder.cs\n@@ -57,11 +57,7 @@ public sealed partial class Seeder(IOptions<SeedOptions> options, TimeProvider t\n         int added = 0;\n         foreach (SeedDispute dispute in planned)\n         {\n-            bool everDisputed = await db.Set<Dispute>().IgnoreQueryFilters([AppDbContext.OwnershipFilter]).AnyAsync(dispute.Matches(), cancellationToken);\n-            if (everDisputed)\n-            {\n-                continue;\n-            }\n+            bool everDisputed = false;\n \n             db.Set<Dispute>().Add(dispute.Write(everDisputed));\n             await db.SaveChangesAsync(cancellationToken);\n",
+      "test_method": "DisputeDesk.Api.IntegrationTests.Transactions.SeededLinksTests.Seeder_FreshStartThenRunAgain_LinksAAndBOnceAndNotCOrD",
+      "expect": "fails",
+      "checked": "fails: DbUpdateException on the second migrate"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/njabulomnisi_Njabulos-MacBook-Pro_2026-11-05_08_00_21.136011.trx",
+      "TestResults/njabulomnisi_Njabulos-MacBook-Pro_2026-11-05_08_00_21.190779.trx",
+      "TestResults/njabulomnisi_Njabulos-MacBook-Pro_2026-11-05_08_00_21.501559.trx",
+      "TestResults/njabulomnisi_Njabulos-MacBook-Pro_2026-11-05_08_00_21.511201.trx"
+    ],
+    "summary": "1589 total, 1589 passed, 0 failed, 0 skipped (Domain.Tests, ArchitectureTests, Api.IntegrationTests, Worker.IntegrationTests)",
+    "diff_hash": "4ebfa459e296",
+    "diff_hash_base": "the staged base, tree 11f09d24c5e54bcb98576f11e86014a8071472bc (see base.note)"
+  },
+  "assumptions": [
+    "The guard hook refused the requested local base commit, so the base is staged, not committed (base.note). My work is the unstaged diff plus one untracked file.",
+    "The seeder now walks the planned disputes in file order instead of grouping by customer first. For backend/fixtures/local.json (A x7, then B) the order is identical; a fixture that interleaved customers would seed in file order.",
+    "Criterion 2 is a deletion, so I added one architecture test (SeedingSource_ConstructsNoAppDbContextAndNoCurrentCustomer) so its break has a test to fail. Criterion 4's 'only addition' applies to the seeding tests, and this test is in the architecture project. It scans explicit new T(...) and target-typed new() in a variable declaration; a target-typed new() passed as an argument is not seen.",
+    "The customer-feature namespace rule now refuses every project's .Seeding namespace (the same per-project shape as Operations and Sla), which includes DisputeDesk.Infrastructure.Seeding.",
+    "The comment at SeededDisputesTests.cs:218 ('the customer contexts must join it') is now stale. Criterion 4 keeps that file unchanged, so it is left for the epic's lows.",
+    "The seeder's class comment drops the two-instance analysis, matching the docs-first AD-30 (EF Core seeds under its migration lock on every migrate).",
+    "Break verification ran in a throwaway copy at /tmp/dd-8.15-copy. Removing it was denied in this session, so it needs removing during hygiene."
+  ],
+  "open_questions": [],
+  "conflicts": []
+}

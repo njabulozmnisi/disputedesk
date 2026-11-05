@@ -47,12 +47,16 @@ internal sealed record SeedDispute(
         return planned;
     }
 
-    /// <summary>Selects this dispute's row by its transaction; through the ownership filter it finds only the customer's own.</summary>
+    /// <summary>
+    /// Selects this dispute's row by its customer and its transaction. The seeder reads past the ownership filter
+    /// (AD-11), so the customer predicate keeps another customer's row on the same transaction from counting as seeded.
+    /// </summary>
     public Expression<Func<Dispute, bool>> Matches()
     {
+        string customerId = CustomerId;
         string accountRef = Transaction.AccountRef;
         string transactionId = Transaction.TransactionId;
-        return dispute => dispute.AccountRef == accountRef && dispute.TransactionId == transactionId;
+        return dispute => dispute.CustomerId == customerId && dispute.AccountRef == accountRef && dispute.TransactionId == transactionId;
     }
 
     /// <summary>
