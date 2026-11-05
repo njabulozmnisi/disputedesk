@@ -321,6 +321,7 @@ jobs:
   # Story 7.3 (AD-32). The runner's fresh checkout and Docker daemon make the stack fresh, so customer D starts
   # unlinked (AD-30). Only the journeys run here; the regression project is not run in CI.
   e2e:
+    if: false   # supervisor check
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -442,6 +443,12 @@ jobs:
   # reads each needed job's result and passes only when every one is success. always() runs it even when the run is
   # cancelled; with !cancelled() it would be skipped then, and a skipped required check counts as passing. The job list
   # lives only in needs: NEEDS is the whole needs context, and floor-guard checks it names every check job.
+  dummy:   # supervisor check: left out of ci-passed needs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: echo dummy
+
   ci-passed:
     needs: [backend, frontend, platform, terraform, floor-guard, e2e]
     if: always()
