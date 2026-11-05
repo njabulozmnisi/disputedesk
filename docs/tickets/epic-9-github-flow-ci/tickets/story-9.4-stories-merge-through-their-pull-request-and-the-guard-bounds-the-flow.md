@@ -15,13 +15,13 @@ refined: true
 
 ## Description
 
-ad-012 clauses 6 and 7, the last step of its rollout order, split from 9.3 on 2026-11-05 (9.3, Notes). Once 9.3 has merged, `main` takes only a squash merge of a checked pull request, but the flow still names `story/**` branches, `scripts/push-and-watch.sh` and `scripts/merge-story.sh`, and the guard neither bounds the stacked story's force push nor asks on `gh` writes that change the ruleset or the settings. After this story the `story/**` trigger and the two scripts are gone; every change is built on a `feature/` branch and reaches `main` through its pull request by written steps; the guard allows, in the main session only and with no prompt, exactly the push and merge forms the standing approval covers (the human's answer on P21), asks on one bounded force push and on every `gh` write, and denies every other force push; and the process rules describe the new flow. That rule diff is the supervisor's to write and the human's to approve (ad-012 clause 6).
+ad-012 clauses 6 and 7, the last step of its rollout order, split from 9.3 on 2026-11-05 (9.3, Notes). Once 9.3 has merged, `main` takes only a squash merge of a checked pull request, but the flow still names `story/**` branches, `scripts/push-and-watch.sh` and `scripts/merge-story.sh`. Since the human's answer on this story's P1 (2026-11-05, `docs/verification/epic-9-decisions.md`), the guard asks only for actions on a deployed environment, the main session commits, pushes and merges with no prompt, and pipeline agents are denied commit, push and merge. Its force-push deny, though, also blocks the stacked story's rebase, misses several force forms, and a subagent can still change pull requests, settings and secrets through `gh`. After this story the `story/**` trigger and the two scripts are gone; every change is built on a `feature/` branch and reaches `main` through its pull request by written steps; the guard keeps the P1 rule as the flow moves to pull requests: one lease-checked force push of a stacked story runs with no prompt in the main session, every other force push is denied, and a subagent is also denied that force push and one closed list of `gh` writes; a guard-case test in `floor-guard` proves it; and the process rules describe the new flow. That rule diff is the supervisor's to write and the human's to approve (ad-012 clause 6).
 
-Human step (hitl): the human approves the rule diff (criterion 7) as one diff.
+Human step (hitl): the human approves the rule diff (criterion 7) as one patch, before dispatch.
 
 ## Requirements
 
-Verify: actionlint and shellcheck pass in `floor-guard`; criterion 1's grep finds nothing; each guard case in Supervisor checks gives its decision; 9.4 merges by squash through its own pull request by criterion 2's steps, and `main`'s CI and Security runs on the squash commit succeed.
+Verify: actionlint and shellcheck pass in `floor-guard`, and so does criterion 6's guard-case test; criterion 1's grep finds nothing; each Supervisor check gives its result; 9.4 merges by squash through its own pull request by criterion 2's steps, and `main`'s CI and Security runs on the squash commit succeed.
 
 Inputs:
 - The `gh` account: every `gh` write and every read-back runs as the repository owner, `GH_TOKEN="$(gh auth token --user <owner>)" gh …`, as 9.3 states; the token is never printed, logged or written to a file.
@@ -30,115 +30,128 @@ Inputs:
 - Pull request base: `main`, or `feature/<base>` for a story stacked on an unmerged story, `<base>` bounded as a story.
 - Pull request title: the commit-message convention's subject, one line of at most 72 characters; the detail goes in the body, which becomes the squash commit's message (9.3).
 - Head commit for `--match-head-commit`: the full 40-character SHA of the commit whose tree the stages checked (`docs/verification/<story>-build.json`'s diff hash covers that tree), or the head `gh pr update-branch` made from it once its checks pass.
-- The guard's exact forms, each a full match of the whole command (no `;`, `&&`, `|` or second command):
-  - allowed in the main session with no prompt: `git push origin feature/<story>`, and `GH_TOKEN="$(gh auth token --user <owner>)" gh pr merge <n> --squash --auto --match-head-commit <sha>`, `<n>` 1 to 6 digits, `<sha>` 40 lower-case hex characters, `<owner>` the owner's login;
-  - asks the main session: `git [-C <absolute path>] push --force-with-lease --force-if-includes origin feature/<story>`, one refspec, no `+` and no `:`.
+- The stacked force form: `git [-C <path>] push --force-with-lease --force-if-includes origin feature/<story>`, matched with `re.fullmatch` over the whole command and no `re.MULTILINE` (so no `;`, `&`, `|`, newline or second command), `<path>` matching `/[A-Za-z0-9._/-]+`, one refspec with no `+` and no `:`. A match returns no decision, not `"allow"`, which would also skip prompts that the settings ask for (hooks reference).
+- The closed list of `gh` writes denied to a subagent, each group and subcommand matched with any options between them (`gh pr -R <owner>/<repo> merge`), with or without the owner-token prefix:
+  - `gh pr create|edit|merge|update-branch|close|reopen|ready`;
+  - `gh api` that writes: a method named by `-X` or `--method`, attached or with `=` (`-XPOST`, `--method=PATCH`), other than `GET` compared case-insensitively, or one implied by `-f`, `-F`, `--field`, `--raw-field` or `--input` without `-X GET`;
+  - `gh repo edit|delete|rename|archive|unarchive|sync`, `gh repo deploy-key add|delete`;
+  - `gh secret set|delete`, `gh variable set|delete`, `gh alias set|import`;
+  - `gh workflow run|enable|disable`.
 - `check-ready.sh <story-id>`: unchanged usage; a dependency counts as available when `refs/heads/feature/<dependency>` exists on `origin`.
 
 1. **The `story/**` trigger and the two scripts go** (ad-012 clauses 1, 6, 7; R33)
    **Given** `ci.yml` and `security.yml` with `push: branches: [main, "story/**"]`, and `scripts/push-and-watch.sh` and `scripts/merge-story.sh`
    **When** this story lands
-   **Then** both workflows run on `pull_request` and `push` to `main` only (Security also on its schedule), both scripts are deleted, and no tracked file outside the records (`docs/verification/`, `docs/tickets/`, `docs/decisions/`) names `story/**`, `story/<`, `push-and-watch.sh`, `merge-story.sh` or `ci-changes.sh` (`git grep`)
+   **Then** both workflows run on `pull_request` and `push` to `main` only (Security also on its schedule), both scripts are deleted, and no tracked file outside the records (`docs/verification/`, `docs/tickets/`, `docs/decisions/`) names `story/**`, `story/<`, `story/[0-9$]`, `push-and-watch.sh`, `merge-story.sh` or `ci-changes.sh` (`git grep`)
    **And** `scripts/check-ready.sh` looks up `refs/heads/feature/<dependency>` (its message and header follow), and `scripts/lane.sh`'s usage comment gives `origin/feature/8.7` as its base-ref example
 
 2. **Every change reaches `main` through its pull request by written steps** (ad-012 clause 6; R33)
    **Given** a story, or a change outside a story, committed on its branch (Inputs) once every stage it needs has passed
    **When** the supervisor ships it
-   **Then** the steps are: `git push origin feature/<id>`; `GH_TOKEN=… gh pr create --head feature/<id> --base <base> --title <title> --body <body>`; `gh pr checks <n> --watch --required`; arm only when `gh pr view <n> --json baseRefName` reads `main`, with `GH_TOKEN=… gh pr merge <n> --squash --auto --match-head-commit <sha>`; before any later push to an armed pull request, `gh pr merge <n> --disable-auto`, then re-arm with the new head once its checks pass; confirm the merge and its squash SHA with `gh pr view <n> --json state,mergeCommit`, then `gh run list --branch main --commit <squash sha> --workflow CI` (and `Security`) and `gh run watch <id> --exit-status`
-   **And** a change outside a story takes the same steps and waits for the full checks (every check job runs on every pull request, ad-012 clause 1); the capture, the epic's lows and decisions and a stage's read-back record of a merged story ride in one records pull request, `feature/records-<story>`, after its merge
+   **Then** the steps are: `git push origin feature/<id>`; `GH_TOKEN=… gh pr create --head feature/<id> --base <base> --title <title> --body <body>`; `gh pr checks <n> --watch --required`; arm only when `gh pr view <n> --json baseRefName` reads `main`, with `GH_TOKEN=… gh pr merge <n> --squash --auto --match-head-commit <sha>`; before any later push to an armed pull request, `gh pr merge <n> --disable-auto`, then re-arm with the new head once its checks pass; if it still reads `OPEN` once its checks pass, `gh pr view <n> --json mergeStateStatus` decides: `BEHIND` takes criterion 3's update, `BLOCKED` waits, `DIRTY` goes to a builder as a fix round; confirm the merge and its squash SHA with `gh pr view <n> --json state,mergeCommit`, then `gh run list --branch main --commit <squash sha> --workflow CI` (and `Security`) and `gh run watch <id> --exit-status`
+   **And** a change outside a story takes the same steps and waits for the full checks (every check job runs on every pull request, ad-012 clause 1); the capture, the epic's lows and decisions, a stage's read-back record and the story's `docs/tickets/README.md` row set to `done` (which `check-ready.sh` relies on once the squash deletes `feature/<story>`) ride in one records pull request, `feature/records-<story>`, after its merge
 
 3. **A stacked story rebases and retargets after its base merges** (ad-012 clause 6; R33)
    **Given** a story whose pull request has the base `feature/<base>`
    **When** the base's pull request squash-merges and GitHub deletes `feature/<base>`
-   **Then** GitHub retargets the stacked pull request to `main` (*Managing branches within your repository*, Deleting a branch), and the supervisor confirms it with `gh pr view <n> --json baseRefName` (else `gh pr edit <n> --base main`); it takes the base's last head from `gh pr view <base-pr> --json headRefOid`, runs `git fetch origin` and `git rebase --onto origin/main <that sha> feature/<story>`, pushes with criterion 4's force form, and the pull request's checks run again before any merge
-   **And** a pull request that is only behind `main` is brought up to date with `gh pr update-branch <n>`, with no force push; the local branch then takes the remote head first (`git fetch` and a fast-forward), and the merge is re-armed with the new head once its checks pass, with no other stage re-run; a `mergeStateStatus` of `DIRTY`, or a drift check failing after an update, goes to a builder as a fix round, since the supervisor writes no code
+   **Then** GitHub retargets the stacked pull request to `main` (*Managing branches within your repository*, Build facts), and the supervisor confirms it with `gh pr view <n> --json baseRefName` (else `gh pr edit <n> --base main`); it takes the base's last head from `gh pr view <base-pr> --json headRefOid`, runs `git fetch origin` and `git rebase --onto origin/main <that sha> feature/<story>` (on a conflict, `git rebase --abort` and a fix round), pushes with the stacked force form (Inputs), and the pull request's checks run again before any merge
+   **And** a pull request that is only behind `main` gets `gh pr merge <n> --disable-auto`, then `gh pr update-branch <n>`, with no force push; the local branch then takes the remote head first (`git fetch` and a fast-forward), and the merge is re-armed with the new head once its checks pass, with no other stage re-run; a `mergeStateStatus` of `DIRTY`, or a drift check failing after an update, goes to a builder as a fix round, since the supervisor writes no code
 
-4. **The guard bounds the force push** (ad-012 clause 6; R33)
+4. **The guard bounds the force push** (ad-012 clause 6, the human's answer on P1; R33)
    **Given** `.claude/hooks/guard.py`
    **When** a Bash command is checked
-   **Then** the force form in Inputs, as a full match of the whole command, with or without `-C <absolute path>`, asks the main session and is denied to a subagent
-   **And** every other push with `-f`, `--force`, `--force-with-lease` or `--force-if-includes`, or with a `+` refspec, is denied, `git -C <dir> push …` included; so are a destination refspec (`feature/9.4:main`, `HEAD:feature/9.5`), a second refspec, and the force form followed by another command
+   **Then** the stacked force form in Inputs, with or without `-C <path>`, gets no decision in the main session and is denied to a subagent
+   **And** every other command in which `push` follows `git`, with any options between them (`-C <dir>`, `-c <key>=<value>`, `--git-dir=…`), is denied to the main session and to a subagent when it carries a short-option cluster containing `f` (`-f`, `-fu`, `-uf`), `--force`, `--force-with-lease` or `--force-if-includes`, `--mirror`, or a `+` refspec; the force form past any bound in Inputs (a destination refspec such as `feature/9.4:main`, a second refspec, another command after it, a path holding `$(`) is one of those
 
-5. **The guard asks on every `gh` write** (ad-012 clause 6; R33)
+5. **A subagent is denied the `gh` writes that change the flow or the settings** (ad-012 clause 6, the human's answer on P1; R33)
    **Given** `.claude/hooks/guard.py`
-   **When** a Bash command is checked, with or without the owner-token prefix
-   **Then** `gh api` that writes asks the main session and is denied to a subagent: a method named by `-X` or `--method`, attached or with `=` (`-XPOST`, `--method=PATCH`), other than `GET` compared case-insensitively, or one implied by `-f`, `-F`, `--field`, `--raw-field` or `--input` without `-X GET`; so do `gh repo edit|delete|rename|archive`, `gh variable set|delete` (`DEPLOY_ENABLED` switches deploy on, 9.2) and `gh workflow run` (a dispatch can deploy)
-   **And** `gh pr merge` in any form but the exact one in Inputs still asks; a `gh api` read passes with no decision
+   **When** a Bash command from the closed `gh` list in Inputs is checked, with or without the owner-token prefix
+   **Then** it is denied to a subagent and gets no decision in the main session
+   **And** a `gh` read (`gh api` with no write form, `gh pr view|checks|list`, `gh run list|watch`) gets no decision for either; a deploy dispatch keeps the ask in the main session and the deny to a subagent that the guard gives it today, and so does `gh variable set|delete DEPLOY_ENABLED` (it switches deploy on merge; human decision 2026-11-05)
 
-6. **The guard allows the exact forms the standing approval covers** (the human's answer on P21, `docs/verification/epic-9-decisions.md`; R33)
-   **Given** `.claude/hooks/guard.py`
-   **When** the main session runs `git push origin feature/<story>` or the exact `gh pr merge` form in Inputs, each as the whole command
-   **Then** the guard allows it with no prompt
-   **And** a subagent is denied both; any other push, merge, `gh api` write or `gh repo edit|delete|rename|archive` still asks the main session, and every force push but criterion 4's form is denied (criteria 4, 5); a change outside a story (`feature/<slug>`) is pushed with a prompt
+6. **A guard-case test proves the guard in `floor-guard`** (pre-build review P9; R33)
+   **Given** `scripts/guard.test.sh`, holding each guard case in Supervisor checks with its expected decision
+   **When** `floor-guard` runs it beside the other script tests (shellcheck lints it)
+   **Then** it feeds each case to `python3 -I .claude/hooks/guard.py` as hook JSON, once with no `agent_type` (the main session) and once as `backend-builder`, and fails naming every case whose decision differs
+   **And** each guard break in the builder's `breaks` list flips one guard rule and names this test
 
 7. **The process rules describe the new flow** (ad-012 clause 6, human answer "the commit on main"; R39)
-   **Given** the rule diff the supervisor writes as a patch before dispatch: AGENTS.md (Commits; Story flow's last line; "CI's ZAP baseline runs on every push"; "Branch CI stays the full authoritative run"; "green on the story branch"), CLAUDE.md (the stacked brief's `story/<base>`; the guard sentence, with the new asks and the two allowed forms), `.claude/skills/review-story/SKILL.md` (the stacked diff base), `.claude/skills/qa-story/SKILL.md` (the ZAP line), `docs/process/agentic-sdlc.md` (section 2's sequence and its push paragraph; section 3's docs-only CI box, routed here by the 9.1 pre-build review, and its G1 and G3 lines) and `.claude/hooks/guard.py`
-   **When** the builder's first step applies it (`git apply --binary <patch>`, with no `docs/` exclusion), so the one full run and the diff hash cover it
+   **Given** the rule diff, one patch the human approves before dispatch: AGENTS.md (Commits; Story flow's last line; "CI's ZAP baseline runs on every push"; "Branch CI stays the full authoritative run"; "green on the story branch"; Dispatch rules' "or branch CI's where CI runs it"), CLAUDE.md (the stacked brief's `story/<base>`; the guard sentence gains the stacked force push and the subagent's `gh` writes), `.claude/skills/review-story/SKILL.md` (the stacked diff base), `.claude/skills/qa-story/SKILL.md` (the ZAP line), `docs/process/agentic-sdlc.md` (section 2's sequence and its push paragraph; section 3's docs-only CI box, routed here by the 9.1 pre-build review, and its G1 and G3 lines) and `.claude/hooks/guard.py`
+   **When** every 9.4 brief, fix rounds included, applies it first with `git apply --binary --exclude='docs/verification/*'`, so the one full run and the diff hash cover it
    **Then** they say: every change is built on a `feature/` branch and reaches `main` only through its pull request by criterion 2's steps; the stacked steps of criterion 3; the ZAP baseline and the full checks run on every pull request and on `main`; and the replacement invariant, in place of the fast-forward rule: pull-request checks test GitHub's merge of the up-to-date branch into `main`, and `main`'s own run builds, scans and publishes the squash commit
-   **And** the standing approvals keep their meaning, with "pushed through `scripts/push-and-watch.sh`" replaced by criterion 2's steps; `main` is never force-pushed, and the ruleset refuses it
+   **And** the standing approvals keep their meaning, with "pushed through `scripts/push-and-watch.sh`" replaced by criterion 2's steps; `main` is never force-pushed, and the ruleset refuses it; the verifier applies the approved patch to the dispatch base in a throwaway copy and compares (`cmp`) the six rule files with the story worktree, any difference being a high finding, and a change to the patch after dispatch is a delta every stage re-runs
 
 8. **9.4 merges through its own pull request** (ad-012 clause 7; R33)
    **Given** criteria 1 to 7 on `feature/9.4`, with every stage passed and the rule diff approved
-   **When** the supervisor ships it by criterion 2's steps (the guard change is not yet on `main`, so the push and the merge ask)
+   **When** the supervisor ships it by criterion 2's steps (the guard on `main` already gives the main session no prompt on the push and the merge, the human's answer on P1)
    **Then** GitHub squash-merges it once both required checks and the code-scanning rule pass on the up-to-date branch, and deletes `feature/9.4`
-   **And** `main`'s CI and Security runs on the squash commit succeed, and from then on the next story follows the new rules
+   **And** `main`'s CI and Security runs on the squash commit succeed; the main checkout is then clean and on `origin/main` (`git status` shows nothing, `HEAD` equals `origin/main`), because every session's hook runs the main checkout's working copy of `guard.py`; from then on the next story follows the new rules
 
 ## Boundaries
 
-- Must not change: what any check job runs, the gate jobs, `publish`, `deploy.yml`, the ruleset and settings 9.3 applied, the story flow's stages (pre-build review, builder, reviewer, verifier, security, QA, fix rounds), the standing approvals' scope.
+- Must not change: what any check job runs, except the guard-case test step in `floor-guard` (criterion 6); the gate jobs, `publish`, `deploy.yml`, the ruleset and settings 9.3 applied, the story flow's stages (pre-build review, builder, reviewer, verifier, security, QA, fix rounds), the standing approvals' scope; the guard's deployed-environment asks, its agent commit, push and merge deny, and its write-path rules.
 - No merge queue, no required reviewer, no linear-history rule, no Gitflow branches, no `gh stack` extension (ad-012, Options rejected and clause 6).
 - Auto-merge is armed only after every stage has passed; it never replaces a stage (challenge, section 2).
-- The guard rule is explainable in two sentences: the two exact forms of the standing approval run with no prompt in the main session, and one exact lease-checked force push to a story branch asks; every other force push is denied, and any `gh` call that writes asks.
+- The guard rule is explainable in two sentences: only actions on a deployed environment ask, and the main session commits, pushes and merges with no prompt, the one lease-checked force push of a stacked story included; every other force push is denied, and a subagent is denied commit, push, merge and the closed list of `gh` writes.
 
 ## Supervisor checks
 
-Guard cases, each kept in a file written with the Write tool (a Bash command holding a force-push example is itself denied) and run with `python3 -I .claude/hooks/guard.py < case.json`, once as the main session and once as a subagent:
-- No prompt in the main session, denied to a subagent: `git push origin feature/9.4`; `GH_TOKEN="$(gh auth token --user <owner>)" gh pr merge 5 --squash --auto --match-head-commit <40 hex>`.
-- Ask in the main session, denied to a subagent: the force form, with and without `-C <absolute path>`; `git push origin feature/records-9.3`; `git -C <absolute path> push origin feature/9.4`; `gh pr merge 5 --squash --auto`; `gh api -XPOST …`; `gh api --method=PATCH …`; `gh api -X patch …`; `gh api repos/<owner>/<name>/rulesets --input main.json`; `gh api -X DELETE repos/<owner>/<name>/rulesets/<id>`; `gh repo edit --enable-merge-commit`; `gh variable set DEPLOY_ENABLED --body true`; `gh workflow run deploy.yml`; each of the `gh` cases with the owner-token prefix.
-- Denied: `--force-with-lease` alone; `-f`; `+feature/9.4`; `feature/9.4:main`; `HEAD:feature/9.5`; the force form followed by `; git push -f origin feature/9.5`; `git push origin feature/9.4 && git push -f origin feature/9.5`; `git -C <dir> push --force origin feature/9.4`.
-- No decision: `gh api repos/<owner>/<name>/rulesets/<id>`.
-- Throwaway copy: a story whose `after` names a story with only `story/<id>` on `origin`; `check-ready.sh` reports it not ready.
+Guard cases, held in criterion 6's test (main session / subagent):
+- No decision / denied: the stacked force form, with and without `-C /abs/path`; `git push origin feature/9.4`; `git push origin feature/records-9.3`; `GH_TOKEN="$(gh auth token --user <owner>)" gh pr merge 5 --squash --auto --match-head-commit <40 hex>`; `gh pr merge 5 --squash --auto`; `gh pr -R <owner>/<repo> merge 5 --squash`; `gh pr create --head feature/9.4 --base main`; `gh pr edit 5 --base main`; `gh pr update-branch 5`; `gh api -XPOST …`; `gh api --method=PATCH …`; `gh api -X patch …`; `gh api repos/<owner>/<name>/rulesets --input main.json`; `gh api -X DELETE repos/<owner>/<name>/rulesets/<id>`; `gh api repos/<owner>/<name>/issues -f title=x`; `gh repo edit --enable-merge-commit`; `gh repo deploy-key add key.pub --allow-write`; `gh secret set FORBIDDEN_TERMS --body x`; `gh variable set DEPLOY_ENABLED --body true`; `gh alias set mm 'pr merge'`; `gh workflow disable Security`; each `gh` case with the owner-token prefix.
+- Denied / denied: `--force-with-lease` alone; `-f`; `-fu`; `-uf`; `--mirror`; `+feature/9.4`; the force form with `feature/9.4:main`, with `HEAD:feature/9.5`, with a second refspec, with `feature/9.4xy`, and with a path holding `$(`; the force form followed by `; git push -f origin feature/9.5`, by `&`, by `||`, and by a newline and a second command; `git push origin feature/9.4 && git push -f origin feature/9.5`; `git -C <dir> push --force origin feature/9.4`; `git -c x=y push --force origin feature/9.4`.
+- Ask / denied: `gh workflow run deploy.yml`.
+- No decision / no decision: `gh api repos/<owner>/<name>/rulesets/<id>`; `gh pr view 5 --json state`; `gh pr checks 5 --watch --required`; `git rebase --onto origin/main <sha> feature/9.4`; `git apply --binary <patch>`.
+
+Flow:
+- Throwaway copy: a story whose `after` names a story with only `story/<id>` on `origin`; `check-ready.sh` reports it not ready. A dependency with `feature/<id>` on `origin` reports ready.
+- Scratch chain proving criterion 3, never touching `main`: pull request A (`feature/99.1` into `feature/scratch-root`) and pull request B (`feature/99.2` into `feature/99.1`). Squash A (the ruleset covers only `main`) and GitHub deletes `feature/99.1`; B now targets `feature/scratch-root`. Run criterion 3's steps with `origin/feature/scratch-root` in place of `origin/main`, push with the stacked force form (no prompt), and confirm B's checks run again. Then close B and delete the scratch branches.
 
 ## Build facts
 
-- Owner: backend (backend-builder) for `.github/` and `scripts/`; the supervisor writes the rule diff (AGENTS.md, CLAUDE.md, the two skills, `docs/process/agentic-sdlc.md`, `.claude/hooks/guard.py`), which the guard leaves outside the builder's paths, and the human approves it.
+- Owner: backend (backend-builder) for `.github/` and `scripts/`, the guard-case test included; the supervisor writes the rule diff (AGENTS.md, CLAUDE.md, the two skills, `docs/process/agentic-sdlc.md`, `.claude/hooks/guard.py`), which the guard leaves outside the builder's paths, and the human approves it.
 - Tier: Feature, with a human gate: a rule change (AGENTS.md, Human gates). The reviewer runs the security checklist on the guard and reads `guard.py` in the applied patch.
 - Flags: hitl, rule change, security.
 - Lane: A, after 9.3; it is the only story in flight from 9.3's merge until it merges.
-- Before the build (supervisor): the rule diff written as a patch; the brief's first step applies it.
+- Dispatch base: `main` holding the guard change of the human's answer on P1 (`story/guard-rule`), so the patch's context is the guard that runs.
+- Before the build (supervisor): the rule diff written in a scratch worktree at the dispatch base and exported with `git diff --binary <base>` as the patch; the main checkout's rule files change only when it takes 9.4's squash commit (criterion 8). The human approves the patch; every brief's first step applies it (criterion 7).
 - Mechanisms and sources:
   - GitHub flow: <https://docs.github.com/en/get-started/using-github/github-flow>.
   - Auto-merge and what disables it: <https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/automatically-merging-a-pull-request>.
-  - Automatic retargeting when a base branch is deleted: GitHub Docs, *Managing branches within your repository*, Deleting a branch (the quote is in `docs/verification/9.3-prebuild-review.md`); the builder records the page's URL in its report.
-  - `gh pr create`, `gh pr checks`, `gh pr merge` (`--squash`, `--auto`, `--match-head-commit`, `--disable-auto`), `gh pr view`, `gh pr edit --base`, `gh pr update-branch`, `gh run list`, `gh run watch --exit-status`, `gh api`, `gh repo edit`: <https://cli.github.com/manual/>; flags confirmed with `gh help <command>`.
-  - `--force-with-lease`, `--force-if-includes` and the `+` refspec: <https://git-scm.com/docs/git-push>; `git rebase --onto`: <https://git-scm.com/docs/git-rebase>.
-  - The guard is a Claude Code `PreToolUse` hook already in the repository: <https://code.claude.com/docs/en/hooks>.
+  - Automatic retargeting when a base branch is deleted: *Managing branches within your repository*, Deleting a branch: <https://docs.github.com/en/pull-requests/how-tos/commit-changes/managing-branches-within-your-repository>.
+  - `gh pr create`, `gh pr checks`, `gh pr merge` (`--squash`, `--auto`, `--match-head-commit`, `--disable-auto`), `gh pr view`, `gh pr edit --base`, `gh pr update-branch`, `gh run list`, `gh run watch --exit-status`, `gh api`, `gh repo`, `gh secret`, `gh variable`, `gh alias`, `gh workflow`: <https://cli.github.com/manual/>; flags confirmed with `gh help <command>`; `-R/--repo` is inherited, so it can sit between a group and its subcommand.
+  - `--force-with-lease`, `--force-if-includes`, `--mirror` and the `+` refspec: <https://git-scm.com/docs/git-push>; `git rebase --onto`: <https://git-scm.com/docs/git-rebase>.
+  - The guard is a Claude Code `PreToolUse` hook already in the repository; `agent_type` marks a subagent or an `--agent` session, and `permissionDecision` values: <https://code.claude.com/docs/en/hooks>.
 - Packages: none.
-- Touches: `.github/workflows/ci.yml` and `security.yml` (the `push` branches), `scripts/push-and-watch.sh` and `scripts/merge-story.sh` (deleted), `scripts/check-ready.sh`, `scripts/lane.sh` (comment); the supervisor's rule diff: `AGENTS.md`, `CLAUDE.md`, `.claude/skills/review-story/SKILL.md`, `.claude/skills/qa-story/SKILL.md`, `docs/process/agentic-sdlc.md`, `.claude/hooks/guard.py`.
+- Touches: `.github/workflows/ci.yml` (the `push` branches; `floor-guard`'s guard-case test step) and `security.yml` (the `push` branches), `scripts/push-and-watch.sh` and `scripts/merge-story.sh` (deleted), `scripts/guard.test.sh` (new), `scripts/check-ready.sh`, `scripts/lane.sh` (comment); the supervisor's rule diff: `AGENTS.md`, `CLAUDE.md`, `.claude/skills/review-story/SKILL.md`, `.claude/skills/qa-story/SKILL.md`, `docs/process/agentic-sdlc.md`, `.claude/hooks/guard.py`.
 
 ## Pre-build
 
 - Reviewed as part of 9.3: `docs/verification/9.3-prebuild-review.md` (this story was split from 9.3 after that review).
 - Sofia, 2026-11-05: folded the `[story]` points of `docs/verification/9.3-prebuild-review.md` that belong to the flow and the guard. P1 (the owner token, Inputs, criteria 2, 5), P3 (the rule diff as a patch applied first, criterion 7), P4 (the bounded force form and the deny list, criterion 4), P5 (`gh api` method forms, `gh repo`, and with their reason `gh variable` and `gh workflow run`, criterion 5), P6 (disable auto-merge before a push, criterion 2), P7 (arm only on base `main`, criterion 2), P10 (`feature/<slug>` and the records pull request, Inputs, criterion 2), P13 (guard cases in a file; `gh help`), P14 (the retargeting citation, criterion 3), P15 (the stacked steps' SHA, fetch, fast-forward and conflict path, criterion 3), P16 (the armed SHA, Inputs), P17 (the grep excludes only records; each named line, criteria 1, 7), P19 (the wait steps, criterion 2), and the 9.1 review's finding 9 (`agentic-sdlc.md`'s docs-only box, criterion 7). Applied the human's answer on P21 (criterion 6). Criteria: 8.
-- Decisions: settled by the human, 2026-11-05 (`docs/verification/epic-9-decisions.md`, P21: allow the exact forms).
+- Reviewed: `docs/verification/9.4-prebuild-review.md` (changes; one decision, P1).
+- Sofia, 2026-11-05, answering `docs/verification/9.4-prebuild-review.md`: applied the human's answer on P1 (the guard asks only for actions on a deployed environment; the main session commits, pushes and merges with no prompt; pipeline agents are denied them), which supersedes P21: the exact-form allow list and old criterion 6 are gone, criteria 4 and 5 keep the P1 rule as the flow moves to pull requests, and criterion 8 adds the clean main checkout. Folded: P2 (the rule diff written in a scratch worktree, Build facts), P3 (the human approves the patch; the verifier's `cmp`; the Assumption replaced, criterion 7, Notes), P4 (`--exclude='docs/verification/*'` on every brief, criterion 7), P5 (short-option clusters, `--mirror`, `+` refspecs, any options before `push`, criterion 4), P7 (one closed `gh` list denied to a subagent, options between group and subcommand, `gh secret` and `gh alias` added, Inputs, criterion 5), P8 (the scratch chain, Supervisor checks), P9 (the guard-case test in `floor-guard`, criterion 6), P10 (`--disable-auto` before `update-branch`, criterion 3), P11 (`mergeStateStatus` on `OPEN`; `git rebase --abort` on a conflict, criteria 2, 3), P12 (`story/[0-9$]` in the grep; the ready side, criterion 1, Supervisor checks), P13 (the AGENTS.md Dispatch rules line, the index row, the retargeting URL, criteria 2, 7, Build facts), P15 (the token limit, Notes), P16 (Notes). Dropped by the P1 answer: P6 (the bounds of the two no-prompt forms, which no longer exist; its full match, no-`MULTILINE` and no-`"allow"` parts are kept for the stacked force form, the one remaining exception) and P14 (the `<owner>` literal of the merge form; the `-C <path>` bound is kept for the force form). Criteria: 8.
+- Decisions: settled by the human, 2026-11-05 (`docs/verification/epic-9-decisions.md`, 9.4 P1: the guard asks only for actions on a deployed environment; supersedes P21).
 
 ## References
 
 - parent — docs/tickets/epic-9-github-flow-ci/epic-9-github-flow-ci.md, section Requirements
 - decision — docs/decisions/ad-012-github-flow-ci.md, clauses 6, 7 and the human decisions on branching and the commit on main
-- decisions — docs/verification/epic-9-decisions.md, P21
+- decisions — docs/verification/epic-9-decisions.md, 9.4 P1 (supersedes P21)
 - challenge — docs/verification/ad-012-challenge.md, sections 1 to 5
 - review — docs/verification/9.3-prebuild-review.md
+- review — docs/verification/9.4-prebuild-review.md
 - previous story — docs/tickets/epic-9-github-flow-ci/tickets/story-9.3-main-is-protected-by-a-ruleset-and-squash-is-the-only-merge-method.md
 - process — AGENTS.md, Commits, Story flow and Human gates; docs/process/agentic-sdlc.md, sections 2 and 3
 
 ## Notes
 
-- Risk high (proposed): a guard that lets an agent force-push, merge or change the ruleset would let unchecked code reach `main`, and a wrong process rule would stall every later story; beyond the criteria, the reviewer runs each guard case file once more against the applied patch.
-- Decision: 2026-11-05 (Sofia) — the rule diff joins the builder's change as a patch applied first (pre-build review, P3, simplest fix), so the builder's one full run and diff hash cover it and no stage re-runs on a late delta.
-- Decision: 2026-11-05 (Sofia) — `gh variable set|delete` and `gh workflow run` also ask (P5's optional part, taken): the first switches deploy on, the second can dispatch a deploy, so both change what reaches AWS once an account exists.
+- Risk high (proposed): a guard that lets an agent force-push, merge or change the ruleset, secrets or settings would let unchecked code reach `main`, and a wrong process rule would stall every later story; beyond the criteria, the supervisor runs the scratch chain in Supervisor checks, which first exercises criterion 3 against a real remote.
+- Decision: 2026-11-05 (Sofia) — the rule diff joins the builder's change as a patch applied first (9.3 pre-build review, P3, simplest fix), so the builder's one full run and diff hash cover it and no stage re-runs on a late delta.
 - Decision: 2026-11-05 (Sofia) — the records of a merged story ride in one records pull request after its merge (P10), not in the next story's diff, so a story's diff hash covers only its own change.
-- Decision: 2026-11-05 (Sofia) — the human's answer on P21 names two exact forms; a push from another directory (`git -C …`) and a records branch (`feature/records-<story>`) are not among them, so they ask. The supervisor runs `cd <worktree>` in one call and the exact push in the next.
-- Decision: 2026-11-05 (Sofia) — a committed guard test in `floor-guard` (P13's optional part) is not taken: `guard.py` is the supervisor's rule diff, and the guard cases run as Supervisor checks; the epic 9 retrospective may propose it as a deterministic check.
-- Decision: 2026-11-05 (Sofia) — GitHub's native stacked pull requests (pre-build review, noted) would remove criterion 3's manual rebase, but they need the `gh stack` extension or the website, availability here is unverified, and ad-012 clause 6 names the manual rebase; a possible later simplification.
-- Assumption: the guard lets the builder's `git apply` of the supervisor's patch touch the supervisor's paths; if it does not, the supervisor applies the patch after the stages and the verifier and the reviewer re-run on that delta (P3, second fix).
+- Decision: 2026-11-05 (Sofia) — under the human's answer on P1, `gh variable set|delete` and `gh workflow run` no longer ask the main session (the 9.3 review's P5 reason is superseded); they stay on the subagent's closed list, and a deploy dispatch keeps the guard's existing ask. Human decision, 2026-11-05: setting or deleting the variable `DEPLOY_ENABLED` asks the main session too, because it switches deploy on merge, a deployed-environment change.
+- Decision: 2026-11-05 (Sofia) — the committed guard-case test is taken (9.4 pre-build review, P9, reversing the 9.3-time decline): the guard changed outside any story once already, and the verifier's breaks need a named test to run.
+- Decision: 2026-11-05 (Sofia) — the `-C <path>` bound and the full match stay on the stacked force form although the main session needs no prompt: the form is the one exception to the force-push deny, and an unbounded path could carry a second command past it.
+- Observed (9.4 pre-build review, P3): a backend-builder's `git apply --binary <patch>` gets no decision, while its `Edit` of `AGENTS.md` is denied, because the guard checks paths only for the Write and Edit tools; criterion 7's `cmp` is what ties the applied rule files to the approved patch.
+- Decision: 2026-11-05 (Sofia) — a subagent can still run `gh auth token --user <owner>` and print the owner's token into its transcript (9.4 pre-build review, P15); accepted as a limit of a single-maintainer guard, since a subagent can also read the credential store by other means.
+- Decision: 2026-11-05 (Sofia) — the supervisor dispatches 9.4 after this disposition and the human's P1 answer, not on `check-ready.sh` alone, which reads any "Sofia, " line and the `decisions` field (9.4 pre-build review, P16); for the epic retrospective, a disposition line names the review file it answers, as the line above does.
+- Decision: 2026-11-05 (Sofia) — GitHub's native stacked pull requests (9.3 pre-build review, noted) would remove criterion 3's manual rebase, but they need the `gh stack` extension or the website, availability here is unverified, and ad-012 clause 6 names the manual rebase; a possible later simplification.
