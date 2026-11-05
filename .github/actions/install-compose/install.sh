@@ -9,7 +9,7 @@
 set -euo pipefail
 
 version=5.6.1
-sha256=47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0
+sha256=57737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0
 
 plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
 mkdir -p "$plugins"
