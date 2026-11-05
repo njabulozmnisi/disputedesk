@@ -6,7 +6,7 @@
 
 **Decision.** One aggregate method per action, the same for every actor; the actor is recorded, never consulted (AD-13, AD-9, AD-14a).
 
-- `Dispute.Raise`, `StartReview`, `Escalate`, `Resolve(outcome, note)`, `Withdraw(note)` and `RecordSlaWarning` are the only ways to create or change a dispute. Each takes an `Actor` and the use-case instant, returns `Result`, and appends one stored event (AD-13, ad-009).
+- `Dispute.Raise`, `StartReview`, `Escalate`, `Resolve(outcome, note)`, `Withdraw(note)` and `RecordSlaWarning` are the only ways to create or change a dispute. Each takes an `Actor` and the use-case instant, returns `Result`, and appends one stored event (AD-13, ad-009). `RecordSlaWarning` is superseded 2026-11-03, see the second note below.
 - The operations escalate and the SLA sweep call the same `Escalate` (AD-13, FR-26).
 - Authorisation happens before the aggregate, per action: one Zitadel project role per action (`dispute.startReview`, `dispute.escalate`, `dispute.resolve`) plus `dispute.read`, one policy per role, and ownership for the customer's withdraw (AD-9, AD-11, FR-24).
 - `Operations:Actors:<sub>` maps a service account's `sub` to the actor type `operations`; no mapping means 403 (superseded 2026-11-03, see the note below). The Worker acts as `automation` with identity `worker:sla-sweep`. The seeder acts as `automation` with `worker:seeder` for start review, escalate and resolve, and as the fixture customer for raise and withdraw (AD-30, AD-14a).
@@ -26,3 +26,5 @@
 - Customers never see actor types or identities: the customer view maps the timeline actor to `you` or `theBank` (AD-13), and published events carry `actorType` but no actor identity (AD-19).
 
 **Superseded in part, 2026-11-03 (human decision D4, simplicity audit; story 8.12).** The `Operations:Actors:<sub>` map is replaced by a plain allowlist, `Operations:AllowedClients`, an array of service accounts' `sub` values. Every allowed caller is actor type `operations` with its `sub` as actor ID, and roles still decide what it may do; a `sub` not in the list gets 403, and an empty or missing list refuses every caller. A `Denied` entry records actor type `Operations` and the token's `sub`, so `ActorType` keeps one meaning, the route's credential type (AD-9, AD-14a, AD-26). A new operations tool is one `Operations:AllowedClients` entry and its role grants.
+
+**Superseded in part, 2026-11-03 (human decision D3, simplicity audit; story 8.14).** `RecordSlaWarning` and its `SlaWarningRaised` stored event are dropped: `Dispute.Raise`, `StartReview`, `Escalate`, `Resolve(outcome, note)` and `Withdraw(note)` are the only ways to create or change a dispute. The SLA sweep only escalates, through the same `Escalate` as operations (AD-13, AD-18, FR-26).
