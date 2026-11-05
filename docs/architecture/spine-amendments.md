@@ -94,6 +94,12 @@ The human's decisions changed or confirmed these rules; unlike the rows above, t
 | AD-18 | 2026-11-03 | The SLA sweep only escalates: `SlaWarningRaised`, `RecordSlaWarning`, the warning claim, the 48-hour lead time, `SlaWarningRaisedAtUtc` and `IX_Disputes_SlaWarning` go, and every stored event is published, so `disputeVersion` has no gaps. AD-13's methods, AD-14's publish mapping, AD-14a's closed set, AD-17's order, AD-19's `disputeVersion`, AD-30's seeded values, PRD FR-17, FR-26 and NFR-DATA-2, the initiative's R18, R22 and R28, ad-006 and ad-009 state the same; the open question on the glossary's "Timeline" closes. Replaces the 2026-10-30 row above | human decision |
 | AD-1 | 2026-11-03 | Contracts references Domain, and only Domain, for the nine enums identical on the wire (`Outcome`, `DisputeAction`, `Reason`, `ActorType`, `DisputeStatus`, `TransactionKind`, `NotDisputableReason`, `TransactionDirection`, `TransactionState`): each exists once, in Domain, with no Contracts copy and no mapping, and the wire is unchanged. The customer-view enums `CustomerStatus` and `TimelineActor` stay in Contracts with their one mapping. AD-14a's ownership sentence and `conventions/backend.md` (the using-alias ban stays; qualified names only where names still clash) state the same rule. Replaces the earlier answer that left AD-1's separate enum graph as is | human decision |
 
+## Decisions of 2026-11-05 (ad-012)
+
+| Decision | Date | Change | Source |
+|---|---|---|---|
+| AD-32 | 2026-11-05 | Every check job runs on every pull request and `main` push (the docs-only `changes` skip goes); `ci-passed` and `security-passed` gate jobs report each workflow's result, and a `floor-guard` step fails when a check job is missing from its gate's `needs`; the Compose and Trivy installs are local composite actions (ad-012 clauses 1, 3, 5) | `docs/decisions/ad-012-github-flow-ci.md` |
+
 ## What else left the spine on 2026-11-04
 
 - **PRD and code divergences.** Six differences between the PRD and the code merged before epic 2 (the `ErrorKind` set, `provision.sh`'s roles and keys, Scalar behind `IsDevelopment()`, the Worker's health check, the fixtures, the gateway's `limit_req`, HSTS and `form-action`), each fixed in its story. Every story is merged, so the section was deleted.
