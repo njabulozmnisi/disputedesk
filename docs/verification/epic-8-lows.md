@@ -24,3 +24,5 @@
 | 8.10 | security S1 | `OperationsEndpoints.cs` (resolve) | A customer cookie on a `text/plain` resolve gets 415 (routing's 415 endpoint carries only the cookie fallback policy); nothing written, no ID revealed. Pin it with a test and one AD-8 clause. |
 | 8.10 | security S2 | `CustomerRoutes.cs` | Withdraw body validation runs before the group's `AntiforgeryFilter` (both 400, no handler runs); state the antiforgery check's place in AD-8's order. |
 | 8.10 | review | `WithdrawDisputeInputTests.cs:108`, `OperationsActionInputTests.cs:256` | Contract note: a non-GUID route ID plus a bad body now answers 400 naming the body field. |
+| 8.11 | review | `RaiseDisputeInputTests.cs:165-182` | The hand-built rejection body is never shown to bind with `"wrongAmount"`; build it with `Body(...)` or add the valid case. |
+| 8.11 | review | same test | The no-echo check reads the note marker, not the refused reason value; add the reason value check for the string cases. |
