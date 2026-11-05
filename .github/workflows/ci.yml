@@ -15,46 +15,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-# The Compose plugin every job that runs docker compose installs: the same version and SHA-256 as the AWS instance
-# (infra/terraform/modules/compute/main.tf, compose_version and compose_sha256); change them together. The runner
-# image's preinstalled Compose is older and rejects the gateway's service:spa build context (fixed in v5.6.0).
-env:
-  COMPOSE_VERSION: 5.6.1
-  COMPOSE_SHA256: 47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0
-
 jobs:
-  # Whether a push changes anything but docs: scripts/ci-changes.sh sets an output that each heavy job's if: reads;
-  # floor-guard always runs. A story/** push is judged on the whole story since its fork point with main, a main push
-  # on its own commits, and a doubt runs everything (the script's header has the rules).
-  changes:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      code: ${{ steps.diff.outputs.code }}
-    steps:
-      # fetch-depth 0 fetches every branch's whole history: the push's before commit, and origin/main for a story's
-      # fork point (actions/checkout README).
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      # The push event's before and after commits (GitHub, "Events that trigger workflows", push) reach the script only
-      # through env.
-      - id: diff
-        env:
-          EVENT: ${{ github.event_name }}
-          REF: ${{ github.ref }}
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.sha }}
-        run: |
-          result=$(scripts/ci-changes.sh "$EVENT" "$REF" "$BEFORE" "$AFTER")
-          echo "$result"
-          echo "$result" >> "$GITHUB_OUTPUT"
-
   backend:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -69,21 +31,8 @@ jobs:
         with:
           global-json-file: backend/global.json
 
-      # As in the platform job: the architecture tests render docker-compose.yml with docker compose config, and the
-      # runner's own Compose is older and refuses the gateway's service:spa build context.
-      - name: Install Compose
-        run: |
-          plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
-          mkdir -p "$plugins"
-          curl -fsSL --max-time 300 -o "$RUNNER_TEMP/docker-compose" \
-            "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-x86_64"
-          echo "${COMPOSE_SHA256}  $RUNNER_TEMP/docker-compose" | sha256sum --check --strict
-          install -m 0755 "$RUNNER_TEMP/docker-compose" "$plugins/docker-compose"
-          docker compose version
-          if [ "$(docker compose version --short)" != "$COMPOSE_VERSION" ]; then
-            echo "::error::docker compose is not v$COMPOSE_VERSION"
-            exit 1
-          fi
+      # The architecture tests render docker-compose.yml with docker compose config, which needs the pinned Compose.
+      - uses: ./.github/actions/install-compose
 
       # setup-dotnet's cache input needs packages.lock.json, which the repo does not have, so the NuGet global-packages
       # folder (~/.nuget/packages on Linux) is cached, keyed on the files that decide what restore downloads.
@@ -123,8 +72,6 @@ jobs:
       - run: dotnet test --solution DisputeDesk.slnx --no-build
 
   frontend:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
@@ -170,8 +117,6 @@ jobs:
           fi
 
   platform:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     # The Infra tests step's GatewayTests build the SPA image twice (with and without browser telemetry) and a gateway on each.
     timeout-minutes: 15
@@ -180,21 +125,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # Docker, "Install the plugin manually", for the active user: the CLI searches ~/.docker/cli-plugins before the
-      # system plugin directories, so this plugin shadows the preinstalled one.
-      - name: Install Compose
-        run: |
-          plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
-          mkdir -p "$plugins"
-          curl -fsSL --max-time 300 -o "$RUNNER_TEMP/docker-compose" \
-            "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-x86_64"
-          echo "${COMPOSE_SHA256}  $RUNNER_TEMP/docker-compose" | sha256sum --check --strict
-          install -m 0755 "$RUNNER_TEMP/docker-compose" "$plugins/docker-compose"
-          docker compose version
-          if [ "$(docker compose version --short)" != "$COMPOSE_VERSION" ]; then
-            echo "::error::docker compose is not v$COMPOSE_VERSION"
-            exit 1
-          fi
+      - uses: ./.github/actions/install-compose
 
       - name: Compose file is valid
         run: docker compose config --quiet
@@ -252,8 +183,6 @@ jobs:
   # applies run only from the maintainer's machine (infra/terraform/README.md); here every test plans against mocked
   # providers.
   terraform:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -304,7 +233,8 @@ jobs:
   floor-guard:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    # Downloaded from their GitHub releases and checked against a SHA-256 pinned here, as security.yml installs Trivy.
+    # Downloaded from their GitHub releases and checked against a SHA-256 pinned here, as .github/actions/install-trivy
+    # installs Trivy.
     # actionlint's pin is its line in the release's actionlint_<version>_checksums.txt; shellcheck publishes no checksum
     # file, so its pin is GitHub's digest of the release asset. Change a version and its pin together.
     env:
@@ -319,8 +249,15 @@ jobs:
 
       - run: scripts/floor-guard.sh
 
-      # The flow scripts' own tests, on scratch repositories with stubs: no network, no Docker.
-      - run: scripts/ci-changes.test.sh
+      # ad-012 clauses 1 and 3: each gate needs every check job, and every check job runs unconditionally. publish runs
+      # only on main after the checks, so ci-passed does not need it. yq is preinstalled on the runner image.
+      - name: Gates need every check job
+        run: |
+          scripts/ci-gates.sh .github/workflows/ci.yml ci-passed publish
+          scripts/ci-gates.sh .github/workflows/security.yml security-passed
+
+      # The flow scripts' own tests, on scratch repositories and files with stubs: no network, no Docker.
+      - run: scripts/ci-gates.test.sh
       - run: scripts/run-breaks.test.sh
 
       - name: Install actionlint
@@ -350,10 +287,11 @@ jobs:
           shellcheck --version
           actionlint .github/workflows/*.yml
 
-      # Every tracked shell script. The :(glob) magic lets ** match no directory as well, so infra/tests/smoke.sh is included
-      # (gitglossary, pathspec). scripts/lane-runner.zsh is not linted: shellcheck does not support zsh.
+      # Every tracked shell script, the local actions' install scripts included. The :(glob) magic lets ** match no
+      # directory as well, so infra/tests/smoke.sh is included (gitglossary, pathspec). scripts/lane-runner.zsh is not linted:
+      # shellcheck does not support zsh.
       - name: shellcheck
-        run: git ls-files -z ':(glob)infra/**/*.sh' 'scripts/*.sh' | xargs -0 shellcheck
+        run: git ls-files -z ':(glob)infra/**/*.sh' 'scripts/*.sh' '.github/actions/*/*.sh' | xargs -0 shellcheck
 
       # Same rule as the pre-commit hook: whole-word, case-insensitive, one term per line, # comments allowed.
       # Only file:line is printed, never the matching text, so the terms stay out of the log.
@@ -383,8 +321,6 @@ jobs:
   # Story 7.3 (AD-32). The runner's fresh checkout and Docker daemon make the stack fresh, so customer D starts
   # unlinked (AD-30). Only the journeys run here; the regression project is not run in CI.
   e2e:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -392,21 +328,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # Docker, "Install the plugin manually", for the active user: the CLI searches ~/.docker/cli-plugins before the
-      # system plugin directories, so this plugin shadows the preinstalled one.
-      - name: Install Compose
-        run: |
-          plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
-          mkdir -p "$plugins"
-          curl -fsSL --max-time 300 -o "$RUNNER_TEMP/docker-compose" \
-            "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-x86_64"
-          echo "${COMPOSE_SHA256}  $RUNNER_TEMP/docker-compose" | sha256sum --check --strict
-          install -m 0755 "$RUNNER_TEMP/docker-compose" "$plugins/docker-compose"
-          docker compose version
-          if [ "$(docker compose version --short)" != "$COMPOSE_VERSION" ]; then
-            echo "::error::docker compose is not v$COMPOSE_VERSION"
-            exit 1
-          fi
+      - uses: ./.github/actions/install-compose
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -458,8 +380,7 @@ jobs:
         run: docker compose down -v
 
   # Story 7.3 (AD-32): the only job that can write packages, on main only and only after the jobs in its needs pass;
-  # terraform is not among them (story 7.16). On a docs-only push its needed jobs are skipped, and a job whose needs
-  # were skipped is skipped too, so nothing is published.
+  # terraform is not among them (story 7.16).
   # Each image is built, scanned and only then pushed, so the pushed bytes are the scanned bytes.
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -470,23 +391,13 @@ jobs:
       contents: read
       packages: write
     env:
-      # The same Trivy version and SHA-256 pin as security.yml; change both together.
-      TRIVY_VERSION: 0.76.1
-      TRIVY_SHA256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
       TRIVY_NO_PROGRESS: "true" # no download progress bars in the log
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Install Trivy
-        run: |
-          curl -fsSLo "$RUNNER_TEMP/trivy.tar.gz" \
-            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
-          echo "${TRIVY_SHA256}  $RUNNER_TEMP/trivy.tar.gz" | sha256sum --check --strict
-          mkdir -p "$RUNNER_TEMP/bin"
-          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP/bin" trivy
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - uses: ./.github/actions/install-trivy
 
       - name: Log in to GHCR
         env:
@@ -526,3 +437,24 @@ jobs:
       - name: Log out of GHCR
         if: always()
         run: docker logout ghcr.io
+
+  # ad-012 clause 1: the CI required check. A skipped job reports success to a required check, so this job
+  # reads each needed job's result and passes only when every one is success. always() runs it even when the run is
+  # cancelled; with !cancelled() it would be skipped then, and a skipped required check counts as passing. The job list
+  # lives only in needs: NEEDS is the whole needs context, and floor-guard checks it names every check job.
+  ci-passed:
+    needs: [backend, frontend, platform, terraform, floor-guard, e2e]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every check job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          not_passed=$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          if [[ -n "$not_passed" ]]; then
+            while IFS= read -r line; do echo "::error::$line"; done <<< "$not_passed"
+            exit 1
+          fi
+          echo "Every check job succeeded."

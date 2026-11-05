@@ -1,4 +1,5 @@
-# These jobs and the CodeQL code-scanning result block a merge only once they are required checks in the branch ruleset.
+# security-passed fails unless every job here succeeded; it and ci.yml's ci-passed become the two required checks in
+# main's ruleset, beside the CodeQL code-scanning rule.
 name: Security
 
 on:
@@ -18,14 +19,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-# Gitleaks and Trivy are downloaded from their GitHub releases and checked against a SHA-256 pinned here,
-# the same idea as pinning actions to a commit SHA: a re-tagged or replaced release fails the check.
-# (The trivy-action and setup-trivy tags were force-pushed with malicious code in March 2026.)
+# Gitleaks is downloaded from its GitHub release and checked against a SHA-256 pinned here, the same idea as pinning
+# actions to a commit SHA: a re-tagged or replaced release fails the check. Trivy's pin lives in
+# .github/actions/install-trivy/install.sh, which this workflow and ci.yml's publish job share.
 env:
   GITLEAKS_VERSION: 8.30.1
   GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
-  TRIVY_VERSION: 0.76.1
-  TRIVY_SHA256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
 
 jobs:
   gitleaks:
@@ -39,7 +38,7 @@ jobs:
 
       - name: Install gitleaks
         run: |
-          curl -fsSLo "$RUNNER_TEMP/gitleaks.tar.gz" \
+          curl -fsSL --max-time 300 -o "$RUNNER_TEMP/gitleaks.tar.gz" \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --strict
           mkdir -p "$RUNNER_TEMP/bin"
@@ -111,14 +110,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Trivy
-        run: |
-          curl -fsSLo "$RUNNER_TEMP/trivy.tar.gz" \
-            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
-          echo "${TRIVY_SHA256}  $RUNNER_TEMP/trivy.tar.gz" | sha256sum --check --strict
-          mkdir -p "$RUNNER_TEMP/bin"
-          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP/bin" trivy
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - uses: ./.github/actions/install-trivy
 
       # Vulnerable dependencies and misconfiguration (the Dockerfiles) in the repo. Secrets are gitleaks' job.
       # Accepted findings are triaged, one path each, in .github/trivyignore.yaml. The command is the one builders run
@@ -147,3 +139,24 @@ jobs:
           trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-core-banking:ci
           trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-gateway:ci
           trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-zitadel:ci
+
+  # ad-012 clause 3: the Security required check, the same rule as ci.yml's ci-passed. A skipped job reports
+  # success to a required check, so this job reads each needed job's result and passes only when every one is success;
+  # always() runs it even when the run is cancelled. For the codeql matrix, needs.codeql.result is the legs' combined
+  # result; GitHub Docs do not say how legs combine, so a one-time check proved that one failing leg fails it.
+  security-passed:
+    needs: [gitleaks, codeql, vulnerable-packages, trivy]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every security job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          not_passed=$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          if [[ -n "$not_passed" ]]; then
+            while IFS= read -r line; do echo "::error::$line"; done <<< "$not_passed"
+            exit 1
+          fi
+          echo "Every check job succeeded."
