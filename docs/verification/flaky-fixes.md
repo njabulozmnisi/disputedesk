@@ -41,6 +41,11 @@ Items 1 (renamed to `Login_AlreadySignedIn_RecordsSignOutForTheEndedSession`: on
 - 6.4 review (2026-10-30): move ReviewScreen.tsx:47 and WithdrawDialog.tsx:49 onto problems.ts validationFields, and keep one z.config({ jitless: true }) (linkSchema.ts:5, raiseSchema.ts:11). Refactor sweep.
 - tf-2 review low (2026-10-30): the "fails again" focus tests (DisputeDetailScreen.test.tsx:266, DisputesScreen.test.tsx:428, TransactionsScreen.test.tsx:656) wait on `not.toHaveAttribute('disabled')`, which is always true (Try again uses aria-disabled); wait on a real settle signal (a second failure with traceId 'trace-2', then findByText(/trace-2/)) before asserting focus. Also for the refactor sweep: one retry() helper for the three screens. Test-only.
 
+## Done 2026-11-05 (e2e baseline QA on 4efec37, `e2e-baseline-qa.md`)
+
+- `bff-sign-in-and-out.spec.ts:93`, `sign-in-and-out-audit.spec.ts:131`, `session-cookie-never-renewed.spec.ts:122`: stale against 8.13 (D2). A live app tab that sees a 401 leaves for `/signed-out`, so a logout form posted from the app's own page raced it. The form is now posted from a non-app page (`/api/v1/bff/session`); every assertion is unchanged. 35 of 35 pass on a fresh stack.
+- `dispute-withdraw.spec.ts:113` and `:180`: not reproduced on main; no edit.
+
 ## Done 2026-10-30 (batch tf-2)
 
 - Try again focus (WCAG 2.2 SC 2.4.3): DisputeDetailScreen focuses the h1 when a retry succeeds or returns 404 and leaves focus on Try again when it fails again; DisputesScreen and TransactionsScreen focus the h1 on success (Load more's Try again unchanged). DisputeDetailScreen is back to `else if (query.isError)` with no hoisted failure card.

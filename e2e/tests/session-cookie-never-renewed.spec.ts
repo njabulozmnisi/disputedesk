@@ -144,7 +144,8 @@ test('logout with /session requests in flight leaves no session cookie in the br
     });
 
     const { requestToken } = await (await page.request.get('/api/v1/bff/antiforgery')).json();
-    await page.goto('/');
+    // Story 8.13 (D2): posted from a page that is not the app, which would leave for /signed-out on a 401.
+    await page.goto('/api/v1/bff/session');
     await page.evaluate((token) => {
       const form = document.createElement('form');
       form.method = 'POST';
