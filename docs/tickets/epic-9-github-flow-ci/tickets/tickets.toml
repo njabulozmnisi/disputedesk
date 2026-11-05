@@ -1,15 +1,16 @@
 # Production CI on GitHub flow: stories in build order. Written by Sofia, 2026-11-05, from
 # docs/decisions/ad-012-github-flow-ci.md (accepted 2026-11-05), in its rollout order (clause 7). Extra keys (owner, lane,
 # high_stakes, migration, touches, supervisor_checks) are for the supervisor; tickets.py ignores them.
+# 2026-11-05 (Sofia): the pre-build reviews folded in; 9.3 split into 9.3 (ruleset and settings) and 9.4 (flow and guard).
 
-next_id = 4
+next_id = 5
 
 [[entry]]
 id = 1
 type = "story"
 title = "Every check runs on pull requests and reports through two gate jobs"
-description = "ad-012 clauses 1, 3 and 5: the changes job, its needs and ifs, scripts/ci-changes.sh and its test go, so every check job runs on every pull request; ci-passed and security-passed need every check job, run with if: always() and fail unless each result is success; the Compose and Trivy installs become composite actions under .github/actions holding the one pin each; triggers unchanged, story/** included; both gates shown successful on a pull request from story/9.1."
-verify = "actionlint passes; on a pull request from story/9.1 every job runs and ci-passed and security-passed succeed; each supervisor break fails its gate."
+description = "ad-012 clauses 1, 3 and 5: the changes job, its needs and ifs, scripts/ci-changes.sh and its test go, so every check job runs on every pull request; ci-passed and security-passed read toJSON(needs), run with if: always() and fail unless each result is success; a floor-guard step keeps each gate's needs equal to the check jobs; the Compose and Trivy installs become composite actions under .github/actions, each running an install.sh beside it so shellcheck lints it, holding the one pin each; the Compose download retries; triggers unchanged, story/** included; both gates shown successful on a pull request from story/9.1."
+verify = "actionlint and shellcheck pass; on a pull request from story/9.1 every job runs and ci-passed and security-passed succeed; each supervisor break fails its gate; main's run after the merge succeeds with publish."
 covers = ["R33"]
 after = ["8.6", "8.9", "8.13", "8.15", "8.16", "8.17"]
 hitl = false
@@ -19,15 +20,15 @@ owner = "backend"
 lane = "A"
 high_stakes = false
 migration = false
-touches = [".github/workflows/ci.yml (changes job; five jobs' needs and if; three Compose steps; workflow env; floor-guard step; publish Trivy step and comment; new ci-passed)", ".github/workflows/security.yml (Trivy step and env; first-line comment; new security-passed)", ".github/actions/install-compose/action.yml, .github/actions/install-trivy/action.yml (new)", "scripts/ci-changes.sh, scripts/ci-changes.test.sh (deleted)", "scripts/security-local.sh (one comment)","infra/terraform/modules/compute/main.tf (one comment)"]
-supervisor_checks = ["Throwaway pull request: exit 1 in vulnerable-packages; security-passed fails naming it.", "Throwaway pull request: if: false on e2e; ci-passed fails naming e2e: skipped.", "Throwaway pull request: one character of the Compose SHA-256 changed; three jobs fail at the checksum and ci-passed names them.", "Throwaway pull request: a failing backend test; ci-passed fails naming backend.", "Throwaway pull request changing only docs/glossary.md; every check job runs."]
+touches = [".github/workflows/ci.yml (changes job; five jobs' needs and if; three Compose steps; workflow env; floor-guard's ci-changes step, tool-pin comment, shellcheck pathspec and new needs step; publish Trivy step and comment; new ci-passed)", ".github/workflows/security.yml (Trivy step and env; pin comment; Gitleaks --max-time; first-line comment; new security-passed)", ".github/actions/install-compose/ and .github/actions/install-trivy/ (action.yml and install.sh each, new)", "scripts/ci-changes.sh, scripts/ci-changes.test.sh (deleted)", "scripts/security-local.sh (one comment)", "infra/terraform/modules/compute/main.tf (one comment)"]
+supervisor_checks = ["Throwaway pull request: exit 1 in vulnerable-packages; security-passed fails naming it.", "Throwaway pull request: one codeql leg fails; security-passed names codeql: failure.", "Throwaway pull request: if: false on e2e; ci-passed fails naming e2e: skipped.", "gh run cancel during e2e; ci-passed fails naming the cancelled jobs.", "Throwaway pull request: one character of the Compose SHA-256 changed; three jobs fail at the checksum and ci-passed names them.", "Throwaway pull request: one character of the Trivy SHA-256 changed; security-passed names trivy.", "Throwaway pull request: a failing backend test; ci-passed fails naming backend.", "A dummy job left out of ci-passed's needs; floor-guard fails naming it.", "Today's ci.yml and security.yml fail criterion 1's structural assertion."]
 
 [[entry]]
 id = 2
 type = "story"
 title = "Deploy follows publish on main, behind a switch, and the deploy role trusts the dev environment"
-description = "ad-012 clause 4 and clause 3's outputs, amending AD-28: publish exposes the five image references by digest as job outputs; deploy.yml becomes reusable (workflow_call with the SHA and the five references; workflow_dispatch kept for rollback) with environment dev and the deploy-dev concurrency group on its job; CI's deploy job calls it after publish when vars.DEPLOY_ENABLED is true, and deploy-switched-off writes a notice otherwise; the human creates dev restricted to main; the role trusts environment:dev with the tftest pins and the README one-time check and first-deploy steps following."
-verify = "actionlint and terraform fmt, validate and mocked test pass; main's run after the merge shows publish's five outputs and the deploy notice and no AWS step; the dev environment read-back shows only main; no AWS command is run."
+description = "ad-012 clause 4 and clause 3's outputs, amending AD-28: publish exposes the five image references by digest as job outputs; deploy.yml becomes reusable (workflow_call with the SHA and the five references; workflow_dispatch kept for rollback) with environment dev and the deploy-dev concurrency group on its job, and its images step writes the same five outputs on both paths; CI's deploy job calls it after publish when vars.DEPLOY_ENABLED is true, and deploy-switched-off prints the five references and writes a notice otherwise; the human creates dev restricted to main before the post-build stages, and the security agent records the read-back; the role trusts environment:dev with the tftest pins and the README one-time check, first-deploy and switch-off-first rollback steps following."
+verify = "actionlint and terraform fmt, validate and mocked test pass; main's run after the merge shows deploy-switched-off printing publish's five outputs with the deploy notice and no AWS step; the dev environment read-back shows only main; no AWS command is run."
 covers = ["R33", "R38", "R39"]
 after = [1]
 hitl = true
@@ -37,15 +38,15 @@ owner = "backend"
 lane = "A"
 high_stakes = true
 migration = false
-touches = [".github/workflows/ci.yml (publish outputs; new deploy and deploy-switched-off jobs)", ".github/workflows/deploy.yml (workflow_call and workflow_dispatch; environment, concurrency, input checks)", "infra/terraform/modules/deploy-role/main.tf (subject, github_environment variable, comments)", "infra/terraform/envs/dev/main.tf, variables.tf (one description)", "infra/terraform/envs/dev/tests/deploy_role.tftest.hcl (variables block, two pins)", "infra/terraform/README.md (deploy-role row, section 8, rollback)"]
-supervisor_checks = ["Throwaway copy: the subject back to ref:refs/heads/main; terraform test fails.", "Throwaway copy: StringLike on :sub; terraform test fails.", "Throwaway copy: needs.publish.outputs.apii in deploy's with; actionlint fails.", "Throwaway branch: deploy.yml dispatched off main; skipped by the guard, and refused by dev's branch policy with the guard removed.", "Scratch branch, push removed: an image tag in place of its digest; publish's shape check fails before the outputs."]
+touches = [".github/workflows/ci.yml (publish outputs; new deploy and deploy-switched-off jobs; floor-guard needs step's main-only list)", ".github/workflows/deploy.yml (workflow_call and workflow_dispatch; environment, concurrency and its shortcut comment, the images step's two paths, comments)", "infra/terraform/modules/deploy-role/main.tf (subject, github_environment variable, comments)", "infra/terraform/envs/dev/main.tf, variables.tf (one description)", "infra/terraform/envs/dev/tests/deploy_role.tftest.hcl (header, variables block, two pins, run name)", "infra/terraform/README.md (deploy-role row, section 8, rollback)"]
+supervisor_checks = ["Throwaway copy: the subject back to ref:refs/heads/main; terraform test fails.", "Throwaway copy: StringLike on :sub; terraform test fails.", "Throwaway copy: needs.publish.outputs.apii in deploy's with; actionlint fails.", "After the security agent's read-back of dev, throwaway branch: deploy.yml dispatched off main; skipped by the guard, and refused by dev's branch policy with the guard removed.", "Scratch branch, no publishing: an image tag in place of its digest; publish's shape check fails before the outputs, and a real digest reference passes.", "Scratch caller of a stripped deploy.yml copy: a valid input set passes the images step; a tag, an upper-case digest, the worker image as api and a 39-character sha each fail it."]
 
 [[entry]]
 id = 3
 type = "story"
-title = "Main is protected by a ruleset, and stories merge by squash through their pull request"
-description = "ad-012 clauses 2, 6 and 7: .github/rulesets/main.json (pull request with no required approval, ci-passed and security-passed from GitHub Actions on an up-to-date branch, no force push, no deletion, CodeQL code-scanning results as an assumption) and the repository's squash-only, auto-merge and delete-on-merge settings, applied by the human with gh api once 9.3's pull request shows both gates; the story/** trigger, push-and-watch.sh and merge-story.sh go; feature/<story> branches; gh pr create and gh pr merge --squash --auto --match-head-commit; stacked stories rebase onto main and retarget; the guard allows only a lease-checked force push to a feature branch and asks on gh api writes; AGENTS.md, CLAUDE.md, the review skill and agentic-sdlc rewritten by the supervisor and approved by the human; 9.3 is the first squash merge."
-verify = "The ruleset and settings read-backs match the committed values; each supervisor check is refused; 9.3 merges by squash through its pull request and main's CI and Security runs on the squash commit succeed."
+title = "Main is protected by a ruleset, and squash is the only merge method"
+description = "ad-012 clause 2 and clause 7's middle step: .github/rulesets/main.json, given whole (pull request with no required approval, ci-passed and security-passed pinned to the GitHub Actions app on an up-to-date branch, CodeQL code-scanning results, no force push, no deletion, no bypass actors) and the repository's squash-only, auto-merge and delete-on-merge settings, applied by the human as the owner with gh api once 9.3's pull request shows both gates, and read back by the reviewer; the forbidden-terms step fails closed; 9.3 ships on today's flow and is the first squash merge, armed with --match-head-commit."
+verify = "The reviewer's ruleset and settings read-backs match the committed values; each supervisor check is refused; 9.3 merges by squash through its pull request and main's CI and Security runs on the squash commit succeed."
 covers = ["R33", "R39"]
 after = [2]
 hitl = true
@@ -55,5 +56,23 @@ owner = "backend"
 lane = "A"
 high_stakes = false
 migration = false
-touches = [".github/workflows/ci.yml, security.yml (push branches)", ".github/rulesets/main.json (new)", "scripts/push-and-watch.sh, scripts/merge-story.sh (deleted)", "scripts/check-ready.sh, scripts/lane.sh (comment)", "infra/README.md (Repository settings section)", "Supervisor rule diff, human-approved: AGENTS.md, CLAUDE.md, .claude/skills/review-story/SKILL.md, docs/process/agentic-sdlc.md, .claude/hooks/guard.py"]
-supervisor_checks = ["A direct push of a throwaway commit to main is refused by the ruleset.", "A throwaway pull request with a failing test, armed with --auto, does not merge.", "gh pr merge --merge and --rebase are refused.", "A pull request behind main is not mergeable until gh pr update-branch.", "gh pr merge --match-head-commit with an older SHA is refused.", "Guard: --force to a feature branch and a lease-checked force push to main are denied; gh api -X DELETE on the ruleset asks.", "Throwaway copy: a dependency with only story/<id> on origin; check-ready reports not ready."]
+touches = [".github/rulesets/main.json (new)", ".github/workflows/ci.yml (floor-guard's Forbidden terms step)", "infra/README.md (Repository settings section)"]
+supervisor_checks = ["An empty throwaway commit sent straight to main is refused by the ruleset.", "A throwaway pull request with a failing test, armed with --auto, does not merge; --merge and --rebase are refused naming the method; --match-head-commit with an older SHA is refused naming the moved head.", "An armed pull request of an empty commit, given one more commit while pending, does not merge on the new head.", "A pull request opened before 9.3's merge and behind main after it is not mergeable until gh pr update-branch.", "Scratch branch: the Forbidden terms step with no secret fails.", "The merge box shows ci-passed and security-passed as Required."]
+
+[[entry]]
+id = 4
+type = "story"
+title = "Stories merge by squash through their pull request, and the guard bounds the flow"
+description = "ad-012 clauses 6 and 7, split from 9.3: the story/** trigger and the two flow scripts go; feature/<story> and feature/<slug> branches; every change reaches main through its pull request by written steps run as the owner (gh pr create, gh pr checks --watch --required, arm on base main with --match-head-commit, disable auto before a later update, wait for main's runs); stacked stories rebase onto origin/main and retarget; the guard allows with no prompt in the main session exactly the two forms of the human's answer on P21, asks on one bounded lease-checked force form and on every gh write, and denies every other force form; AGENTS.md, CLAUDE.md, two skills, agentic-sdlc and guard.py rewritten by the supervisor as a patch the builder applies first, approved by the human."
+verify = "Criterion 1's grep finds nothing; each guard case gives its decision; 9.4 merges by squash through its own pull request and main's CI and Security runs on the squash commit succeed."
+covers = ["R33", "R39"]
+after = [3]
+hitl = true
+risk = "high"
+refine = false
+owner = "backend"
+lane = "A"
+high_stakes = false
+migration = false
+touches = [".github/workflows/ci.yml, security.yml (branch triggers)", "the two flow scripts under scripts/ (deleted)", "scripts/check-ready.sh, scripts/lane.sh (comment)", "Supervisor rule diff, human-approved, applied first by the builder: AGENTS.md, CLAUDE.md, .claude/skills/review-story/SKILL.md, .claude/skills/qa-story/SKILL.md, docs/process/agentic-sdlc.md, .claude/hooks/guard.py"]
+supervisor_checks = ["Guard case files: the two exact forms run with no prompt in the main session and are denied to a subagent.", "Guard: the bounded force form with and without -C asks; -f, --force-with-lease alone, a + refspec, a destination refspec and a chained force form are denied.", "Guard: gh api -XPOST, --method=PATCH, -X patch, --input, -X DELETE, gh repo edit, gh variable set and gh workflow run ask, with and without the owner-token prefix; a gh api read gets no decision.", "Throwaway copy: a dependency with only story/<id> on origin; check-ready reports not ready."]
