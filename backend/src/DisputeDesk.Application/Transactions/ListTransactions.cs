@@ -3,6 +3,7 @@ using DisputeDesk.Application.Disputes;
 using DisputeDesk.Contracts.Transactions;
 using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
+using DisputeDesk.Domain.Transactions;
 using Microsoft.EntityFrameworkCore;
 
 namespace DisputeDesk.Application.Transactions;
@@ -60,7 +61,7 @@ public sealed class ListTransactions(CurrentCustomer currentCustomer, ICoreBanki
 
     private static TransactionResponse ToResponse(Transaction transaction, RowDispute? dispute, DateTimeOffset now)
     {
-        Domain.Transactions.NotDisputableReason? reason = Domain.Transactions.Disputability.ReasonNotDisputable(
+        NotDisputableReason? reason = Disputability.ReasonNotDisputable(
             dispute is not null, transaction.Direction, transaction.Kind, transaction.State, transaction.TransactionDate, now);
 
         return new TransactionResponse(
@@ -70,47 +71,15 @@ public sealed class ListTransactions(CurrentCustomer currentCustomer, ICoreBanki
             transaction.TransactionDate,
             transaction.Description,
             DisputeWire.ToMoney(transaction.Amount, transaction.Currency),
-            ToWire(transaction.Direction),
-            ToWire(transaction.Kind),
-            ToWire(transaction.State),
+            transaction.Direction,
+            transaction.Kind,
+            transaction.State,
             transaction.MaskedCard,
             Disputable: reason is null,
-            reason is null ? null : ToWire(reason.Value),
+            reason,
             dispute?.Id,
             dispute is null ? null : DisputeWire.ToCustomerStatus(dispute.Status));
     }
-
-    // Contracts reference no other project (AD-1), so the wire enums are their own types with the same members.
-    private static TransactionDirection ToWire(Domain.Transactions.TransactionDirection direction) => direction switch
-    {
-        Domain.Transactions.TransactionDirection.Debit => TransactionDirection.Debit,
-        Domain.Transactions.TransactionDirection.Credit => TransactionDirection.Credit,
-        _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, "Unmapped transaction direction."),
-    };
-
-    private static TransactionKind ToWire(Domain.Transactions.TransactionKind kind) => kind switch
-    {
-        Domain.Transactions.TransactionKind.Card => TransactionKind.Card,
-        Domain.Transactions.TransactionKind.OwnAccountTransfer => TransactionKind.OwnAccountTransfer,
-        Domain.Transactions.TransactionKind.Transfer => TransactionKind.Transfer,
-        Domain.Transactions.TransactionKind.Other => TransactionKind.Other,
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unmapped transaction kind."),
-    };
-
-    private static TransactionState ToWire(Domain.Transactions.TransactionState state) => state switch
-    {
-        Domain.Transactions.TransactionState.Settled => TransactionState.Settled,
-        Domain.Transactions.TransactionState.Pending => TransactionState.Pending,
-        _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Unmapped transaction state."),
-    };
-
-    private static NotDisputableReason ToWire(Domain.Transactions.NotDisputableReason reason) => reason switch
-    {
-        Domain.Transactions.NotDisputableReason.AlreadyDisputed => NotDisputableReason.AlreadyDisputed,
-        Domain.Transactions.NotDisputableReason.NotEligible => NotDisputableReason.NotEligible,
-        Domain.Transactions.NotDisputableReason.OutsideWindow => NotDisputableReason.OutsideWindow,
-        _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "Unmapped reason."),
-    };
 
     /// <summary>The dispute of one transaction on the page.</summary>
     private sealed record RowDispute(string AccountRef, string TransactionId, Guid Id, DisputeStatus Status)

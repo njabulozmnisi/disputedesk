@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Contracts.Disputes;
 
@@ -29,7 +30,7 @@ public sealed record RaiseDisputeRequest(
     /// <summary>The longest ID core banking issues (the client's ID shape, story 2.3).</summary>
     public const int IdMaxLength = 32;
 
-    /// <summary>The same limit as <c>Dispute.NoteMaxLength</c>, which Contracts cannot reference (AD-1).</summary>
+    /// <summary>The same limit as <c>Dispute.NoteMaxLength</c>; Contracts uses Domain only for the enums identical on the wire (AD-1).</summary>
     public const int NoteMaxLength = 1000;
 
     /// <summary>0.00 or more, with at most 2 decimals, within <c>numeric(19,2)</c>.</summary>
@@ -49,7 +50,8 @@ public sealed record RaiseDisputeRequest(
             yield return new ValidationResult("The note must be at most 1000 characters after trimming.", [nameof(Note)]);
         }
 
-        bool isWrongAmount = Reason == Disputes.Reason.WrongAmount;
+        // Qualified because the property Reason hides the type of the same name here.
+        bool isWrongAmount = Reason == Domain.Disputes.Reason.WrongAmount;
         if (isWrongAmount && ExpectedAmount is null)
         {
             yield return new ValidationResult("An expected amount is required for the reason wrong amount.", [nameof(ExpectedAmount)]);

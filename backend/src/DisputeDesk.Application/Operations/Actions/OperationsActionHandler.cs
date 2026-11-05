@@ -117,8 +117,8 @@ public sealed class OperationsActionHandler(IAppDbContext db, CurrentOperationsA
             case DisputeAction.Escalate:
                 return dispute.Escalate(operationsActor.Actor, instant);
             case DisputeAction.Resolve:
-                Contracts.Disputes.Outcome outcome = resolve?.Outcome ?? throw new ArgumentException("Built-in validation requires an outcome.", nameof(resolve));
-                return dispute.Resolve(DisputeWire.ToDomain(outcome), resolve.Note, operationsActor.Actor, instant);
+                Outcome outcome = resolve?.Outcome ?? throw new ArgumentException("Built-in validation requires an outcome.", nameof(resolve));
+                return dispute.Resolve(outcome, resolve.Note, operationsActor.Actor, instant);
             default:
                 throw new ArgumentOutOfRangeException(nameof(action), action, "Not an operations action.");
         }
@@ -138,7 +138,7 @@ public sealed class OperationsActionHandler(IAppDbContext db, CurrentOperationsA
         return error;
     }
 
-    private static Error NotAllowedIn(DisputeStatus status) => DisputeWire.ActionNotAllowedWithDisputeStatus(DisputeWire.ToWire(status));
+    private static Error NotAllowedIn(DisputeStatus status) => DisputeWire.ActionNotAllowedWithDisputeStatus(status);
 
     private static AuditAction ToAuditAction(DisputeAction action) => action switch
     {

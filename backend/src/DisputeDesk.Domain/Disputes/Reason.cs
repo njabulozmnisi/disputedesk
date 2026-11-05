@@ -1,6 +1,7 @@
 namespace DisputeDesk.Domain.Disputes;
 
-/// <summary>Why the customer disputes a transaction (glossary: Reason).</summary>
+// Glossary: Reason. The summary below is the API document's text (openapi.json).
+/// <summary>Why the customer disputes a transaction. On the wire: <c>unrecognised</c>, <c>duplicateCharge</c>, and so on.</summary>
 public enum Reason
 {
     Unrecognised,

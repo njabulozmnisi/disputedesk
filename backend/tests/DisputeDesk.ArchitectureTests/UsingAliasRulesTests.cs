@@ -7,9 +7,9 @@ namespace DisputeDesk.ArchitectureTests;
 /// <summary>
 /// No <c>using X = ...;</c> directive in the backend source, tests or stubs, migrations included, and no MSBuild
 /// <c>&lt;Using Include="..." Alias="..." /&gt;</c> item, which generates one (docs/conventions/backend.md; Microsoft
-/// Learn, Common MSBuild project items: <c>Using</c>). A file imports one side, Domain or Contracts, and writes a type of
-/// the other qualified from the DisputeDesk root, which C# resolves against each enclosing namespace (C# language
-/// specification, "Namespace and type names").
+/// Learn, Common MSBuild project items: <c>Using</c>). Only where two types still share a name does a file import one
+/// side and write the other qualified from the DisputeDesk root, which C# resolves against each enclosing namespace (C#
+/// language specification, "Namespace and type names").
 /// </summary>
 public class UsingAliasRulesTests
 {

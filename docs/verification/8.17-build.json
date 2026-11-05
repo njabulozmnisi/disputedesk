@@ -1,0 +1,146 @@
+{
+  "status": "built",
+  "story": "8.17",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/disputedesk/.claude/worktrees/8.17",
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "D14b; R25, AD-1",
+      "test": "LayerTests.ContractsAssembly_References_OnlyDomainOfTheSolution (renamed from ContractsAssembly_References_NoOtherSolutionAssembly); LayerTests.DomainAssembly_References_NoOtherSolutionAssembly (unchanged)"
+    },
+    {
+      "id": "AC2",
+      "requirement": "D14b; R25, R30",
+      "test": "LayerTests.ContractsAssembly_Enums_AreOnlyThoseWithNoIdenticalDomainTwin; WireBytesTests (members and names on the wire unchanged); OpenApiDocumentTests.Document_EnumComponents_ListTheirWireNamesAndNeverNull; OpenAPI drift check (empty diff)"
+    },
+    {
+      "id": "AC3",
+      "requirement": "D14b; R18, AD-14a",
+      "test": "LayerTests.ContractsAssembly_Enums_AreOnlyThoseWithNoIdenticalDomainTwin (exactly the six stay); CustomerTimelineAllowlistTests.ToTimeline_EveryTypeAndAnUnknownOne_AdmitsOnlyTheFiveLifecycleTypesInStreamOrder (ToCustomerStatus and ToTimelineActor stay the one mapping)"
+    },
+    {
+      "id": "AC4",
+      "requirement": "D14b; R34",
+      "test": "Compile-time: the pair mappings cannot exist without the Contracts copies (AC2's test); OperationsActionInputTests.Resolve_ValidBodyWithUnknownPropertiesOnAResolvedDispute_Returns409WithDisputeStatusResolved and DisputeWireErrorTests (the 8.2 variant ActionNotAllowedWithDisputeStatus takes the Domain DisputeStatus, passed through)"
+    },
+    {
+      "id": "AC5",
+      "requirement": "D14b; R23, R30, NFR-API-2",
+      "test": "WireBytesTests.OutboxPayload_FixedInput_IsExactlyTheExpectedString (5 published types), WireBytesTests.StoredEventData_FixedInput_IsExactlyTheExpectedString (6 stored types), WireBytesTests.StoredRaiseResponse_FixedInput_IsExactlyTheExpectedString, WireBytesTests.StoredData_CoversEveryStoredEventTypeInTheDomain: written first and passing on the base code (13/13) before any enum moved, unchanged after; PublishMappingTests and StoredEventReplayTests unchanged and passing; OpenAPI drift: backend/openapi.json byte-identical after the regenerating build (git diff --quiet)"
+    },
+    {
+      "id": "AC6",
+      "requirement": "D14b; R34",
+      "test": "SourceRulesTests.BackendSource_EnumIdenticalOnTheWire_IsNeverNamespaceQualified with its scan check SourceRulesTests.BackendSource_EnumIdenticalOnTheWire_QualifiedIsFoundInRaiseDisputeRequest; UsingAliasRulesTests (unchanged rule, passing)"
+    }
+  ],
+  "smoke": "Under the stack lock, on a throwaway Compose project (COMPOSE_PROJECT_NAME=disputedesk-817, DISPUTEDESK_SUBNET=10.201.90.0/24) built from this worktree, removed afterwards with down -v. The shared stack's volume first gave a 500 on raise: its database lacks Disputes.SlaWarningRaisedAtUtc (migrated by another lane's reshaped migration, AD-22) while EF reported it up to date; it was not wiped. Throwaway run: dev-login customer-a -> session linked; GET /api/v1/transactions shows direction/kind/state/notDisputableReason camelCase (debit, card, pending, notEligible); POST /api/v1/disputes wrongAmount on TXN-A-0028 -> 201 with Location, reason wrongAmount, customerStatus submitted; the same Idempotency-Key -> 201 byte-identical body; operations start-review 200, escalate 200, resolve upheld 200 (status resolved, outcome upheld, timeline actorType/fromStatus/toStatus camelCase); resolve again -> 409 action-not-allowed with disputeStatus resolved; customer detail shows underReviewPrioritised and theBank. Rows: StoredEvents data (reason wrongAmount, kind card, outcome upheld ...), OutboxMessages data for raised.v1 and three status-changed.v1 (action, actorType, outcome camelCase), Disputes row Resolved|Upheld|WrongAmount. Shared stack left stopped.",
+  "standards": [
+    {
+      "mechanism": "Contracts references Domain through an MSBuild ProjectReference",
+      "source": "https://learn.microsoft.com/visualstudio/msbuild/common-msbuild-project-items#projectreference"
+    },
+    {
+      "mechanism": "Layer rule read from assembly metadata (LayerTests)",
+      "source": "https://learn.microsoft.com/dotnet/api/system.reflection.assembly.getreferencedassemblies"
+    },
+    {
+      "mechanism": "Enum wire names by the existing shared converter factory, unchanged (applies to the Domain enums by type)",
+      "source": "https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/converters-how-to"
+    },
+    {
+      "mechanism": "Domain enum XML summaries reach openapi.json through the OpenAPI XML comment source generator from referenced projects with GenerateDocumentationFile; no AdditionalFiles or extra ProjectReference was needed (the empty diff proves it)",
+      "source": "https://learn.microsoft.com/aspnet/core/fundamentals/openapi/openapi-comments?view=aspnetcore-10.0#add-xml-documentation-sources"
+    },
+    {
+      "mechanism": "Source rule over Roslyn syntax trees (existing SourceTrees helper) for criterion 6",
+      "source": "https://learn.microsoft.com/dotnet/csharp/roslyn-sdk/get-started/syntax-analysis"
+    }
+  ],
+  "breaks": [
+    {
+      "criterion": "AC1",
+      "patch": "--- a/backend/src/DisputeDesk.Contracts/DisputeDesk.Contracts.csproj\n+++ b/backend/src/DisputeDesk.Contracts/DisputeDesk.Contracts.csproj\n@@ -2,5 +2,6 @@\n   <ItemGroup>\n     <!-- Only for the enums identical on the wire, which exist once, in Domain (AD-1, D14b). -->\n     <ProjectReference Include=\"..\\DisputeDesk.Domain\\DisputeDesk.Domain.csproj\" />\n+    <ProjectReference Include=\"..\\DisputeDesk.Application\\DisputeDesk.Application.csproj\" />\n   </ItemGroup>\n </Project>\n",
+      "test_method": "DisputeDesk.ArchitectureTests.LayerTests.ContractsAssembly_References_OnlyDomainOfTheSolution",
+      "expect": "fails",
+      "note": "Fails at restore (MSB4006 circular dependency), so the test cannot pass: every solution assembly except Domain already depends on Contracts, so no second reference compiles. This is the story's own supervisor check."
+    },
+    {
+      "criterion": "AC2",
+      "patch": "--- /dev/null\n+++ b/backend/src/DisputeDesk.Contracts/Bff/TransactionKind.cs\n@@ -0,0 +1,17 @@\n+namespace DisputeDesk.Contracts.Bff;\n+\n+/// <summary>A copy of the Domain enum.</summary>\n+public enum TransactionKind\n+{\n+    /// <summary>Card.</summary>\n+    Card,\n+\n+    /// <summary>Own account transfer.</summary>\n+    OwnAccountTransfer,\n+\n+    /// <summary>Transfer.</summary>\n+    Transfer,\n+\n+    /// <summary>Other.</summary>\n+    Other,\n+}\n",
+      "test_method": "DisputeDesk.ArchitectureTests.LayerTests.ContractsAssembly_Enums_AreOnlyThoseWithNoIdenticalDomainTwin",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC3",
+      "patch": "--- a/backend/src/DisputeDesk.Application/Disputes/DisputeWire.cs\n+++ b/backend/src/DisputeDesk.Application/Disputes/DisputeWire.cs\n@@ -18,7 +18,7 @@\n     {\n         DisputeStatus.Submitted => CustomerStatus.Submitted,\n         DisputeStatus.UnderReview => CustomerStatus.UnderReview,\n-        DisputeStatus.Escalated => CustomerStatus.UnderReviewPrioritised,\n+        DisputeStatus.Escalated => CustomerStatus.UnderReview,\n         DisputeStatus.Resolved => CustomerStatus.Resolved,\n         DisputeStatus.Withdrawn => CustomerStatus.Withdrawn,\n         _ => throw new ArgumentOutOfRangeException(nameof(status), status, \"Unmapped status.\"),\n",
+      "test_method": "DisputeDesk.Api.IntegrationTests.Disputes.CustomerTimelineAllowlistTests.ToTimeline_EveryTypeAndAnUnknownOne_AdmitsOnlyTheFiveLifecycleTypesInStreamOrder",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC4",
+      "patch": "--- a/backend/src/DisputeDesk.Application/Operations/Actions/OperationsActionHandler.cs\n+++ b/backend/src/DisputeDesk.Application/Operations/Actions/OperationsActionHandler.cs\n@@ -138,7 +138,7 @@\n         return error;\n     }\n \n-    private static Error NotAllowedIn(DisputeStatus status) => DisputeWire.ActionNotAllowedWithDisputeStatus(status);\n+    private static Error NotAllowedIn(DisputeStatus status) => DisputeWire.ActionNotAllowedWithDisputeStatus(status == DisputeStatus.Resolved ? DisputeStatus.Submitted : status);\n \n     private static AuditAction ToAuditAction(DisputeAction action) => action switch\n     {\n",
+      "test_method": "DisputeDesk.Api.IntegrationTests.Operations.OperationsActionInputTests.Resolve_ValidBodyWithUnknownPropertiesOnAResolvedDispute_Returns409WithDisputeStatusResolved",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC5",
+      "patch": "--- a/backend/src/DisputeDesk.Infrastructure/Persistence/CommitRows.cs\n+++ b/backend/src/DisputeDesk.Infrastructure/Persistence/CommitRows.cs\n@@ -23,7 +23,7 @@\n             id,\n             raised,\n             DisputeEvents.RaisedV1,\n-            new DisputeRaisedV1(raised.DisputeId, raised.Reason, raised.ToStatus, Utc(raised), raised.Version),\n+            new DisputeRaisedV1(raised.DisputeId, raised.Reason, DisputeStatus.UnderReview, Utc(raised), raised.Version),\n             activity),\n         ReviewStarted started => StatusChanged(id, started, started.FromStatus, started.ToStatus, DisputeAction.StartReview, outcome: null, activity),\n         DisputeEscalated escalated => StatusChanged(id, escalated, escalated.FromStatus, escalated.ToStatus, DisputeAction.Escalate, outcome: null, activity),\n",
+      "test_method": "DisputeDesk.Api.IntegrationTests.Disputes.WireBytesTests.OutboxPayload_FixedInput_IsExactlyTheExpectedString",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC5",
+      "patch": "--- a/backend/src/DisputeDesk.Application/Disputes/CustomerView.cs\n+++ b/backend/src/DisputeDesk.Application/Disputes/CustomerView.cs\n@@ -14,7 +14,7 @@\n         dispute.Id,\n         DisputeWire.ToCustomerStatus(dispute.Status),\n         dispute.Outcome,\n-        dispute.Reason,\n+        Reason.Unrecognised,\n         dispute.Note,\n         ToSnapshot(dispute),\n         dispute.ExpectedAmount is decimal expected ? DisputeWire.ToMoney(expected, dispute.Currency) : null,\n",
+      "test_method": "DisputeDesk.Api.IntegrationTests.Disputes.WireBytesTests.StoredRaiseResponse_FixedInput_IsExactlyTheExpectedString",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC5",
+      "patch": "--- a/backend/src/DisputeDesk.Domain/Disputes/DisputeAction.cs\n+++ b/backend/src/DisputeDesk.Domain/Disputes/DisputeAction.cs\n@@ -1,7 +1,7 @@\n namespace DisputeDesk.Domain.Disputes;\n \n // Glossary: Action. Raise creates the dispute. The summary below is the API document's text (openapi.json).\n-/// <summary>A named change to a dispute. On the wire: <c>raise</c>, <c>startReview</c>, and so on.</summary>\n+/// <summary>A named change to one dispute. On the wire: <c>raise</c>, <c>startReview</c>, and so on.</summary>\n public enum DisputeAction\n {\n     Raise,\n",
+      "test_method": "OpenAPI drift check: from backend/, dotnet build DisputeDesk.slnx then git diff --exit-code -- openapi.json (CI step 'OpenAPI drift'); no test method",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC6",
+      "patch": "--- a/backend/src/DisputeDesk.Api/Operations/OperationsEndpoints.cs\n+++ b/backend/src/DisputeDesk.Api/Operations/OperationsEndpoints.cs\n@@ -153,7 +153,7 @@\n \n         OperationsDisputeResponse dispute = result.Value.Dispute;\n         metrics.RecordOperationsAction(action);\n-        if (action == DisputeAction.Resolve && dispute.Outcome is Outcome outcome)\n+        if (action == DisputeAction.Resolve && dispute.Outcome is Domain.Disputes.Outcome outcome)\n         {\n             metrics.RecordResolved(outcome, result.Value.SlaEscalated);\n         }\n",
+      "test_method": "DisputeDesk.ArchitectureTests.SourceRulesTests.BackendSource_EnumIdenticalOnTheWire_IsNeverNamespaceQualified",
+      "expect": "fails"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/njabulomnisi_Njabulos-MacBook-Pro_2026-11-05_04_18_02.121210.trx",
+      "TestResults/njabulomnisi_Njabulos-MacBook-Pro_2026-11-05_04_18_02.139648.trx",
+      "TestResults/njabulomnisi_Njabulos-MacBook-Pro_2026-11-05_04_18_02.158916.trx",
+      "TestResults/njabulomnisi_Njabulos-MacBook-Pro_2026-11-05_04_18_02.158999.trx"
+    ],
+    "diff_hash": "cb97cfa0955c",
+    "summary": "1588 total, 1588 passed, 0 failed, 0 skipped (Domain.Tests, ArchitectureTests, Api.IntegrationTests, Worker.IntegrationTests)"
+  },
+  "checks": {
+    "build": "dotnet build DisputeDesk.slnx: 0 warnings, 0 errors",
+    "openapi_drift": "backend/openapi.json byte-identical (git diff --quiet)",
+    "orval_drift": "not run locally (frontend/node_modules absent); its only input, backend/openapi.json, is byte-identical, so the generated client cannot change; CI's Orval drift step confirms",
+    "event_schemas": "contracts/events/*.schema.json untouched; PublishMappingTests schema tests pass",
+    "ef_model_drift": "No changes have been made to the model since the last migration",
+    "format": "dotnet format style and whitespace --verify-no-changes: clean",
+    "floor_guard": "clean",
+    "secret_scan": "no leaks found",
+    "breaks_verified": "each break applied, its test run, then reverted; all fail as stated"
+  },
+  "assumptions": [
+    "Domain enum summaries for ActorType, DisputeAction, DisputeStatus, Reason and TransactionKind now carry the Contracts text exactly (the text openapi.json renders); the Domain-only notes they replaced (glossary pointers, 'recorded, never used to decide', 'only card transactions can be disputed') are kept as a plain // line above each. Outcome and NotDisputableReason have no description in openapi.json before or after, so their Domain summaries are unchanged; member summaries do not reach the document.",
+    "Criterion 6 is applied beyond the nine enums in the files the story touches: no Contracts type now shares a name with a Domain or Application type, so Contracts.Disputes.* qualifications in CustomerView, OperationsView, RaiseDisputeHandler, CommitRows and four tests are written through their using, per conventions/backend.md:14. DisputeWire.cs also writes DisputeErrors and Error unqualified. Qualified names left untouched elsewhere (for example Domain.Disputes.DisputeErrors in DisputeWireErrorTests) are not enums and were not changed.",
+    "RaiseDisputeRequest keeps one qualified name, Domain.Disputes.Reason.WrongAmount: its property Reason is a Reason?, so C#'s Color Color rule does not apply and the simple name binds to the property. A comment says why; the AC6 source rule exempts that one file and proves it scans it.",
+    "The same stale comment criterion 4 names at RaiseDisputeRequest.cs:32 also sat on WithdrawDisputeRequest.NoteMaxLength and ResolveDisputeRequest.NoteMaxLength; all three now read 'Contracts uses Domain only for the enums identical on the wire (AD-1)'. The UsingAliasRulesTests summary was updated the same way; its rule is unchanged.",
+    "8.2's typed variant is DisputeWire.ActionNotAllowedWithDisputeStatus, already in Application on this base; it now takes the Domain DisputeStatus and its caller passes the status through. Domain/Disputes/DisputeErrors.cs has no System.Enum parameter on this base.",
+    "WireBytesTests.StoredData includes a SlaWarningRaised row (data {}), because it is a stored event type on this base. 8.14 removes that type: whichever of 8.14 and 8.17 merges second drops that one row (and StoredData_CoversEveryStoredEventTypeInTheDomain will fail until it does). StoredEventType was not touched.",
+    "Low, left as is: SourceRulesTests.ProductionSource_AutomationActorType_AppearsOnlyInTheSweepTheSeederAndTheWireMapping still exempts DisputeWire.cs, which no longer names ActorType.Automation. Removing it means renaming a test that earlier stories' records cite (5.3, 8.5), so it is left for the epic's lows batch.",
+    "The shared Compose stack's Postgres volume is out of step with this base (column Disputes.SlaWarningRaisedAtUtc missing, migration history reports up to date), most likely from 8.14's in-place reshaped migration (AD-22). It was not wiped; the next stack user needs docker compose down -v under the stack lock."
+  ],
+  "open_questions": [],
+  "conflicts": [
+    "8.14 (parallel): WireBytesTests' SlaWarningRaised row, as above; no shared file section otherwise expected (8.14 changes StoredEventType and the SLA code; 8.17 does not touch them). Both edit CommitRows.cs: 8.17 changes the StatusChanged lines and the DisputeRaisedV1 line, 8.14 likely the SlaWarningRaised => null arm."
+  ]
+}

@@ -1,2 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <!-- Only for the enums identical on the wire, which exist once, in Domain (AD-1, D14b). -->
+    <ProjectReference Include="..\DisputeDesk.Domain\DisputeDesk.Domain.csproj" />
+  </ItemGroup>
 </Project>

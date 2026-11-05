@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-using DisputeDesk.Contracts.Disputes;
+using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Contracts.Events;
 

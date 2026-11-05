@@ -146,7 +146,7 @@ public class PublishMappingTests
         CloudEvent<DisputeStatusChangedV1>? changed = JsonSerializer.Deserialize<CloudEvent<DisputeStatusChangedV1>>(sample, options);
         Assert.NotNull(changed);
         Assert.Equal(DisputeEvents.StatusChangedV1, changed.Type);
-        Assert.Equal(Contracts.Disputes.Outcome.Upheld, changed.Data.Outcome);
+        Assert.Equal(Outcome.Upheld, changed.Data.Outcome);
     }
 
     [Theory]

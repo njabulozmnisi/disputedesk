@@ -1,5 +1,6 @@
 using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Contracts.Transactions;
+using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Contracts.Operations;
 

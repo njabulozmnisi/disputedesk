@@ -1,6 +1,7 @@
 using System.Diagnostics.Metrics;
 using System.Text.Json;
 using DisputeDesk.Contracts.Disputes;
+using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Observability;
 
 namespace DisputeDesk.Api.Disputes;
@@ -40,7 +41,7 @@ public sealed class DisputeActionMetrics
     /// Counts an operations action that committed (AD-20), labelled with its camelCase name: <c>startReview</c>,
     /// <c>escalate</c> or <c>resolve</c>.
     /// </summary>
-    public void RecordOperationsAction(Domain.Disputes.DisputeAction action) =>
+    public void RecordOperationsAction(DisputeAction action) =>
         _actions.Add(
             1,
             new KeyValuePair<string, object?>("action", JsonNamingPolicy.CamelCase.ConvertName(action.ToString())),

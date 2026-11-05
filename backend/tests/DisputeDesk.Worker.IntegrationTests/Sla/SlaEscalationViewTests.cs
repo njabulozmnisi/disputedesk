@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using DisputeDesk.Application.Disputes;
+using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Contracts.Events;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
@@ -26,11 +27,11 @@ public class SlaEscalationViewTests(SlaFixture fixture)
 
         List<StoredEventRow> rows = await rig.StreamAsync(disputeId);
         List<StoredEvent> stream = [.. rows.Select(row => row.ToStoredEvent())];
-        Contracts.Disputes.DisputeResponse customer = CustomerView.ToResponse(await rig.DisputeRowAsync(disputeId), stream);
-        Assert.Equal(Contracts.Disputes.CustomerStatus.UnderReviewPrioritised, customer.CustomerStatus);
-        Contracts.Disputes.TimelineEntryResponse last = customer.Timeline[^1];
-        Assert.Equal(Contracts.Disputes.DisputeAction.Escalate, last.Action);
-        Assert.Equal(Contracts.Disputes.TimelineActor.TheBank, last.Actor);
+        DisputeResponse customer = CustomerView.ToResponse(await rig.DisputeRowAsync(disputeId), stream);
+        Assert.Equal(CustomerStatus.UnderReviewPrioritised, customer.CustomerStatus);
+        TimelineEntryResponse last = customer.Timeline[^1];
+        Assert.Equal(DisputeAction.Escalate, last.Action);
+        Assert.Equal(TimelineActor.TheBank, last.Actor);
 
         OutboxMessage published = Assert.Single(await rig.OutboxAsync(disputeId), message => message.Id == rows[^1].Id);
         Assert.Equal(DisputeEvents.StatusChangedV1, published.EventType);

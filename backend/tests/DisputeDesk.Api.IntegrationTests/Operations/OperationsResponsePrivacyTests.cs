@@ -1,6 +1,7 @@
 using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Contracts.Operations;
 using DisputeDesk.Contracts.Transactions;
+using DisputeDesk.Domain.Disputes;
 
 namespace DisputeDesk.Api.IntegrationTests.Operations;
 

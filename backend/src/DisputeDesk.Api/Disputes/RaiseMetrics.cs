@@ -1,6 +1,6 @@
 using System.Diagnostics.Metrics;
 using System.Text.Json;
-using DisputeDesk.Contracts.Disputes;
+using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Observability;
 
 namespace DisputeDesk.Api.Disputes;

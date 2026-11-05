@@ -6,6 +6,7 @@ using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Application.Audit;
 using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Problems;
+using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
@@ -84,7 +85,7 @@ public class RateLimitRejectionTests(PostgresFixture postgres)
         {
             AuditLogEntry entry = Assert.Single(await api.Factory.LinkingAuditsAsync(login), entry => entry.Action == AuditAction.LinkingRateLimited);
             Assert.Equal(
-                (AuditResult.Rejected, Domain.Disputes.ActorType.Customer, login, (string?)null, IPAddress.Parse("203.0.113.7")),
+                (AuditResult.Rejected, ActorType.Customer, login, (string?)null, IPAddress.Parse("203.0.113.7")),
                 (entry.Result, entry.ActorType, entry.ActorId, entry.CustomerId, entry.ClientIp));
         }
 

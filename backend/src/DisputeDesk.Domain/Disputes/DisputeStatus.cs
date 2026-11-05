@@ -1,6 +1,7 @@
 namespace DisputeDesk.Domain.Disputes;
 
-/// <summary>Where a dispute is (glossary: Status). Customers see <see cref="Escalated"/> as under review (prioritised).</summary>
+// Glossary: Status. Customers see Escalated as under review (prioritised). The summary below is the API document's text (openapi.json).
+/// <summary>A dispute's internal status, as events and operations see it. Customers see CustomerStatus instead.</summary>
 public enum DisputeStatus
 {
     Submitted,

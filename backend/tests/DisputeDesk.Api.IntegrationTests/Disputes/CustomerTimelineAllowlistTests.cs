@@ -1,4 +1,5 @@
 using DisputeDesk.Application.Disputes;
+using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Domain.Transactions;
 
@@ -25,14 +26,14 @@ public class CustomerTimelineAllowlistTests
             At(new DisputeResolved(DisputeStatus.Escalated, DisputeStatus.Resolved, Outcome.Upheld, "Refunded"), 6, ActorType.Operations),
         ];
 
-        IReadOnlyList<Contracts.Disputes.TimelineEntryResponse> timeline = CustomerView.ToTimeline(stream);
+        IReadOnlyList<TimelineEntryResponse> timeline = CustomerView.ToTimeline(stream);
 
         Assert.Equal(
             [
-                new Contracts.Disputes.TimelineEntryResponse(Contracts.Disputes.DisputeAction.Raise, Contracts.Disputes.CustomerStatus.Submitted, Contracts.Disputes.TimelineActor.You, Now.AddHours(1), "Not me"),
-                new Contracts.Disputes.TimelineEntryResponse(Contracts.Disputes.DisputeAction.StartReview, Contracts.Disputes.CustomerStatus.UnderReview, Contracts.Disputes.TimelineActor.TheBank, Now.AddHours(3), null),
-                new Contracts.Disputes.TimelineEntryResponse(Contracts.Disputes.DisputeAction.Escalate, Contracts.Disputes.CustomerStatus.UnderReviewPrioritised, Contracts.Disputes.TimelineActor.TheBank, Now.AddHours(5), null),
-                new Contracts.Disputes.TimelineEntryResponse(Contracts.Disputes.DisputeAction.Resolve, Contracts.Disputes.CustomerStatus.Resolved, Contracts.Disputes.TimelineActor.TheBank, Now.AddHours(6), "Refunded"),
+                new TimelineEntryResponse(DisputeAction.Raise, CustomerStatus.Submitted, TimelineActor.You, Now.AddHours(1), "Not me"),
+                new TimelineEntryResponse(DisputeAction.StartReview, CustomerStatus.UnderReview, TimelineActor.TheBank, Now.AddHours(3), null),
+                new TimelineEntryResponse(DisputeAction.Escalate, CustomerStatus.UnderReviewPrioritised, TimelineActor.TheBank, Now.AddHours(5), null),
+                new TimelineEntryResponse(DisputeAction.Resolve, CustomerStatus.Resolved, TimelineActor.TheBank, Now.AddHours(6), "Refunded"),
             ],
             timeline);
     }
@@ -42,9 +43,9 @@ public class CustomerTimelineAllowlistTests
     {
         StoredEvent withdrawn = At(new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, "Found it"), 2, ActorType.Customer);
 
-        Contracts.Disputes.TimelineEntryResponse entry = Assert.Single(CustomerView.ToTimeline([withdrawn]));
+        TimelineEntryResponse entry = Assert.Single(CustomerView.ToTimeline([withdrawn]));
 
-        Assert.Equal(new Contracts.Disputes.TimelineEntryResponse(Contracts.Disputes.DisputeAction.Withdraw, Contracts.Disputes.CustomerStatus.Withdrawn, Contracts.Disputes.TimelineActor.You, Now.AddHours(2), "Found it"), entry);
+        Assert.Equal(new TimelineEntryResponse(DisputeAction.Withdraw, CustomerStatus.Withdrawn, TimelineActor.You, Now.AddHours(2), "Found it"), entry);
     }
 
     [Fact]
