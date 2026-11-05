@@ -39,3 +39,6 @@
 | 8.8 | verify finding 4 | `DeployScriptTests.cs:395-404` | `DerivedPath_IsCheckedAgainstItsBound` calls `within_bounds` directly (`deploy.sh` sets the paths itself; comment explains). |
 | 8.8 | verify finding 5 (tooling) | `scripts/run-breaks.sh` | No path for the `infra/tests` project: a break filter that matches no test passes; make a zero-match filter fail and add the infra project. |
 | 8.12 | QA (wording) | `e2e/tests/operations-actions.spec.ts:232` | Test title still says "maps to no actor"; reword to "is not in AllowedClients". |
+| 8.9 | security L1 | local gateway `/otlp/v1/(traces|metrics|logs)` | Still passes a client's `X-Origin-Verify` to the local OTLP receiver (no effect: no local secret, AWS `/otlp/` is 404). Following the 2026-11-04 decision (strip on every local route), add `proxy_set_header X-Origin-Verify "";` there and the header to `LocalOtlpLocation_UpstreamRequest_*`. |
+| 8.9 | review L2 | story 8.9 file | Criterion 3 ("with no test changed"), Boundaries ("any header value") and Pre-build ("Decisions: none raised") predate the 2026-11-04 decision; add a dated note citing `epic-8-decisions.md`. |
+| 8.9 | verify L2 (process) | M1 lane collect | No `8.9-build.json` or results file reached the verifier (lane predated the flow change); same as the 8.12 row. |

@@ -168,11 +168,13 @@ public sealed partial class GatewayTests(GatewayFixture gateway) : IClassFixture
     [MemberData(nameof(ForwardingRoutes))]
     public async Task ProxiedLocation_UpstreamRequest_HoldsExactlyTheHeadersItsLocationSets(string gatewayName, string origin, string path, string port)
     {
-        // A client's RFC 7239 Forwarded must never reach an upstream (Zitadel resolves its instance from it), nor in AWS
-        // the origin-verify header. The full set of names shows a header a location adds or stops dropping.
+        // A client's RFC 7239 Forwarded must never reach an upstream (Zitadel resolves its instance from it), nor the
+        // origin-verify header: AWS requests carry it already, and the local edge drops a client's one the same way.
+        // The full set of names shows a header a location adds or stops dropping.
         string host = HostOf(gatewayName, origin);
+        string[] localOriginVerify = gatewayName == "local" ? ["-H", "X-Origin-Verify: client-sent"] : [];
 
-        Reply reply = await GatewayAsync(gatewayName, host, path, "-H", "Forwarded: for=203.0.113.9;host=evil.example;proto=http");
+        Reply reply = await GatewayAsync(gatewayName, host, path, ["-H", "Forwarded: for=203.0.113.9;host=evil.example;proto=http", .. localOriginVerify]);
         var echoed = Echoed.Parse(reply.Body);
 
         Assert.Equal(port, echoed.Port);
