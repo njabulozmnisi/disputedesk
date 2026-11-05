@@ -9,8 +9,9 @@ using Json.Schema;
 namespace DisputeDesk.Api.IntegrationTests.Disputes;
 
 /// <summary>
-/// The one exhaustive publish mapping (AD-14, AD-19): every stored event type maps to its integration event or to
-/// nothing, an unmapped type throws, and no payload carries what a stored event holds privately.
+/// The one exhaustive publish mapping (AD-14, AD-19): every stored event type maps to its integration event, with the
+/// stored event's ID and version, so a dispute's published versions have no gap; an unmapped type throws, and
+/// no payload carries what a stored event holds privately.
 /// </summary>
 public class PublishMappingTests
 {
@@ -25,14 +26,13 @@ public class PublishMappingTests
     private static readonly JsonSchema StatusChangedSchema = JsonSchema.FromText(File.ReadAllText(SchemaPath));
 
     /// <summary>One stored event of each type, built here, with the integration event type it maps to.</summary>
-    public static TheoryData<StoredEvent, string?> OneOfEachType => new()
+    public static TheoryData<StoredEvent, string> OneOfEachType => new()
     {
         { Raised(), DisputeEvents.RaisedV1 },
         { At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, ActorType.Operations, "ops-marker"), DisputeEvents.StatusChangedV1 },
         { At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 3, ActorType.Automation, "worker:sla-sweep"), DisputeEvents.StatusChangedV1 },
         { At(new DisputeResolved(DisputeStatus.Escalated, DisputeStatus.Resolved, Outcome.Rejected, "note-marker"), 4, ActorType.Operations, "ops-marker"), DisputeEvents.StatusChangedV1 },
         { At(new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, "note-marker"), 2, ActorType.Customer, "login-marker"), DisputeEvents.StatusChangedV1 },
-        { At(new SlaWarningRaised(), 2, ActorType.Automation, "worker:sla-sweep"), null },
     };
 
     [Fact]
@@ -49,16 +49,11 @@ public class PublishMappingTests
 
     [Theory]
     [MemberData(nameof(OneOfEachType))]
-    public void OutboxMessage_EachType_MapsToItsIntegrationEventOrNothing(StoredEvent storedEvent, string? expectedType)
+    public void OutboxMessage_EachType_MapsToItsIntegrationEventWithTheStoredEventsIdAndVersion(StoredEvent storedEvent, string expectedType)
     {
-        OutboxMessage? message = CommitRows.OutboxMessage(EventId, storedEvent, activity: null);
+        OutboxMessage message = CommitRows.OutboxMessage(EventId, storedEvent, activity: null);
 
-        Assert.Equal(expectedType, message?.EventType);
-        if (message is null)
-        {
-            return;
-        }
-
+        Assert.Equal(expectedType, message.EventType);
         Assert.Equal(EventId, message.Id);
         Assert.Equal(DisputeId, message.DisputeId);
         Assert.Equal(storedEvent.Version, message.DisputeVersion);
@@ -71,20 +66,20 @@ public class PublishMappingTests
 
     [Theory]
     [MemberData(nameof(OneOfEachType))]
-    public void OutboxMessage_EachType_PayloadHoldsNoPrivateField(StoredEvent storedEvent, string? expectedType)
+    public void OutboxMessage_EachType_PayloadHoldsNoPrivateField(StoredEvent storedEvent, string expectedType)
     {
-        string payload = CommitRows.OutboxMessage(EventId, storedEvent, activity: null)?.Payload ?? "";
+        string payload = CommitRows.OutboxMessage(EventId, storedEvent, activity: null).Payload;
 
         // Markers that cannot occur in a UUID or an instant by chance.
         string[] forbidden = ["CUS-000001", "ACC-A-1", "TXN-A-0029", "492181******4417", "87.23", "80.00", "7.23", "note-marker", "ops-marker", "login-marker", "worker:", "Steers"];
         Assert.All(forbidden, value => Assert.DoesNotContain(value, payload, StringComparison.Ordinal));
-        Assert.True(expectedType is not null || payload.Length == 0);
+        Assert.Contains(expectedType, payload, StringComparison.Ordinal);
     }
 
     [Fact]
     public void OutboxMessage_Raise_HoldsExactlyTheRaisedDataFields()
     {
-        string payload = CommitRows.OutboxMessage(EventId, Raised(), activity: null)?.Payload ?? "";
+        string payload = CommitRows.OutboxMessage(EventId, Raised(), activity: null).Payload;
 
         using var document = JsonDocument.Parse(payload);
         JsonElement data = document.RootElement.GetProperty("data");
@@ -104,7 +99,7 @@ public class PublishMappingTests
     {
         StoredEvent storedEvent = StatusChanges()[index];
 
-        string payload = CommitRows.OutboxMessage(EventId, storedEvent, activity: null)?.Payload ?? "";
+        string payload = CommitRows.OutboxMessage(EventId, storedEvent, activity: null).Payload;
 
         using var document = JsonDocument.Parse(payload);
         JsonElement data = document.RootElement.GetProperty("data");
@@ -186,7 +181,7 @@ public class PublishMappingTests
     }
 
     private static StoredEvent[] StatusChanges() =>
-        [.. OneOfEachType.Select(row => row.Data.Item1).Where(storedEvent => storedEvent is not (DisputeRaised or SlaWarningRaised))];
+        [.. OneOfEachType.Select(row => row.Data.Item1).Where(storedEvent => storedEvent is not DisputeRaised)];
 
     private static TEvent At<TEvent>(TEvent storedEvent, int version, ActorType actorType, string actorId)
         where TEvent : StoredEvent =>

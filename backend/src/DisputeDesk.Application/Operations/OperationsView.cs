@@ -42,7 +42,6 @@ public static class OperationsView
         DisputeEscalated escalated => Entry(escalated, StoredEventType.DisputeEscalated, escalated.FromStatus, escalated.ToStatus, note: null),
         DisputeResolved resolved => Entry(resolved, StoredEventType.DisputeResolved, resolved.FromStatus, resolved.ToStatus, resolved.Note),
         DisputeWithdrawn withdrawn => Entry(withdrawn, StoredEventType.DisputeWithdrawn, withdrawn.FromStatus, withdrawn.ToStatus, note: null),
-        SlaWarningRaised warning => Entry(warning, StoredEventType.SlaWarningRaised, fromStatus: null, toStatus: null, note: null),
         _ => throw new ArgumentOutOfRangeException(nameof(storedEvent), storedEvent.GetType().Name, "Unmapped stored event type."),
     };
 

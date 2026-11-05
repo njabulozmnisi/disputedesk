@@ -19,11 +19,10 @@ public class CustomerTimelineAllowlistTests
         StoredEvent[] stream =
         [
             At(new DisputeRaised("CUS-000001", Transaction(), Reason.Unrecognised, "Not me", null, 10m, DisputeStatus.Submitted), 1, ActorType.Customer),
-            At(new SlaWarningRaised(), 2, ActorType.Automation),
-            At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 3, ActorType.Operations),
-            At(new UnknownStoredEvent(), 4, ActorType.Operations),
-            At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 5, ActorType.Automation),
-            At(new DisputeResolved(DisputeStatus.Escalated, DisputeStatus.Resolved, Outcome.Upheld, "Refunded"), 6, ActorType.Operations),
+            At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, ActorType.Operations),
+            At(new UnknownStoredEvent(), 3, ActorType.Operations),
+            At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 4, ActorType.Automation),
+            At(new DisputeResolved(DisputeStatus.Escalated, DisputeStatus.Resolved, Outcome.Upheld, "Refunded"), 5, ActorType.Operations),
         ];
 
         IReadOnlyList<TimelineEntryResponse> timeline = CustomerView.ToTimeline(stream);
@@ -31,9 +30,9 @@ public class CustomerTimelineAllowlistTests
         Assert.Equal(
             [
                 new TimelineEntryResponse(DisputeAction.Raise, CustomerStatus.Submitted, TimelineActor.You, Now.AddHours(1), "Not me"),
-                new TimelineEntryResponse(DisputeAction.StartReview, CustomerStatus.UnderReview, TimelineActor.TheBank, Now.AddHours(3), null),
-                new TimelineEntryResponse(DisputeAction.Escalate, CustomerStatus.UnderReviewPrioritised, TimelineActor.TheBank, Now.AddHours(5), null),
-                new TimelineEntryResponse(DisputeAction.Resolve, CustomerStatus.Resolved, TimelineActor.TheBank, Now.AddHours(6), "Refunded"),
+                new TimelineEntryResponse(DisputeAction.StartReview, CustomerStatus.UnderReview, TimelineActor.TheBank, Now.AddHours(2), null),
+                new TimelineEntryResponse(DisputeAction.Escalate, CustomerStatus.UnderReviewPrioritised, TimelineActor.TheBank, Now.AddHours(4), null),
+                new TimelineEntryResponse(DisputeAction.Resolve, CustomerStatus.Resolved, TimelineActor.TheBank, Now.AddHours(5), "Refunded"),
             ],
             timeline);
     }
@@ -46,12 +45,6 @@ public class CustomerTimelineAllowlistTests
         TimelineEntryResponse entry = Assert.Single(CustomerView.ToTimeline([withdrawn]));
 
         Assert.Equal(new TimelineEntryResponse(DisputeAction.Withdraw, CustomerStatus.Withdrawn, TimelineActor.You, Now.AddHours(2), "Found it"), entry);
-    }
-
-    [Fact]
-    public void ToTimeline_SlaWarning_GivesNoEntry()
-    {
-        Assert.Empty(CustomerView.ToTimeline([At(new SlaWarningRaised(), 2, ActorType.Automation)]));
     }
 
     [Fact]

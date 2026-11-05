@@ -27,11 +27,11 @@ public class SlaBatchTests(SlaFixture fixture)
 
         await rig.SweepAsync();
 
-        IReadOnlyList<Activity> overdue = rig.BatchSpans("overdue");
+        IReadOnlyList<Activity> overdue = rig.BatchSpans();
         Assert.Equal([50, 50, 20], overdue.Select(span => (int?)span.GetTagItem("disputedesk.sla_sweep.claimed")));
         Assert.Equal([50, 50, 20], overdue.Select(span => (int?)span.GetTagItem("disputedesk.sla_sweep.changed")));
-        // One transaction per batch, the warning batch included, and one savepoint per saved dispute.
-        Assert.Equal(overdue.Count + rig.BatchSpans("warning").Count, transactions.Committed);
+        // One transaction per batch and one savepoint per saved dispute.
+        Assert.Equal(overdue.Count, transactions.Committed);
         Assert.Equal(120, transactions.Savepoints);
         Assert.All(await rig.EscalationCountsAsync(disputeIds), counts => Assert.Equal((1, 1), counts.Value));
     }
@@ -48,7 +48,7 @@ public class SlaBatchTests(SlaFixture fixture)
 
         await rig.SweepAsync();
 
-        Assert.Equal(expected, rig.BatchSpans("overdue").Select(span => (int?)span.GetTagItem("disputedesk.sla_sweep.claimed") ?? -1));
+        Assert.Equal(expected, rig.BatchSpans().Select(span => (int?)span.GetTagItem("disputedesk.sla_sweep.claimed") ?? -1));
         Assert.All(await rig.EscalationCountsAsync(disputeIds), counts => Assert.Equal((1, 1), counts.Value));
     }
 
@@ -120,7 +120,7 @@ public class SlaBatchTests(SlaFixture fixture)
         Assert.Equal((1, 1), counts[disputeIds[2]]);
         Assert.Equal(2, SweepRig.Total(rig.Escalations));
         Assert.Equal(2, SweepRig.Total(rig.Actions, ("action", "escalate"), ("actor_type", "automation")));
-        Assert.Equal([2], rig.BatchSpans("overdue").Select(span => (int?)span.GetTagItem("disputedesk.sla_sweep.changed")));
+        Assert.Equal([2], rig.BatchSpans().Select(span => (int?)span.GetTagItem("disputedesk.sla_sweep.changed")));
         Assert.Contains(rig.SweepLogLines, line => line.Contains(failing.ToString(), StringComparison.Ordinal) && line.Contains("PostgresException", StringComparison.Ordinal));
     }
 
@@ -197,7 +197,7 @@ public class SlaBatchTests(SlaFixture fixture)
 
         Assert.All(await first.EscalationCountsAsync(disputeIds), counts => Assert.Equal((1, 1), counts.Value));
         // Both listeners see both sweeps' spans: the claims of the two sweeps add up to 120, so no row was claimed twice.
-        IReadOnlyList<Activity> overdue = first.BatchSpans("overdue");
+        IReadOnlyList<Activity> overdue = first.BatchSpans();
         Assert.Equal(120, overdue.Sum(span => (int?)span.GetTagItem("disputedesk.sla_sweep.claimed")));
         // Each batch span starts before its claim, and the rendezvous holds both first claims until both have returned, so
         // the two first-started spans are the two sweeps' first batches. Spans end in no fixed order: one sweep's short
@@ -232,7 +232,8 @@ public class SlaBatchTests(SlaFixture fixture)
         await sweep.StopAsync(TestContext.Current.CancellationToken);
 
         Assert.All(await rig.EscalationCountsAsync(disputeIds), counts => Assert.Equal((1, 1), counts.Value));
-        Assert.True(atEachClaim.Count >= 4, $"Only {atEachClaim.Count} claims ran.");
+        // The first loop alone claims 50, 50 and 20.
+        Assert.True(atEachClaim.Count >= 3, $"Only {atEachClaim.Count} claims ran.");
         // Touched since the clock last moved, at every claim: after each batch, not only once per loop.
         lock (atEachClaim)
         {

@@ -17,5 +17,4 @@ export const StoredEventType = {
   disputeEscalated: 'disputeEscalated',
   disputeResolved: 'disputeResolved',
   disputeWithdrawn: 'disputeWithdrawn',
-  slaWarningRaised: 'slaWarningRaised',
 } as const;

@@ -13,9 +13,8 @@ using Microsoft.EntityFrameworkCore.Storage;
 namespace DisputeDesk.Worker.Sla;
 
 /// <summary>
-/// The SLA sweep (AD-18, FR-26). Every 30 seconds it escalates the open disputes whose SLA is due, then records one
-/// <see cref="SlaWarningRaised"/> on each open dispute due within 48 hours. Each batch is one transaction: it claims up to
-/// 50 rows with <c>FOR UPDATE SKIP LOCKED</c>, then, inside one savepoint per dispute, replays it, lets the aggregate
+/// The SLA sweep (AD-18, FR-26). Every 30 seconds it escalates the open disputes whose SLA is due. Each batch is one
+/// transaction: it claims up to 50 rows with <c>FOR UPDATE SKIP LOCKED</c>, then, inside one savepoint per dispute, replays it, lets the aggregate
 /// decide and saves it through the commit (AD-14), so one failed dispute does not undo the others (EF Core,
 /// Transactions: savepoints). Batches repeat until one comes back short, which catches up after downtime.
 /// Two sweeps exclude each other through the row locks alone (NFR-ARC-4).
@@ -51,12 +50,6 @@ public sealed partial class SlaSweep(
     private readonly Counter<long> _actions = meterFactory.Create(Telemetry.MeterName)
         .CreateCounter<long>("disputedesk.dispute_actions", description: "Dispute actions that succeeded, by action and actor type.");
 
-    private enum Claim
-    {
-        Overdue,
-        Warning,
-    }
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Each batch span is a root span, never a child of whatever started the host.
@@ -88,21 +81,18 @@ public sealed partial class SlaSweep(
     }
 
     /// <summary>
-    /// One loop: escalation batches until one comes back short, then warning batches the same way. A full batch that
-    /// changed nothing also ends the run, or a batch of disputes that all fail would be claimed again and again.
+    /// One loop: escalation batches until one comes back short. A full batch that changed nothing also ends the run, or
+    /// a batch of disputes that all fail would be claimed again and again.
     /// </summary>
     internal async Task SweepAsync(CancellationToken cancellationToken)
     {
-        foreach (Claim claim in new[] { Claim.Overdue, Claim.Warning })
+        int claimed;
+        int changed;
+        do
         {
-            int claimed;
-            int changed;
-            do
-            {
-                (claimed, changed) = await RunBatchAsync(claim, cancellationToken);
-            }
-            while (claimed == SlaQueries.BatchSize && changed > 0);
+            (claimed, changed) = await RunBatchAsync(cancellationToken);
         }
+        while (claimed == SlaQueries.BatchSize && changed > 0);
     }
 
     /// <summary>
@@ -110,26 +100,23 @@ public sealed partial class SlaSweep(
     /// were claimable then: rows another transaction holds are taken by a later loop. Returns how many rows it claimed and
     /// how many of those it changed.
     /// </summary>
-    private async Task<(int Claimed, int Changed)> RunBatchAsync(Claim claim, CancellationToken cancellationToken)
+    private async Task<(int Claimed, int Changed)> RunBatchAsync(CancellationToken cancellationToken)
     {
         // The batch's one clock reading (AD-4), cut to the whole microseconds a Postgres timestamptz keeps.
         DateTimeOffset now = Instants.ToWholeMicroseconds(timeProvider.GetUtcNow());
         using Activity? span = Source.StartActivity(BatchSpanName);
-        span?.SetTag("disputedesk.sla_sweep.claim", claim == Claim.Overdue ? "overdue" : "warning");
 
         await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
         AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         // Each dispute has its own savepoint around its load and its save (TryChangeAsync), so EF Core's own, around the save only, is not needed.
         db.Database.AutoSavepointsEnabled = false;
         await using IDbContextTransaction transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        List<Guid> claimed = claim == Claim.Overdue
-            ? await db.ClaimOverdueAsync(now, cancellationToken)
-            : await db.ClaimWarningsAsync(now, Dispute.SlaWarningLeadTime, cancellationToken);
+        List<Guid> claimed = await db.ClaimOverdueAsync(now, cancellationToken);
 
         int changed = 0;
         foreach (Guid disputeId in claimed)
         {
-            if (await TryChangeAsync(db, transaction, disputeId, claim, now, cancellationToken))
+            if (await TryChangeAsync(db, transaction, disputeId, now, cancellationToken))
             {
                 changed++;
             }
@@ -138,7 +125,7 @@ public sealed partial class SlaSweep(
         await transaction.CommitAsync(cancellationToken);
 
         // Counted only once committed, so a dispute whose save rolled back counts nothing (AD-20).
-        if (claim == Claim.Overdue && changed > 0)
+        if (changed > 0)
         {
             _escalations.Add(changed);
             _actions.Add(changed, new KeyValuePair<string, object?>("action", "escalate"), new KeyValuePair<string, object?>("actor_type", "automation"));
@@ -148,7 +135,7 @@ public sealed partial class SlaSweep(
         span?.SetTag("disputedesk.sla_sweep.changed", changed);
         if (claimed.Count > 0)
         {
-            LogBatch(claim, changed, claimed.Count);
+            LogBatch(changed, claimed.Count);
         }
 
         TouchHeartbeat();
@@ -163,14 +150,14 @@ public sealed partial class SlaSweep(
     /// action escalated or closed first is skipped; any other failure is skipped until the next loop. True when saved.
     /// </summary>
     private async Task<bool> TryChangeAsync(
-        AppDbContext db, IDbContextTransaction transaction, Guid disputeId, Claim claim, DateTimeOffset now, CancellationToken cancellationToken)
+        AppDbContext db, IDbContextTransaction transaction, Guid disputeId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         for (int attempt = 1; attempt <= 2; attempt++)
         {
             await transaction.CreateSavepointAsync(DisputeSavepoint, cancellationToken);
             try
             {
-                bool changed = await ChangeAsync(db, disputeId, claim, now, cancellationToken);
+                bool changed = await ChangeAsync(db, disputeId, now, cancellationToken);
                 await transaction.ReleaseSavepointAsync(DisputeSavepoint, cancellationToken);
                 return changed;
             }
@@ -193,13 +180,13 @@ public sealed partial class SlaSweep(
     }
 
     /// <summary>Replays the dispute and lets the aggregate decide; saves and returns true when it changed (AD-14).</summary>
-    private static async Task<bool> ChangeAsync(AppDbContext db, Guid disputeId, Claim claim, DateTimeOffset now, CancellationToken cancellationToken)
+    private static async Task<bool> ChangeAsync(AppDbContext db, Guid disputeId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         List<StoredEvent> stream = await LoadStreamAsync(db, disputeId, cancellationToken);
         var dispute = Dispute.Replay(stream);
         // Time never runs backwards within a stream (AD-15).
         DateTimeOffset instant = Instants.Later(now, stream[^1].OccurredAtUtc);
-        Result decided = claim == Claim.Overdue ? EscalateIfOverdue(dispute, instant) : dispute.RecordSlaWarning(SweepActor, instant);
+        Result decided = EscalateIfOverdue(dispute, instant);
         if (decided.IsFailure)
         {
             return false;
@@ -239,8 +226,8 @@ public sealed partial class SlaSweep(
     }
 
     // Counts and dispute IDs only, never a customer, an account, a transaction or an exception's message (AD-20).
-    [LoggerMessage(Level = LogLevel.Information, Message = "SLA sweep {Claim} batch changed {Changed} of {Claimed} claimed disputes")]
-    private partial void LogBatch(Claim claim, int changed, int claimed);
+    [LoggerMessage(Level = LogLevel.Information, Message = "SLA sweep batch changed {Changed} of {Claimed} claimed disputes")]
+    private partial void LogBatch(int changed, int claimed);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "SLA sweep lost a version race on dispute {DisputeId} and decides again")]
     private partial void LogVersionClash(Guid disputeId);

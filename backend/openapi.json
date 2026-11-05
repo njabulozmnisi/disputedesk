@@ -1546,7 +1546,7 @@
             ]
           }
         },
-        "description": "One stored event as operations see it (FR-30): its type, who acted (the actor type, never the identity), when, and\nthe statuses it moved between. `fromStatus` is null on `disputeRaised` and `slaWarningRaised`, and\n`toStatus` on `slaWarningRaised`. `note` is set only on `disputeResolved`: the bank's note\nmeant for the customer."
+        "description": "One stored event as operations see it (FR-30): its type, who acted (the actor type, never the identity), when, and\nthe statuses it moved between. `fromStatus` is null on `disputeRaised`. `note` is set only on\n`disputeResolved`: the bank's note meant for the customer."
       },
       "Outcome": {
         "enum": [
@@ -1727,8 +1727,7 @@
           "reviewStarted",
           "disputeEscalated",
           "disputeResolved",
-          "disputeWithdrawn",
-          "slaWarningRaised"
+          "disputeWithdrawn"
         ],
         "description": "The type of a stored event on an operations timeline: the closed set of AD-14a, camelCase on the wire."
       },

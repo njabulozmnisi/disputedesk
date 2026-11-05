@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/njabulozmnisi/disputedesk/blob/main/contracts/events/disputedesk.dispute.status-changed.v1.schema.json",
   "title": "disputedesk.dispute.status-changed.v1",
-  "description": "A dispute moved from one status to another: review started, escalated, resolved or withdrawn. A CloudEvents 1.0 event in structured JSON mode (architecture AD-19). It carries no personal data: no customer ID, account or card number, amount, note or actor identity. disputeVersion rises within a dispute but can skip the versions of stored events that are not published, so consumers order by it and never treat a gap as a lost event. Consumers dedupe on source + id. Changes within v1 are additive.",
+  "description": "A dispute moved from one status to another: review started, escalated, resolved or withdrawn. A CloudEvents 1.0 event in structured JSON mode (architecture AD-19). It carries no personal data: no customer ID, account or card number, amount, note or actor identity. disputeVersion is the version of the stored event it publishes; every stored event of a dispute is published, so the versions written have no gap, and consumers order by it. Delivery is at least once: consumers dedupe on source + id. Changes within v1 are additive.",
   "type": "object",
   "required": ["specversion", "id", "source", "type", "subject", "time", "datacontenttype", "dataschema", "data"],
   "properties": {

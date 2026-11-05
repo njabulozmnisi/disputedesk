@@ -35,8 +35,7 @@ public class SlaTelemetryPrivacyTests(SlaFixture fixture)
         // The first is escalated, the second's save is refused and the third's stream load is refused.
         Guid refusedSave = disputeIds[1];
         failLoad.DisputeId = disputeIds[2];
-        Guid warned = await rig.RaiseAsync(SweepRig.RaisedAt + TimeSpan.FromHours(1));
-        string[] transactionIds = [.. await Task.WhenAll(disputeIds.Append(warned).Select(async id => (await rig.DisputeRowAsync(id)).TransactionId))];
+        string[] transactionIds = [.. await Task.WhenAll(disputeIds.Select(async id => (await rig.DisputeRowAsync(id)).TransactionId))];
         // A refused row is the case where PostgreSQL's error detail would quote the row, customer and snapshot included.
         await RefuseEscalationOfAsync(rig, refusedSave);
         rig.Clock.SetUtcNow(SweepRig.RaisedAt + Dispute.Sla + TimeSpan.FromMinutes(30));
@@ -60,17 +59,15 @@ public class SlaTelemetryPrivacyTests(SlaFixture fixture)
         using (IHost host = builder.Build())
         {
             await host.StartAsync(TestContext.Current.CancellationToken);
-            // The first loop runs at once; it has ended when its warning batch span has.
-            await Eventually.UntilAsync(() => spans.Snapshot().Any(span => span.OperationName == SlaSweep.BatchSpanName
-                && span.GetTagItem("disputedesk.sla_sweep.claim") as string == "warning"), OutboxFixture.WaitLimit);
+            // The first loop runs at once; with three disputes it is one batch, so it has ended when that batch span has.
+            await Eventually.UntilAsync(() => spans.Snapshot().Any(span => span.OperationName == SlaSweep.BatchSpanName), OutboxFixture.WaitLimit);
             host.Services.GetRequiredService<MeterProvider>().ForceFlush();
             await host.StopAsync(TestContext.Current.CancellationToken);
         }
 
-        // The run took each path: one escalation, one warning, and both refusals, seen by EF Core's logs and Npgsql's spans.
+        // The run took each path: one escalation and both refusals, seen by EF Core's logs and Npgsql's spans.
         Dictionary<Guid, (int, int)> counts = await rig.EscalationCountsAsync(disputeIds);
         Assert.Equal([(1, 1), (0, 0), (0, 0)], disputeIds.Select(id => counts[id]));
-        Assert.Single(await rig.StreamAsync(warned), row => row.EventType == nameof(SlaWarningRaised));
         Assert.Contains(logs.Snapshot(), record => record.CategoryName?.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal) == true
             && record.LogLevel == LogLevel.Error && record.Exception is not null);
         Assert.True(spans.Snapshot().Count(span => span.Source.Name == "Npgsql" && span.Status == ActivityStatusCode.Error) >= 2);

@@ -10,9 +10,8 @@ import type { StoredEventType } from './storedEventType';
 
 /**
  * One stored event as operations see it (FR-30): its type, who acted (the actor type, never the identity), when, and
- * the statuses it moved between. `fromStatus` is null on `disputeRaised` and `slaWarningRaised`, and
- * `toStatus` on `slaWarningRaised`. `note` is set only on `disputeResolved`: the bank's note
- * meant for the customer.
+ * the statuses it moved between. `fromStatus` is null on `disputeRaised`. `note` is set only on
+ * `disputeResolved`: the bank's note meant for the customer.
  */
 export interface OperationsTimelineEntryResponse {
   eventType: StoredEventType;

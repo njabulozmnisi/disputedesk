@@ -65,7 +65,6 @@ public class WireBytesTests
             "{\"fromStatus\":\"escalated\",\"toStatus\":\"resolved\",\"outcome\":\"rejected\",\"note\":\"No error found.\"}"
         },
         { At(new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, null), 2, ActorType.Customer), "{\"fromStatus\":\"submitted\",\"toStatus\":\"withdrawn\",\"note\":null}" },
-        { At(new SlaWarningRaised(), 2, ActorType.Automation), "{}" },
     };
 
     [Fact]

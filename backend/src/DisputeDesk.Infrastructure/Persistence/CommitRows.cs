@@ -7,17 +7,18 @@ using DisputeDesk.Domain.Disputes;
 namespace DisputeDesk.Infrastructure.Persistence;
 
 /// <summary>
-/// The publish mapping of the commit (AD-14): the one place a stored event becomes an integration event, or nothing.
+/// The publish mapping of the commit (AD-14): the one place a stored event becomes an integration event.
 /// Stored events are private domain events and never leave as they are; only the fields AD-19 and AD-19a list do
 /// (Microsoft Learn, "Domain events versus integration events").
 /// </summary>
 internal static class CommitRows
 {
     /// <summary>
-    /// The outbox row of <paramref name="storedEvent"/> under its stored event ID <paramref name="id"/>, or null for a
-    /// type that is never published. A type this switch does not name throws, which stops the commit.
+    /// The outbox row of <paramref name="storedEvent"/> under its stored event ID <paramref name="id"/>. Every stored event
+    /// is published, so a dispute's published versions have no gap (AD-19). A type this switch does not name throws,
+    /// which stops the commit.
     /// </summary>
-    public static OutboxMessage? OutboxMessage(Guid id, StoredEvent storedEvent, Activity? activity) => storedEvent switch
+    public static OutboxMessage OutboxMessage(Guid id, StoredEvent storedEvent, Activity? activity) => storedEvent switch
     {
         DisputeRaised raised => Message(
             id,
@@ -29,8 +30,6 @@ internal static class CommitRows
         DisputeEscalated escalated => StatusChanged(id, escalated, escalated.FromStatus, escalated.ToStatus, DisputeAction.Escalate, outcome: null, activity),
         DisputeResolved resolved => StatusChanged(id, resolved, resolved.FromStatus, resolved.ToStatus, DisputeAction.Resolve, resolved.Outcome, activity),
         DisputeWithdrawn withdrawn => StatusChanged(id, withdrawn, withdrawn.FromStatus, withdrawn.ToStatus, DisputeAction.Withdraw, outcome: null, activity),
-        // For operations only: never published (AD-18).
-        SlaWarningRaised => null,
         _ => throw new ArgumentOutOfRangeException(nameof(storedEvent), storedEvent.GetType().Name, "No publish mapping for this stored event type."),
     };
 

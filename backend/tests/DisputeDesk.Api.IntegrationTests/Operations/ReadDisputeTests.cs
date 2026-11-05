@@ -27,17 +27,16 @@ public class ReadDisputeTests(PostgresFixture postgres, TransactionsStub stub) :
         // Version 4 is appended before version 3, so the stored row order is not the version order.
         await factory.AppendDirectlyAsync(disputeId, DisputeStatus.Resolved, Outcome.Upheld,
             At(new ReviewStarted(DisputeStatus.Submitted, DisputeStatus.UnderReview), 2, ActorType.Operations),
-            At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 4, ActorType.Automation),
-            At(new SlaWarningRaised(), 3, ActorType.Automation),
-            At(new DisputeWithdrawn(DisputeStatus.Escalated, DisputeStatus.Withdrawn, "Sorted it out"), 5, ActorType.Customer),
-            At(new DisputeResolved(DisputeStatus.Withdrawn, DisputeStatus.Resolved, Outcome.Upheld, "We refunded you"), 6, ActorType.Operations));
+            At(new DisputeWithdrawn(DisputeStatus.Escalated, DisputeStatus.Withdrawn, "Sorted it out"), 4, ActorType.Customer),
+            At(new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated), 3, ActorType.Automation),
+            At(new DisputeResolved(DisputeStatus.Withdrawn, DisputeStatus.Resolved, Outcome.Upheld, "We refunded you"), 5, ActorType.Operations));
         await factory.AddRowsAsync(new StoredEventRow
         {
             Id = Guid.CreateVersion7(stub.Now),
             DisputeId = disputeId,
-            Version = 7,
+            Version = 6,
             EventType = "DisputeReopened",
-            OccurredAtUtc = stub.NowAsStored.AddHours(7),
+            OccurredAtUtc = stub.NowAsStored.AddHours(6),
             ActorType = ActorType.Operations,
             ActorId = FakeZitadel.OperationsSub,
             Data = """{"note":"unknown-row"}""",
@@ -65,22 +64,22 @@ public class ReadDisputeTests(PostgresFixture postgres, TransactionsStub stub) :
         List<JsonElement> timeline = [.. dispute.GetProperty("timeline").EnumerateArray()];
         Assert.All(timeline, entry => Assert.Equal(["eventType", "actorType", "occurredAt", "fromStatus", "toStatus", "note"], OperationsApi.Names(entry)));
         Assert.Equal(
-            ["disputeRaised", "reviewStarted", "slaWarningRaised", "disputeEscalated", "disputeWithdrawn", "disputeResolved"],
+            ["disputeRaised", "reviewStarted", "disputeEscalated", "disputeWithdrawn", "disputeResolved"],
             timeline.Select(entry => entry.GetProperty("eventType").GetString()));
         Assert.Equal(
-            ["customer", "operations", "automation", "automation", "customer", "operations"],
+            ["customer", "operations", "automation", "customer", "operations"],
             timeline.Select(entry => entry.GetProperty("actorType").GetString()));
         Assert.Equal(
-            [null, "submitted", null, "underReview", "escalated", "withdrawn"],
+            [null, "submitted", "underReview", "escalated", "withdrawn"],
             timeline.Select(entry => entry.GetProperty("fromStatus").GetString()));
         Assert.Equal(
-            ["submitted", "underReview", null, "escalated", "withdrawn", "resolved"],
+            ["submitted", "underReview", "escalated", "withdrawn", "resolved"],
             timeline.Select(entry => entry.GetProperty("toStatus").GetString()));
         // Only the bank's note meant for the customer; never a note the customer wrote.
-        Assert.Equal([null, null, null, null, null, "We refunded you"], timeline.Select(entry => entry.GetProperty("note").GetString()));
+        Assert.Equal([null, null, null, null, "We refunded you"], timeline.Select(entry => entry.GetProperty("note").GetString()));
         Assert.Equal(raised.GetProperty("createdAt").GetDateTimeOffset(), timeline[0].GetProperty("occurredAt").GetDateTimeOffset());
         Assert.Equal(
-            [2, 3, 4, 5, 6],
+            [2, 3, 4, 5],
             timeline.Skip(1).Select(entry => (int)(entry.GetProperty("occurredAt").GetDateTimeOffset() - stub.NowAsStored).TotalHours));
     }
 

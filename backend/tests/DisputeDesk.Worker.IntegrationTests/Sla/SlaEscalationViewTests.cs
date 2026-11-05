@@ -40,7 +40,7 @@ public class SlaEscalationViewTests(SlaFixture fixture)
         Assert.Equal("escalate", data.GetProperty("action").GetString());
         Assert.Equal("automation", data.GetProperty("actorType").GetString());
         Assert.Equal("escalated", data.GetProperty("toStatus").GetString());
-        Activity batch = Assert.Single(rig.BatchSpans("overdue"));
+        Activity batch = Assert.Single(rig.BatchSpans());
         Assert.Equal(batch.Id, published.TraceParent);
         Assert.Equal(batch.TraceId.ToHexString(), rows[^1].TraceId);
 

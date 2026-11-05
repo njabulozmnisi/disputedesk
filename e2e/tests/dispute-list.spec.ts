@@ -103,7 +103,7 @@ test('the list is newest first by createdAt then ID, exactly the stored rows of 
 
   // Values: no internal strings anywhere in the page.
   const wire = JSON.stringify(page);
-  for (const internal of ['CUS-', 'worker:', 'DisputeRaised', 'escalated', 'SlaDueAtUtc', 'ActorId', 'SlaWarningRaised', 'customerId']) {
+  for (const internal of ['CUS-', 'worker:', 'DisputeRaised', 'escalated', 'SlaDueAtUtc', 'ActorId', 'customerId']) {
     expect(wire).not.toContain(internal);
   }
   const statuses = queryDatabase(`select string_agg(distinct "Status", ',') from "Disputes" where "CustomerId" = '${customerId}'`);

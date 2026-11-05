@@ -13,10 +13,10 @@ public class StoredEventTypesTests
     ];
 
     [Fact]
-    public void StoredEvent_DomainTypes_AreExactlyTheSixTypes()
+    public void StoredEvent_DomainTypes_AreExactlyTheFiveTypes()
     {
         Assert.Equal(
-            ["DisputeEscalated", "DisputeRaised", "DisputeResolved", "DisputeWithdrawn", "ReviewStarted", "SlaWarningRaised"],
+            ["DisputeEscalated", "DisputeRaised", "DisputeResolved", "DisputeWithdrawn", "ReviewStarted"],
             StoredEventTypes.Select(type => type.Name).Order(StringComparer.Ordinal));
     }
 

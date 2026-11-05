@@ -21,7 +21,6 @@ public class OperationsViewTests
         new DisputeEscalated(DisputeStatus.UnderReview, DisputeStatus.Escalated),
         new DisputeResolved(DisputeStatus.Escalated, DisputeStatus.Resolved, Outcome.Upheld, "Refunded"),
         new DisputeWithdrawn(DisputeStatus.Submitted, DisputeStatus.Withdrawn, "Found it"),
-        new SlaWarningRaised(),
     ];
 
     [Fact]
@@ -33,6 +32,15 @@ public class OperationsViewTests
             .Order(StringComparer.Ordinal);
 
         Assert.Equal(domainTypes, Samples.Select(sample => sample.GetType().Name).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void StoredEventType_WireEnum_NamesExactlyTheDomainsStoredEventTypes()
+    {
+        // The wire enum names exactly the domain's stored event types; one without the other fails here.
+        Assert.Equal(
+            Samples.Select(sample => sample.GetType().Name).Order(StringComparer.Ordinal),
+            Enum.GetNames<StoredEventType>().Order(StringComparer.Ordinal));
     }
 
     [Fact]
