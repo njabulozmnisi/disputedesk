@@ -98,6 +98,7 @@ The human's decisions changed or confirmed these rules; unlike the rows above, t
 
 | Decision | Date | Change | Source |
 |---|---|---|---|
+| AD-28 | 2026-11-05 | Deploy follows `publish` on `main` behind `DEPLOY_ENABLED`, `deploy.yml` is a reusable workflow also dispatched for rollback, and the deploy role trusts `environment:dev` (restricted to `main`); the two are named exceptions to "no new AWS-only mechanisms before an apply". Offline limit: the mocked Terraform tests pin the new subject, and the live role assumption is proved only by the first deploy (ad-012 clause 4) | `docs/decisions/ad-012-github-flow-ci.md` |
 | AD-32 | 2026-11-05 | Every check job runs on every pull request and `main` push (the docs-only `changes` skip goes); `ci-passed` and `security-passed` gate jobs report each workflow's result, and a `floor-guard` step fails when a check job is missing from its gate's `needs`; the Compose and Trivy installs are local composite actions (ad-012 clauses 1, 3, 5) | `docs/decisions/ad-012-github-flow-ci.md` |
 
 ## What else left the spine on 2026-11-04

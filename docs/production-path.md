@@ -238,7 +238,7 @@ Published images carry the OCI `source` and `revision` labels only (story 7.3 pr
 
 ### P55. Deploy role subject
 
-The OIDC trust pins the repository's main branch, not the workflow (AD-28; story 7.5 pre-build security S7.5-7). Production customises the subject claim to include `job_workflow_ref`, so only `deploy.yml` on main can assume the role (GitHub, *Customizing the token claims*). No CI job holds `id-token: write` (the OIDC token and subject are a one-time check recorded in `infra/terraform/README.md`); a job that is given it later could mint a token the deploy role accepts, and the `job_workflow_ref` subject closes that too. *Why it waits:* the trust already limits the role to main, and the environment has never been applied (P46).
+The OIDC trust pins the environment `dev`, which only `main` may use, not the workflow (AD-28, ad-012; story 7.5 pre-build security S7.5-7). Production customises the subject claim to include `job_workflow_ref`, so only `deploy.yml` on main can assume the role (GitHub, *Customizing the token claims*). The one CI job that holds `id-token: write` is `deploy`, which calls `deploy.yml` (the OIDC token and subject are a one-time check recorded in `infra/terraform/README.md`); a job that is given it later could mint a token the deploy role accepts, and the `job_workflow_ref` subject closes that too. *Why it waits:* the trust already limits the role to the `dev` environment on main, and the environment has never been applied (P46).
 
 ### P56. Instance role
 
