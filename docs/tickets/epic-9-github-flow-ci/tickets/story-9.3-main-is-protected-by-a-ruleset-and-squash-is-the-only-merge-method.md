@@ -64,7 +64,7 @@ Inputs:
 
 ## Boundaries
 
-- Must not change: what any check job runs, except criterion 3's failing step; the gate jobs; `publish`; `deploy.yml`; the triggers (the `story/**` trigger goes in 9.4); `push-and-watch.sh`, `merge-story.sh`, `check-ready.sh`; the guard; AGENTS.md, CLAUDE.md and the skills (9.4).
+- Must not change: what any check job runs, except criterion 3's failing step and one `floor-guard` step that runs `scripts/main-protection.test.sh`; the gate jobs; `publish`; `deploy.yml`; the triggers (the `story/**` trigger goes in 9.4); `push-and-watch.sh`, `merge-story.sh`, `check-ready.sh`; the guard; AGENTS.md, CLAUDE.md and the skills (9.4).
 - No merge queue, no required reviewer, no linear-history rule, no `allowed_merge_methods`, no Gitflow branches (ad-012, Options rejected and clause 2).
 - Auto-merge is armed only after every stage has passed; it never replaces a stage (challenge, section 2).
 - No pull request from a fork is merged in this flow; criterion 3 makes its checks fail.
@@ -124,3 +124,4 @@ After criteria 1 and 2 are applied, every `gh` write as the owner (Inputs). Each
 - Decision: 2026-11-05 (Sofia) — squash commit title and message come from the pull request, so the supervisor writes the commit-message convention once, as the pull request's title and body; the title is one short line (at most 72 characters) with the detail in the body (pre-build review, P18, second fix), because GitHub Docs give no title limit and a short subject stays well below any.
 - Decision: 2026-11-05 (Sofia) — a pull request from a fork fails its checks (criterion 3) rather than relying on a rule that the flow merges none (pre-build review, P20): a deterministic check over a sentence.
 - Decision: 2026-11-05 (Sofia) — the reviewer, not the supervisor, records the read-backs, because stage agents write their own records (AGENTS.md, Dispatch rules; pre-build review, P11); the record reaches `main` in 9.4's pull request or the first records pull request after it.
+- Decision: 2026-11-05 (supervisor, from the verifier's medium on Boundaries) — `floor-guard` runs `scripts/main-protection.test.sh`, so the committed ruleset file, the README's apply commands and the forbidden-terms step stay checked in CI, not only locally; Boundaries allow that one step.
