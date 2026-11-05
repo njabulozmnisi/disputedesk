@@ -2,19 +2,16 @@ using System.Net;
 using DisputeDesk.Api.IntegrationTests.Disputes;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Api.IntegrationTests.Transactions;
-using DisputeDesk.Api.Operations;
 using DisputeDesk.Contracts.Problems;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace DisputeDesk.Api.IntegrationTests.Operations;
 
 /// <summary>
 /// AC3, AD-9: a valid token reads only with the <c>dispute.read</c> role under this project's roles claim and a
-/// <c>sub</c> that <c>Operations:Actors</c> maps to the operations actor. Every other valid token gets 403
-/// <c>forbidden</c>, with the same body for a real and an unknown dispute ID apart from <c>traceId</c> (FR-24: 403 before
-/// 404). Start-up refuses a mapping to any other actor type; an empty map starts and refuses every token.
+/// <c>sub</c> listed in <c>Operations:AllowedClients</c>. Every other valid token gets 403 <c>forbidden</c>, with the same
+/// body for a real and an unknown dispute ID apart from <c>traceId</c> (FR-24: 403 before 404). The list's own edges are
+/// in <see cref="OperationsAllowlistTests"/>.
 /// </summary>
 public class OperationsRolesTests(PostgresFixture postgres, TransactionsStub stub) : IClassFixture<TransactionsStub>
 {
@@ -24,7 +21,7 @@ public class OperationsRolesTests(PostgresFixture postgres, TransactionsStub stu
     [InlineData("no roles")]
     [InlineData("dispute.read only under the generic roles claim")]
     [InlineData("dispute.read only as a role claim of its own")]
-    [InlineData("dispute.read with an unmapped sub")]
+    [InlineData("dispute.read with an unlisted sub")]
     [InlineData("customer ID token, no roles")]
     [InlineData("customer ID token with dispute.read")]
     public async Task ReadDispute_ValidTokenNotAllowedToRead_Returns403WithTheSameBodyForARealAndAnUnknownId(string token)
@@ -44,7 +41,7 @@ public class OperationsRolesTests(PostgresFixture postgres, TransactionsStub stu
     }
 
     [Fact]
-    public async Task ReadDispute_MappedTokenWithDisputeRead_Returns200()
+    public async Task ReadDispute_ListedTokenWithDisputeRead_Returns200()
     {
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, stub);
         Guid disputeId = await factory.RaiseForCustomerAAsync();
@@ -55,38 +52,7 @@ public class OperationsRolesTests(PostgresFixture postgres, TransactionsStub stu
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    [Theory]
-    [InlineData("customer")]
-    [InlineData("automation")]
-    [InlineData("Operations")] // the value is exact
-    [InlineData("")]
-    public async Task Startup_ActorMappedToAnythingButOperations_Fails(string actorType)
-    {
-        (int exitCode, string output) = await ApiProcess.RunUntilExitAsync(
-            new Dictionary<string, string?> { [$"Operations:Actors:{FakeZitadel.OperationsSub}"] = actorType },
-            TestContext.Current.CancellationToken);
-
-        Assert.NotEqual(0, exitCode);
-        Assert.Contains("OptionsValidationException: Every Operations:Actors value must be", output, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ReadDispute_EmptyActorMap_StartsAndReturns403ForAMappableToken()
-    {
-        // Post-configuration runs before the start-up validation, so the validated map is empty.
-        await using ApiFactory factory = await TransactionsApi.StartAsync(
-            postgres, stub, services => services.PostConfigure<OperationsOptions>(operations => operations.Actors.Clear()));
-        Assert.Empty(factory.Services.GetRequiredService<IOptions<OperationsOptions>>().Value.Actors);
-        Guid disputeId = await factory.RaiseForCustomerAAsync();
-        using HttpClient tool = factory.CreateTool();
-
-        HttpResponseMessage response = await tool.ReadDisputeAsync(disputeId.ToString(), factory.Zitadel.Issue(roles: OperationsApi.ReadRole));
-
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Equal(ProblemType.For(CommonProblems.Forbidden), await response.ProblemTypeAsync());
-    }
-
-    /// <summary>The valid token for one case; each would read if it carried the role and a mapped <c>sub</c>.</summary>
+    /// <summary>The valid token for one case; each would read if it carried the role and a listed <c>sub</c>.</summary>
     private static SecurityTokenDescriptor Token(FakeZitadel zitadel, string token)
     {
         switch (token)
@@ -102,8 +68,8 @@ public class OperationsRolesTests(PostgresFixture postgres, TransactionsStub stu
                 SecurityTokenDescriptor roleClaim = zitadel.AccessToken();
                 roleClaim.Claims["role"] = OperationsApi.ReadRole;
                 return roleClaim;
-            case "dispute.read with an unmapped sub":
-                return zitadel.AccessToken("unmapped-machine-user", OperationsApi.ReadRole);
+            case "dispute.read with an unlisted sub":
+                return zitadel.AccessToken("unlisted-machine-user", OperationsApi.ReadRole);
             case "customer ID token, no roles":
                 return CustomerIdToken(zitadel);
             case "customer ID token with dispute.read":

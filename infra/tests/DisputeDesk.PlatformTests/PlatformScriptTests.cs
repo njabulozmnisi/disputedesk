@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Http;
 namespace DisputeDesk.PlatformTests;
 
 /// <summary>
-/// AC11: what the Zitadel provisioner creates. 5.1 AC7: the operations actor mapping it writes. 7.12 AC6 and AC7: the
+/// AC11: what the Zitadel provisioner creates. 8.12 AC4: the operations allowlist it writes. 7.12 AC6 and AC7: the
 /// gateway templates' access log format and their /api error pages; GatewayTests proves the rest by response.
 /// The provision.sh cases read the file because no run on this machine reaches a Zitadel call: the script first runs
 /// /label-policy.sh and reads /brand/, which only the provisioner image holds.
@@ -43,21 +43,22 @@ public partial class PlatformScriptTests
     }
 
     [Fact]
-    public void ProvisionScript_ClientsFile_MapsTheMachineUserIdToTheOperationsActor()
+    public void ProvisionScript_ClientsFile_ListsTheMachineUserIdAsTheOnlyAllowedClient()
     {
-        // 5.1 AC7, AD-26: Operations:Actors:<the machine user's ID, its tokens' sub> = operations.
+        // 8.12 AC4, AD-26: Operations:AllowedClients = [the machine user's ID, its tokens' sub].
         Assert.Contains("--arg opsUserId \"$OPS_ID\"", ProvisionScript, StringComparison.Ordinal);
-        Assert.Contains("Operations: { Actors: { ($opsUserId): \"operations\" } }", ProvisionScript, StringComparison.Ordinal);
+        Assert.Contains("Operations: { AllowedClients: [$opsUserId] }", ProvisionScript, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ProvisionScript_CurrentCheck_AlsoRequiresTheActorMapping()
+    public void ProvisionScript_CurrentCheck_AlsoRequiresExactlyTheAllowedClientsList()
     {
-        // Otherwise a clients file written before 5.1 counts as current and never gains the mapping.
+        // Exact array equality: a file in the old shape (a map of subs to actor types), or with any other list, is not
+        // current, so it is rewritten, with new secrets, as any file that is not current is.
         string currentCheck = CurrentCheck().Match(ProvisionScript).Value;
 
         Assert.Contains("is current; secrets not rotated", currentCheck, StringComparison.Ordinal);
-        Assert.Contains("[ \"$(jq -r --arg ops \"$OPS_ID\" '.Operations.Actors[$ops]' \"$OUT_FILE\")\" = operations ]", currentCheck, StringComparison.Ordinal);
+        Assert.Contains("jq -e --arg ops \"$OPS_ID\" '.Operations.AllowedClients == [$ops]' \"$OUT_FILE\" >/dev/null; then", currentCheck, StringComparison.Ordinal);
     }
 
     [Theory]

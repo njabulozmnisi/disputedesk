@@ -30,3 +30,12 @@
 | 8.13 | delta review L2, L3 | `sessionEnd.test.tsx:144`, `queryClient.ts:59` | Rename the "several 401s" test; comment why `handleSuccess` re-reads the typed cache. |
 | 8.8 | review L2 | `infra/tests/DisputeDesk.PlatformTests/ShellHarnessTests.cs:11` | Assert each named exception file exists, so 8.16 must remove the `iam-names.test.sh` exception. |
 | 8.8 | review L3 | `ComposeRenderTests.cs:120-126` | Delete the temporary env file in a `finally`. |
+| 8.12 | security L1 | `OperationsOptions` binding tests | Pin that an old-shape clients file (`Operations:Actors`) binds `AllowedClients` empty (one more `InlineData`). |
+| 8.12 | review | `OperationsEndpoints.cs:75,93,106,120` | Route summaries still say "a mapped token sub"; reword to "a token sub in `Operations:AllowedClients`" (no openapi change). |
+| 8.12 | verify L1 (tooling) | builder `breaks` format | Break patches had no `@@` hunk headers, so `scripts/run-breaks.sh` refused them; the build-story procedure should require patches made with `git diff` (a check in `run-breaks.sh` or the status hook). |
+| 8.12 | verify L2 (process) | M1 lane collect | No `8.12-build.json` reached the verifier (the lane predated the flow change); check that `lane.sh collect` brings it on the next M1 build. |
+| 8.12 | verify (tooling) | `scripts/verify-with-copilot.sh` | Its prompt still tells the cross-model check to run the suites; under the faster flow it reads the results file instead. |
+| 8.8 | verify finding 2 | `ComposeRenderTests` worker `!override` | The worker's base and override environments share the same six keys, so dropping its tag is unobservable; drop the redundant tag or note it. |
+| 8.8 | verify finding 4 | `DeployScriptTests.cs:395-404` | `DerivedPath_IsCheckedAgainstItsBound` calls `within_bounds` directly (`deploy.sh` sets the paths itself; comment explains). |
+| 8.8 | verify finding 5 (tooling) | `scripts/run-breaks.sh` | No path for the `infra/tests` project: a break filter that matches no test passes; make a zero-match filter fail and add the infra project. |
+| 8.12 | QA (wording) | `e2e/tests/operations-actions.spec.ts:232` | Test title still says "maps to no actor"; reword to "is not in AllowedClients". |

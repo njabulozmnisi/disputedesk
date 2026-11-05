@@ -62,7 +62,7 @@ test('the token is a Zitadel access token for this project with the machine user
   expect(Object.keys(roles).sort()).toEqual(['dispute.escalate', 'dispute.read', 'dispute.resolve', 'dispute.startReview']);
   expect(payload.sub).toBe(operationsSub);
   const mapped = execFileSync('docker', ['compose', 'run', '--rm', '--no-deps', '-T', '--entrypoint', 'cat', 'provision', '/out/zitadel-clients.json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  expect(JSON.parse(mapped).Operations.Actors[operationsSub]).toBe('operations');
+  expect(JSON.parse(mapped).Operations.AllowedClients).toEqual([operationsSub]);
 });
 
 for (const [name, getId, account] of [['A', () => disputeA, 'ACC-A-1'], ['B', () => disputeB, 'ACC-B-1']] as const) {

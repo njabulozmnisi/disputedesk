@@ -35,10 +35,7 @@ public static class OperationsAuthentication
 
     public static IServiceCollection AddOperationsAuthentication(this IServiceCollection services)
     {
-        services.AddOptions<OperationsOptions>()
-            .BindConfiguration(OperationsOptions.Section)
-            .Validate(operations => operations.MapsOnlyToOperations(), "Every Operations:Actors value must be \"operations\" (AD-9).")
-            .ValidateOnStart();
+        services.AddOptions<OperationsOptions>().BindConfiguration(OperationsOptions.Section);
         services.AddScoped<CurrentOperationsActor>();
         services.AddScoped<IAuthorizationHandler, OperationsActorHandler>();
 
@@ -57,7 +54,8 @@ public static class OperationsAuthentication
 
     /// <summary>
     /// One operations policy (Microsoft Learn, "Policy-based authorization"): the JwtBearer scheme only, an authenticated
-    /// user, the <paramref name="role"/> and a mapped <c>sub</c>, which a 403 is audited under as <paramref name="action"/>.
+    /// user, the <paramref name="role"/> and a <c>sub</c> in the allowlist, which a 403 is audited under as
+    /// <paramref name="action"/>.
     /// </summary>
     private static void RequireRole(AuthorizationPolicyBuilder policy, string role, AuditAction action) => policy
         .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)

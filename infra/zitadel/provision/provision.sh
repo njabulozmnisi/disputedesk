@@ -211,14 +211,15 @@ done
 # --------------------------------------------------------------------- client settings for the Api
 # The Zitadel:* and Operations:* keys of AD-26, plus the operations tools' client credentials (infra/smoke.sh and
 # scripts/operations-token.sh use them; the Api loads the whole file but binds no option to them, so they reach no
-# Api code). Operations:Actors maps the machine user's ID, which
-# is its tokens' sub, to the operations actor (AD-9).
-# Kept when the file already describes this instance in this shape; otherwise both secrets are (re)generated.
+# Api code). Operations:AllowedClients lists the machine user's ID, which is its tokens' sub, as the one operations
+# caller (AD-9).
+# Kept when the file already describes this instance in this shape (the list exactly [the machine user's ID]); otherwise
+# both secrets are (re)generated.
 if [ -s "$OUT_FILE" ] \
   && [ "$(jq -r '.Zitadel.Issuer' "$OUT_FILE")" = "$Z" ] \
   && [ "$(jq -r '.Zitadel.ProjectId' "$OUT_FILE")" = "$PROJECT_ID" ] \
   && [ "$(jq -r '.Zitadel.Bff.ClientId' "$OUT_FILE")" = "$BFF_CLIENT_ID" ] \
-  && [ "$(jq -r --arg ops "$OPS_ID" '.Operations.Actors[$ops]' "$OUT_FILE")" = operations ]; then
+  && jq -e --arg ops "$OPS_ID" '.Operations.AllowedClients == [$ops]' "$OUT_FILE" >/dev/null; then
   log "$OUT_FILE is current; secrets not rotated"
 else
   if [ -z "$BFF_SECRET" ]; then
@@ -234,7 +235,7 @@ else
         Issuer: $issuer, MetadataAddress: "\($issuer)/.well-known/openid-configuration", ProjectId: $project,
         Bff: { ClientId: $bffId, ClientSecret: .[0] },
         OperationsTools: { ClientId: $opsId, ClientSecret: .[1] } },
-      Operations: { Actors: { ($opsUserId): "operations" } } }' > "$OUT_FILE.tmp"
+      Operations: { AllowedClients: [$opsUserId] } }' > "$OUT_FILE.tmp"
   chown "$OUT_UID:$OUT_UID" "$OUT_FILE.tmp"
   chmod 0400 "$OUT_FILE.tmp"
   mv "$OUT_FILE.tmp" "$OUT_FILE"

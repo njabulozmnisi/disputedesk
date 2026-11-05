@@ -57,10 +57,11 @@ public sealed class AuthorizationResultHandler : IAuthorizationMiddlewareResultH
 
     /// <summary>
     /// One <c>Denied</c> entry, saved before the 403 is written; a failed save throws, which the exception handler
-    /// answers with 500 (fail closed; OWASP Logging Cheat Sheet). The actor is the bearer token's <c>sub</c>, mapped or
-    /// not (AD-14a): the policy's scheme is JwtBearer only, so <see cref="HttpContext.User"/> is the token's principal
-    /// here, never the cookie's. The dispute ID is the route value when it is a GUID; nothing is looked up, so the 403
-    /// is the same for every ID. The handler is a singleton, so the scoped services come from the request.
+    /// answers with 500 (fail closed; OWASP Logging Cheat Sheet). The actor is the route's actor type, operations, and the
+    /// bearer token's <c>sub</c>, in the allowlist or not (AD-14a): the policy's scheme is JwtBearer only, so
+    /// <see cref="HttpContext.User"/> is the token's principal here, never the cookie's. The dispute ID is the route value
+    /// when it is a GUID; nothing is looked up, so the 403 is the same for every ID. The handler is a singleton, so the
+    /// scoped services come from the request.
     /// </summary>
     private static async Task RecordDeniedAsync(HttpContext context, AuditAction action)
     {
