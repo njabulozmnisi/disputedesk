@@ -6,15 +6,12 @@ public sealed class ShellHarnessTests
     [Fact]
     public void Infra_HoldsNoShellTestHarness()
     {
-        // The one exception until story 8.16 replaces it with JSON policy checks in this project. infra/smoke.sh, the
-        // developer smoke check, is not a harness and matches neither pattern.
-        string[] exceptions = ["infra/terraform/iam-names.test.sh"];
+        // infra/smoke.sh, the developer smoke check, is not a harness and matches neither pattern.
         string infra = Path.Combine(SourceRoots.Repo, "infra");
 
         string[] harnesses = [.. Directory.GetFiles(infra, "*.test.sh", SearchOption.AllDirectories)
             .Concat(Directory.GetFiles(Path.Combine(infra, "aws"), "check-*.sh"))
             .Select(file => Path.GetRelativePath(SourceRoots.Repo, file).Replace('\\', '/'))
-            .Except(exceptions)
             .Order(StringComparer.Ordinal)];
 
         Assert.True(harnesses.Length == 0, $"Shell test harnesses under infra/: {string.Join(", ", harnesses)}");

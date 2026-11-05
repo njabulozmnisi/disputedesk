@@ -79,16 +79,9 @@ resource "aws_s3_bucket_ownership_controls" "state" {
 
 resource "aws_s3_bucket_policy" "state" {
   bucket = aws_s3_bucket.state.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Sid       = "DenyInsecureTransport"
-      Effect    = "Deny"
-      Principal = "*"
-      Action    = "s3:*"
-      Resource  = [aws_s3_bucket.state.arn, "${aws_s3_bucket.state.arn}/*"]
-      Condition = { Bool = { "aws:SecureTransport" = "false" } }
-    }]
+  # A JSON template (story 8.16) whose names the infra tests' IamNamesTests check.
+  policy = templatefile("${path.module}/state-bucket-policy.json.tftpl", {
+    bucket_arn = aws_s3_bucket.state.arn
   })
 
   # A bucket policy is refused while public access blocking is still being applied to a new bucket.

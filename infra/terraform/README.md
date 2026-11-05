@@ -17,9 +17,17 @@ are the only public entry. GitHub Actions deploys a commit through SSM Run Comma
 | `modules/compute` | The c7i-flex.large instance (AL2023, IMDSv2, no SSH), its Elastic IP, security group, role and user data. |
 | `modules/database` | RDS PostgreSQL 18 on db.t4g.micro, private, TLS required; the master password through write-only arguments. |
 | `modules/edge` | The three CloudFront distributions and the origin-verify value. |
-| `modules/deploy-role` | GitHub's OIDC provider, the deploy role, and the Run Command document it may send. The role trusts GitHub's immutable subject for `main`, `repo:<owner>@<owner-id>/<name>@<repo-id>:ref:refs/heads/main`; CI's `oidc-token` and `oidc-subject` jobs check its format on every push to `main`. |
+| `modules/deploy-role` | GitHub's OIDC provider, the deploy role, and the Run Command document it may send. The role trusts GitHub's immutable subject for `main`, `repo:<owner>@<owner-id>/<name>@<repo-id>:ref:refs/heads/main`, pinned by `envs/dev/tests/deploy_role.tftest.hcl` and confirmed once against the repository's OIDC settings before the first deploy (step 8). |
 | `modules/observability` | The collector's log group and stream, and X-Ray Transaction Search. |
 | `modules/budget` | The monthly cost budget and its two email alerts. |
+
+Every IAM policy document is a `<name>.json.tftpl` file beside its `main.tf` (the two trust policies and the two role
+policies in `modules/deploy-role` and `modules/compute`, the Transaction Search policy in `modules/observability`, the
+state bucket policy in `bootstrap`), rendered with `templatefile()`. Each is valid JSON before rendering, with its
+placeholders only inside JSON strings, so `IamNamesTests` in the infra test project (`infra/tests`) reads every action
+and condition key from the files with `System.Text.Json` and checks it against AWS's public service reference (no AWS
+call). The values are ARNs, IDs, the region, paths and the OIDC subject, none of which holds a `"` or `\`; a value that
+could would need `jsonencode()`. The mocked Terraform tests pin each rendered policy.
 
 What to know before applying it:
 
@@ -199,6 +207,22 @@ first publish, set each one public once: the package's page, **Package settings*
 While one is still private, `deploy.yml` fails at its digest lookup, before it sends anything to AWS.
 
 ## 8. The repository variables and the first deploy
+
+First, once, check the subject the deploy role trusts against the repository's OIDC settings (GitHub REST API, *Get the
+customization template for an OIDC subject claim for a repository*):
+
+```sh
+gh api repos/<owner>/<name>/actions/oidc/customization/sub
+gh api repos/<owner>/<name> --jq '.owner.login, .owner.id, .name, .id'
+```
+
+`use_immutable_subject` must be `true`, and `sub_claim_prefix` must carry the same owner, owner ID, repository name and
+repository ID as the subject pinned in `envs/dev/tests/deploy_role.tftest.hcl`,
+`repo:<owner>@<owner-id>/<name>@<repo-id>:ref:refs/heads/main` (story 7.15), with the IDs given to step 4 as
+`TF_VAR_github_repository_owner_id` and `TF_VAR_github_repository_id`. On a mismatch, stop: do not deploy until the
+pinned subject and `modules/deploy-role` are corrected. Repeat the check after a repository transfer or rename, or a
+change to the repository's OIDC subject customisation. The API returns the repository's configuration, not a token
+issued to a job, so the first deploy's `AssumeRoleWithWebIdentity` is the end-to-end proof.
 
 ```sh
 cd infra/terraform/envs/dev

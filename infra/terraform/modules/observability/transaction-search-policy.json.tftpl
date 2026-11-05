@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "TransactionSearchXRayAccess",
+      "Effect": "Allow",
+      "Principal": { "Service": "xray.amazonaws.com" },
+      "Action": "logs:PutLogEvents",
+      "Resource": [
+        "arn:aws:logs:${aws_region}:${account_id}:log-group:aws/spans:*",
+        "arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/application-signals/data:*"
+      ],
+      "Condition": {
+        "ArnLike": { "aws:SourceArn": "arn:aws:xray:${aws_region}:${account_id}:*" },
+        "StringEquals": { "aws:SourceAccount": "${account_id}" }
+      }
+    }
+  ]
+}

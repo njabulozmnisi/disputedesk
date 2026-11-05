@@ -225,7 +225,9 @@ jobs:
       # ad-011: the tests of infra/'s own files: the provisioner, the gateway templates, both gateway images on a
       # throwaway Docker network (GatewayTests, stories 7.4 and 7.12), the AWS override's render and the collector config
       # (ComposeRenderTests, story 7.4), the deploy script with its commands stubbed (DeployScriptTests, story 7.5) and its
-      # database init against a throwaway PostgreSQL 18 with TLS (DatabaseInitTests, story 7.17). infra/tests/global.json
+      # database init against a throwaway PostgreSQL 18 with TLS (DatabaseInitTests, story 7.17), and every IAM name in
+      # the Terraform policy templates against AWS's public service reference, fetched over HTTPS with no credentials
+      # and bounded by the test's own 5-minute deadline (IamNamesTests, stories 7.16 and 8.16). infra/tests/global.json
       # pins the same SDK as the backend job and selects Microsoft.Testing.Platform; dotnet reads it from the working
       # directory.
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -276,12 +278,6 @@ jobs:
             terraform -chdir="$root" validate
             terraform -chdir="$root" test
           done
-
-      # Story 7.16: every IAM action and condition key in the policies exists in AWS's public service reference, fetched
-      # over HTTPS with no credentials (no AWS API call). The step timeout bounds the whole run, retries included.
-      - name: IAM names exist in AWS's service reference
-        timeout-minutes: 5
-        run: infra/terraform/iam-names.test.sh
 
       # What a plan cannot show, or the dev environment rules out (AD-28): prevent_destroy, deletion protection turned
       # on, a NAT gateway, a load balancer, an IAM user or access key.
@@ -462,8 +458,8 @@ jobs:
         run: docker compose down -v
 
   # Story 7.3 (AD-32): the only job that can write packages, on main only and only after the jobs in its needs pass;
-  # terraform and the OIDC subject check (oidc-token, oidc-subject) are not among them (story 7.16). On a docs-only
-  # push its needed jobs are skipped, and a job whose needs were skipped is skipped too, so nothing is published.
+  # terraform is not among them (story 7.16). On a docs-only push its needed jobs are skipped, and a job whose needs
+  # were skipped is skipped too, so nothing is published.
   # Each image is built, scanned and only then pushed, so the pushed bytes are the scanned bytes.
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -530,91 +526,3 @@ jobs:
       - name: Log out of GHCR
         if: always()
         run: docker logout ghcr.io
-
-  # Story 7.15 (AD-28): the deploy role trusts GitHub's immutable subject. On every push to main, oidc-token reads the
-  # subject GitHub issues to this repository and oidc-subject checks the deploy-role module builds the same one. The
-  # token is for a non-STS audience, so STS refuses it; neither job holds an AWS credential or gates publish.
-  oidc-token:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    # Only this job may mint a token, and it runs no checkout and no action (OWASP CICD-SEC-5).
-    permissions:
-      id-token: write
-    outputs:
-      subject: ${{ steps.token.outputs.subject }}
-    steps:
-      # The manual token request (GitHub, "OpenID Connect reference"). The token stays in shell variables only, is
-      # masked before anything else is printed, and only its sub is handed on.
-      - id: token
-        name: Request a token and read its subject
-        shell: bash
-        env:
-          AUDIENCE: disputedesk-oidc-subject-check
-        run: |
-          jq --version
-          response=$(curl -sS --fail --max-time 10 -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE")
-          token=$(printf '%s' "$response" | jq -r '.value' 2>/dev/null) || token=""
-          if [[ -z "$token" || "$token" == null ]]; then
-            echo "::error::The token request returned no token."
-            exit 1
-          fi
-          echo "::add-mask::$token"
-
-          # The payload only, not verified (RFC 7519, section 3): this check reads the claims; STS verifies tokens.
-          # base64url (RFC 7515, section 2) becomes base64 for @base64d. jq's errors are discarded: they quote input.
-          claims=$(printf '%s' "$token" |
-            jq -R -c 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson | {aud, sub}' 2>/dev/null) ||
-            claims=""
-          if [[ -z "$claims" ]]; then
-            echo "::error::The token's payload is not a base64url-encoded JSON object."
-            exit 1
-          fi
-          aud=$(printf '%s' "$claims" | jq -r '.aud')
-          sub=$(printf '%s' "$claims" | jq -r '.sub')
-          if [[ "$aud" != "$AUDIENCE" ]]; then
-            echo "::error::The token's aud is not $AUDIENCE."
-            exit 1
-          fi
-          if [[ -z "$sub" || "$sub" == null ]]; then
-            echo "::error::The token has no sub."
-            exit 1
-          fi
-          echo "sub: $sub"
-          echo "aud: $aud"
-          echo "subject=$sub" >> "$GITHUB_OUTPUT"
-
-  oidc-subject:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: oidc-token
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: 1.17.1
-          terraform_wrapper: false
-
-      # The repository and its IDs from the github context (GitHub, "Contexts reference"), and the token's sub, reach
-      # Terraform only as -var values through env. A failed assertion prints both subjects.
-      - name: The deploy role trusts the subject GitHub issued
-        env:
-          REPOSITORY: ${{ github.repository }}
-          REPOSITORY_OWNER_ID: ${{ github.repository_owner_id }}
-          REPOSITORY_ID: ${{ github.repository_id }}
-          EXPECTED_SUBJECT: ${{ needs.oidc-token.outputs.subject }}
-        run: |
-          terraform -chdir=infra/terraform/envs/dev init -backend=false -input=false -lockfile=readonly \
-            -test-directory=tests-oidc
-          terraform -chdir=infra/terraform/envs/dev test -test-directory=tests-oidc \
-            -var "github_repository=$REPOSITORY" \
-            -var "github_repository_owner_id=$REPOSITORY_OWNER_ID" \
-            -var "github_repository_id=$REPOSITORY_ID" \
-            -var "expected_subject=$EXPECTED_SUBJECT"

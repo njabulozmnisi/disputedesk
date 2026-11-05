@@ -1,0 +1,260 @@
+{
+  "status": "built",
+  "story": "8.16",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a5ddc63d6597e9425",
+  "base": "618efc7 (origin/story/8.8 4684d3e plus the docs-first cherry-pick of 53f7dce)",
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "R38, NFR-INFRA-4",
+      "test": "terraform test with every *.tftest.hcl unchanged: envs/dev 50 passed (deploy_role.tftest.hcl exact sub and both deploy-role policies, compute.tftest.hcl instance policy, observability_budget.tftest.hcl Transaction Search policy), bootstrap 9 passed (bootstrap.tftest.hcl bucket policy); a changed template fails compute.tftest.hcl (checked by hand). Every policy attribute is templatefile() of a .json.tftpl and only the SSM content stays jsonencode: DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference"
+    },
+    {
+      "id": "AC2",
+      "requirement": "R38",
+      "test": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference; DisputeDesk.PlatformTests.IamNamesRulesTests.Read_ValidTemplates_ReadsEachDistinctNameOncePerFile, Read_TemplateOutsideItsShape_FailsNamingTheFile, Read_ActionInsideItsBound_IsRead, Read_ActionOutsideItsBound_FailsNamingItAndTheFile, Read_ConditionKeyInsideItsBound_IsRead, Read_ConditionKeyOutsideItsBound_FailsNamingItAndTheFile, Read_NoTemplate_FailsForNoActionAndNoConditionKey, Read_TemplatesWithActionsButNoConditionKey_FailsForNoConditionKey, Read_TemplateUnderDotTerraform_IsNotRead, CheckTerraformFiles_AllowedLine_Passes, CheckTerraformFiles_RefusedLine_FailsNamingFileAndLine"
+    },
+    {
+      "id": "AC3",
+      "requirement": "R38",
+      "test": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference; DisputeDesk.PlatformTests.IamNamesRulesTests.Check_KnownAction_Passes, Check_UnknownAction_FailsNamingItAndTheFile; DisputeDesk.PlatformTests.IamNamesTests.IamNames_OneMisspeltInACopy_FailsNamingExactlyIt (xray:PutSpan, cloudwatchlogs:PutLogEvents)"
+    },
+    {
+      "id": "AC4",
+      "requirement": "R38",
+      "test": "DisputeDesk.PlatformTests.IamNamesRulesTests.Check_KnownConditionKey_Passes, Check_OidcKey_PassesMarkedNotVerified, Check_UnknownConditionKey_FailsNamingItAndTheFile; DisputeDesk.PlatformTests.IamNamesTests.IamNames_OneMisspeltInACopy_FailsNamingExactlyIt (kms:ViaServices and both OIDC keys misspelt)"
+    },
+    {
+      "id": "AC5",
+      "requirement": "R33",
+      "test": "DisputeDesk.PlatformTests.ServiceReferenceFetchTests.Fetch_ValidFiles_ReadsTheNamedServicesFromTheDocumentedLayout, CreateClient_HasTheBoundsInTheStory, Fetch_FileOfTheWrongShape_FailsNamingTheUrl, Fetch_HttpErrorNotRetried_FailsAtOnceNamingTheUrl, Fetch_RetriedStatusTwiceThenSuccess_Passes, Fetch_RetriedStatusThreeTimes_FailsAfterTwoRetriesNamingTheUrl, Fetch_ConnectionFailsTwiceThenSucceeds_Passes, Fetch_ConnectionFailsThreeTimes_FailsNamingTheUrl, Fetch_RealClientAgainstAServerThatClosesTheConnection_FailsNamingTheUrl, Fetch_NoAnswerWithinTheRequestTimeoutThreeTimes_FailsNamingTheUrl, Fetch_DeadlinePassesDuringARequest_FailsNamingTheInterruptedUrl, Fetch_DeadlinePassesWhileWaitingToRetry_FailsNamingTheUrl"
+    },
+    {
+      "id": "AC6",
+      "requirement": "R38, R33",
+      "test": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_OneMisspeltInACopy_FailsNamingExactlyIt (ssm:SendComand, kms:ViaServices, token.actions.githubusercontent.cmo:sub); deletions: DisputeDesk.PlatformTests.ShellHarnessTests.Infra_HoldsNoShellTestHarness with the iam-names.test.sh exception removed; the CI step is gone (no 'iam-names' in .github/workflows/ci.yml)"
+    },
+    {
+      "id": "AC7",
+      "requirement": "R33, R38",
+      "test": "No test project covers CI and docs: ci.yml holds no oidc-token or oidc-subject job and no id-token: write (grep finds no 'oidc' or 'id-token' in ci.yml; actionlint passes); publish.needs unchanged [backend, frontend, platform, floor-guard, e2e]; envs/dev/tests-oidc/ deleted; envs/dev/tests/deploy_role.tftest.hcl unchanged and passing; infra/terraform/README.md deploy-role row and section 8 record the one-time gh api check, its two fields, the stop condition, the re-run triggers and that the API returns configuration, not a token"
+    },
+    {
+      "id": "AC8",
+      "requirement": "R39",
+      "test": "Docs, checked by reading: infra/README.md (terraform/ and tests/ rows, Tests section) and infra/terraform/README.md (policy-template paragraph, deploy-role row, section 8) name the .json.tftpl files, IamNamesTests and the recorded OIDC check"
+    }
+  ],
+  "smoke": "No API or UI change, so no stack smoke check. Ran: terraform fmt -check -recursive infra/terraform (clean); terraform init -backend=false -lockfile=readonly, validate and test for bootstrap (9 passed, as before) and envs/dev (50 passed, as before) with local Terraform 1.15.3 (CI pins 1.17.1); actionlint (clean); dotnet format style and whitespace --verify-no-changes on DisputeDesk.PlatformTests (clean); scripts/secret-scan.sh (no leaks); scripts/security-local.sh, Trivy fs and config (exit 0); scripts/floor-guard.sh (exit 0); the new and changed test classes in mcr.microsoft.com/dotnet/sdk:10.0 (SDK 10.0.403) under the stack lock (119 passed); the full infra test project once under the stack lock with TRX (437 passed, 0 failed). No AWS command run and no AWS API called; the only network fetch is the public service reference JSON.",
+  "standards": [
+    {
+      "mechanism": "IAM policy documents as templatefile() JSON templates",
+      "source": "https://developer.hashicorp.com/terraform/language/functions/templatefile"
+    },
+    {
+      "mechanism": "Reading the templates with the System.Text.Json DOM (JsonDocument)",
+      "source": "https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/use-dom"
+    },
+    {
+      "mechanism": "Policy Version pinned to 2012-10-17",
+      "source": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_version.html"
+    },
+    {
+      "mechanism": "Names looked up in AWS's programmatic service reference (public JSON, no credentials)",
+      "source": "https://docs.aws.amazon.com/service-authorization/latest/reference/service-reference.html"
+    },
+    {
+      "mechanism": "Action wildcards (* any characters, ? one), case-insensitive names, condition keys and the OIDC federation keys",
+      "source": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_action.html; https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition.html; https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html#condition-keys-wif"
+    },
+    {
+      "mechanism": "Connect timeout and no redirects on SocketsHttpHandler; per-request timeout with HttpClient.Timeout",
+      "source": "https://learn.microsoft.com/dotnet/api/system.net.http.socketshttphandler.connecttimeout; https://learn.microsoft.com/dotnet/api/system.net.http.socketshttphandler.allowautoredirect; https://learn.microsoft.com/dotnet/api/system.net.http.httpclient.timeout"
+    },
+    {
+      "mechanism": "Retrying only the idempotent GET, at most twice, on curl --retry's transient failures (connection failure, timeout, 408, 429, 500, 502, 503, 504) with its 1 s then 2 s back-off",
+      "source": "https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2; https://curl.se/docs/manpage.html#--retry"
+    },
+    {
+      "mechanism": "Whole-check deadline as one CancellationTokenSource.CancelAfter linked to the test's token",
+      "source": "https://learn.microsoft.com/dotnet/standard/threading/cancellation-in-managed-threads"
+    },
+    {
+      "mechanism": "User-Agent product token (the reference answers 403 without one)",
+      "source": "https://www.rfc-editor.org/rfc/rfc9110#section-10.1.5"
+    },
+    {
+      "mechanism": "Testing HttpClient code with a stub HttpMessageHandler",
+      "source": "https://learn.microsoft.com/dotnet/api/system.net.http.httpmessagehandler"
+    },
+    {
+      "mechanism": "The fetched reference shared as an xUnit class fixture (IClassFixture, IAsyncLifetime)",
+      "source": "https://xunit.net/docs/shared-context"
+    },
+    {
+      "mechanism": "Recorded one-time OIDC subject check through the repository OIDC customization API",
+      "source": "https://docs.github.com/en/rest/actions/oidc"
+    }
+  ],
+  "breaks": [
+    {
+      "name": "AC1: a policy written with jsonencode() again (bootstrap state bucket)",
+      "patch": "diff --git a/infra/terraform/bootstrap/main.tf b/infra/terraform/bootstrap/main.tf\n--- a/infra/terraform/bootstrap/main.tf\n+++ b/infra/terraform/bootstrap/main.tf\n@@ -80,8 +80,9 @@\n resource \"aws_s3_bucket_policy\" \"state\" {\n   bucket = aws_s3_bucket.state.id\n   # A JSON template (story 8.16) whose names the infra tests' IamNamesTests check.\n-  policy = templatefile(\"${path.module}/state-bucket-policy.json.tftpl\", {\n-    bucket_arn = aws_s3_bucket.state.arn\n+  policy = jsonencode({\n+    Version   = \"2012-10-17\"\n+    Statement = [{ Sid = \"DenyInsecureTransport\", Effect = \"Deny\", Principal = \"*\", Action = \"s3:*\", Resource = [aws_s3_bucket.state.arn, \"${aws_s3_bucket.state.arn}/*\"], Condition = { Bool = { \"aws:SecureTransport\" = \"false\" } } }]\n   })\n \n   # A bucket policy is refused while public access blocking is still being applied to a new bucket.\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference",
+      "expect": "fails"
+    },
+    {
+      "name": "AC2 / supervisor check: Version 2008-10-17 in a template",
+      "patch": "diff --git a/infra/terraform/modules/observability/transaction-search-policy.json.tftpl b/infra/terraform/modules/observability/transaction-search-policy.json.tftpl\n--- a/infra/terraform/modules/observability/transaction-search-policy.json.tftpl\n+++ b/infra/terraform/modules/observability/transaction-search-policy.json.tftpl\n@@ -1,5 +1,5 @@\n {\n-  \"Version\": \"2012-10-17\",\n+  \"Version\": \"2008-10-17\",\n   \"Statement\": [\n     {\n       \"Sid\": \"TransactionSearchXRayAccess\",\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference",
+      "expect": "fails"
+    },
+    {
+      "name": "AC2 / supervisor check: \"Resource\": ${resources}, not valid JSON",
+      "patch": "diff --git a/infra/terraform/modules/deploy-role/deploy-policy.json.tftpl b/infra/terraform/modules/deploy-role/deploy-policy.json.tftpl\n--- a/infra/terraform/modules/deploy-role/deploy-policy.json.tftpl\n+++ b/infra/terraform/modules/deploy-role/deploy-policy.json.tftpl\n@@ -5,7 +5,7 @@\n       \"Sid\": \"SendDeployCommand\",\n       \"Effect\": \"Allow\",\n       \"Action\": \"ssm:SendCommand\",\n-      \"Resource\": [\"${instance_arn}\", \"${document_arn}\"]\n+      \"Resource\": ${resources}\n     },\n     {\n       \"Sid\": \"ReadDeployResult\",\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference",
+      "expect": "fails"
+    },
+    {
+      "name": "AC2 / supervisor check: a policy attribute whose jsonencode( starts on the next line",
+      "patch": "diff --git a/infra/terraform/modules/observability/main.tf b/infra/terraform/modules/observability/main.tf\n--- a/infra/terraform/modules/observability/main.tf\n+++ b/infra/terraform/modules/observability/main.tf\n@@ -30,10 +30,9 @@\n resource \"aws_cloudwatch_log_resource_policy\" \"transaction_search\" {\n   policy_name = \"${var.name}-transaction-search\"\n   # A JSON template (story 8.16) whose names the infra tests' IamNamesTests check.\n-  policy_document = templatefile(\"${path.module}/transaction-search-policy.json.tftpl\", {\n-    aws_region = var.aws_region\n-    account_id = var.account_id\n-  })\n+  policy_document = (\n+    jsonencode({ Version = \"2012-10-17\", Statement = [] })\n+  )\n }\n \n # Transaction Search: spans go to CloudWatch Logs (UpdateTraceSegmentDestination). X-Ray creates the aws/spans log\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference",
+      "expect": "fails"
+    },
+    {
+      "name": "AC2 / supervisor check: an aws_iam_policy_document data source added",
+      "patch": "diff --git a/infra/terraform/modules/compute/main.tf b/infra/terraform/modules/compute/main.tf\n--- a/infra/terraform/modules/compute/main.tf\n+++ b/infra/terraform/modules/compute/main.tf\n@@ -148,6 +148,13 @@\n   })\n }\n \n+data \"aws_iam_policy_document\" \"extra\" {\n+  statement {\n+    actions   = [\"ssm:GetParameter\"]\n+    resources = [\"*\"]\n+  }\n+}\n+\n resource \"aws_iam_instance_profile\" \"instance\" {\n   name = \"${var.name}-instance\"\n   role = aws_iam_role.instance.name\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference",
+      "expect": "fails"
+    },
+    {
+      "name": "AC2: the aws_iam_policy_document rule removed",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n@@ -82,7 +82,7 @@\n                     problems.Add($\"{where}: jsonencode( outside the deploy document's content\");\n                 }\n \n-                if (line.Contains(\"aws_iam_policy_document\", StringComparison.Ordinal))\n+                if (line.Contains(\"aws_iam_policy_document_never\", StringComparison.Ordinal))\n                 {\n                     problems.Add($\"{where}: an aws_iam_policy_document\");\n                 }\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesRulesTests.CheckTerraformFiles_RefusedLine_FailsNamingFileAndLine",
+      "expect": "fails"
+    },
+    {
+      "name": "AC2: the action bound ends in $, which lets a final newline through",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n@@ -279,7 +279,7 @@\n             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);\n \n     // \\z, not $: $ also matches before a final newline.\n-    [GeneratedRegex(@\"^[a-z0-9-]+:[A-Za-z0-9*?]+\\z\")]\n+    [GeneratedRegex(@\"^[a-z0-9-]+:[A-Za-z0-9*?]+$\")]\n     private static partial Regex ActionBound();\n \n     [GeneratedRegex(@\"^[A-Za-z0-9._/-]+(:[A-Za-z0-9._/-]+)+\\z\")]\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesRulesTests.Read_ActionOutsideItsBound_FailsNamingItAndTheFile",
+      "expect": "fails"
+    },
+    {
+      "name": "AC2: no condition key across all templates fails only when there is no action either",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n@@ -47,7 +47,7 @@\n             problems.Add($\"no IAM action found in a *.json.tftpl file under {terraformDirectory}\");\n         }\n \n-        if (conditionKeys.Count == 0)\n+        if (actions.Count == 0 && conditionKeys.Count == 0)\n         {\n             problems.Add($\"no condition key found in a *.json.tftpl file under {terraformDirectory}\");\n         }\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesRulesTests.Read_TemplatesWithActionsButNoConditionKey_FailsForNoConditionKey",
+      "expect": "fails"
+    },
+    {
+      "name": "AC3 / supervisor check: xray:PutSpans to xray:PutSpan in the compute instance template",
+      "patch": "diff --git a/infra/terraform/modules/compute/instance-policy.json.tftpl b/infra/terraform/modules/compute/instance-policy.json.tftpl\n--- a/infra/terraform/modules/compute/instance-policy.json.tftpl\n+++ b/infra/terraform/modules/compute/instance-policy.json.tftpl\n@@ -36,7 +36,7 @@\n     {\n       \"Sid\": \"XRayOtlpSpans\",\n       \"Effect\": \"Allow\",\n-      \"Action\": [\"xray:PutSpans\", \"xray:PutSpansForIndexing\"],\n+      \"Action\": [\"xray:PutSpan\", \"xray:PutSpansForIndexing\"],\n       \"Resource\": \"*\"\n     }\n   ]\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference",
+      "expect": "fails"
+    },
+    {
+      "name": "AC3 / supervisor check: logs:PutLogEvents to cloudwatchlogs:PutLogEvents",
+      "patch": "diff --git a/infra/terraform/modules/observability/transaction-search-policy.json.tftpl b/infra/terraform/modules/observability/transaction-search-policy.json.tftpl\n--- a/infra/terraform/modules/observability/transaction-search-policy.json.tftpl\n+++ b/infra/terraform/modules/observability/transaction-search-policy.json.tftpl\n@@ -5,7 +5,7 @@\n       \"Sid\": \"TransactionSearchXRayAccess\",\n       \"Effect\": \"Allow\",\n       \"Principal\": { \"Service\": \"xray.amazonaws.com\" },\n-      \"Action\": \"logs:PutLogEvents\",\n+      \"Action\": \"cloudwatchlogs:PutLogEvents\",\n       \"Resource\": [\n         \"arn:aws:logs:${aws_region}:${account_id}:log-group:aws/spans:*\",\n         \"arn:aws:logs:${aws_region}:${account_id}:log-group:/aws/application-signals/data:*\"\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference",
+      "expect": "fails"
+    },
+    {
+      "name": "AC3: ? in an action matches any characters",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n@@ -270,7 +270,7 @@\n \n     /// <summary>An action's name as a pattern: * any characters, ? exactly one (AWS IAM, \"IAM JSON policy elements: Action\").</summary>\n     private static Regex ActionPattern(string name) =>\n-        new(\"^\" + Regex.Escape(name).Replace(@\"\\*\", \".*\", StringComparison.Ordinal).Replace(@\"\\?\", \".\", StringComparison.Ordinal) + @\"\\z\",\n+        new(\"^\" + Regex.Escape(name).Replace(@\"\\*\", \".*\", StringComparison.Ordinal).Replace(@\"\\?\", \".*\", StringComparison.Ordinal) + @\"\\z\",\n             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);\n \n     /// <summary>A reference key name as a pattern: each ${...} segment, such as ${TagKey}, is any non-empty text without ':'.</summary>\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesRulesTests.Check_UnknownAction_FailsNamingItAndTheFile",
+      "expect": "fails"
+    },
+    {
+      "name": "AC4 / supervisor check: token.actions.githubusercontent.com:aud misspelt",
+      "patch": "diff --git a/infra/terraform/modules/deploy-role/trust-policy.json.tftpl b/infra/terraform/modules/deploy-role/trust-policy.json.tftpl\n--- a/infra/terraform/modules/deploy-role/trust-policy.json.tftpl\n+++ b/infra/terraform/modules/deploy-role/trust-policy.json.tftpl\n@@ -7,7 +7,7 @@\n       \"Action\": \"sts:AssumeRoleWithWebIdentity\",\n       \"Condition\": {\n         \"StringEquals\": {\n-          \"token.actions.githubusercontent.com:aud\": \"sts.amazonaws.com\",\n+          \"token.actions.githubusercontnet.com:aud\": \"sts.amazonaws.com\",\n           \"token.actions.githubusercontent.com:sub\": \"${subject}\"\n         }\n       }\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference",
+      "expect": "fails"
+    },
+    {
+      "name": "AC4: a ${...} segment matches empty text and ':'",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n@@ -275,7 +275,7 @@\n \n     /// <summary>A reference key name as a pattern: each ${...} segment, such as ${TagKey}, is any non-empty text without ':'.</summary>\n     private static Regex ConditionKeyPattern(string referenceKey) =>\n-        new(\"^\" + string.Join(\"[^:]+\", Placeholder().Split(referenceKey).Select(Regex.Escape)) + @\"\\z\",\n+        new(\"^\" + string.Join(\".*\", Placeholder().Split(referenceKey).Select(Regex.Escape)) + @\"\\z\",\n             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);\n \n     // \\z, not $: $ also matches before a final newline.\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesRulesTests.Check_UnknownConditionKey_FailsNamingItAndTheFile",
+      "expect": "fails"
+    },
+    {
+      "name": "AC4: any token.actions.githubusercontent.com key accepted as the OIDC exception",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n@@ -131,7 +131,7 @@\n             {\n                 lines.Add($\"ok  condition key {key.Name}  ({key.File})\");\n             }\n-            else if (OidcKeys.Contains(key.Name, StringComparer.OrdinalIgnoreCase))\n+            else if (key.Name.StartsWith(\"token.actions.githubusercontent.com:\", StringComparison.OrdinalIgnoreCase))\n             {\n                 lines.Add($\"ok  condition key {key.Name}  ({key.File})  not verified against the service reference: an OIDC federation key in the IAM User Guide\");\n             }\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesRulesTests.Check_UnknownConditionKey_FailsNamingItAndTheFile",
+      "expect": "fails"
+    },
+    {
+      "name": "AC5 / supervisor check: the index URL pointed at v1/no-such-file.json",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n@@ -11,8 +11,8 @@\n /// </summary>\n internal sealed record ServiceReference(IReadOnlySet<string> Services, IReadOnlyDictionary<string, string[]> ActionsByService, IReadOnlyList<string> ConditionKeyNames)\n {\n-    public static readonly Uri IndexUrl = new(\"https://servicereference.us-east-1.amazonaws.com/\");\n-    public static readonly Uri GlobalKeysUrl = new(IndexUrl, \"v1/global-condition-keys.json\");\n+    public static readonly Uri IndexUrl = new(\"https://servicereference.us-east-1.amazonaws.com/v1/no-such-file.json\");\n+    public static readonly Uri GlobalKeysUrl = new(\"https://servicereference.us-east-1.amazonaws.com/v1/global-condition-keys.json\");\n \n     /// <summary>Each fetch makes at most this many retries, as story 7.16's curl --retry 2 did.</summary>\n     public const int MaxRetries = 2;\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_InTheTerraformTree_AllExistInTheServiceReference",
+      "expect": "fails"
+    },
+    {
+      "name": "AC5: redirects followed",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n@@ -35,7 +35,7 @@\n     /// <summary>10 s to connect (SocketsHttpHandler.ConnectTimeout); no redirect followed, no cookie, no credential.</summary>\n     public static SocketsHttpHandler CreateHandler() => new()\n     {\n-        AllowAutoRedirect = false,\n+        AllowAutoRedirect = true,\n         UseCookies = false,\n         Credentials = null,\n         ConnectTimeout = TimeSpan.FromSeconds(10),\n",
+      "test_method": "DisputeDesk.PlatformTests.ServiceReferenceFetchTests.CreateClient_HasTheBoundsInTheStory",
+      "expect": "fails"
+    },
+    {
+      "name": "AC5: a third retry",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n@@ -15,7 +15,7 @@\n     public static readonly Uri GlobalKeysUrl = new(IndexUrl, \"v1/global-condition-keys.json\");\n \n     /// <summary>Each fetch makes at most this many retries, as story 7.16's curl --retry 2 did.</summary>\n-    public const int MaxRetries = 2;\n+    public const int MaxRetries = 3;\n \n     /// <summary>The first retry waits this long and the second twice as long, curl --retry's back-off.</summary>\n     public static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1);\n",
+      "test_method": "DisputeDesk.PlatformTests.ServiceReferenceFetchTests.Fetch_RetriedStatusThreeTimes_FailsAfterTwoRetriesNamingTheUrl",
+      "expect": "fails"
+    },
+    {
+      "name": "AC5: a redirect retried like a 503",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n@@ -135,7 +135,7 @@\n         throw new HttpRequestException($\"Could not fetch {url}: {failure}\");\n     }\n \n-    private static bool IsRetried(HttpStatusCode status) => status is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests\n+    private static bool IsRetried(HttpStatusCode status) => status is HttpStatusCode.Found or HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests\n         or HttpStatusCode.InternalServerError or HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout;\n \n     private static async Task<JsonDocument> FetchJsonAsync(HttpClient client, TimeSpan retryDelay, Uri url, CancellationToken deadline)\n",
+      "test_method": "DisputeDesk.PlatformTests.ServiceReferenceFetchTests.Fetch_HttpErrorNotRetried_FailsAtOnceNamingTheUrl",
+      "expect": "fails"
+    },
+    {
+      "name": "AC5: the deadline's failure no longer names the interrupted URL",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n@@ -89,7 +89,7 @@\n         }\n         catch (OperationCanceledException exception) when (deadline.IsCancellationRequested)\n         {\n-            throw new TimeoutException($\"The check's deadline passed while fetching {url}\", exception);\n+            throw new TimeoutException(\"The check's deadline passed\", exception);\n         }\n     }\n \n",
+      "test_method": "DisputeDesk.PlatformTests.ServiceReferenceFetchTests.Fetch_DeadlinePassesDuringARequest_FailsNamingTheInterruptedUrl",
+      "expect": "fails"
+    },
+    {
+      "name": "AC5: a Name or service that is not a string accepted",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/ServiceReference.cs\n@@ -165,7 +165,7 @@\n         {\n             if (item.ValueKind != JsonValueKind.Object\n                 || !item.TryGetProperty(property, out JsonElement value)\n-                || value.ValueKind != JsonValueKind.String)\n+                || value.ValueKind == JsonValueKind.Undefined)\n             {\n                 throw new InvalidDataException(shape);\n             }\n",
+      "test_method": "DisputeDesk.PlatformTests.ServiceReferenceFetchTests.Fetch_FileOfTheWrongShape_FailsNamingTheUrl",
+      "expect": "fails"
+    },
+    {
+      "name": "AC6: an unknown action name is printed as ok instead of failing",
+      "patch": "diff --git a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n--- a/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/IamNames.cs\n@@ -117,7 +117,7 @@\n             }\n             else if (!serviceActions.Any(pattern.IsMatch))\n             {\n-                failures.Add($\"action {action.Name} in {action.File}: no such action in the service reference for {service}\");\n+                lines.Add($\"action {action.Name} in {action.File}: no such action in the service reference for {service}\");\n             }\n             else\n             {\n",
+      "test_method": "DisputeDesk.PlatformTests.IamNamesTests.IamNames_OneMisspeltInACopy_FailsNamingExactlyIt",
+      "expect": "fails"
+    },
+    {
+      "name": "AC6: the shell harness is back",
+      "patch": "diff --git a/infra/terraform/iam-names.test.sh b/infra/terraform/iam-names.test.sh\nnew file mode 100755\n--- /dev/null\n+++ b/infra/terraform/iam-names.test.sh\n@@ -0,0 +1,2 @@\n+#!/usr/bin/env bash\n+echo ok\n",
+      "test_method": "DisputeDesk.PlatformTests.ShellHarnessTests.Infra_HoldsNoShellTestHarness",
+      "expect": "fails"
+    }
+  ],
+  "breaks_checked": "Each patch passes git apply --check against the worktree. The builder also ran each one in a throwaway copy of infra/ with dotnet test --filter-method <test_method> --minimum-expected-tests 1; all 22 fail on an assertion, none on a build error.",
+  "test_results": {
+    "files": [
+      "TestResults/njabulomnisi_Njabulos-Ayoba-MacBook-Pro_2026-11-05_05_06_49.444797.trx"
+    ],
+    "command": "from infra/tests: scripts/test-lock.sh run stack 8.16 -- dotnet test --project DisputeDesk.PlatformTests --report-xunit-trx --results-directory <worktree>/TestResults",
+    "summary": "437 total, 437 passed, 0 failed, 0 skipped",
+    "diff_hash": "a50995c195f0",
+    "diff_hash_base": "618efc7"
+  },
+  "assumptions": [
+    "The client sends one header, User-Agent: DisputeDesk-PlatformTests. Inputs say 'no ... extra header', but servicereference.us-east-1.amazonaws.com answers 403 to a request without a User-Agent (checked with curl -H 'User-Agent:'), and 7.16's curl sent its own. No credential, cookie or other header is sent; Fetch_ValidFiles_ReadsTheNamedServicesFromTheDocumentedLayout asserts the request headers are exactly User-Agent.",
+    "Retries cover curl --retry's transient set (connection failure, per-request timeout, 408, 429, 500, 502, 503, 504). Any other non-success, a redirect included, fails at once, so the index pointed at v1/no-such-file.json fails after one request.",
+    "The OIDC exception compares the two keys case-insensitively: criterion 4 says each key is looked up case-insensitively, as 7.16 did.",
+    "The real bounds are asserted as values: 30 s request timeout, 10 s connect timeout, no redirect, no cookies, no credentials and 2 retries in CreateClient_HasTheBoundsInTheStory. The 5-minute deadline is a constant in ServiceReferenceFixture. Behaviour on each side of each bound is tested with short timeouts and deadlines against a stub handler, so no test waits 30 s or 5 minutes, and no FakeTimeProvider package is added (the story adds no packages).",
+    "The retry back-off is a parameter of ServiceReference.FetchAsync: 1 s in the fixture, zero in the offline tests.",
+    "envs/dev/tests/deploy_role.tftest.hcl's header comment still says the policies are 'written with jsonencode'. It is now stale but left as it is, because the story requires every *.tftest.hcl unchanged. This is a candidate for the epic's lows.",
+    "Comments that sat inside the jsonencode() instance policy (EncryptKeyRing, XRayOtlpSpans) moved to the comment above aws_iam_role_policy.instance, because JSON has no comments.",
+    "The compute trust policy has no placeholders. It is rendered with templatefile(path, {}), so every policy attribute follows the one anchored rule.",
+    "Trivy reads neither the old jsonencode() inline role policies nor the templates for IAM wildcard checks. With an Allow */* statement added to a throwaway copy of modules/compute, both forms give the same single AWS-0104 finding, so Trivy loses no coverage.",
+    "The stale allowlist entry 'shell(infra/terraform/iam-names.test.sh)' in scripts/verify-with-copilot.sh:38 is left, because that file is outside the story's Touches.",
+    "No test asserts that ci.yml holds no id-token: write. AC7 is CI and docs, verified by grep and actionlint, and the story asks for no such check."
+  ],
+  "open_questions": [],
+  "conflicts": [
+    "Inputs ('no credential, cookie or extra header') versus the service reference, which refuses a request without a User-Agent (HTTP 403): resolved by sending only a User-Agent product token, as 7.16's curl did. See assumptions."
+  ]
+}
