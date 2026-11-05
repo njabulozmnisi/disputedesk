@@ -9,7 +9,7 @@
 - `Dispute.Raise`, `StartReview`, `Escalate`, `Resolve(outcome, note)`, `Withdraw(note)` and `RecordSlaWarning` are the only ways to create or change a dispute. Each takes an `Actor` and the use-case instant, returns `Result`, and appends one stored event (AD-13, ad-009).
 - The operations escalate and the SLA sweep call the same `Escalate` (AD-13, FR-26).
 - Authorisation happens before the aggregate, per action: one Zitadel project role per action (`dispute.startReview`, `dispute.escalate`, `dispute.resolve`) plus `dispute.read`, one policy per role, and ownership for the customer's withdraw (AD-9, AD-11, FR-24).
-- `Operations:Actors:<sub>` maps a service account's `sub` to the actor type `operations`; no mapping means 403. The Worker acts as `automation` with identity `worker:sla-sweep`. The seeder acts as `automation` with `worker:seeder` for start review, escalate and resolve, and as the fixture customer for raise and withdraw (AD-30, AD-14a).
+- `Operations:Actors:<sub>` maps a service account's `sub` to the actor type `operations`; no mapping means 403 (superseded 2026-11-03, see the note below). The Worker acts as `automation` with identity `worker:sla-sweep`. The seeder acts as `automation` with `worker:seeder` for start review, escalate and resolve, and as the fixture customer for raise and withdraw (AD-30, AD-14a).
 - Actor type and identity are written to the stored event and, for refused or forbidden actions, to the audit row, with the same values; they are never passed into a decision (AD-9, AD-14a).
 - The action names, actor types and result values are closed sets owned once: Domain owns `ActorType` and `DisputeAction`, Contracts owns `AuditAction` and `AuditResult` (AD-14a).
 
@@ -22,5 +22,7 @@
 **Consequences.**
 
 - Whether an action is allowed depends only on the dispute's status, through the one allowed-actions table in Domain (FR-24, AD-13); who may ask is settled earlier, by the role or ownership check.
-- A new operations tool is one `Operations:Actors:<sub>` mapping and its role grants, with no change to the aggregate (AD-9).
+- A new operations tool is one `Operations:Actors:<sub>` mapping and its role grants, with no change to the aggregate (AD-9) (superseded 2026-11-03, see the note below).
 - Customers never see actor types or identities: the customer view maps the timeline actor to `you` or `theBank` (AD-13), and published events carry `actorType` but no actor identity (AD-19).
+
+**Superseded in part, 2026-11-03 (human decision D4, simplicity audit; story 8.12).** The `Operations:Actors:<sub>` map is replaced by a plain allowlist, `Operations:AllowedClients`, an array of service accounts' `sub` values. Every allowed caller is actor type `operations` with its `sub` as actor ID, and roles still decide what it may do; a `sub` not in the list gets 403, and an empty or missing list refuses every caller. A `Denied` entry records actor type `Operations` and the token's `sub`, so `ActorType` keeps one meaning, the route's credential type (AD-9, AD-14a, AD-26). A new operations tool is one `Operations:AllowedClients` entry and its role grants.

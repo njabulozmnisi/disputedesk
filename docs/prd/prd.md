@@ -451,7 +451,7 @@ Operations endpoints accept only bearer JWTs issued through client credentials. 
 
 - A BFF cookie on an operations endpoint returns 401.
 - A valid token without the endpoint's role returns 403.
-- A credential that does not map to exactly one known actor type returns 403. The mapping is one Zitadel service account per actor type [ASSUMPTION].
+- A credential whose `sub` is not in the operations allowlist (`Operations:AllowedClients`, an array of service account subs) returns 403; every allowed caller is actor type `operations`, and an empty or missing list refuses every caller.
 - An action on a dispute ID that does not exist returns 404.
 - A successful action is recorded as a `ReviewStarted`, `DisputeEscalated` or `DisputeResolved` stored event, with the time, dispute ID, action, from-status, to-status, actor type, actor identity (the service account's ID) and trace ID. No audit log entry is written for it (NFR-SEC-10). Settled on 2026-10-29 (ad-009).
 - A rejected operations attempt after authentication (403, 404 or 409) is written to the internal audit log, with its actor, action and result.
