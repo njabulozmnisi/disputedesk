@@ -12,4 +12,5 @@ The main session is the supervisor (AGENTS.md, Roles). The guard hook (`.claude/
 
 - Pipeline agents are in `.claude/agents/`; each file sets its model ([ad-004](docs/process/ad-004-model-roles.md)). If usage strains, drop to one Opus lane.
 - Each agent runs its procedure skill in `.claude/skills/` (`build-story`, `verify-story`, `qa-story`, `review-story`, `security-story`); planning uses the BMAD skills there (brief, PRD, UX, architecture, Sofia) and the `grill` skill.
-- A builder dispatched with the Agent tool gets its own isolated worktree from the current `HEAD`, so a fix-round brief starts by applying the patch from `scripts/story-patch.sh`.
+- A builder dispatched with the Agent tool gets its own isolated worktree from the current `HEAD`, so a fix-round brief starts by applying the patch from `scripts/story-patch.sh`, and a stacked story's brief starts with `git checkout --detach story/<base>` in that clean worktree.
+- The reviewer, security agent and verifier briefs give the main checkout's absolute `docs/verification/` path for their records.

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Pushes the current branch and waits for the CI and Security workflows on the pushed commit, so main is never left red
+# Pushes a branch and waits for the CI and Security workflows on the pushed commit, so main is never left red
 # unnoticed. Exits non-zero unless both succeed.
-# Usage: scripts/push-and-watch.sh [remote]            (default remote: origin)
+# Usage: scripts/push-and-watch.sh [remote] [branch]   (default remote: origin; default branch: the current one)
+#   A story/* branch is pushed with --force-with-lease --force-if-includes, so it can be pushed again after a rebase
+#   but never over a remote commit this clone has not integrated (git-push); every other branch, main included, is
+#   pushed without force and a rejected push exits 2.
 #   DISPUTEDESK_WATCH_TIMEOUT  seconds to find both workflows' runs on the pushed commit (default 1800). It does not
 #                              bound a run once found: GitHub cancels a job at its timeout-minutes, which every job
 #                              in ci.yml and security.yml sets, and a cancelled run exits 1.
@@ -9,23 +12,29 @@
 set -euo pipefail
 
 remote=${1:-origin}
+branch=${2:-$(git rev-parse --abbrev-ref HEAD)}
 timeout=${DISPUTEDESK_WATCH_TIMEOUT:-1800}
 workflows=(CI Security)
 
-branch=$(git rev-parse --abbrev-ref HEAD)
-sha=$(git rev-parse HEAD)
+sha=$(git rev-parse --verify --quiet "refs/heads/$branch") \
+  || { echo "push-and-watch: no local branch $branch" >&2; exit 2; }
 repo=$(git remote get-url "$remote" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')
 
-git push "$remote" "$branch" || { echo "push-and-watch: push failed" >&2; exit 2; }
+if [[ "$branch" == story/* ]]; then
+  git push --force-with-lease --force-if-includes "$remote" "$branch" || { echo "push-and-watch: push failed" >&2; exit 2; }
+else
+  git push "$remote" "$branch" || { echo "push-and-watch: push failed" >&2; exit 2; }
+fi
 echo "push-and-watch: pushed ${sha:0:7} to $remote/$branch; waiting for ${workflows[*]} on $repo"
 
-# A run appears a few seconds after the push.
+# A run appears a few seconds after the push. --branch keeps a fast-forwarded main from finding the story branch's
+# earlier run on the same commit.
 deadline=$((SECONDS + timeout))
 run_ids=()
 for workflow in "${workflows[@]}"; do
   while true; do
-    id=$(gh run list -R "$repo" --commit "$sha" --workflow "$workflow" --json databaseId -q '.[0].databaseId // empty') \
-      || { echo "push-and-watch: gh failed" >&2; exit 2; }
+    id=$(gh run list -R "$repo" --branch "$branch" --commit "$sha" --workflow "$workflow" --json databaseId \
+      -q '.[0].databaseId // empty') || { echo "push-and-watch: gh failed" >&2; exit 2; }
     [[ -z "$id" ]] || break
     if (( SECONDS >= deadline )); then
       echo "push-and-watch: no $workflow run on ${sha:0:7} after ${timeout}s" >&2

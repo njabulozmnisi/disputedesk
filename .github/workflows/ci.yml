@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, "story/**"]
 
 # Least privilege: every job reads the repo and nothing more.
 permissions:
@@ -23,7 +23,38 @@ env:
   COMPOSE_SHA256: 47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0
 
 jobs:
+  # Whether a push changes anything but docs: scripts/ci-changes.sh sets an output that each heavy job's if: reads;
+  # floor-guard always runs. A story/** push is judged on the whole story since its fork point with main, a main push
+  # on its own commits, and a doubt runs everything (the script's header has the rules).
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      # fetch-depth 0 fetches every branch's whole history: the push's before commit, and origin/main for a story's
+      # fork point (actions/checkout README).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The push event's before and after commits (GitHub, "Events that trigger workflows", push) reach the script only
+      # through env.
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          result=$(scripts/ci-changes.sh "$EVENT" "$REF" "$BEFORE" "$AFTER")
+          echo "$result"
+          echo "$result" >> "$GITHUB_OUTPUT"
+
   backend:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -53,6 +84,13 @@ jobs:
             echo "::error::docker compose is not v$COMPOSE_VERSION"
             exit 1
           fi
+
+      # setup-dotnet's cache input needs packages.lock.json, which the repo does not have, so the NuGet global-packages
+      # folder (~/.nuget/packages on Linux) is cached, keyed on the files that decide what restore downloads.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'backend/Directory.Packages.props', 'backend/.config/dotnet-tools.json') }}
 
       - run: dotnet restore DisputeDesk.slnx
 
@@ -85,6 +123,8 @@ jobs:
       - run: dotnet test --solution DisputeDesk.slnx --no-build
 
   frontend:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
@@ -99,6 +139,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
 
@@ -128,6 +170,8 @@ jobs:
           fi
 
   platform:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     # The Infra tests step's GatewayTests build the SPA image twice (with and without browser telemetry) and a gateway on each.
     timeout-minutes: 15
@@ -217,6 +261,8 @@ jobs:
   # applies run only from the maintainer's machine (infra/terraform/README.md); here every test plans against mocked
   # providers.
   terraform:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -288,6 +334,10 @@ jobs:
 
       - run: scripts/floor-guard.sh
 
+      # The flow scripts' own tests, on scratch repositories with stubs: no network, no Docker.
+      - run: scripts/ci-changes.test.sh
+      - run: scripts/run-breaks.test.sh
+
       - name: Install actionlint
         run: |
           curl -fsSL --max-time 60 -o "$RUNNER_TEMP/actionlint.tar.gz" \
@@ -348,6 +398,8 @@ jobs:
   # Story 7.3 (AD-32). The runner's fresh checkout and Docker daemon make the stack fresh, so customer D starts
   # unlinked (AD-30). Only the journeys run here; the regression project is not run in CI.
   e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -374,6 +426,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
 
       - run: npm ci
         working-directory: e2e
@@ -419,7 +473,8 @@ jobs:
         run: docker compose down -v
 
   # Story 7.3 (AD-32): the only job that can write packages, on main only and only after the jobs in its needs pass;
-  # terraform and the OIDC subject check (oidc-token, oidc-subject) are not among them (story 7.16).
+  # terraform and the OIDC subject check (oidc-token, oidc-subject) are not among them (story 7.16). On a docs-only
+  # push its needed jobs are skipped, and a job whose needs were skipped is skipped too, so nothing is published.
   # Each image is built, scanned and only then pushed, so the pushed bytes are the scanned bytes.
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
