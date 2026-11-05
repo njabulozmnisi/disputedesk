@@ -137,7 +137,9 @@ test('sign-out: row deleted, both cookies cleared, SignOut audited, end_session 
   const { requestToken } = await (await page.request.get('/api/v1/antiforgery')).json();
   const auditBefore = auditCount();
   const sessionsBefore = sessionCount();
-  await page.goto('/');
+  // A live app tab leaves for /signed-out as soon as it sees a 401, so the form is posted from a page
+  // that is not the app (the session JSON); the redirect chain is then observed without the tab racing it.
+  await page.goto('/api/v1/authentication/session');
   const navigations: string[] = [];
   page.on('request', (request) => request.isNavigationRequest() && navigations.push(request.url()));
   await page.evaluate((token) => {

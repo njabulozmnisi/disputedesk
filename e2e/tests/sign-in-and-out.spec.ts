@@ -92,7 +92,9 @@ test('a missing or forged antiforgery token gets a 400 validation problem and ke
 
 test('logout with the token deletes the row, clears both cookies and redirects to end_session (id_token_hint, state) and back through the signed-out callback', async ({ browser }) => {
   const { requestToken } = await (await page.request.get('/api/v1/antiforgery')).json();
-  await page.goto('/');
+  // A live app tab leaves for /signed-out as soon as it sees a 401, so the form is posted from a page
+  // that is not the app (the session JSON); the redirect chain is then observed without the tab racing it.
+  await page.goto('/api/v1/authentication/session');
   const navigations: string[] = [];
   page.on('request', (request) => request.isNavigationRequest() && navigations.push(request.url()));
   await page.evaluate((token) => {
