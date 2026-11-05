@@ -61,6 +61,8 @@ jobs:
       matrix:
         language: [csharp, javascript-typescript]
     steps:
+      - if: matrix.language == 'csharp'   # supervisor check
+        run: exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -89,6 +91,7 @@ jobs:
       run:
         working-directory: backend
     steps:
+      - run: exit 1   # supervisor check
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
