@@ -71,6 +71,85 @@ scripts/test-lock.sh run stack <owner> -- bash -c 'cd infra/tests && dotnet test
 `IamNamesTests` fetches AWS's service reference, so it needs the network: offline, it fails naming the URL it could not
 fetch, and never passes without the reference.
 
+## Repository settings
+
+`main` is protected by a ruleset, and squash is the only merge method (ad-012 clause 2, AD-32). Both live in GitHub's
+settings, so the repository owner applies them with the commands below; nothing in CI applies them. Each command runs
+with the owner's token (`GH_TOKEN` from `gh auth token --user`, GitHub CLI manual), because the active `gh` account has
+pull access only; the token is never printed or written to a file. Apply them only once a pull request shows
+`ci-passed` and `security-passed` reported by the GitHub Actions app, since a required check pinned to an app must have
+recently been submitted by it (GitHub Docs, *Available rules for rulesets*).
+
+CI needs the `FORBIDDEN_TERMS` Actions secret first: without it the *Forbidden terms* step in `floor-guard` fails, so
+`ci-passed` cannot pass. Set it once, from the main checkout, with the gitignored terms file the pre-commit hook reads;
+`gh secret set` reads the value from standard input and encrypts it before sending it (`gh help secret set`). Read it
+back with `gh secret list`, which shows its name only:
+
+```sh
+GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh secret set FORBIDDEN_TERMS --app actions -R njabulozmnisi/disputedesk < .claude/forbidden-terms.local
+```
+
+The ruleset is [`.github/rulesets/main.json`](../.github/rulesets/main.json), the body of the REST call *Create a
+repository ruleset*:
+
+| Rule | Effect |
+|---|---|
+| `bypass_actors: []` | No one bypasses it, the owner included. |
+| `deletion` | `main` cannot be deleted. |
+| `non_fast_forward` | No force push to `main`. |
+| `pull_request` | Every change reaches `main` through a pull request; no approving review is required (`0`; the story stages review). |
+| `required_status_checks` | `ci-passed` and `security-passed`, each only from the GitHub Actions app (`integration_id` 15368, `gh api apps/github-actions`), so a commit status set by hand cannot stand in; `strict_required_status_checks_policy: true` requires the branch to be up to date with `main`. |
+| `code_scanning` | CodeQL results are required, and a security alert of high or higher, or an error alert, blocks the merge (code scanning merge protection). |
+
+```sh
+# First application: creates the ruleset and prints its id.
+GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api --method POST repos/njabulozmnisi/disputedesk/rulesets --input .github/rulesets/main.json --jq .id
+# Any later application replaces that ruleset in place, so there is only ever one. Its id, if the first output is lost:
+GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api repos/njabulozmnisi/disputedesk/rulesets --jq '.[] | {id,name}'
+GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api --method PUT repos/njabulozmnisi/disputedesk/rulesets/<id> --input .github/rulesets/main.json
+```
+
+Read it back (GET) and compare it with the file; the expected output is nothing. A difference is a parameter GitHub
+adds (for example `allowed_merge_methods` or `do_not_enforce_on_create`), recorded with the read-back:
+
+```sh
+diff <(jq -S . .github/rulesets/main.json) \
+  <(GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api repos/njabulozmnisi/disputedesk/rulesets/<id> \
+    --jq '{name,target,enforcement,bypass_actors,conditions,rules}' | jq -S .)
+```
+
+The repository settings (REST *Update a repository*). `-F` sends `true` and `false` as JSON booleans and `-f` sends
+strings (`gh help api`); `--method PATCH` is explicit because a field flag otherwise makes the call a `POST`:
+
+```sh
+GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api --method PATCH repos/njabulozmnisi/disputedesk \
+  -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false \
+  -F allow_auto_merge=true -F delete_branch_on_merge=true \
+  -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY
+```
+
+Read them back (GET):
+
+```sh
+GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api repos/njabulozmnisi/disputedesk \
+  --jq '{allow_squash_merge,allow_merge_commit,allow_rebase_merge,allow_auto_merge,delete_branch_on_merge,squash_merge_commit_title,squash_merge_commit_message}'
+```
+
+| Field | Expected | Why |
+|---|---|---|
+| `allow_squash_merge` | `true` | Squash is the only merge method. |
+| `allow_merge_commit` | `false` | |
+| `allow_rebase_merge` | `false` | |
+| `allow_auto_merge` | `true` | `gh pr merge --auto` merges once the required checks pass. |
+| `delete_branch_on_merge` | `true` | The head branch is deleted on merge. |
+| `squash_merge_commit_title` | `PR_TITLE` | The squash commit's subject is the pull request's title. |
+| `squash_merge_commit_message` | `PR_BODY` | Its message is the pull request's body. |
+
+There is no linear-history rule: squash is enforced once, by these settings, and the rule alone would still allow
+rebase merges (GitHub Docs, *Available rules for rulesets*); for the same reason the ruleset has no
+`allowed_merge_methods`. There is no merge queue: GitHub offers it only on organization-owned repositories, and for one
+maintainer the up-to-date requirement gives the same guarantee (ad-012 clause 2).
+
 ## Credentials
 
 - Fixed dev-only values (database passwords, Zitadel master key, admin password) are inline defaults in

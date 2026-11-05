@@ -1,0 +1,197 @@
+{
+  "status": "built",
+  "story": "9.3",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a8ac9f5d8c697bc8e",
+  "base": "9df21844ad06670e6d24d314d0b349ae6e4de261 (origin/story/docs-9.3, committed; the work is uncommitted on top)",
+  "changed": [
+    ".github/rulesets/main.json (new)",
+    ".github/workflows/ci.yml (floor-guard: the Forbidden terms step fails closed; one run: line for the new test)",
+    "infra/README.md (new Repository settings section)",
+    "scripts/main-protection.test.sh (new; fix round 1: the withheld-text case and bash -e)"
+  ],
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "R33, NFR-SEC-8",
+      "test": "scripts/main-protection.test.sh: 'main.json is exactly criterion 1's ruleset' (jq -S comparison of the whole file with criterion 1's Inputs) and 'the required contexts are the gate jobs' (ci-passed in ci.yml and security-passed in security.yml exist and have no name:, so their check runs carry the job id); the apply and re-apply commands are checked in the README case. The live read-back is the reviewer's, after the human applies it (story criterion 1)."
+    },
+    {
+      "id": "AC2",
+      "requirement": "R33",
+      "test": "scripts/main-protection.test.sh: 'infra/README.md applies the ruleset file and the seven settings as the owner (-F booleans, -f strings)'. The live read-back of the seven fields is the reviewer's, after the human applies them."
+    },
+    {
+      "id": "AC3",
+      "requirement": "NFR-SEC-8, R33",
+      "test": "scripts/main-protection.test.sh: the Forbidden terms cases (an unset, an empty and a comments-only secret fail with '::error::The FORBIDDEN_TERMS secret is not set'; with terms set: no match passes, a whole-word case-insensitive match and a CRLF term fail naming only file:line, a part of a word passes; the matching text is withheld, checked on the captured output of the step so the case can fail (break b5); the step reads secrets.FORBIDDEN_TERMS and has no if: or continue-on-error:). The step runs with bash -e, as GitHub runs a step with no shell:. The with-terms path of the step is byte-identical to the base (git diff HEAD -- .github/workflows/ci.yml)."
+    },
+    {
+      "id": "AC4",
+      "requirement": "R33",
+      "test": "none in the diff: a process step for the supervisor and the human (push on today's flow, open the pull request, watch both gates, then apply). The commands are in infra/README.md, Repository settings, and in this report's human_commands."
+    },
+    {
+      "id": "AC5",
+      "requirement": "R33",
+      "test": "none in the diff: the first squash merge under the ruleset, proved after the merge by main's CI and Security runs on the squash commit and gh pr view (story Requirements, Verify)."
+    }
+  ],
+  "smoke": "No API, UI or stack change, so no stack smoke check. The Forbidden terms step's run: script was read from ci.yml and run as GitHub runs a step with no shell: (bash -e, Workflow syntax, defaults.run.shell) in a scratch git repository, on macOS and on Ubuntu 24.04.5 (mcr.microsoft.com/dotnet/sdk:10.0, arm64, under the stack lock). Fix round 1 made no GitHub call of any kind. The first build's read-only GitHub checks as the owner (GET only) stand: gh api apps/github-actions returns id 15368; main's head 38c8183 has check runs ci-passed and security-passed from app 15368; no ruleset yet; CodeQL analyses on refs/heads/main.",
+  "standards": [
+    {
+      "mechanism": "Branch ruleset applied through the REST API (POST to create, PUT to replace, GET to read back); every field name and enum checked against the schema",
+      "source": "https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset"
+    },
+    {
+      "mechanism": "Ruleset rules: restrict deletions, block force pushes, require a pull request, required status checks from a pinned app with branches up to date (strict)",
+      "source": "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets"
+    },
+    {
+      "mechanism": "Code scanning merge protection with the code_scanning rule (tool CodeQL), available at the repository level",
+      "source": "https://docs.github.com/en/code-security/code-scanning/managing-your-code-scanning-configuration/set-code-scanning-merge-protection"
+    },
+    {
+      "mechanism": "Squash-only merging, auto-merge and head-branch deletion through the repository settings (REST Update a repository)",
+      "source": "https://docs.github.com/en/rest/repos/repos#update-a-repository"
+    },
+    {
+      "mechanism": "Merge methods (why no linear-history rule)",
+      "source": "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/about-merge-methods-on-github"
+    },
+    {
+      "mechanism": "gh api: --input for the ruleset body, -F typed fields for booleans, -f string fields, --method explicit",
+      "source": "https://cli.github.com/manual/gh_api"
+    },
+    {
+      "mechanism": "The owner's token through GH_TOKEN from gh auth token --user, never printed",
+      "source": "https://cli.github.com/manual/gh_auth_token"
+    },
+    {
+      "mechanism": "Fail closed on a missing secret: secrets are not passed to a workflow triggered from a fork, and an unset secret reads as an empty string",
+      "source": "https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets"
+    },
+    {
+      "mechanism": "Required flow control on main (protected branch, required checks, no bypass)",
+      "source": "https://owasp.org/www-project-top-10-ci-cd-security-risks/CICD-SEC-01-Insufficient-Flow-Control-Mechanisms"
+    },
+    {
+      "mechanism": "The test runs an extracted step with the command GitHub uses for a step with no shell: on Linux, bash -e {0}",
+      "source": "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#defaultsrunshell"
+    }
+  ],
+  "breaks": [
+    {
+      "id": "b1-ruleset-not-strict",
+      "criterion": "AC1",
+      "patch": "--- a/.github/rulesets/main.json\n+++ b/.github/rulesets/main.json\n@@ -29,7 +29,7 @@\n     {\n       \"type\": \"required_status_checks\",\n       \"parameters\": {\n-        \"strict_required_status_checks_policy\": true,\n+        \"strict_required_status_checks_policy\": false,\n         \"required_status_checks\": [\n           { \"context\": \"ci-passed\", \"integration_id\": 15368 },\n           { \"context\": \"security-passed\", \"integration_id\": 15368 }\n",
+      "test_method": "scripts/main-protection.test.sh",
+      "expect": "fails: main.json differs from criterion 1 (strict_required_status_checks_policy false: a branch behind main could merge)"
+    },
+    {
+      "id": "b2-ruleset-check-not-pinned",
+      "criterion": "AC1",
+      "patch": "--- a/.github/rulesets/main.json\n+++ b/.github/rulesets/main.json\n@@ -31,7 +31,7 @@\n       \"parameters\": {\n         \"strict_required_status_checks_policy\": true,\n         \"required_status_checks\": [\n-          { \"context\": \"ci-passed\", \"integration_id\": 15368 },\n+          { \"context\": \"ci-passed\" },\n           { \"context\": \"security-passed\", \"integration_id\": 15368 }\n         ]\n       }\n",
+      "test_method": "scripts/main-protection.test.sh",
+      "expect": "fails: main.json differs from criterion 1 (ci-passed without integration_id: a commit status set by hand could satisfy it)"
+    },
+    {
+      "id": "b3-readme-boolean-as-string",
+      "criterion": "AC2",
+      "patch": "--- a/infra/README.md\n+++ b/infra/README.md\n@@ -123,7 +123,7 @@\n \n ```sh\n GH_TOKEN=\"$(gh auth token --user njabulozmnisi)\" gh api --method PATCH repos/njabulozmnisi/disputedesk \\\n-  -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false \\\n+  -F allow_squash_merge=true -f allow_merge_commit=false -F allow_rebase_merge=false \\\n   -F allow_auto_merge=true -F delete_branch_on_merge=true \\\n   -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY\n ```\n",
+      "test_method": "scripts/main-protection.test.sh",
+      "expect": "fails: infra/README.md has no line: -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false"
+    },
+    {
+      "id": "b4-forbidden-terms-skips",
+      "criterion": "AC3",
+      "patch": "--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -307,8 +307,8 @@\n           terms=\"$RUNNER_TEMP/forbidden-terms\"\n           printf '%s\\n' \"$FORBIDDEN_TERMS\" | tr -d '\\r' | grep -v '^[[:space:]]*#' | sed '/^[[:space:]]*$/d' > \"$terms\" || true\n           if [[ ! -s \"$terms\" ]]; then\n-            echo \"::error::The FORBIDDEN_TERMS secret is not set or holds no terms, so the forbidden-terms check cannot run (a pull request from a fork gets no secrets).\"\n-            exit 1\n+            echo \"::notice::The FORBIDDEN_TERMS secret is not set; the forbidden-terms check was skipped.\"\n+            exit 0\n           fi\n           matches=$(git grep -n -I -i -w -F -f \"$terms\") && status=0 || status=$?\n           rm -f \"$terms\" # hosted runners are discarded, but a self-hosted runner would keep the terms on disk\n",
+      "test_method": "scripts/main-protection.test.sh",
+      "expect": "fails: Forbidden terms: an unset secret fails: exit 0, want 1"
+    },
+    {
+      "id": "b5-forbidden-terms-prints-match",
+      "criterion": "AC3",
+      "patch": "--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -316,6 +316,7 @@\n           if [[ $status -eq 0 ]]; then\n             echo \"::error::Forbidden terms found (matching text withheld):\"\n             printf '%s\\n' \"$matches\" | cut -d: -f1,2\n+            printf '%s\\n' \"$matches\"\n             exit 1\n           elif [[ $status -gt 1 ]]; then\n             echo \"::error::git grep failed (exit $status).\"\n",
+      "test_method": "scripts/main-protection.test.sh",
+      "expect": "fails: Forbidden terms: the matching text was printed (the step prints the matching text beside file:line)"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/9.3-main-protection-test.txt",
+      "TestResults/9.3-main-protection-test-linux.txt",
+      "TestResults/9.3-ci-gates-test.txt",
+      "TestResults/9.3-deploy-workflow-test.txt",
+      "TestResults/9.3-run-breaks-test.txt",
+      "TestResults/9.3-actionlint.txt",
+      "TestResults/9.3-shellcheck.txt",
+      "TestResults/9.3-shellcheck-files.txt",
+      "TestResults/9.3-floor-guard.txt",
+      "TestResults/9.3-secret-scan.txt",
+      "TestResults/9.3-breaks-dry-run.txt",
+      "TestResults/9.3-b5-against-old-test.txt",
+      "TestResults/9.3-b5-against-fixed-test.txt"
+    ],
+    "diff_hash": "6e35ffee450a",
+    "diff_hash_command": "scripts/diff-hash.sh <worktree> HEAD",
+    "backend_suite": "not run: no backend, frontend or infra/tests file changes",
+    "tools": "macOS: jq 1.7.1, yq v4.54.1 (the session scratchpad copy), actionlint 1.7.12, shellcheck 0.11.0, gitleaks. Linux: mcr.microsoft.com/dotnet/sdk:10.0 (Ubuntu 24.04.5, arm64, bash 5.2.21) with jq 1.7 from apt and yq v4.54.1 linux_arm64 (gh release download URL, SHA-256 matched the release checksums file), under the stack lock."
+  },
+  "human_commands": [
+    {
+      "when": "Before 9.3 is pushed: the push runs CI on story/9.3, and the Forbidden terms step now fails without the secret. Run from the main checkout, where the gitignored terms file is.",
+      "command": "GH_TOKEN=\"$(gh auth token --user njabulozmnisi)\" gh secret set FORBIDDEN_TERMS --app actions -R njabulozmnisi/disputedesk < .claude/forbidden-terms.local",
+      "expect": "GH_TOKEN=\"$(gh auth token --user njabulozmnisi)\" gh secret list -R njabulozmnisi/disputedesk lists FORBIDDEN_TERMS"
+    },
+    {
+      "when": "Criterion 4: once 9.3's pull request shows ci-passed and security-passed successful from the GitHub Actions app. Run from a checkout of story/9.3.",
+      "command": "GH_TOKEN=\"$(gh auth token --user njabulozmnisi)\" gh api --method POST repos/njabulozmnisi/disputedesk/rulesets --input .github/rulesets/main.json --jq .id",
+      "expect": "prints the new ruleset's id"
+    },
+    {
+      "when": "Criterion 2, right after the ruleset.",
+      "command": "GH_TOKEN=\"$(gh auth token --user njabulozmnisi)\" gh api --method PATCH repos/njabulozmnisi/disputedesk -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false -F allow_auto_merge=true -F delete_branch_on_merge=true -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY",
+      "expect": "the repository JSON, with the seven fields as sent"
+    },
+    {
+      "when": "Reviewer's read-back of criterion 1 (GET only).",
+      "command": "diff <(jq -S . .github/rulesets/main.json) <(GH_TOKEN=\"$(gh auth token --user njabulozmnisi)\" gh api repos/njabulozmnisi/disputedesk/rulesets/<id> --jq '{name,target,enforcement,bypass_actors,conditions,rules}' | jq -S .)",
+      "expect": "no output, or only parameters GitHub adds (for example allowed_merge_methods or do_not_enforce_on_create), recorded in docs/verification/9.3-review.md"
+    },
+    {
+      "when": "Reviewer's read-back of criterion 2 (GET only).",
+      "command": "GH_TOKEN=\"$(gh auth token --user njabulozmnisi)\" gh api repos/njabulozmnisi/disputedesk --jq '{allow_squash_merge,allow_merge_commit,allow_rebase_merge,allow_auto_merge,delete_branch_on_merge,squash_merge_commit_title,squash_merge_commit_message}'",
+      "expect": "allow_squash_merge true, allow_merge_commit false, allow_rebase_merge false, allow_auto_merge true, delete_branch_on_merge true, squash_merge_commit_title PR_TITLE, squash_merge_commit_message PR_BODY"
+    },
+    {
+      "when": "Any later re-application, so there is one ruleset.",
+      "command": "GH_TOKEN=\"$(gh auth token --user njabulozmnisi)\" gh api --method PUT repos/njabulozmnisi/disputedesk/rulesets/<id> --input .github/rulesets/main.json",
+      "expect": "the same ruleset id"
+    }
+  ],
+  "assumptions": [
+    "The FORBIDDEN_TERMS Actions secret is not set on the repository today. gh secret list as the owner (GET, names only) lists no secrets, and main's last green CI run (42050744654, on 38c8183) logged the notice that the check was skipped. So the forbidden-terms check has never run in CI. With criterion 3, every CI run (main, story/** pushes, pull requests) fails at floor-guard until the secret is set. The first human command sets it, and infra/README.md (Repository settings) says so. Without it, criterion 4 cannot be met.",
+    "No Dependabot configuration exists. If one is added, its pull requests get Dependabot secrets only, so FORBIDDEN_TERMS must also be set with --app dependabot or their ci-passed fails (fail closed, as intended).",
+    "Every field name and enum in main.json was checked against GitHub's REST docs, fetched 2026-11-05 as markdown from docs.github.com/api/article/body: /en/rest/repos/rules (Create, Update (PUT, same body fields) and Get a repository ruleset) and /en/rest/repos/repos (Update a repository, the seven fields). squash_merge_commit_title is required when squash_merge_commit_message is sent, and both are sent.",
+    "integration_id 15368: GET apps/github-actions returns id 15368 (slug github-actions), and main's head 38c8183 has check runs ci-passed and security-passed from app 15368. The gate jobs have no name:, so their check runs carry the job ids, which the test pins.",
+    "The code_scanning rule: GitHub Docs (Set code scanning merge protection) offer it at the repository level through the REST code_scanning rule. The tool name CodeQL matches the code-scanning analyses on refs/heads/main, and Security runs CodeQL on pull_request. So there is no docs/production-path.md entry. This is not proved live until the human's POST. A 422 there would mean GitHub refuses the rule, and the gap would then go to docs/production-path.md, per the epic decision.",
+    "AC4 and AC5 are supervisor and human steps after the build. They have no test in the diff and no break.",
+    "The README commands name the owner and repository (njabulozmnisi/disputedesk) instead of <owner>/<name>, so they run as written. The ruleset id stays <id>.",
+    "shellcheck's SC2016 on the new test was fixed by escaping inside double quotes, not with a disable directive. No new suppression.",
+    "The Linux run used the native arm64 mcr.microsoft.com/dotnet/sdk:10.0 (Ubuntu 24.04.5), not amd64. An earlier amd64 pull of that tag retagged it on the shared daemon. The tag was pointed back at the local arm64 image (sdk:10.0.403-noble, 2f27d27a5fb6), and the amd64 image was removed.",
+    "The verifier needs yq v4 and jq on PATH for scripts/main-protection.test.sh, as for ci-gates.test.sh and deploy-workflow.test.sh. The runner image has both.",
+    "Fix round 1 changes only scripts/main-protection.test.sh. The same pipefail pattern and the bash --noprofile --norc -eo pipefail runner in ci-gates.test.sh and deploy-workflow.test.sh (9.2 review L2) are left to the epic batch, as the review says.",
+    "shellcheck-files lists tracked and untracked scripts (git ls-files -co), so the new, still untracked test is linted as CI will lint it once committed."
+  ],
+  "open_questions": [
+    "Set the FORBIDDEN_TERMS repository secret before 9.3 is pushed (the first human command). Until it is set, criterion 3 makes every CI run fail at floor-guard, main's included."
+  ],
+  "conflicts": [
+    "Boundaries say no check job may change what it runs except criterion 3's step. floor-guard gains one line, run: scripts/main-protection.test.sh, beside the other flow tests (ci-gates, run-breaks, deploy-workflow), so the ruleset file and the fail-closed step stay checked on every pull request. It adds a test of this story's files and changes no existing check. If the reviewer reads the boundary literally, dropping that line leaves the test runnable only locally."
+  ],
+  "fix_round": {
+    "round": 1,
+    "fixes": "9.3-fixes.md: M1 (the withheld-text case captures the step output first, then searches it, so it can fail; break b5 added) and L2 (the extracted step runs with bash -e, as GitHub runs a step with no shell:; comments corrected)",
+    "proof": "TestResults/9.3-b5-against-old-test.txt: b5 against the unfixed test, the test passed with the break (FAIL, exit 1). TestResults/9.3-b5-against-fixed-test.txt: b5 against the fixed test, failed as expected (exit 0). The fixed test with b5 applied prints: MAIN PROTECTION TEST FAIL: Forbidden terms: the matching text was printed"
+  }
+}

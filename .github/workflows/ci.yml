@@ -261,6 +261,7 @@ jobs:
       - run: scripts/ci-gates.test.sh
       - run: scripts/run-breaks.test.sh
       - run: scripts/deploy-workflow.test.sh
+      - run: scripts/main-protection.test.sh
 
       - name: Install actionlint
         run: |
@@ -297,6 +298,8 @@ jobs:
 
       # Same rule as the pre-commit hook: whole-word, case-insensitive, one term per line, # comments allowed.
       # Only file:line is printed, never the matching text, so the terms stay out of the log.
+      # With no terms it fails (story 9.3): ci-passed is a required check, and a pull request from a fork gets no
+      # secrets, so skipping would let it pass unchecked.
       - name: Forbidden terms
         env:
           FORBIDDEN_TERMS: ${{ secrets.FORBIDDEN_TERMS }}
@@ -304,8 +307,8 @@ jobs:
           terms="$RUNNER_TEMP/forbidden-terms"
           printf '%s\n' "$FORBIDDEN_TERMS" | tr -d '\r' | grep -v '^[[:space:]]*#' | sed '/^[[:space:]]*$/d' > "$terms" || true
           if [[ ! -s "$terms" ]]; then
-            echo "::notice::The FORBIDDEN_TERMS secret is not set; the forbidden-terms check was skipped."
-            exit 0
+            echo "::error::The FORBIDDEN_TERMS secret is not set or holds no terms, so the forbidden-terms check cannot run (a pull request from a fork gets no secrets)."
+            exit 1
           fi
           matches=$(git grep -n -I -i -w -F -f "$terms") && status=0 || status=$?
           rm -f "$terms" # hosted runners are discarded, but a self-hosted runner would keep the terms on disk
