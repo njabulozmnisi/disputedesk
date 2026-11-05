@@ -142,7 +142,7 @@ Source: [ad-012, CI and deploy follow GitHub flow](../decisions/ad-012-github-fl
 | Story | Title | Owner | Status |
 |---|---|---|---|
 | 9.1 | [Every check runs on pull requests and reports through two gate jobs](epic-9-github-flow-ci/tickets/story-9.1-every-check-runs-on-pull-requests-and-reports-through-two-gate-jobs.md) | backend | done |
-| 9.2 | [Deploy follows publish on main, behind a switch, and the deploy role trusts the dev environment](epic-9-github-flow-ci/tickets/story-9.2-deploy-follows-publish-on-main-behind-a-switch.md) | backend | planned |
+| 9.2 | [Deploy follows publish on main, behind a switch, and the deploy role trusts the dev environment](epic-9-github-flow-ci/tickets/story-9.2-deploy-follows-publish-on-main-behind-a-switch.md) | backend | done |
 | 9.3 | [Main is protected by a ruleset, and squash is the only merge method](epic-9-github-flow-ci/tickets/story-9.3-main-is-protected-by-a-ruleset-and-squash-is-the-only-merge-method.md) | backend | planned |
 | 9.4 | [Stories merge by squash through their pull request, and the guard bounds the flow](epic-9-github-flow-ci/tickets/story-9.4-stories-merge-through-their-pull-request-and-the-guard-bounds-the-flow.md) | backend | planned |
 
