@@ -17,7 +17,7 @@ are the only public entry. GitHub Actions deploys a commit through SSM Run Comma
 | `modules/compute` | The c7i-flex.large instance (AL2023, IMDSv2, no SSH), its Elastic IP, security group, role and user data. |
 | `modules/database` | RDS PostgreSQL 18 on db.t4g.micro, private, TLS required; the master password through write-only arguments. |
 | `modules/edge` | The three CloudFront distributions and the origin-verify value. |
-| `modules/deploy-role` | GitHub's OIDC provider, the deploy role, and the Run Command document it may send. The role trusts GitHub's immutable subject for `main`, `repo:<owner>@<owner-id>/<name>@<repo-id>:ref:refs/heads/main`, pinned by `envs/dev/tests/deploy_role.tftest.hcl` and confirmed once against the repository's OIDC settings before the first deploy (step 8). |
+| `modules/deploy-role` | GitHub's OIDC provider, the deploy role, and the Run Command document it may send. The role trusts GitHub's immutable subject for a job in the environment `dev`, which only `main` may deploy to, `repo:<owner>@<owner-id>/<name>@<repo-id>:environment:dev`, pinned by `envs/dev/tests/deploy_role.tftest.hcl` and confirmed once against the repository's OIDC settings before the first deploy (step 8). |
 | `modules/observability` | The collector's log group and stream, and X-Ray Transaction Search. |
 | `modules/budget` | The monthly cost budget and its two email alerts. |
 
@@ -206,9 +206,21 @@ first publish, set each one public once: the package's page, **Package settings*
 (GitHub, *Configuring a package's access control and visibility*). The instance then pulls them without a credential.
 While one is still private, `deploy.yml` fails at its digest lookup, before it sends anything to AWS.
 
-## 8. The repository variables and the first deploy
+## 8. The environment, the repository variables and the first deploy
 
-First, once, check the subject the deploy role trusts against the repository's OIDC settings (GitHub REST API, *Get the
+First, once, create the GitHub environment `dev` with a deployment branch policy that allows only `main` (GitHub REST
+API, *Deployment environments* and *Deployment branch policies*; `-F` sends typed booleans, `-f` strings, `gh api`
+manual). No required reviewers and no wait timer: one maintainer deploys continuously. Create it before any workflow
+references it: a run that references an environment that does not exist creates it with no protection rules (GitHub,
+*Managing environments for deployment*).
+
+```sh
+gh api --method PUT repos/<owner>/<name>/environments/dev \
+  -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'
+gh api --method POST repos/<owner>/<name>/environments/dev/deployment-branch-policies -f name=main -f type=branch
+```
+
+Then, once, check the subject the deploy role trusts against the repository's OIDC settings (GitHub REST API, *Get the
 customization template for an OIDC subject claim for a repository*):
 
 ```sh
@@ -216,13 +228,17 @@ gh api repos/<owner>/<name>/actions/oidc/customization/sub
 gh api repos/<owner>/<name> --jq '.owner.login, .owner.id, .name, .id'
 ```
 
-`use_immutable_subject` must be `true`, and `sub_claim_prefix` must carry the same owner, owner ID, repository name and
-repository ID as the subject pinned in `envs/dev/tests/deploy_role.tftest.hcl`,
-`repo:<owner>@<owner-id>/<name>@<repo-id>:ref:refs/heads/main` (story 7.15), with the IDs given to step 4 as
+`use_default` must be `true`, so GitHub's default `environment:dev` segment follows the prefix in a `dev` job's
+subject; `use_immutable_subject` must be `true`, and `sub_claim_prefix` must carry the same owner, owner ID, repository
+name and repository ID as the subject pinned in `envs/dev/tests/deploy_role.tftest.hcl`,
+`repo:<owner>@<owner-id>/<name>@<repo-id>:environment:dev` (story 7.15; ad-012), with the IDs given to step 4 as
 `TF_VAR_github_repository_owner_id` and `TF_VAR_github_repository_id`. On a mismatch, stop: do not deploy until the
 pinned subject and `modules/deploy-role` are corrected. Repeat the check after a repository transfer or rename, or a
 change to the repository's OIDC subject customisation. The API returns the repository's configuration, not a token
-issued to a job, so the first deploy's `AssumeRoleWithWebIdentity` is the end-to-end proof.
+issued to a job, and the mocked Terraform tests pin the subject but cannot prove the live role assumption: the first
+deploy's `AssumeRoleWithWebIdentity` is the end-to-end proof.
+
+Then set the four repository variables and run the first deploy by hand:
 
 ```sh
 cd infra/terraform/envs/dev
@@ -239,6 +255,14 @@ The commit must be on main (the deploy document stops on the instance, before ch
 `git merge-base --is-ancestor <sha> origin/main` succeeds) and its five images published. The workflow sends the deploy document to the instance and
 waits for its result; the job fails unless the command ends `Success`, and then prints the deploy script's standard
 error.
+
+Only after the first deploy succeeds, switch deploy on. From then on every `main` run deploys: CI's `deploy` job calls
+`deploy.yml` after `publish` with the five images it published. Until then CI's `deploy-switched-off` job prints them
+and sends nothing.
+
+```sh
+gh variable set DEPLOY_ENABLED --body true
+```
 
 ## A half-done database init
 
@@ -351,8 +375,20 @@ Run each once after the first deploy, and after any change to the Terraform or t
 
 ## Rollback
 
-Run `deploy.yml` with an earlier SHA of main whose images are still in GHCR. The Api does not roll migrations back, so
-a rollback past a migration relies on that migration staying compatible with the earlier code.
+Dispatch `deploy.yml` by hand with an earlier SHA of main whose images are still in GHCR; it resolves their digests and
+runs in the same environment and concurrency group as CI's deploys, so the two never interleave. While
+`DEPLOY_ENABLED` is on, switch deploy off first, or the next `main` run redeploys over the rollback, and switch it on
+again once the fix is on `main`:
+
+```sh
+gh variable set DEPLOY_ENABLED --body false
+gh workflow run deploy.yml --ref main -f sha=<the earlier SHA>
+# once the fix is on main:
+gh variable set DEPLOY_ENABLED --body true
+```
+
+The GitHub-flow alternative is a revert on `main`, which deploys like any other change. The Api does not roll
+migrations back, so a rollback past a migration relies on that migration staying compatible with the earlier code.
 
 ## Destroy
 

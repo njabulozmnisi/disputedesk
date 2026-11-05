@@ -1,5 +1,6 @@
-# Story 7.5, criterion 5, and story 7.15, criterion 1 (GitHub's immutable subject): a plan of the deploy-role module
-# against a mocked AWS provider. The policies are written with jsonencode, so jsondecode here reads the real documents.
+# Story 7.5, criterion 5, story 7.15, criterion 1 (GitHub's immutable subject), and ad-012 clause 4 (the environment
+# dev): a plan of the deploy-role module against a mocked AWS provider. The policies are JSON templates, so
+# jsondecode here reads the real documents.
 #   terraform init -backend=false && terraform test
 
 mock_provider "aws" {
@@ -20,12 +21,13 @@ variables {
   github_repository          = "example-owner/disputedesk"
   github_repository_owner_id = "123456"
   github_repository_id       = "456789"
+  github_environment         = "dev"
   instance_arn               = "arn:aws:ec2:eu-west-1:0000-0000-0000:instance/i-0000-0000-000000001"
   clone_directory            = "/opt/disputedesk"
   ssm_path                   = "/disputedesk/dev"
 }
 
-run "criterion_5_the_role_trusts_only_this_repository_main_branch" {
+run "criterion_5_the_role_trusts_only_this_repository_dev_environment" {
   command = plan
 
   module {
@@ -49,11 +51,11 @@ run "criterion_5_the_role_trusts_only_this_repository_main_branch" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:example-owner@123456/disputedesk@456789:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub" = "repo:example-owner@123456/disputedesk@456789:environment:dev"
         }
       }
     }]
-    error_message = "The trust policy is not exactly StringEquals on the audience and this repository's main branch."
+    error_message = "The trust policy is not exactly StringEquals on the audience and this repository's dev environment."
   }
 
   assert {
@@ -153,7 +155,7 @@ run "criterion_5_the_image_pattern_names_this_repository_owner_in_lower_case" {
   }
 
   assert {
-    condition     = jsondecode(aws_iam_role.deploy.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:Example-Owner@123456/disputedesk@456789:ref:refs/heads/main"
-    error_message = "The trust policy's subject does not keep the owner's case."
+    condition     = jsondecode(aws_iam_role.deploy.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:Example-Owner@123456/disputedesk@456789:environment:dev"
+    error_message = "The trust policy's subject does not keep the owner's case or name this repository's dev environment."
   }
 }
