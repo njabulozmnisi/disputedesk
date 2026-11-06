@@ -8,7 +8,7 @@ React with TypeScript, shadcn/ui on Tailwind, TanStack Query, TanStack Router.
 - **Routes with TanStack Router.** Every route, including the not-found route, is defined with TanStack Router (architecture AD-31).
 - **Forms with shadcn/ui's `Field` pattern.** Forms use shadcn/ui's current documented form pattern: `Field` with React Hook Form's `Controller` and a zod schema, each field wiring `aria-invalid` and `aria-describedby` itself (architecture AD-31). Each package is verified and pinned exactly when first added (AGENTS.md, Dependency verification).
 - **Theme tokens only.** Colour, type, spacing and radius come from the one theme file. No raw colours or pixel values in components. The brand is swappable in that file.
-- **WCAG 2.2 AA** (NFR-CODE-6), largely through Radix (via shadcn/ui): keyboard access, visible focus, labelled form errors, reflow at 320px, contrast as computed in DESIGN.md, one restrained accent. The axe scan in the Playwright E2E tests checks it.
+- **WCAG 2.2 AA** (NFR-CODE-6), largely through Radix (via shadcn/ui): keyboard access, visible focus, labelled form errors, reflow at 320px, contrast as computed in DESIGN.md, one restrained accent. axe checks it, in the Vitest tests (`vitest-axe`) and in the Playwright E2E tests.
 - **Plain-language copy.** Short sentences, no jargon, status visible at a glance. Mobile first.
-- **Tests.** Vitest with MSW handlers written in `src/test/support.tsx` (Orval generates no mocks: `mock: false`), `tsc --noEmit`, lint. Feature folders: `features/{linking,transactions,disputes}`.
+- **Tests.** Vitest with MSW: shared handlers and helpers in `src/test/`, and per-test overrides with `server.use` (Orval generates no mocks: `mock: false`), `tsc --noEmit`, lint. Feature folders: `features/{linking,transactions,disputes}`.
 - **Strict TypeScript.** `tsconfig` has `strict: true`; no `any` (lint rule).

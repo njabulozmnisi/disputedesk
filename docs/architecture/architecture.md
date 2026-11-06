@@ -7,7 +7,7 @@ paradigm: Clean Architecture (ports and adapters) with feature folders, plus ser
 scope: The whole DisputeDesk initiative - Api host (browser sessions and REST), Worker, core-banking stub, SPA, Compose platform, CI and the AWS dev environment
 status: final
 created: '2026-10-26'
-updated: '2026-11-04'
+updated: '2026-11-06'
 binds: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R33, R34, R35, R36, R37, R38, R39, R40, R41]
 sources:
   - docs/initiative-disputedesk.md
@@ -49,8 +49,10 @@ Each AD states its current rule only: **Rule** (two to five sentences), **Detail
 flowchart LR
   Api --> Application
   Api --> Infrastructure
+  Api --> Contracts
   Worker --> Application
   Worker --> Infrastructure
+  Worker --> Contracts
   Infrastructure --> Application
   Application --> Domain
   Application --> Contracts
@@ -58,7 +60,7 @@ flowchart LR
   Stub["CoreBankingStub: no project references"]
 ```
 
-Only these arrows are allowed. Api and Worker reach Contracts transitively. The architecture tests enforce the graph: `LayerTests` checks that Domain and the stub reference no other project, that Contracts references Domain and no other project, that Application never references Infrastructure, the hosts or Npgsql, that only Infrastructure implements `IAppDbContext` and the three ports, and that Api and Worker are the only hosts; `OwnershipRulesTests` checks the `IgnoreQueryFilters(["Ownership"])` and `AddDbContextPool` rules (AD-11).
+Only these arrows are allowed. The architecture tests enforce the graph: `LayerTests` checks that Domain and the stub reference no other project, that Contracts references Domain and no other project, that Application never references Infrastructure, the hosts or Npgsql, that only Infrastructure implements `IAppDbContext` and the three ports, and that Api and Worker are the only hosts; `OwnershipRulesTests` checks the `IgnoreQueryFilters(["Ownership"])` and `AddDbContextPool` rules (AD-11).
 
 ## Invariants & Rules
 
@@ -502,7 +504,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 
 - **Binds:** R33, R34, R35
 - **Prevents:** each story bolting its own job onto CI; unclear images in GHCR
-- **Rule:** `ci.yml` jobs: `backend` (P0-4, plus the migrations drift check), `frontend` (`tsc --noEmit`, ESLint, Prettier, Vitest, Orval regeneration drift), `platform` (Compose validation), and `e2e` (Compose up, Playwright journeys with an axe scan, ZAP baseline). `security.yml` (P0-4) stays. Every check job runs on every pull request and every `main` push, with no docs-only skip. `e2e-regression` is the one path-scoped suite (countermeasure A3, approved 2026-11-05): the job runs on every pull request and every `main` push, runs the regression suite (`e2e/run-regression.sh`) only on a pull request whose changed paths match a line of `scripts/regression-paths.list`, and otherwise passes with a notice. Two gate jobs report the result: `ci-passed` in `ci.yml` and `security-passed` in `security.yml` each need every check job of their workflow, run with `if: always()` and fail unless each succeeded, so a later job left out of a gate's `needs` fails a `floor-guard` step. The pinned Compose and Trivy installs are the local composite actions under `.github/actions/` (ad-012). On main a `publish` job, the only one with `packages: write`, pushes `api`, `worker`, `gateway` (with the SPA), `core-banking` and `zitadel` to GHCR, tagged `sha-` plus the first 12 characters of the commit SHA, and the deploy references digests. `deploy.yml` only consumes the published images by digest: CI's `deploy` job calls it with `publish`'s five digests, and it is dispatched by hand for rollback. A ruleset on `main` (`.github/rulesets/main.json`) requires a pull request, the `ci-passed` and `security-passed` checks on an up-to-date branch and CodeQL's code-scanning results, and blocks force pushes and deletion; the repository allows squash merging only, with auto-merge and branch deletion on merge (ad-012 clause 2). A pull request's checks test GitHub's merge of the up-to-date branch, and `main`'s own run builds, scans and publishes the squash commit (ad-012 clause 6).
+- **Rule:** `ci.yml` jobs: `backend` (P0-4, plus the migrations drift check), `frontend` (`tsc --noEmit`, ESLint, Prettier, Vitest, Orval regeneration drift), `platform` (Compose validation, the platform tests and their format checks), `terraform` (fmt, validate and mocked tests), `floor-guard`, and `e2e` (Compose up, Playwright journeys with an axe scan, ZAP baseline); then `e2e-regression`, `publish`, `deploy`, `deploy-switched-off` and the `ci-passed` gate. `security.yml` (P0-4) stays. Every check job runs on every pull request and every `main` push, with no docs-only skip. `e2e-regression` is the one path-scoped suite (countermeasure A3, approved 2026-11-05): the job runs on every pull request and every `main` push, runs the regression suite (`e2e/run-regression.sh`) only on a pull request whose changed paths match a line of `scripts/regression-paths.list`, and otherwise passes with a notice. Two gate jobs report the result: `ci-passed` in `ci.yml` and `security-passed` in `security.yml` each need every check job of their workflow, run with `if: always()` and fail unless each succeeded, so a later job left out of a gate's `needs` fails a `floor-guard` step. The pinned Compose and Trivy installs are the local composite actions under `.github/actions/` (ad-012). On main a `publish` job, the only one with `packages: write`, pushes `api`, `worker`, `gateway` (with the SPA), `core-banking` and `zitadel` to GHCR, tagged `sha-` plus the first 12 characters of the commit SHA, and the deploy references digests. `deploy.yml` only consumes the published images by digest: CI's `deploy` job calls it with `publish`'s five digests, and it is dispatched by hand for rollback. A ruleset on `main` (`.github/rulesets/main.json`) requires a pull request, the `ci-passed` and `security-passed` checks on an up-to-date branch and CodeQL's code-scanning results, and blocks force pushes and deletion; the repository allows squash merging only, with auto-merge and branch deletion on merge (ad-012 clause 2). A pull request's checks test GitHub's merge of the up-to-date branch, and `main`'s own run builds, scans and publishes the squash commit (ad-012 clause 6).
 - **Rejected:** a separate CI system; `latest` tags.
 
 ## Consistency Conventions
@@ -515,7 +517,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 | Casing | C# enum members PascalCase (`UnderReview`, `StartReview`). Wire values in API JSON and event payloads, including ProblemDetails extension fields, camelCase through one converter factory creating `CamelCaseNameOnlyEnumConverter<TEnum>` (AD-5), the same style as Microsoft Graph enums; a JSON request body's enum is read only from its exact camelCase name, and a number, a list or any other casing is refused. Enum values in Postgres `text` columns are the C# member names (`HasConversion<string>()`). Zitadel role keys use the same camelCase after the `dispute.` prefix (`dispute.startReview`, AD-9). Table, column and constraint names PascalCase, the EF Core default (plural tables, `Id` keys, `<EntityName>Id` foreign keys, `...Utc` instants). No DisputeDesk-defined name is snake_case; the only snake_case left belongs to protocols, tools and infrastructure (OIDC parameters, OpenTelemetry attributes, Postgres functions, the `qa_readonly` role). Route segments and problem `type` slugs kebab-case. Topic `disputedesk.disputes`; CloudEvents `type` dotted lowercase (`disputedesk.dispute.status-changed.v1`). Metric names OpenTelemetry style (`disputedesk.disputes.raised`). Test methods `Method_Scenario_Expected` (`Withdraw_WhenResolved_Returns409`) |
 | Internal enum values (wire) | statuses `submitted`, `underReview`, `escalated`, `resolved`, `withdrawn`; actions `raise`, `startReview`, `escalate`, `resolve`, `withdraw`; outcomes `upheld`, `rejected`; actor types `customer`, `operations`, `automation`; reasons `unrecognised`, `duplicateCharge`, `wrongAmount`, `notReceived`, `cancelledSubscription`, `refundNotProcessed`. Stored in Postgres as `Submitted`, `UnderReview`, `StartReview`, `DuplicateCharge` and so on |
 | Customer enum values (wire) | `customerStatus`: `submitted`, `underReview`, `underReviewPrioritised`, `resolved`, `withdrawn`; `actor`: `you`, `theBank`; `notDisputableReason`: `alreadyDisputed`, `outsideWindow`, `notEligible`; session `state`: `anonymous`, `unlinked`, `linked` |
-| Database | Plural PascalCase tables, PascalCase columns matching the C# properties; `Id` primary keys, `<EntityName>Id` foreign keys; constraints `PK_<Table>`, `FK_<Dependent>_<Principal>_<Column>`, `IX_<Table>_<Columns>`, `UQ_<Table>_<Columns>` (via `HasDatabaseName`), `CK_<Table>_<Description>`; UTC instants are `timestamptz` columns ending in `Utc`; `numeric(19,2)` plus `Currency char(3)`; enums stored as `text` C# member names (PascalCase); no time defaults; handwritten SQL double-quotes identifiers; no naming-convention package. Database, role and Compose names (`disputedesk`, `qa_readonly`) are infrastructure names and keep their own style |
+| Database | Plural PascalCase tables, PascalCase columns matching the C# properties; `Id` primary keys, `<EntityName>Id` foreign keys; constraints `PK_<Table>`, `FK_<Dependent>_<Principal>_<Column>`, `IX_<Table>_<Columns>`, `UQ_<Table>_<Columns>` (via `HasDatabaseName`), `CK_<Table>_<Description>`; UTC instants are `timestamptz` columns ending in `Utc`; `numeric(19,2)` plus `Currency varchar(3)`; enums stored as `text` C# member names (PascalCase); no time defaults; handwritten SQL double-quotes identifiers; no naming-convention package. Database, role and Compose names (`disputedesk`, `qa_readonly`) are infrastructure names and keep their own style |
 | Timestamps in JSON | RFC 3339 UTC as System.Text.Json writes a UTC `DateTimeOffset`: offset `+00:00`, fractional seconds as written. `transactionDate` is the instant, which the SPA renders in South African time |
 | Errors | ProblemDetails only (AD-3) |
 | Logging | Message templates. Never log ID numbers, OTPs, full account or card numbers, notes, tokens, or request bodies on linking routes |
@@ -527,7 +529,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 
 | Name | Version |
 | --- | --- |
-| .NET SDK / runtime | 10.0.403 / 10.0.14 (pinned exactly in `global.json`, the Dockerfile and `Directory.Packages.props`; bump the SDK, runtime and every `Microsoft.*` 10.0.x package together; stay on 10.0.x when .NET 11 ships) |
+| .NET SDK / runtime | 10.0.403 / 10.0.14 (pinned exactly in `backend/global.json` and `infra/tests/global.json`, the Dockerfile and `Directory.Packages.props`; bump the SDK, runtime and every `Microsoft.*` 10.0.x package together; stay on 10.0.x when .NET 11 ships) |
 | EF Core / Npgsql EF provider | 10.0.14 / 10.0.3 |
 | OpenIdConnect, JwtBearer, DataProtection.EntityFrameworkCore | same patch as the runtime (10.0.14) |
 | Microsoft.Extensions.Http.Resilience | 10.11.0 |
@@ -542,10 +544,10 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 | Mailpit | v1.32.0 |
 | Node | 24.22.1 (`.nvmrc`) |
 | React / Vite | 19.3.1 / 8.3.5 |
-| TypeScript | 6.0.3 (typescript-eslint 8.72.0 needs a version below 6.1.0; TypeScript 7.0.2 is out) |
-| Tailwind CSS / Orval / TanStack Query | 4.3.3 / 8.45.0 / 5.104.5 |
+| TypeScript | 6.0.3 (typescript-eslint 8.72.1 needs a version below 6.1.0; TypeScript 7.0.2 is out) |
+| Tailwind CSS / Orval / TanStack Query | 4.3.3 / 8.45.0 / 5.105.0 |
 | Playwright | 1.64.1 |
-| Terraform / hashicorp/aws | 1.17.0 / 6.70.0 |
+| Terraform / hashicorp/aws | 1.17.1 / 6.71.0 |
 
 Versions were checked against nuget.org, npm and the HashiCorp registry on 2026-10-26, or read from merged code. Each story re-verifies its versions and pins them exactly on first use (AGENTS.md). Pins not listed here (collector image, ESLint, Prettier, TanStack Router, React Hook Form, zod, `@axe-core/playwright`, the OpenTelemetry web SDK, the RDS minor version) are set by their owning stories.
 
@@ -557,7 +559,7 @@ Versions were checked against nuget.org, npm and the HashiCorp registry on 2026-
 flowchart LR
   B[Browser SPA] -->|localhost:8080 and auth.localhost:8080| GW[gateway nginx]
   GW -->|static SPA| SPA[SPA files]
-  GW -->|/api/*| API[api: browser sessions, REST, relay and SLA sweep]
+  GW -->|/api/*, /scalar/, /openapi/v1.json| API[api: browser sessions, REST, relay and SLA sweep]
   GW -->|/otlp/*| ASP[aspire-dashboard]
   GW -->|auth host| Z[zitadel, provisioned by its post_start hook]
   API -->|OIDC back channel via gateway alias| GW
@@ -577,17 +579,20 @@ flowchart LR
   subgraph EC2[EC2 c7i-flex.large: Compose plus aws override]
     GW[nginx] --> API[api]
     GW --> Z[zitadel]
-    GW -->|/otlp/| COL[otel collector contrib]
+    GW -->|mail host| MP
     WK[worker] --> RP[redpanda]
     API --> CB[core-banking stub]
     API --> MP[mailpit, UI behind basic auth]
-    API --> COL
+    Z -->|SMTP| MP
+    API --> COL[otel collector contrib]
     WK --> COL
   end
   U[Browser] -->|HTTPS| CFA[CloudFront app]
   U -->|HTTPS| CFZ[CloudFront auth]
+  U -->|HTTPS| CFM[CloudFront mail]
   CFA -->|HTTP 80 with origin secret| GW
   CFZ -->|HTTP 80 with origin secret| GW
+  CFM -->|HTTP 80 with origin secret| GW
   API --> RDS[(RDS Postgres db.t4g.micro)]
   WK --> RDS
   Z --> RDS
@@ -659,7 +664,7 @@ erDiagram
     text Note
     numeric ExpectedAmount "numeric(19,2), wrong amount only"
     numeric DisputedAmount "numeric(19,2)"
-    text Currency "ZAR"
+    text Currency "varchar(3), ZAR"
     text Status
     text Outcome
     int Version "latest stored event Version; disputeVersion"
@@ -695,7 +700,7 @@ erDiagram
   IdempotencyKeys {
     uuid Id PK
     text CustomerId "UQ_IdempotencyKeys_CustomerId_Key"
-    text Key
+    text Key "varchar(255)"
     uuid LeaseId
     bytea RequestHash
     text Status "InProgress, Completed"
@@ -712,12 +717,10 @@ erDiagram
     text Result
     text ActorType
     text ActorId
-    text LoginSub
     text CustomerId
     uuid DisputeId "no FK: linking entries have none"
     inet ClientIp
     text TraceId
-    jsonb Details "never an ID number"
   }
   Sessions {
     uuid Id PK
@@ -732,10 +735,10 @@ erDiagram
     text FriendlyName
     text Xml
   }
-  CustomerLinks ||--o{ Disputes : "CustomerId"
-  Disputes ||--|{ StoredEvents : "stream"
-  Disputes ||--o{ OutboxMessages : "dispute events"
-  Disputes ||--o{ AuditLogEntries : "refused actions and reads"
+  Disputes ||--|{ StoredEvents : "stream (FK)"
+  Disputes ||--o{ OutboxMessages : "dispute events (FK)"
+  CustomerLinks ||..o{ Disputes : "CustomerId, no FK"
+  Disputes |o..o{ AuditLogEntries : "DisputeId, no FK"
 ```
 
 ### Endpoint map
@@ -747,6 +750,7 @@ erDiagram
 | Customer | cookie, `Linked` | `GET /api/v1/transactions`, `POST /api/v1/disputes` (Idempotency-Key, 201), `GET /api/v1/disputes`, `GET /api/v1/disputes/<disputeId>`, `POST /api/v1/disputes/<disputeId>/withdraw` |
 | Operations | bearer, one role each | `GET /api/v1/operations/disputes/<disputeId>` (`dispute.read`), `POST .../start-review`, `.../escalate`, `.../resolve` |
 | Health | none | `/health/live`, `/health/ready` (gateway: `/api/health/*`) |
+| API reference | none; served only when `Scalar:Enabled` is true | `GET /openapi/v1.json`, `/scalar/` |
 
 ### Source tree additions
 
@@ -777,7 +781,7 @@ The repository uses one top-level folder per stack (`backend/`, `frontend/`, `e2
 | Testing (important) | Domain unit tests, Testcontainers integration tests, OpenAPI and event contract tests, Playwright and ZAP on the stack | AD-13, AD-19, AD-32, conventions |
 | Observability | One trace from browser to the relay, named business metrics, Aspire and CloudWatch | AD-20, AD-29 |
 | Infrastructure and DevOps | Zero-click Compose, CI and GHCR, the Terraform dev environment, OIDC deploy | AD-26, AD-27, AD-28, AD-32 |
-| Documentation | This spine and its [amendment history](spine-amendments.md), plus the decision records in `docs/decisions/`: ad-001 to ad-003 and ad-005 to ad-011 (Zitadel, `IAppDbContext`, Result types, QA data integrity, actor-agnostic actions, browser session, linking, stored events, Redpanda, team folders); the delivery-process record ad-004 (model roles) is in `docs/process/` | all |
+| Documentation | This spine and its [amendment history](spine-amendments.md), plus the decision records in `docs/decisions/`: ad-001 to ad-003 and ad-005 to ad-012 (Zitadel, `IAppDbContext`, Result types, QA data integrity, actor-agnostic actions, browser session, linking, stored events, Redpanda, team folders, GitHub flow CI); the delivery-process record ad-004 (model roles) is in `docs/process/` | all |
 
 | Requirement | Governed by |
 | --- | --- |

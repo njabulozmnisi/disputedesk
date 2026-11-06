@@ -4,6 +4,8 @@ How DisputeDesk is planned, built, verified and shipped with AI agents, and wher
 
 ## 1. The lifecycle
 
+The initial plan, as it ran for epics 1 to 7. New work since then enters as a feature spec, `docs/backlog/story-<id>.md`, listed in the Features table of `docs/tickets/README.md`, and goes straight to section 2.
+
 ```mermaid
 flowchart TB
     classDef human fill:#fde68a,stroke:#b45309,color:#111
@@ -75,7 +77,7 @@ sequenceDiagram
         SEC-->>N: High-severity findings escalated for a decision
     end
     opt High or medium findings (at most two rounds, then the human)
-        S->>B: <id>-fixes.md to a fresh builder; the stages re-run on the delta
+        S->>B: <id>-fixes.md to a fresh builder, then the stages re-run on the delta
     end
     opt Story changes a user journey, the HTTP surface, data or events
         S->>Q: QA in that worktree
@@ -85,7 +87,7 @@ sequenceDiagram
     S->>S: Commit on feature/<id>, push, open the pull request (base main, or feature/<base> when stacked)
     S->>S: Wait for its required checks, arm squash auto-merge on base main pinned to the checked head
     S->>S: Confirm the squash commit, wait for main's CI and Security runs on it (publish)
-    S-->>N: Report after the merge; High-stakes diffs in the review blocks
+    S-->>N: Report after the merge, with High-stakes diffs in the review blocks
 ```
 
 Before dispatch the supervisor runs `scripts/check-ready.sh <id>`, which fails while a `[story]` point in the pre-build review has no Sofia disposition, a `[decision]` point exists but the feature spec's front matter lacks `decisions: settled` (the supervisor sets it, citing `docs/verification/decisions.md`, once the human has answered), or a feature spec in the `after` list (`story-<id>`) is neither done (its Features row in `docs/tickets/README.md` reads `done`) nor pushed as a `feature/<id>` branch on origin.
@@ -148,7 +150,7 @@ flowchart LR
     PC --> G8[No secrets or forbidden terms reach history]
 ```
 
-Every check job runs on every pull request and on every push to main, a docs-only change included (ad-012, clause 1), and `ci-passed` and `security-passed` gate them. The ZAP baseline is one of them, so QA runs no ZAP scan of its own.
+Every check job runs on every pull request and on every push to main, a docs-only change included (ad-012, clause 1), and `ci-passed` and `security-passed` gate them. The one exception is `e2e-regression`: it runs its suite only when a pull request touches a path in `scripts/regression-paths.list`, and otherwise passes with a notice (AD-32). The ZAP baseline is one of them, so QA runs no ZAP scan of its own.
 
 ## Agents, skills and files
 

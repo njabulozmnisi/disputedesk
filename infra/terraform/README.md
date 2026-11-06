@@ -1,89 +1,93 @@
 # The AWS dev environment
 
-**This procedure has not been run.** The AWS account does not exist yet, so the Terraform here has been checked only
-with `terraform fmt`, `terraform validate` and `terraform test` plans against mocked providers, and no AWS command has
-been run (decided 2026-10-30). Before any real use, run the procedure below once, end to end, with its post-deploy
-checks.
+**Status:**
+- Steps 1–3 are done, except step 1.4: CloudFront verification is still open.
+- Step 4's first apply created the network, instance and database. The three CloudFront distributions wait on account
+  verification (step 1.4).
+- Steps 5–8 and the post-deploy checks have not been run yet, so the application has never been deployed.
 
-One environment (AD-28): one EC2 instance runs the same Compose stack as local development plus
-`infra/deploy/aws/compose.yml`, RDS PostgreSQL holds both databases, and three CloudFront distributions (app, auth, mail)
-are the only public entry. GitHub Actions deploys a commit through SSM Run Command with an OIDC role and no stored key.
+There is one environment (AD-28):
+- one EC2 instance runs the same Compose stack as local, plus `infra/deploy/aws/compose.yml`;
+- RDS PostgreSQL holds both databases;
+- three CloudFront distributions (app, auth, mail) are the only public entry;
+- GitHub Actions deploys through SSM Run Command, with an OIDC role and no stored key.
+
+[infra/README.md](../README.md#deployed-on-aws) has the architecture diagram.
+
+```mermaid
+flowchart LR
+    S1[1 Account<br/>+ CloudFront verified] --> S2[2 Admin sign-in] --> S3[3 State bucket] --> S4[4 terraform apply]
+    S4 --> S5[5 Secrets] --> S6[6 Budget alert] --> S7[7 Public images] --> S8[8 dev environment,<br/>variables, first deploy]
+    S8 --> C[Post-deploy checks] --> ON[DEPLOY_ENABLED=true]
+```
 
 | Folder | What |
 |---|---|
-| `bootstrap/` | The S3 bucket for `envs/dev`'s state. Local state, applied once; `terraform destroy` of `envs/dev` leaves it. |
-| `envs/dev/` | The one root: the KMS key, the SSM values the deploy script reads, and the modules below. |
-| `modules/network` | VPC, a public subnet with an internet gateway (no NAT gateway), two private subnets for RDS. |
-| `modules/compute` | The c7i-flex.large instance (AL2023, IMDSv2, no SSH), its Elastic IP, security group, role and user data. |
-| `modules/database` | RDS PostgreSQL 18 on db.t4g.micro, private, TLS required; the master password through write-only arguments. |
-| `modules/edge` | The three CloudFront distributions and the origin-verify value. |
-| `modules/deploy-role` | GitHub's OIDC provider, the deploy role, and the Run Command document it may send. The role trusts GitHub's immutable subject for a job in the environment `dev`, which only `main` may deploy to, `repo:<owner>@<owner-id>/<name>@<repo-id>:environment:dev`, pinned by `envs/dev/tests/deploy_role.tftest.hcl` and confirmed once against the repository's OIDC settings before the first deploy (step 8). |
-| `modules/observability` | The collector's log group and stream, and X-Ray Transaction Search. |
-| `modules/budget` | The monthly cost budget and its two email alerts. |
+| `bootstrap/` | The S3 state bucket for `envs/dev`. It has local state and is applied once |
+| `envs/dev/` | The one root: the KMS key, the SSM values the deploy reads, and the modules |
+| `modules/network` | A VPC with one public subnet (internet gateway, no NAT) and two private subnets for RDS |
+| `modules/compute` | The c7i-flex.large instance (AL2023, IMDSv2, no SSH), its Elastic IP, security group, role and user data |
+| `modules/database` | RDS PostgreSQL 18 on db.t4g.micro, private, TLS required, with the master password in write-only arguments |
+| `modules/edge` | The three CloudFront distributions and the origin-verify value |
+| `modules/deploy-role` | GitHub's OIDC provider, the deploy role (trusted only for the `dev` environment, which only `main` may use), and its Run Command document |
+| `modules/observability` | The collector's log group, and X-Ray Transaction Search |
+| `modules/budget` | The monthly cost budget and its two email alerts |
 
-Every IAM policy document is a `<name>.json.tftpl` file beside its `main.tf` (the two trust policies and the two role
-policies in `modules/deploy-role` and `modules/compute`, the Transaction Search policy in `modules/observability`, the
-state bucket policy in `bootstrap`), rendered with `templatefile()`. Each is valid JSON before rendering, with its
-placeholders only inside JSON strings, so `IamNamesTests` in the infra test project (`infra/tests`) reads every action
-and condition key from the files with `System.Text.Json` and checks it against AWS's public service reference (no AWS
-call). The values are ARNs, IDs, the region, paths and the OIDC subject, none of which holds a `"` or `\`; each module
-input that reaches a template refuses both in a `validation` block, and a value that could hold one would need
-`jsonencode()`. The mocked Terraform tests pin each rendered policy that takes a value; the compute trust policy has no
-placeholders.
+- Every IAM policy is a `<name>.json.tftpl` file beside its `main.tf`.
+- `IamNamesTests` in `infra/tests` checks every action in those files against AWS's public service reference.
 
-What to know before applying it:
+## Know before you apply
 
-- **The fixture logins are live.** The customer and operations logins whose passwords are published in
-  [`backend/fixtures/local.json`](../../backend/fixtures/local.json) work on the AWS demo. It holds only synthetic data.
-- **CloudFront reaches the origin over plain HTTP**, and the default `*.cloudfront.net` certificate allows TLS 1.0
-  viewers. There is no WAF. An HTTPS or VPC origin, a domain with an ACM certificate (TLS 1.2 minimum) and WAF come
-  before any real data (production path).
-- **The instance's managed policies are broader than least privilege.** `AmazonSSMManagedInstanceCore` can read every
-  SSM parameter in the account and `CloudWatchAgentServerPolicy` can write to any log group. This is accepted because
-  the account is dedicated to this environment; AWS's documented minimal instance policy is a production-path item.
-- **A compromise of the Api or the collector exposes every deploy secret.** Those two containers reach the instance
-  metadata service, so they hold the instance role, which can read and decrypt everything under `/disputedesk/dev`:
-  the RDS master password, Zitadel's master key and every other SecureString. Separating the deploy's secrets from the
-  containers' credentials is a production-path item.
-- **The gateway's realip file can drift.** The deploy script writes CloudFront's origin-facing ranges from
-  `ip-ranges.json` at each deploy; the security group's managed prefix list follows AWS's changes at once, the file only
-  at the next deploy.
-- **One secret is in Terraform state:** the origin-verify value, because CloudFront's origin header needs it in the
-  plan. The RDS master password reaches RDS and SSM through write-only arguments and never enters state. The state
-  bucket is private, versioned, encrypted and HTTPS only.
-- **The Zitadel console is not exposed in AWS.** The gateway answers 404 on `/ui/console`; nothing in the demo needs it.
+| Risk | Accepted because | Production path |
+|---|---|---|
+| The fixture logins and their published passwords work on AWS | Only synthetic data is held | [P50](../../docs/production-path.md#p50-demo-logins-in-aws) |
+| CloudFront reaches the origin over plain HTTP. The default certificate allows TLS 1.0, and there is no WAF | No real data | [P52](../../docs/production-path.md#p52-edge-transport) |
+| The instance's managed SSM and CloudWatch policies are broader than least privilege | The account is dedicated | [P56](../../docs/production-path.md#p56-instance-role) |
+| The api and the collector reach instance metadata, so a compromise of either exposes every deploy secret | No real data | [P61](../../docs/production-path.md#p61-deploy-secrets-apart-from-the-containers-credentials) |
+| The gateway's CloudFront IP list is refreshed only at each deploy | The security group's prefix list follows AWS at once | |
+
+- **Terraform state holds three secrets:** the origin-verify value (twice: the generated value and its SSM copy) and
+  the budget email address.
+- The RDS master password never enters state, because it is passed in write-only arguments.
+- The state bucket is private, versioned, encrypted and HTTPS-only.
+- **The repository must be public.** The instance clones it and fetches from it anonymously.
+- **A fork or rename** must also change the `ghcr.io/njabulozmnisi/` image owner in `.github/workflows/deploy.yml` and
+  `ci.yml`.
+- The Zitadel console is not exposed: the gateway answers 404 on `/ui/console`.
+
+**Known issue.** `rds.force_ssl` has no `apply_method`, so every plan shows a one-line diff on the parameter group. It is
+harmless, because PostgreSQL 15 and later default to 1 on RDS.
 
 ## Tools
 
 - Terraform 1.17.1 (CI's version; any 1.11 or later works).
 - AWS CLI 2.32.0 or later, for `aws login`.
-- `gh`, signed in to the repository, for the repository variables and the deploy.
+- `gh`, signed in to the repository.
 
-Every command below runs from the repository root unless it says otherwise, with `REGION` set to one of `af-south-1`,
-`us-east-1`, `us-west-2`, `eu-west-1` or `eu-central-1` (`af-south-1` is an opt-in region: enable it in the account
-first):
+Run every command from the repository root unless it says otherwise. The region is one of `af-south-1`, `us-east-1`,
+`us-west-2`, `eu-west-1` or `eu-central-1`:
 
 ```sh
-export REGION=eu-west-1
+export REGION=af-south-1
 ```
 
 ## 1. The account
 
 1. Create a new AWS account on the free plan.
-2. Turn on MFA for the root user. Create no access keys for the root user, ever.
+2. Turn on MFA for the root user. Never create access keys for it.
+3. Enable the opt-in region if you chose `af-south-1`: Account, AWS Regions.
+4. Get the account verified for CloudFront. A new account cannot create distributions until it is: open a support
+   case under Account and billing.
 
 ## 2. The administrator's sign-in (temporary credentials only)
 
-The maintainer signs in as an IAM user with a console password and MFA, and uses `aws login`, which turns that console
-sign-in into temporary credentials for the CLI (AWS CLI, *Login for AWS local development using console credentials*).
-IAM Identity Center is not used: an account instance of Identity Center gives no access to AWS accounts, and an
-organization instance needs AWS Organizations, which ends the free plan's credits (IAM Identity Center, *Account
-instances*; AWS Free Tier FAQs).
+Sign in as an IAM user with a console password and MFA. `aws login` turns that console sign-in into temporary CLI
+credentials. IAM Identity Center is not used, because its organisation instance ends the free plan's credits.
 
-1. Signed in as root, create the IAM user `admin` with console access and a password, attach `AdministratorAccess` and
+1. As root, create the IAM user `admin` with console access. Attach `AdministratorAccess` and
    `SignInLocalDevelopmentAccess`, and give it **no access keys**.
-2. Sign in to the console as `admin` and assign an MFA device to it. Sign out of the root user.
-3. On the maintainer's machine:
+2. Sign in as `admin`, assign it an MFA device, and sign out of root.
+3. On your machine:
 
    ```sh
    aws login --profile disputedesk --region "$REGION"
@@ -91,10 +95,8 @@ instances*; AWS Free Tier FAQs).
    aws sts get-caller-identity          # shows the admin user's ARN
    ```
 
-   If Terraform's AWS provider does not yet read the `aws login` session (step 4's `terraform plan` stops with "No
-   valid credential sources found"), give it the same temporary credentials through a process profile, the workaround
-   the AWS CLI page for `aws login` gives (*Sharing Login credentials as process credentials*). The CLI keeps
-   refreshing them:
+   Terraform's AWS provider may not yet read the `aws login` session: step 4's plan then stops with "No valid credential
+   sources found". If so, expose the same credentials through a process profile:
 
    ```sh
    cat >> ~/.aws/config <<EOF
@@ -104,11 +106,9 @@ instances*; AWS Free Tier FAQs).
    region = $REGION
    EOF
    export AWS_PROFILE=disputedesk-process
-   aws sts get-caller-identity          # the same admin user's ARN
    ```
 
-Never run `aws iam create-access-key`, and never put static keys into `aws configure` (AWS IAM, *Security best
-practices*, temporary credentials for people).
+Never run `aws iam create-access-key`, and never put static keys into `aws configure`.
 
 ## 3. The state bucket (once)
 
@@ -119,21 +119,21 @@ terraform apply -var "aws_region=$REGION" -var "state_bucket_name=disputedesk-tf
 cd -
 ```
 
-`bootstrap/terraform.tfstate` is local and ignored by git. Keep it to destroy the bucket at the very end.
+Keep `bootstrap/terraform.tfstate`, which is local and gitignored. It is needed to destroy the bucket at the end.
 
 ## 4. The environment
 
-First check that the region offers the instance and database classes (each command lists at least one row):
+Check that the region offers both classes. Each command prints a value:
 
 ```sh
-aws ec2 describe-instance-type-offerings --region "$REGION" --filters Name=instance-type,Values=c7i-flex.large
-aws rds describe-orderable-db-instance-options --region "$REGION" --engine postgres --engine-version 18 \
-  --db-instance-class db.t4g.micro --query 'OrderableDBInstanceOptions[0].EngineVersion'
+aws ec2 describe-instance-type-offerings --region "$REGION" --filters Name=instance-type,Values=c7i-flex.large \
+  --query 'InstanceTypeOfferings[0].InstanceType' --output text
+aws rds describe-orderable-db-instance-options --region "$REGION" --engine postgres --db-instance-class db.t4g.micro \
+  --query "OrderableDBInstanceOptions[?starts_with(EngineVersion, '18.')].EngineVersion | [0]" --output text
 ```
 
-The budget's address is personal data: pass it through the environment, never in a committed file. The repository's
-name, in GitHub's exact case, and its two numeric IDs come from GitHub's API: the deploy role's subject is built from
-them and compared case-sensitively.
+- The budget address is personal data: pass it in the environment, never in a file.
+- The repository's name, in GitHub's exact case, and its two numeric IDs build the deploy role's subject.
 
 ```sh
 cd infra/terraform/envs/dev
@@ -151,18 +151,13 @@ rm -rf "$(dirname "$plan_file")"
 cd -
 ```
 
-`terraform init` fills in the bucket and region of the S3 backend in `envs/dev/backend.tf`; `envs/dev/terraform.tf`
-pins Terraform and the providers.
-
-The saved plan holds the origin-verify value and the budget address in clear text (Terraform, *Command: plan*), so it
-is written to a temporary directory outside the repository and removed after the apply; `*.tfplan` is also ignored by
-git. Plans and applies run only from this machine, never from CI (AD-28).
+The saved plan holds the origin-verify value and the budget address in clear text. That is why it goes to a temporary
+directory and is deleted after the apply. Plans and applies run only from this machine, never from CI (AD-28).
 
 ## 5. The secrets a person creates
 
-Each is a SecureString under `/disputedesk/dev`, encrypted with the environment's own KMS key, generated (never chosen
-by hand) within the bound `infra/deploy/aws/input-bounds.sh` checks. The value goes to the CLI from a file of mode 0600, so it
-is never on a command line.
+Each is a generated SecureString under `/disputedesk/dev`, encrypted with the environment's KMS key. Values pass through
+a 0600 file, never the command line. Their bounds are checked by `infra/deploy/aws/input-bounds.sh` and `deploy.sh`.
 
 ```sh
 SSM_PATH=/disputedesk/dev
@@ -186,15 +181,13 @@ openssl rand -base64 32 | tr -d '\n' | put_secret LINKING_OTP_HMAC_KEY        # 
 { printf 'mailpit:'; letters_and_digits 64; } | put_secret MAILPIT_UI_AUTH     # user:password, [A-Za-z0-9]
 ```
 
-Terraform wrote the rest of what the deploy reads: `APP_HOST`, `AUTH_HOST`, `MAILPIT_HOST`, `DB_HOST`,
-`OTEL_LOG_GROUP`, `DATAPROTECTION_SSM_PATH`, `DATAPROTECTION_KMS_KEY_ID`, `GATEWAY_ORIGIN_VERIFY` and
-`RDS_MASTER_PASSWORD`. The Api writes its Data Protection key ring under `/disputedesk-dataprotection/dev`, outside
-`/disputedesk/dev`, so the deploy never reads it.
+Terraform already wrote the other nine values the deploy reads, the RDS master password among them. The Api keeps its
+Data Protection keys under `/disputedesk-dataprotection/dev`, which the deploy never reads.
 
 ## 6. The budget alert
 
-AWS Budgets emails the address in `TF_VAR_budget_alert_email` at 80 % of the actual monthly cost and at 100 % of the
-forecast, without credits. Check the recipient, and accept any confirmation email that arrives:
+AWS Budgets emails the step 4 address at 80 % of the actual monthly cost and 100 % of the forecast, credits excluded.
+Check the budget, and accept the confirmation email if one arrives:
 
 ```sh
 aws budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" \
@@ -205,19 +198,24 @@ A budget alerts; it does not stop spending.
 
 ## 7. The images
 
-Story 7.3's `publish` job pushes five packages to GHCR from main: `disputedesk-api`, `disputedesk-worker`,
-`disputedesk-gateway`, `disputedesk-core-banking` and `disputedesk-zitadel`. GHCR creates packages private. After the
-first publish, set each one public once: the package's page, **Package settings**, **Change visibility**, **Public**
-(GitHub, *Configuring a package's access control and visibility*). The instance then pulls them without a credential.
-While one is still private, `deploy.yml` fails at its digest lookup, before it sends anything to AWS.
+CI's `publish` job pushes five packages to GHCR from `main`:
+- `disputedesk-api`
+- `disputedesk-worker`
+- `disputedesk-gateway`
+- `disputedesk-core-banking`
+- `disputedesk-zitadel`
+
+GHCR creates them private. After the first publish, make each one public: open the package, then **Package settings** →
+**Change visibility** → **Public**.
+
+A private image fails a deploy in one of two places:
+- a hand-dispatched deploy fails at its digest lookup, before it reaches AWS;
+- a CI deploy fails at `docker pull` on the instance.
 
 ## 8. The environment, the repository variables and the first deploy
 
-First, once, create the GitHub environment `dev` with a deployment branch policy that allows only `main` (GitHub REST
-API, *Deployment environments* and *Deployment branch policies*; `-F` sends typed booleans, `-f` strings, `gh api`
-manual). No required reviewers and no wait timer: one maintainer deploys continuously. Create it before any workflow
-references it: a run that references an environment that does not exist creates it with no protection rules (GitHub,
-*Managing environments for deployment*).
+Create the GitHub environment `dev` before any workflow names it, allowing only `main`. A run that names a missing
+environment would create it with no protection.
 
 ```sh
 gh api --method PUT repos/<owner>/<name>/environments/dev \
@@ -225,25 +223,21 @@ gh api --method PUT repos/<owner>/<name>/environments/dev \
 gh api --method POST repos/<owner>/<name>/environments/dev/deployment-branch-policies -f name=main -f type=branch
 ```
 
-Then, once, check the subject the deploy role trusts against the repository's OIDC settings (GitHub REST API, *Get the
-customization template for an OIDC subject claim for a repository*):
+Check the OIDC subject the deploy role trusts:
 
 ```sh
 gh api repos/<owner>/<name>/actions/oidc/customization/sub
 gh api repos/<owner>/<name> --jq '.owner.login, .owner.id, .name, .id'
 ```
 
-`use_default` must be `true`, so GitHub's default `environment:dev` segment follows the prefix in a `dev` job's
-subject; `use_immutable_subject` must be `true`, and `sub_claim_prefix` must carry the same owner, owner ID, repository
-name and repository ID as the subject pinned in `envs/dev/tests/deploy_role.tftest.hcl`,
-`repo:<owner>@<owner-id>/<name>@<repo-id>:environment:dev` (story 7.15; ad-012), with the IDs given to step 4 as
-`TF_VAR_github_repository_owner_id` and `TF_VAR_github_repository_id`. On a mismatch, stop: do not deploy until the
-pinned subject and `modules/deploy-role` are corrected. Repeat the check after a repository transfer or rename, or a
-change to the repository's OIDC subject customisation. The API returns the repository's configuration, not a token
-issued to a job, and the mocked Terraform tests pin the subject but cannot prove the live role assumption: the first
-deploy's `AssumeRoleWithWebIdentity` is the end-to-end proof.
+- `use_default` and `use_immutable_subject` must both be `true`.
+- `sub_claim_prefix` must match the subject pinned in `envs/dev/tests/deploy_role.tftest.hcl`:
+  `repo:<owner>@<owner-id>/<name>@<repo-id>:environment:dev`.
+- On a mismatch, stop and correct `modules/deploy-role` first.
+- Repeat the check after a rename, a transfer, or a change to the OIDC settings.
+- The first deploy's role assumption is the end-to-end proof.
 
-Then set the four repository variables and run the first deploy by hand:
+Set the four repository variables and deploy by hand:
 
 ```sh
 cd infra/terraform/envs/dev
@@ -256,14 +250,11 @@ gh workflow run deploy.yml --ref main -f sha="$(git rev-parse origin/main)"
 gh run watch "$(gh run list --workflow deploy.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
 ```
 
-The commit must be on main (the deploy document stops on the instance, before checking it out, unless
-`git merge-base --is-ancestor <sha> origin/main` succeeds) and its five images published. The workflow sends the deploy document to the instance and
-waits for its result; the job fails unless the command ends `Success`, and then prints the deploy script's standard
-error.
+- The commit must be on `main`, and its five images must be published.
+- The job fails, printing the deploy script's standard error, unless the command ends `Success`.
 
-Only after the first deploy succeeds, switch deploy on. From then on every `main` run deploys: CI's `deploy` job calls
-`deploy.yml` after `publish` with the five images it published. Until then CI's `deploy-switched-off` job prints them
-and sends nothing.
+Once the first deploy and the post-deploy checks pass, switch continuous deploy on. Until then, CI's
+`deploy-switched-off` job prints the image digests and sends nothing.
 
 ```sh
 gh variable set DEPLOY_ENABLED --body true
@@ -271,7 +262,7 @@ gh variable set DEPLOY_ENABLED --body true
 
 ## A half-done database init
 
-The first deploy creates the roles `disputedesk`, `zitadel` and `qa_readonly` and the databases `disputedesk` and
+The first deploy creates the roles `disputedesk`, `zitadel` and `qa_readonly`, and the databases `disputedesk` and
 `zitadel`. If it stopped part-way, every later deploy stops with "RDS holds only some of the roles and databases". No
 data exists yet, so drop what was created and deploy again. Open a shell on the instance:
 
@@ -279,7 +270,7 @@ data exists yet, so drop what was created and deploy again. Open a shell on the 
 aws ssm start-session --target "$(terraform -chdir=infra/terraform/envs/dev output -raw deploy_instance_id)"
 ```
 
-Then, on the instance:
+On the instance:
 
 ```sh
 sudo -i
@@ -304,31 +295,26 @@ Then run `deploy.yml` again with the same SHA.
 
 ## Post-deploy checks
 
-Run each once after the first deploy, and after any change to the Terraform or the AWS override.
+Run them after the first deploy, and after any change to the Terraform or the AWS override.
 
-1. Sign in over the app distribution (`https://<APP_HOST>`) as a fixture customer, and raise a dispute.
-2. See the dispute's trace in X-Ray Transaction Search, its metrics in CloudWatch (namespace `DisputeDesk`) and its
-   logs in the `/disputedesk-dev/otel` log group. From the maintainer's machine, within an hour of step 1, each command
-   prints at least one line:
+1. Sign in at `https://<APP_HOST>` as a fixture customer and raise a dispute.
+2. Within an hour, the dispute shows up in X-Ray, CloudWatch metrics (namespace `DisputeDesk`) and the
+   `/disputedesk-dev/otel` logs. Each command prints at least one line:
 
    ```sh
    since=$(( ($(date +%s) - 3600) * 1000 ))
-   # Transaction Search stores spans in the aws/spans log group.
    aws logs filter-log-events --log-group-name aws/spans --start-time "$since" --filter-pattern '"disputes"' \
      --max-items 5 --query 'events[].message' --output text
    aws cloudwatch list-metrics --namespace DisputeDesk --query 'Metrics[].MetricName' --output text
    aws logs filter-log-events --log-group-name /disputedesk-dev/otel --log-stream-names otlp --start-time "$since" \
      --max-items 5 --query 'events[].message' --output text
    ```
-3. Mailpit answers 401 without credentials on `https://<MAILPIT_HOST>/`, and the app distribution answers 404 on
-   `/mailpit/`.
-4. A direct request to the Elastic IP is refused: `curl -m 10 http://<elastic IP>/` times out (the security group
-   admits only CloudFront).
-5. RDS is not reachable from outside: `nc -z -w 5 <DB_HOST> 5432` from the maintainer's machine fails.
-6. The init's `CREATE DATABASE ... OWNER disputedesk` worked under RDS's `rds_superuser` master: both databases exist,
-   owned by `disputedesk` and `zitadel`. On the instance, as in *A half-done database init* (`sudo -i`,
-   `cd /opt/disputedesk`, `PGPASSWORD` and `PGHOST` exported), the query prints `disputedesk|disputedesk` and
-   `zitadel|zitadel`:
+
+3. Mailpit answers 401 without credentials at `https://<MAILPIT_HOST>/`. The app answers 404 on `/mailpit/`.
+4. A direct request to the Elastic IP times out: `curl -m 10 http://<elastic IP>/`.
+5. RDS is unreachable from outside: `nc -z -w 5 <DB_HOST> 5432` fails.
+6. Both databases exist with the right owners. On the instance, set up as in *A half-done database init*, this prints
+   `disputedesk|disputedesk` and `zitadel|zitadel`:
 
    ```sh
    docker run --rm -e PGPASSWORD -e PGHOST -e PGSSLMODE=verify-full -e PGSSLROOTCERT=/run/rds/ca-bundle.pem \
@@ -337,24 +323,19 @@ Run each once after the first deploy, and after any change to the Terraform or t
      "SELECT datname, pg_get_userbyid(datdba) FROM pg_database WHERE datname IN ('disputedesk', 'zitadel') ORDER BY 1"
    unset PGPASSWORD
    ```
-7. A metadata request from the Mailpit container fails while the Api gets credentials, and both still hold after a
-   reboot (`sudo reboot`, then repeat). On the instance, from `/opt/disputedesk`:
+
+7. Mailpit cannot reach instance metadata, but the Api can, and both still hold after `sudo reboot`. On the instance,
+   from `/opt/disputedesk`, this must time out:
 
    ```sh
    docker compose -f docker-compose.yml -f infra/deploy/aws/compose.yml exec mailpit \
      wget -T 5 -O - http://169.254.169.254/latest/meta-data/
    ```
 
-   It must time out: a 401 answer means the container reached the metadata service (which then wants an IMDSv2
-   token).
-
-   The Api has credentials when its key ring exists: from the maintainer's machine,
+   A 401 would mean the container reached the metadata service. The Api has credentials when, from your machine,
    `aws ssm get-parameters-by-path --path /disputedesk-dataprotection/dev --query 'length(Parameters)'` is at least 1.
-
-8. Redpanda stays within its limit: `docker stats --no-stream` shows it under its 768 MiB `mem_limit`.
-9. The CloudFront origin-facing prefix list fits the security group's rule quota (a prefix list counts as its maximum
-   entries; Amazon VPC, *Reference prefix lists in your AWS resources*). The first number must be below the second,
-   the quota "Inbound or outbound rules per security group":
+8. `docker stats --no-stream` shows Redpanda under its 768 MiB limit.
+9. CloudFront's prefix list fits the security group's rule quota. The first number must be below the second:
 
    ```sh
    aws ec2 describe-managed-prefix-lists --region "$REGION" \
@@ -363,10 +344,10 @@ Run each once after the first deploy, and after any change to the Terraform or t
    aws service-quotas get-service-quota --region "$REGION" --service-code vpc --quota-code L-0EA8095F \
      --query Quota.Value --output text
    ```
-10. The budget alert email arrives once a threshold is crossed (or check the recipient as in step 6).
-11. Plain HTTP is refused, not redirected, on the APIs and on the whole identity origin, and still redirected for the
-    app's pages. The first three print `403` and an empty `Location`; the last two print `301` and an `https://`
-    `Location`. `/api` without a trailing slash is a client route the SPA serves, not an Api path, so it redirects:
+
+10. The budget email arrives once a threshold is crossed. Until then, check the recipient as in step 6.
+11. Plain HTTP is refused on the APIs and the identity host, and redirected for the app's pages. The first three print
+    `403` with no `Location`, and the last two print `301` to `https://`:
 
     ```sh
     for url in "http://<APP_HOST>/api/health/live" "http://<MAILPIT_HOST>/api/v1/messages" \
@@ -375,15 +356,10 @@ Run each once after the first deploy, and after any change to the Terraform or t
     done
     ```
 
-    The three host names are CloudFront default domains, under which DisputeDesk serves no other name, so the gateway's
-    `Strict-Transport-Security: max-age=63072000; includeSubDomains` reaches only HTTPS hosts.
-
 ## Rollback
 
-Dispatch `deploy.yml` by hand with an earlier SHA of main whose images are still in GHCR; it resolves their digests and
-runs in the same environment and concurrency group as CI's deploys, so the two never interleave. While
-`DEPLOY_ENABLED` is on, switch deploy off first, or the next `main` run redeploys over the rollback, and switch it on
-again once the fix is on `main`:
+Switch continuous deploy off, then dispatch an earlier `main` SHA whose images are still in GHCR. Switch it back on
+once the fix is on `main`:
 
 ```sh
 gh variable set DEPLOY_ENABLED --body false
@@ -392,13 +368,12 @@ gh workflow run deploy.yml --ref main -f sha=<the earlier SHA>
 gh variable set DEPLOY_ENABLED --body true
 ```
 
-The GitHub-flow alternative is a revert on `main`, which deploys like any other change. The Api does not roll
-migrations back, so a rollback past a migration relies on that migration staying compatible with the earlier code.
+A revert on `main` also works, and deploys like any other change. Migrations are not rolled back, so a rollback past one
+relies on it staying compatible with the earlier code.
 
 ## Destroy
 
-Before `terraform destroy`, delete what Terraform did not create under its paths: the person-created SecureStrings and
-the Api's key ring.
+First delete what Terraform did not create: the person-made secrets and the Api's key ring.
 
 ```sh
 for name in APP_DB_PASSWORD ZITADEL_DB_PASSWORD QA_DB_PASSWORD ZITADEL_MASTERKEY \
@@ -420,12 +395,7 @@ terraform destroy
 cd -
 ```
 
-After it, exactly these remain:
-
-- the state bucket (`bootstrap/`; `terraform destroy` there removes it once it is emptied of every object version);
-- the KMS key, scheduled for deletion at the end of its 7-day window;
-- Transaction Search's `aws/spans` log group, which X-Ray created. Delete it with:
-
-  ```sh
-  aws logs delete-log-group --log-group-name aws/spans
-  ```
+Three things remain afterwards:
+- The state bucket. Empty every object version, then run `terraform destroy` in `bootstrap/`.
+- The KMS key, deleted at the end of its 7-day window.
+- The `aws/spans` log group, created by X-Ray. Delete it with `aws logs delete-log-group --log-group-name aws/spans`.

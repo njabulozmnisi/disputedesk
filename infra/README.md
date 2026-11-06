@@ -1,185 +1,211 @@
 # infra
 
-Everything the DevOps team owns: the local Compose platform (`docker-compose.yml` at the repo root), the AWS environment
-(Terraform, the deploy script, the AWS gateway and collector config), identity provisioning, the database init, and the
-tests of that code. Each top-level folder stands for one team's repository. Only Docker is needed locally:
+Everything the DevOps team owns:
+- the local Compose platform (`docker-compose.yml` at the repo root);
+- the AWS environment (Terraform);
+- the deploy;
+- the gateway, identity and collector images;
+- the database init;
+- the tests of all of it.
 
-```sh
-docker compose up --wait        # about 30 s once images are built; fully configured, zero clicks
-docker compose down -v          # stop and drop all data (Zitadel, Postgres, Redpanda, generated secrets)
-scripts/test-lock.sh run stack <owner> -- infra/tests/smoke.sh   # the developer smoke check
+## Local stack
+
+```mermaid
+flowchart LR
+    subgraph host["Your machine (127.0.0.1)"]
+        direction LR
+        GW["gateway :8080<br/>SPA, /api/, /scalar/"]
+        MP["mailpit :8025"]
+        AD["aspire-dashboard :18888<br/>OTLP :4317 / :4318"]
+        PG[("postgres :5433")]
+        RP[["redpanda :19092"]]
+    end
+    GW --> API[api<br/>+ in-process relay and SLA sweep]
+    GW -- auth.localhost --> ZI[zitadel]
+    GW -- /otlp/v1/* --> AD
+    API --> PG
+    API --> RP
+    API --> CB[core-banking stub]
+    API -- SMTP --> MP
+    API --> AD
+    ZI --> PG
+    ZI -- SMTP --> MP
 ```
 
-The smoke check starts and ends with `docker compose down -v`: it wipes the data of the shared `disputedesk`
-stack, whichever worktree started it. Run it only under the `stack` lock.
-
-| What | Where |
-|---|---|
-| App origin (the SPA; `/api/` -> api, `/api/health/*` -> api `/health/*`, `/otlp/v1/*` -> the Aspire OTLP/HTTP receiver) | <http://localhost:8080> |
-| Identity origin (Zitadel API, console, the hosted login at `/ui/login`) | <http://auth.localhost:8080> |
-| Mailpit | <http://localhost:8025> |
-| Aspire dashboard (anonymous, loopback only) | <http://localhost:18888> |
-| Redpanda Console (optional, `console` profile, anonymous, loopback only; below) | <http://localhost:8081> |
-| Postgres / Redpanda / OTLP for apps run on the host | `127.0.0.1:5433` / `localhost:19092` / `127.0.0.1:4317` (gRPC), `:4318` (HTTP) |
-
-Redpanda Console (topics, messages and consumer groups in a browser) is optional and local only. It sits in the
-`console` Compose profile, so it adds a container only when asked: a plain `docker compose up` never starts it, and
-the AWS deploy never enables the profile (`ComposeRenderTests` and `DeployScriptTests` in `infra/tests` fail if either
-would). It has no sign-in and listens on loopback only.
-
 ```sh
-docker compose --profile console up -d --wait redpanda-console   # http://localhost:8081 (DISPUTEDESK_CONSOLE_PORT)
-docker compose stop redpanda-console                              # stop it; the rest of the stack keeps running
-docker compose --profile console down -v                          # down -v for the whole stack, the console included
+docker compose up --build --wait   # fully provisioned, no manual steps
+docker compose down -v             # stop and delete all data
+scripts/test-lock.sh run stack <owner> -- infra/tests/smoke.sh   # black-box check; starts and ends with down -v
 ```
 
-Compose acts only on the services of the active profiles, so a plain `docker compose stop` or `down` leaves a running
-console up; name it, or pass `--profile console`, as above.
+- **Ports.** Every host port except the gateway's 8080 can be moved, for example
+  `DISPUTEDESK_OTLP_HTTP_PORT=14318 docker compose up --wait`. The variables are listed in the header of
+  `docker-compose.yml`.
+- **Redpanda Console** (topics and messages in a browser) is optional:
+  `docker compose --profile console up -d --wait redpanda-console`, then <http://localhost:8081>. The AWS deploy never
+  enables it.
+- **A second stack** beside this one needs its own `COMPOSE_PROJECT_NAME` and `DISPUTEDESK_SUBNET`. The default
+  subnet is `10.201.89.0/24`, pinned because the api trusts forwarded headers only from it (AD-23). Only one stack can
+  hold port 8080.
 
-Every host port except the gateway's 8080 can be moved when another process holds it, for example
-`DISPUTEDESK_OTLP_HTTP_PORT=14318 docker compose up --wait`; the header of `docker-compose.yml` lists the variables.
+## Deployed on AWS
 
-The default network's subnet is pinned, because the api trusts forwarded headers only from it (AD-23):
-`DISPUTEDESK_SUBNET`, default `10.201.89.0/24`, sets both the network and the api's `ForwardedHeaders__TrustedNetwork`.
-A second stack beside this one (another worktree or a throwaway copy) sets another value, for example
-`DISPUTEDESK_SUBNET=10.201.90.0/24`, since two networks on one Docker daemon cannot share a subnet. It also sets its own `COMPOSE_PROJECT_NAME` (the file names the project `disputedesk`, so without it the second stack replaces the first one's containers); the gateway's fixed 8080 still means only one stack runs at a time.
+One EC2 instance runs the same Compose stack. It sits behind CloudFront, with PostgreSQL on RDS. The environment is
+partly applied: the CloudFront distributions wait on AWS account verification, and the application has not been
+deployed yet ([terraform/README.md](terraform/README.md)).
 
-| Folder | Purpose |
+```mermaid
+flowchart LR
+    U[Browser] -->|HTTPS| CF["CloudFront x3<br/>app · auth · mail"]
+    CF -->|"HTTP :80 + X-Origin-Verify<br/>CloudFront prefix list only"| EIP[Elastic IP]
+    subgraph VPC["VPC 10.20.0.0/16 · af-south-1"]
+        subgraph PUB["Public subnet"]
+            EIP --> EC2
+            subgraph EC2["EC2 c7i-flex.large · Docker Compose"]
+                GW[gateway] --> API[api]
+                GW --> ZI[zitadel]
+                GW --> MP["mailpit<br/>(basic auth)"]
+                WK[worker] --> RP[[redpanda]]
+                API --> CB[core-banking stub]
+                API & WK --> COL[otel-collector]
+            end
+        end
+        subgraph PRIV["Private subnets x2"]
+            RDS[("RDS PostgreSQL 18<br/>TLS required")]
+        end
+        API & WK & ZI -->|5432| RDS
+    end
+    COL --> XR[X-Ray]
+    COL --> CW[CloudWatch Logs + metrics]
+    EC2 -. secrets .-> SSM["SSM Parameter Store<br/>KMS-encrypted"]
+```
+
+How a deploy reaches the instance. There is no SSH; the only way in is SSM:
+
+```mermaid
+sequenceDiagram
+    participant GA as GitHub Actions (deploy, env dev)
+    participant STS as AWS STS
+    participant SSM as SSM Run Command
+    participant EC2 as EC2 instance
+    GA->>STS: OIDC token
+    STS-->>GA: short-lived disputedesk-dev-deploy role
+    GA->>SSM: SendCommand (one document, one instance)
+    SSM->>EC2: git fetch + checkout, deploy.sh with 5 image digests
+    EC2->>EC2: secrets from SSM, RDS CA bundle, compose up
+    GA->>SSM: poll until Success
+```
+
+- Deploys run from `main` only. A deploy on every merge stays switched off until the repository variable
+  `DEPLOY_ENABLED` is `true`; a hand-dispatched deploy (`deploy.yml`) works either way.
+- Images come from GHCR, pinned by digest.
+- Only the api and the collector can reach instance metadata.
+
+## Folders
+
+| Folder | What |
 |---|---|
-| `images/postgres/` | Postgres init: `disputedesk` (app, owns its database), `zitadel` (non-superuser, own database), `qa_readonly` (SELECT on the app schema through default privileges, read-only sessions). |
-| `images/gateway/` | The gateway image: the built SPA files, taken from the SPA image (`frontend/Dockerfile`) through the named build context `spa` (the build-only `spa` service in `docker-compose.yml`, `--build-context` in CI), served by unprivileged nginx. `templates/` holds the config, rendered from the `GATEWAY_*` variables in `docker-compose.yml` at start: two server blocks, fixed upstream Host per origin, security headers and CSP on the app origin, the coarse rate limit and the `/otlp/` proxy. `templates-aws/` is the AWS gateway's config, selected by `NGINX_ENVSUBST_TEMPLATE_DIR`: three server blocks (app, identity, Mailpit), each refusing requests without CloudFront's origin-verify header, with the client address and scheme from CloudFront's headers. |
-| `images/zitadel/` | The `disputedesk-zitadel` image: Zitadel's own binary on pinned Alpine with bash, curl and jq, run as Zitadel's non-root `zitadel` user (uid 1000). Its Compose `post_start` hook runs the idempotent provisioner (`provision.sh`: project, roles, web app, operations machine user, fixture logins, and the hosted login's label policy from `label-policy.sh`) once `zitadel ready` succeeds; the container is healthy only after the script wrote its provisioned marker. `verify.sh` is the read-only check of facts invisible from outside. |
-| `images/otel-collector/` | The OpenTelemetry Collector config in AWS: OTLP in from the Api and the Worker, traces to X-Ray, logs and metrics to CloudWatch (AD-29). |
-| `deploy/aws/` | The AWS deploy (`compose.yml`, the AWS override merged onto the root `docker-compose.yml`, AD-28): `deploy.sh` runs on the instance through SSM (writes `.env`, fetches the RDS CA bundle, runs the database init on first deploy, blocks container access to instance metadata, starts Compose); `input-bounds.sh` holds each input's bound, shared with the deploy script. |
-| `deploy/runbook.md` | Operator steps, among them the release of a `Failed` outbox row (AD-22). |
-| `terraform/` | The AWS dev environment (never applied: there is no account): `bootstrap/` (the state bucket), `envs/dev/` (`terraform.tf` pins Terraform and the providers, `backend.tf` the S3 state) with its mocked-provider tests (`tests/`), and the modules (network, compute, database, edge, observability, deploy-role, budget). Every IAM policy is a `<name>.json.tftpl` file beside its `main.tf`, rendered with `templatefile()`, whose names `IamNamesTests` in `tests/` checks. The deploy role's GitHub OIDC subject is pinned by `envs/dev/tests/deploy_role.tftest.hcl` and confirmed by a one-time check recorded in `terraform/README.md` (step 8). See `terraform/README.md`. |
-| `tests/` | `smoke.sh`, the black-box smoke check through the gateway: the stack is up and wired (the real Api's Scalar page, Zitadel's headers merged with the gateway's, provisioning, Postgres, the Redpanda topic, Mailpit, the dashboard); every check fails the run. `fixtures/` holds `compose.test.env` (a dummy value for each AWS input) and `test-realip.conf` (the trusted range the gateway tests mount). `DisputeDesk.PlatformTests` holds the xUnit tests of infra/'s files (ad-011): `GatewayTests` builds both gateway images and checks their responses and what each upstream receives on a throwaway Docker network (stories 7.4 and 7.12), the one place the gateway's own headers are checked; `ComposeRenderTests` renders the local file and the AWS override with the dummy inputs and checks the model, the services both environments run and the collector config (story 7.4); `DeployScriptTests` runs `deploy/aws/deploy.sh` in a throwaway copy with its external commands stubbed (`PathStubs`), and tests each input's bound once (story 7.5); `DatabaseInitTests` runs it unchanged against a throwaway PostgreSQL 18 with TLS and a non-superuser master (story 7.17); `IamNamesTests` reads every IAM action and condition key from the policy templates under `terraform/` with `System.Text.Json` and checks it against AWS's public service reference, fetched over HTTPS with no credentials and a 5-minute deadline, with the reading rules in `IamNamesRulesTests` and the fetch's bounds in `ServiceReferenceFetchTests` (story 7.16); `ShellHarnessTests` keeps shell test harnesses out of `infra/`; `PlatformScriptTests` runs the provisioning scripts with a stub `curl`, curls `provision.sh`'s retry options against an in-process stand-in for Zitadel, reads the Compose model from `docker compose config`, and reads a file only where no run can show the property. A standalone project with its own `global.json` (the SDK and Microsoft.Testing.Platform) and `.editorconfig`; nothing under `backend/` is referenced. CI's `platform` job runs it. |
+| `images/gateway/` | nginx serving the SPA and routing by host. `templates/` holds the local config: app and identity hosts, security headers and CSP, a coarse rate limit, the `/otlp/` proxy. `templates-aws/` holds the AWS config: app, identity and Mailpit hosts, each requiring CloudFront's origin-verify header |
+| `images/zitadel/` | Zitadel on pinned Alpine. `provision.sh` runs at start and creates the project, roles, web app, operations client, fixture logins and login branding. `verify.sh` checks the result |
+| `images/postgres/` | Database init: the `disputedesk` app role, the `zitadel` role, and the read-only `qa_readonly` role |
+| `images/otel-collector/` | The collector config for AWS: OTLP in; X-Ray, CloudWatch Logs and metrics out (AD-29) |
+| `deploy/aws/` | `compose.yml`, the AWS override. `deploy.sh` runs on the instance: it writes `.env`, fetches the RDS CA bundle, writes the gateway's CloudFront real-IP config, runs the first database init, blocks metadata access, and starts Compose. `input-bounds.sh` holds the input bounds |
+| `deploy/runbook.md` | Operator procedures for the local stack |
+| `terraform/` | `bootstrap/`, the state bucket. `envs/dev/`, the environment and its mocked-provider tests. The modules: network, compute, database, edge, observability, deploy-role, budget. See [terraform/README.md](terraform/README.md) |
+| `tests/` | `smoke.sh`, and `DisputeDesk.PlatformTests`, the xUnit tests of everything above |
+
+`DisputeDesk.PlatformTests` covers:
+
+| Test class | Checks |
+|---|---|
+| `GatewayTests` | Builds both gateway images and checks the responses on a throwaway network |
+| `ComposeRenderTests` | Renders the local and AWS Compose models and the collector config |
+| `DeployScriptTests` | Runs `deploy.sh` with its external commands stubbed, and every input bound |
+| `DatabaseInitTests` | Runs the init against a throwaway PostgreSQL 18 over TLS |
+| `IamNamesTests`, `IamNamesRulesTests`, `ServiceReferenceFetchTests` | Every IAM action in the policy templates exists in AWS's public service reference |
+| `PlatformScriptTests`, `LabelPolicyTests` | The provisioning scripts, run against a stub |
+| `ShellHarnessTests` | Shell test harnesses stay out of `infra/` |
 
 ## Tests
 
-The infra tests need the .NET SDK pinned in `tests/global.json`, plus `bash`, `curl`, `jq` and Docker with Compose
-v5.6.1 (as CI installs it; the Compose render is authoritative only on that version), and `openssl`. The gateway and
-database-init tests start containers on the shared Docker daemon, so run them under the `stack` lock; they bind no host
-port. Run them from `infra/tests`, where `dotnet` finds that `global.json`:
+You need the .NET SDK from `tests/global.json`, Docker with Compose v5.6.1, `bash`, `curl`, `jq` and `openssl`.
+`IamNamesTests` also needs the network.
+
+The gateway and database-init tests start containers on the shared Docker daemon, so run them under the `stack`
+lock:
 
 ```sh
 scripts/test-lock.sh run stack <owner> -- bash -c 'cd infra/tests && dotnet test --project DisputeDesk.PlatformTests'
 ```
 
-`IamNamesTests` fetches AWS's service reference, so it needs the network: offline, it fails naming the URL it could not
-fetch, and never passes without the reference.
+## Credentials (local, dev-only)
 
-## Repository settings
-
-`main` is protected by a ruleset, and squash is the only merge method (ad-012 clause 2, AD-32). Both live in GitHub's
-settings, so the repository owner applies them with the commands below; nothing in CI applies them. Each command runs
-with the owner's token (`GH_TOKEN` from `gh auth token --user`, GitHub CLI manual), because the active `gh` account has
-pull access only; the token is never printed or written to a file. Apply them only once a pull request shows
-`ci-passed` and `security-passed` reported by the GitHub Actions app, since a required check pinned to an app must have
-recently been submitted by it (GitHub Docs, *Available rules for rulesets*).
-
-CI needs the `FORBIDDEN_TERMS` Actions secret first: without it the *Forbidden terms* step in `floor-guard` fails, so
-`ci-passed` cannot pass. Set it once, from the main checkout, with the gitignored terms file the pre-commit hook reads;
-`gh secret set` reads the value from standard input and encrypts it before sending it (`gh help secret set`). Read it
-back with `gh secret list`, which shows its name only:
-
-```sh
-GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh secret set FORBIDDEN_TERMS --app actions -R njabulozmnisi/disputedesk < .claude/forbidden-terms.local
-```
-
-A pull request from a fork gets no secrets, so its *Forbidden terms* step fails; a fork pull request is never merged here
-whatever its checks show, and fork-workflow approval stays on.
-
-The ruleset is [`.github/rulesets/main.json`](../.github/rulesets/main.json), the body of the REST call *Create a
-repository ruleset*:
-
-| Rule | Effect |
+| What | Where |
 |---|---|
-| `bypass_actors: []` | No one bypasses it, the owner included. |
-| `deletion` | `main` cannot be deleted. |
-| `non_fast_forward` | No force push to `main`. |
-| `pull_request` | Every change reaches `main` through a pull request; no approving review is required (`0`; the story stages review). |
-| `required_status_checks` | `ci-passed` and `security-passed`, each only from the GitHub Actions app (`integration_id` 15368, `gh api apps/github-actions`), so a commit status set by hand cannot stand in; `strict_required_status_checks_policy: true` requires the branch to be up to date with `main`. |
-| `code_scanning` | CodeQL results are required, and a security alert of high or higher, or an error alert, blocks the merge (code scanning merge protection). |
+| Customer logins | [backend/fixtures/local.json](../backend/fixtures/local.json), listed in the [root README](../README.md#try-it) |
+| Zitadel console admin | `admin` / `Dev-Only-Admin-1` at <http://auth.localhost:8080/ui/console> |
+| Database passwords, Zitadel master key | Inline defaults in `docker-compose.yml`, which an untracked `.env` can override |
+| Generated client secrets | Written by the provisioner, read with `docker compose exec -T zitadel cat /provision/out/zitadel-clients.json` |
+| A browserless sign-in | `scripts/dev-login.sh <login>` leaves a session in a cookie jar |
 
-```sh
-# First application: creates the ruleset and prints its id.
-GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api --method POST repos/njabulozmnisi/disputedesk/rulesets --input .github/rulesets/main.json --jq .id
-# Any later application replaces that ruleset in place, so there is only ever one. Its id, if the first output is lost:
-GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api repos/njabulozmnisi/disputedesk/rulesets --jq '.[] | {id,name}'
-GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api --method PUT repos/njabulozmnisi/disputedesk/rulesets/<id> --input .github/rulesets/main.json
-```
+- **After changing what the provisioner creates**, run `docker compose down -v` once. It never edits an app that
+  already exists.
+- **If provisioning fails**, `docker compose up` fails too. Fix the cause, then run `docker compose restart zitadel`.
 
-Read it back (GET) and compare it with the file; the expected output is nothing. A difference is a parameter GitHub
-adds (for example `allowed_merge_methods` or `do_not_enforce_on_create`), recorded with the read-back:
+<details>
+<summary><strong>Owner only: repository settings</strong> (applied once, by hand)</summary>
 
-```sh
-diff <(jq -S . .github/rulesets/main.json) \
-  <(GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api repos/njabulozmnisi/disputedesk/rulesets/<id> \
-    --jq '{name,target,enforcement,bypass_actors,conditions,rules}' | jq -S .)
-```
+`main` is protected by a ruleset, and squash is the only merge method (ad-012, AD-32). The owner applies both, with
+the owner's token; the token is never printed. Apply them only after a pull request has shown `ci-passed` and
+`security-passed` from the GitHub Actions app.
 
-The repository settings (REST *Update a repository*). `-F` sends `true` and `false` as JSON booleans and `-f` sends
-strings (`gh help api`); `--method PATCH` is explicit because a field flag otherwise makes the call a `POST`:
+1. Set the `FORBIDDEN_TERMS` secret, which CI's floor guard needs:
 
-```sh
-GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api --method PATCH repos/njabulozmnisi/disputedesk \
-  -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false \
-  -F allow_auto_merge=true -F delete_branch_on_merge=true \
-  -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY
-```
+   ```sh
+   GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh secret set FORBIDDEN_TERMS --app actions -R njabulozmnisi/disputedesk < .claude/forbidden-terms.local
+   ```
 
-Read them back (GET):
+2. Apply the ruleset, [`.github/rulesets/main.json`](../.github/rulesets/main.json):
 
-```sh
-GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api repos/njabulozmnisi/disputedesk \
-  --jq '{allow_squash_merge,allow_merge_commit,allow_rebase_merge,allow_auto_merge,delete_branch_on_merge,squash_merge_commit_title,squash_merge_commit_message}'
-```
+   | Rule | Effect |
+   |---|---|
+   | `bypass_actors: []` | No one bypasses it, the owner included |
+   | `deletion`, `non_fast_forward` | `main` cannot be deleted or force-pushed |
+   | `pull_request` | Every change arrives by pull request |
+   | `required_status_checks` | `ci-passed` and `security-passed`, from the GitHub Actions app only, on a branch up to date with `main` |
+   | `code_scanning` | CodeQL results are required; a high or error alert blocks the merge |
 
-| Field | Expected | Why |
-|---|---|---|
-| `allow_squash_merge` | `true` | Squash is the only merge method. |
-| `allow_merge_commit` | `false` | |
-| `allow_rebase_merge` | `false` | |
-| `allow_auto_merge` | `true` | `gh pr merge --auto` merges once the required checks pass. |
-| `delete_branch_on_merge` | `true` | The head branch is deleted on merge. |
-| `squash_merge_commit_title` | `PR_TITLE` | The squash commit's subject is the pull request's title. |
-| `squash_merge_commit_message` | `PR_BODY` | Its message is the pull request's body. |
+   ```sh
+   # First time: create it and print its id.
+   GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api --method POST repos/njabulozmnisi/disputedesk/rulesets --input .github/rulesets/main.json --jq .id
+   # Find the id again if lost:
+   GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api repos/njabulozmnisi/disputedesk/rulesets --jq '.[] | {id,name}'
+   # Later: replace it in place.
+   GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api --method PUT repos/njabulozmnisi/disputedesk/rulesets/<id> --input .github/rulesets/main.json
+   # Read it back. No output means it matches; a difference may be a parameter GitHub adds
+   # (for example allowed_merge_methods), which is recorded with the read-back.
+   diff <(jq -S . .github/rulesets/main.json) \
+     <(GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api repos/njabulozmnisi/disputedesk/rulesets/<id> \
+       --jq '{name,target,enforcement,bypass_actors,conditions,rules}' | jq -S .)
+   ```
 
-There is no linear-history rule: squash is enforced once, by these settings, and the rule alone would still allow
-rebase merges (GitHub Docs, *Available rules for rulesets*); for the same reason the ruleset has no
-`allowed_merge_methods`. There is no merge queue: GitHub offers it only on organization-owned repositories, and for one
-maintainer the up-to-date requirement gives the same guarantee (ad-012 clause 2).
+3. Make squash the only merge method, with auto-merge on and head branches deleted:
 
-## Credentials
+   ```sh
+   GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api --method PATCH repos/njabulozmnisi/disputedesk \
+     -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false \
+     -F allow_auto_merge=true -F delete_branch_on_merge=true \
+     -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY
+   ```
 
-- Fixed dev-only values (database passwords, Zitadel master key, admin password) are inline defaults in
-  `docker-compose.yml`, overridable from an untracked `.env`.
-- Logins for customers A, B and C come from [`backend/fixtures/local.json`](../backend/fixtures/local.json). Sign in with the username.
-  The Zitadel console admin is `admin` / `Dev-Only-Admin-1`.
-- Zitadel's bootstrap PAT (the IAM_OWNER machine user's) sits in the `zitadel-bootstrap` volume, seen only by the
-  zitadel container, where the provisioner reads it.
-- `scripts/dev-login.sh <login>` signs one fixture login in without a browser, through the hosted login's own forms,
-  and leaves the session in a cookie jar.
-- Generated values are written by the provisioner, in the zitadel container's `post_start` hook as `zitadel`
-  (uid 1000), to `zitadel-clients.json` in the `zitadel-clients` volume, shaped
-  as .NET configuration: the AD-26 keys `Zitadel:Issuer`, `Zitadel:MetadataAddress`, `Zitadel:ProjectId`,
-  `Zitadel:WebApp:ClientId` and `Zitadel:WebApp:ClientSecret`, plus the operations tools' client credentials
-  (`Zitadel:OperationsTools:*`, used by `smoke.sh`). The api container mounts it at
-  `/run/zitadel/zitadel-clients.json` (owner and group `zitadel`, mode 0440) and reads it through Zitadel's group
-  (`group_add: ["1000"]`). The provisioner's settings are the `PROVISION_*` variables of the zitadel service. To read
-  the file, or to re-run the read-only check, from the host:
+   Read it back:
 
-  ```sh
-  docker compose exec -T zitadel cat /provision/out/zitadel-clients.json
-  docker compose exec -T zitadel bash /provision/verify.sh
-  ```
+   ```sh
+   GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh api repos/njabulozmnisi/disputedesk \
+     --jq '{allow_squash_merge,allow_merge_commit,allow_rebase_merge,allow_auto_merge,delete_branch_on_merge,squash_merge_commit_title,squash_merge_commit_message}'
+   ```
 
-  A failed hook fails `docker compose up` and leaves no provisioned marker, so the api never starts; after fixing the
-  cause, `docker compose restart zitadel` runs the hook again.
+There is no linear-history rule and no merge queue. Squash is enforced by these settings. GitHub offers merge queues
+only to organisation-owned repositories, and the up-to-date requirement gives the same guarantee.
 
-  The provisioner never changes an app or authorization that already exists, so after a change to what it creates
-  (for example the web app's roles, URIs or auth method), run `docker compose down -v` once to re-provision.
-
-  The secrets are regenerated whenever the file is missing or describes another Zitadel instance, so
-  `docker compose down -v` gives fresh ones.
+</details>
