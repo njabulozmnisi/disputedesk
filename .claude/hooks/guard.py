@@ -90,7 +90,7 @@ FORCE_OPTIONS = ("force", "force-with-lease", "force-if-includes", "mirror")
 # whole command, and it gets no decision, never "allow".
 STACKED_PUSH = ["push", "--force-with-lease", "--force-if-includes", "origin"]
 STACKED_PATH = r"/[A-Za-z0-9._/-]+"
-STACKED_BRANCH = r"feature/[0-9]+\.[0-9]+[a-z]?"
+STACKED_BRANCH = r"feature/(?!records-|lows-)[a-z][a-z0-9-]{0,40}"
 # The supervisor commits; pipeline agents never commit, push or merge.
 AGENT_GIT_DENY = ("commit", "push", "merge")
 # The closed list of gh writes that change the flow, the settings or the secrets, by the call's first positional

@@ -7,7 +7,7 @@ description: Procedure for data-integrity and data-movement QA of one story on t
 
 QA runs only for a story that changes a user journey, the HTTP surface, data or events, once its high and medium findings are fixed. It runs no ZAP scan: CI's ZAP baseline runs on every pull request and on main.
 
-1. **Lock.** Everything below runs under `scripts/test-lock.sh run stack qa-<story> -- ...`. One QA run at a time; the stack starts once and is stopped (`docker compose stop`) when the run ends. No manual pass holds the stack.
+1. **Lock.** Everything below runs under `scripts/test-lock.sh run stack qa-<id> -- ...`. One QA run at a time; the stack starts once and is stopped (`docker compose stop`) when the run ends. No manual pass holds the stack.
 2. **Stack.** `docker compose up --wait` in the builder's worktree.
 3. **Walk every criterion,** happy and unhappy paths, as a seeded customer signed in through Zitadel (Playwright MCP). Always include:
    - another customer's dispute (expect 404, no data leaked);
@@ -19,7 +19,7 @@ QA runs only for a story that changes a user journey, the HTTP surface, data or 
    - Database, via the read-only role in `infra/images/postgres/`: the dispute's stored event, its `Disputes` row and (for a published type) the outbox row with the same ID, written in one transaction; audit rows only for refused or forbidden actions, linking, operations reads, sign-in and sign-out.
    - Events: the right shape and key on the topic, trace context in the headers.
 5. **Standards.** Check observed behaviour against the governing standard: HTTP semantics and status codes (RFC 9110), problem details (RFC 9457), cookie attributes (RFC 6265bis), caching (RFC 9111), OWASP guidance for the area. A deviation is a finding even when the story text is silent.
-6. **Evidence** to `docs/verification/<story>-qa.md`, keyed by commit SHA. Scrub `Authorization` headers, cookies, ID numbers and other personal data first (POPIA).
+6. **Evidence** to `docs/verification/<id>-qa.md`, keyed by commit SHA. Scrub `Authorization` headers, cookies, ID numbers and other personal data first (POPIA).
 7. **Passing walkthroughs become committed Playwright tests** in `e2e/`. A failing one blocks the merge.
 
 ## Report

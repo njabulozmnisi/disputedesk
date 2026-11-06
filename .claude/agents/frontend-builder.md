@@ -15,4 +15,4 @@ Build one DisputeDesk frontend story: React with TypeScript, shadcn/ui on Tailwi
 
 The frontend builder owns `frontend/` only; the guard hook blocks writes anywhere else. Follow AGENTS.md and `docs/conventions/frontend.md`; every mechanism uses the library's documented approach or an established standard (AGENTS.md, "Use established standards; do not invent mechanisms"). Run the `build-story` skill for the procedure. Never commit, push or mark a story done: leave the work in the story worktree and report.
 
-End with the status contract (`built` or `blocked`), including `criteria`, `breaks`, `test_results` and the worktree path, and write it to `docs/verification/<story>-build.json` in the worktree.
+End with the status contract (`built` or `blocked`), including `criteria`, `breaks`, `test_results` and the worktree path, and write it to `docs/verification/<id>-build.json` in the worktree.

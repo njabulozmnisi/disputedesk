@@ -59,7 +59,7 @@ sequenceDiagram
     participant R as Reviewer (Opus, writes only its record)
 
     S->>S: check-ready, collision check (stacked on feature/<base> when it depends on an unmerged story)
-    S->>B: Story from docs/tickets (worktree from main, or from feature/<base>)
+    S->>B: Feature spec from docs/backlog (worktree from main, or from feature/<base>)
     B->>B: Test first, all checks, one full run with a results file, breaks list, developer smoke check
     B-->>S: {status: built, criteria → tests, breaks, test_results}, <id>-build.json in the worktree
     par Post-build review, records in docs/verification/
@@ -88,21 +88,21 @@ sequenceDiagram
     S-->>N: Report after the merge; High-stakes diffs in the review blocks
 ```
 
-Before dispatch the supervisor runs `scripts/check-ready.sh <story>`, which fails while a `[story]` point in the pre-build review has no Sofia disposition, a `[decision]` point exists but the story's front matter lacks `decisions: settled` (the supervisor sets it, citing the epic's `epic-<epic>-decisions.md`, once the human has answered), or a story in the `after` list is neither done nor pushed as a `feature/<id>` branch on origin.
+Before dispatch the supervisor runs `scripts/check-ready.sh <id>`, which fails while a `[story]` point in the pre-build review has no Sofia disposition, a `[decision]` point exists but the feature spec's front matter lacks `decisions: settled` (the supervisor sets it, citing `docs/verification/decisions.md`, once the human has answered), or a feature spec in the `after` list (`story-<id>`) is neither done (its Features row in `docs/tickets/README.md` reads `done`) nor pushed as a `feature/<id>` branch on origin.
 
-Pre-build, one reviewer reads each Feature and High-stakes story with the review and security checklists; there is no per-story challenger. The challenger runs only in decision mode, on a new or changed architecture decision, PRD or brief.
+Pre-build, one reviewer reads each Feature-tier and High-stakes story with the review and security checklists; there is no per-story challenger. The challenger runs only in decision mode, on a new or changed architecture decision, PRD or brief.
 
-Only high and medium findings send the story to a fix round. Lows go to `docs/verification/epic-<epic>-lows.md` and are fixed in one batch per epic. After two fix rounds a story that still has a high or medium finding goes to the human.
+Only high and medium findings send the story to a fix round. Lows go to `docs/verification/lows.md` and are fixed in the lows batch (AGENTS.md, Continuous improvement). After two fix rounds a story that still has a high or medium finding goes to the human.
 
 A fix round goes to one fresh builder, whose isolated worktree starts at the base commit, not at the story's uncommitted change. The supervisor runs `scripts/story-patch.sh <story-worktree> <base> <patch>`, which writes the change as one binary patch and fails unless the patch reproduces the worktree; the fix brief starts with `git apply --binary --exclude='docs/*' <patch>`, and the builder's worktree becomes the story worktree.
 
 A fix item that moves a header, or the component that owns a behaviour, lists every response or path the criterion names, each with its expected value.
 
-A lane on a worker machine runs through `scripts/lane.sh start|wait|collect <host> <story> ...`: it starts a headless builder in a tmux session, waits for its exit file, and brings back the report and a verified patch. Two machines (M1 and M2) run two lanes each; `lane.sh start` refuses a lane under 15 GB free, and the supervisor fills a lane the moment it frees.
+A lane on a worker machine runs through `scripts/lane.sh start|wait|collect <host> <id> ...`: it starts a headless builder in a tmux session, waits for its exit file, and brings back the report and a verified patch. Two machines (M1 and M2) run two lanes each; `lane.sh start` refuses a lane under 15 GB free, and the supervisor fills a lane the moment it frees.
 
-The verifier does not re-run the suite. It checks that the builder's results files cover the current diff (the diff hash in `<story>-build.json`), judges each criterion against its test, and runs each `breaks` entry in a throwaway copy: apply the patch, run the named test, expect a failure. A break that still passes, or a results file for another diff, is a high finding.
+The verifier does not re-run the suite. It checks that the builder's results files cover the current diff (the diff hash in `<id>-build.json`), judges each criterion against its test, and runs each `breaks` entry in a throwaway copy: apply the patch, run the named test, expect a failure. A break that still passes, or a results file for another diff, is a high finding.
 
-Every change reaches main through its pull request (AGENTS.md, Commits): a story on `feature/<story>`, any other change on `feature/<slug>`, the records of a merged story on `feature/records-<story>`. Every `gh` write and read-back runs as the repository owner, `GH_TOKEN="$(gh auth token --user <owner>)" gh …`, written `gh` below; the token is never printed, logged or written to a file. Once every stage the change needs has passed, the supervisor:
+Every change reaches main through its pull request (AGENTS.md, Commits): a story on `feature/<id>`, any other change on `feature/<slug>`, the records of a merged story on `feature/records-<id>`. Every `gh` write and read-back runs as the repository owner, `GH_TOKEN="$(gh auth token --user <owner>)" gh …`, written `gh` below; the token is never printed, logged or written to a file. Once every stage the change needs has passed, the supervisor:
 
 1. pushes the branch, `git push origin feature/<id>`, and opens the pull request, `gh pr create --head feature/<id> --base <base> --title <title> --body <body>`, where `<base>` is `main`, or `feature/<base>` for a stacked story, and `<title>` is the commit-message subject (one line, at most 72 characters);
 2. waits for the required checks, `gh pr checks <n> --watch --required`;
@@ -113,7 +113,7 @@ Every change reaches main through its pull request (AGENTS.md, Commits): a story
 
 A pull request that is only behind main gets `gh pr merge <n> --disable-auto`, then `gh pr update-branch <n>`, with no force push; the local branch then takes the remote head first (`git fetch` and a fast-forward), and the merge is re-armed with the new head once its checks pass, with no other stage re-run. A `DIRTY` pull request, or a drift check that fails after an update, goes to a builder as a fix round, since the supervisor writes no code.
 
-A stacked story's pull request has the base `feature/<base>`. When the base's pull request squash-merges, GitHub deletes `feature/<base>` and retargets the stacked pull request to main ([Managing branches within your repository](https://docs.github.com/en/pull-requests/how-tos/commit-changes/managing-branches-within-your-repository), Deleting a branch); the supervisor confirms it with `gh pr view <n> --json baseRefName` (else `gh pr edit <n> --base main`). It takes the base's last head from `gh pr view <base-pr> --json headRefOid`, runs `git fetch origin` and `git rebase --onto origin/main <that sha> feature/<story>` (on a conflict, `git rebase --abort` and a fix round), and pushes with the one force push the guard lets through, `git [-C <path>] push --force-with-lease --force-if-includes origin feature/<story>`, as the whole command. The pull request's checks run again before any merge.
+A stacked story's pull request has the base `feature/<base>`. When the base's pull request squash-merges, GitHub deletes `feature/<base>` and retargets the stacked pull request to main ([Managing branches within your repository](https://docs.github.com/en/pull-requests/how-tos/commit-changes/managing-branches-within-your-repository), Deleting a branch); the supervisor confirms it with `gh pr view <n> --json baseRefName` (else `gh pr edit <n> --base main`). It takes the base's last head from `gh pr view <base-pr> --json headRefOid`, runs `git fetch origin` and `git rebase --onto origin/main <that sha> feature/<id>` (on a conflict, `git rebase --abort` and a fix round), and pushes with the one force push the guard lets through, `git [-C <path>] push --force-with-lease --force-if-includes origin feature/<id>`, as the whole command. The pull request's checks run again before any merge.
 
 Pull-request checks test GitHub's merge of the up-to-date branch into main, and main's own run builds, scans and publishes the squash commit (ad-012). Main is never force-pushed, and its ruleset refuses it.
 

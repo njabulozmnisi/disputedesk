@@ -1,8 +1,8 @@
 # Build order
 
-Every epic and story in the order it is built. A story's number is `<epic>.<story>`; it is also its file name prefix, its `docs/verification/` prefix and the name used in reports and commits. The order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, 3.9 right after 3.3, 3.10 and 3.11 right after 3.6, 5.5 right after 5.1, 6.6 before 6.3, 7.6 and 7.7 right after 7.3, 7.11 before 7.4, 7.12, 7.13 and 7.14 before 7.10, and 7.10 last).
+Every piece of work in the order it is built. New work is a feature spec named by its slug (AGENTS.md, Ticket numbering), listed in the Features table at the end. The numbered stories before that table are done and keep their numbers: a story's number is `<epic>.<story>`, its file name prefix and its `docs/verification/` prefix. Their order comes from the `tickets.toml` files (table order); ids are never renumbered, so a story a replan moved keeps its number (5.4 is built before 5.3, 3.5 moved to 5.4, 2.7 is built before 2.4, 3.8 is built before 3.3, 3.9 right after 3.3, 3.10 and 3.11 right after 3.6, 5.5 right after 5.1, 6.6 before 6.3, 7.6 and 7.7 right after 7.3, 7.11 before 7.4, 7.12, 7.13 and 7.14 before 7.10, and 7.10 last).
 
-Status: done (merged on main), in progress, or planned. The supervisor updates it when a story merges.
+Status: done (merged on main), in progress, or planned. The supervisor updates it when a feature spec merges.
 
 ## Epic 1: [The platform baseline runs, is tested and is scanned](epic-1-platform-baseline/epic-1-platform-baseline.md)
 
@@ -108,3 +108,16 @@ Needs: epic 2 (the themed hosted login for UJ-1); epic 3 (dispute screens for UJ
 | 7.17 | [Deploy database setup proved against PostgreSQL 18 with TLS](epic-7-release/tickets/story-7.17-deploy-database-setup-proved-against-postgresql-18-with-tls.md) | backend | done |
 
 Build-order constraint (decided 2026-10-30): 7.1 starts once 6.4 and 3.12 have merged; 7.2 follows 7.1 and 7.3 follows 7.2 (they share `e2e/playwright.config.ts`, and CI runs the journeys 7.1 and 7.2 add). 7.6 waits on nothing and 7.11 waits only on 3.11, so both may build beside the QA stories; 7.7 follows 7.3 and 5.3. 7.4 follows 7.3 and 7.11, and 7.5 follows 7.4 (one lane, B). 7.10 runs last, after every other epic 7 story. Decided 2026-10-31 (7.10 disposition): the review's fixes run as 7.12 (gateway and edge), 7.13 (backend) and 7.14 (frontend and docs), which touch different files and may build in parallel (only 7.12 touches `PlatformScriptTests`); 7.10 closes once all three have merged. Decided 2026-11-01: three offline checks of the AWS deploy path follow the closed 7.10; 7.15 builds first, because the deploy role's trust subject is a live defect; 7.17 may build beside it in the second lane, and 7.16 follows 7.15 in its lane; each adds a different `ci.yml` job or step, so the story that merges second rebases, and none runs an AWS command. No AWS command is run in this epic: the account does not exist, so 7.5 closes on fmt, validate and mocked-provider plans.
+
+## Features
+
+| Slug | Title | Owner | Tier | Status |
+|---|---|---|---|---|
+| feature-ids | [New work is named by a feature slug](../backlog/story-feature-ids.md) | backend | Feature | done |
+| guard-allow-list | Subagents run only a closed list of git and gh forms, per role | backend | High-stakes | planned |
+| ci-e2e-regression | CI runs the e2e regression project on pull requests that can break it | backend | Feature | planned |
+| guard-main-session | The main session is asked for every deploy path and every command the guard cannot read | backend | High-stakes | planned |
+| agent-isolation | Pipeline agents never change the main checkout | backend | High-stakes | planned |
+| process-checks | The pipeline's handoffs fail fast instead of late | backend | Feature | planned |
+| ci-hardening | Downloads retry for minutes, and the verifier's allow list is checked | backend | Small | planned |
+| skill-lines | The pitfall lines and the spec template catch what checks cannot | supervisor | Small | planned |

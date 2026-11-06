@@ -13,6 +13,8 @@ owner_token="GH_TOKEN=\"\$(gh auth token --user njabulozmnisi)\" "
 repo=njabulozmnisi/disputedesk
 sha=0123456789abcdef0123456789abcdef01234567 # a 40-character SHA
 stacked='push --force-with-lease --force-if-includes origin' # the stacked force form, before its branch
+slug41=$(printf '%41s' '' | tr ' ' a) # the longest feature slug (AGENTS.md, Ticket numbering)
+slug42=$(printf '%42s' '' | tr ' ' a) # one character too long
 failures=()
 runs=0
 
@@ -47,9 +49,15 @@ check() {
 }
 
 # --- no decision in the main session, denied to a subagent ---
-check none deny "git $stacked feature/7.4"
-check none deny "git -C /abs/path $stacked feature/7.4"
-check none deny "git -C /private/tmp/claude-501/-Users-x/scratchpad/wt.7_4 $stacked feature/7.4b"
+check none deny "git $stacked feature/guard-allow-list"
+check none deny "git -C /abs/path $stacked feature/guard-allow-list"
+check none deny "git -C /private/tmp/claude-501/-Users-x/scratchpad/wt.7_4 $stacked feature/guard-allow-list"
+# the feature slug's bounds: 1 and 41 characters
+check none deny "git $stacked feature/a"
+check none deny "git $stacked feature/$slug41"
+# only records- and lows- with their dash are reserved
+check none deny "git $stacked feature/records"
+check none deny "git $stacked feature/lows"
 check none deny "git push origin feature/7.4"
 check none deny "git push origin feature/records-7.3"
 check none deny "git commit -m x"
@@ -95,7 +103,7 @@ check none deny "gh workflow run ci.yml"
 check none deny "gh api \\"$'\n'"  -X PUT repos/$repo/rulesets/1 \\"$'\n'"  --input main.json"
 check none deny "gh pr \\"$'\n'"  merge 5 --squash"
 check none deny "git \\"$'\n'"  push origin feature/7.4"
-check none deny "git push --force-with-lease \\"$'\n'"--force-if-includes origin feature/7.4" # joined: the stacked form
+check none deny "git push --force-with-lease \\"$'\n'"--force-if-includes origin feature/guard-allow-list" # joined: the stacked form
 # pushes that look like a force and are not
 check none deny "git push -4 origin feature/7.4"
 check none deny "git push -u origin feature/fix-7.4f"
@@ -145,15 +153,15 @@ check none deny "gh variable remove OTHER"
 check none deny "echo x\\\\"$'\n'"gh pr merge 5"
 check none deny "echo x\\\\\\\\"$'\n'"git push origin feature/7.4"
 # the flow's own steps
-check none deny "git $stacked feature/7.5"
-check none deny "git -C /private/tmp/wt $stacked feature/7.5"
+check none deny "git $stacked feature/ci-hardening"
+check none deny "git -C /private/tmp/wt $stacked feature/ci-hardening"
 check none deny "${owner_token}gh pr create --head feature/7.4 --base main --title \"7.4 stories merge through their pull request\" --body-file /tmp/body.md"
 check none deny "gh pr create --head feature/7.4 --base main --title t --body-file /tmp/body.md"
 check none deny "git commit -F /tmp/msg.txt"
 # The guard reads each simple command as the words bash passes on (Python's shlex). In these four, bash passes git
 # the stacked form's own words, or a word that keeps a literal backslash, which is no force option or + refspec.
-check none deny "git  $stacked feature/7.4" # two spaces: the stacked form's words
-check none deny "git $stacked \"feature/7.4\"" # a quoted branch: the stacked form's words
+check none deny "git  $stacked feature/guard-allow-list" # two spaces: the stacked form's words
+check none deny "git $stacked \"feature/guard-allow-list\"" # a quoted branch: the stacked form's words
 check none deny "git push origin \\\\+feature/7.4" # bash passes \+feature/7.4
 check none deny "git push \\\\\\"$'\n'"--force origin feature/7.4" # bash passes \--force, as the repository
 # A subagent is denied every command substitution but the two exemptions.
@@ -210,20 +218,32 @@ check deny deny "git push -uf origin feature/7.4"
 check deny deny "git push --mirror origin"
 check deny deny "git push origin +feature/7.4"
 check deny deny "git push origin '+feature/7.4'"
-check deny deny "git $stacked feature/7.4:main"
-check deny deny "git $stacked HEAD:feature/7.5"
-check deny deny "git $stacked feature/7.4 feature/7.5"
+check deny deny "git $stacked feature/guard-allow-list:main"
+check deny deny "git $stacked HEAD:feature/guard-allow-list"
+check deny deny "git $stacked feature/guard-allow-list feature/ci-hardening"
 check deny deny "git $stacked feature/7.4xy"
 check deny deny "git $stacked feature/records-7.3"
 check deny deny "git $stacked main"
-check deny deny "git -C /tmp/\$(id) $stacked feature/7.4"
-check deny deny "git -C relative/path $stacked feature/7.4"
-check deny deny "git $stacked feature/7.4; git push -f origin feature/7.5"
-check deny deny "git $stacked feature/7.4 &"
-check deny deny "git $stacked feature/7.4 || true"
-check deny deny "git $stacked feature/7.4"$'\n'"echo second"
-check deny deny "git $stacked feature/7.4"$'\n'
-check deny deny "git push --force-with-lease"$'\n'"--force-if-includes origin feature/7.4"
+# a branch outside the feature slug's bounds: an upper-case letter, 42 characters, a dot, a colon, a leading dash or
+# digit, no slug, the reserved records- and lows- prefixes, and a numbered story's branch
+check deny deny "git $stacked feature/Guard"
+check deny deny "git $stacked feature/7a"
+check deny deny "git $stacked feature/$slug42"
+check deny deny "git $stacked feature/a.b-c"
+check deny deny "git $stacked feature/x:main"
+check deny deny "git $stacked feature/-guard"
+check deny deny "git $stacked feature/"
+check deny deny "git $stacked feature/records-guard-allow-list"
+check deny deny "git $stacked feature/lows-2026-11-06"
+check deny deny "git $stacked feature/7.4"
+check deny deny "git -C /tmp/\$(id) $stacked feature/guard-allow-list"
+check deny deny "git -C relative/path $stacked feature/guard-allow-list"
+check deny deny "git $stacked feature/guard-allow-list; git push -f origin feature/ci-hardening"
+check deny deny "git $stacked feature/guard-allow-list &"
+check deny deny "git $stacked feature/guard-allow-list || true"
+check deny deny "git $stacked feature/guard-allow-list"$'\n'"echo second"
+check deny deny "git $stacked feature/guard-allow-list"$'\n'
+check deny deny "git push --force-with-lease"$'\n'"--force-if-includes origin feature/guard-allow-list"
 check deny deny "git push origin feature/7.4 && git push -f origin feature/7.5"
 check deny deny "git -C /abs/dir push --force origin feature/7.4"
 check deny deny "git -c x=y push --force origin feature/7.4"
@@ -231,8 +251,8 @@ check deny deny "git --git-dir=/abs/dir/.git push --force origin feature/7.4"
 # line continuations
 check deny deny "git push \\"$'\n'"  --force origin feature/7.4"
 check deny deny "git \\"$'\n'"  push -f origin feature/7.4"
-check deny deny "git $stacked \\"$'\n'"feature/7.4"$'\n'"echo second"
-check deny deny "git $stacked feature/7.4 \\"$'\n'"  feature/7.5"
+check deny deny "git $stacked \\"$'\n'"feature/guard-allow-list"$'\n'"echo second"
+check deny deny "git $stacked feature/guard-allow-list \\"$'\n'"  feature/ci-hardening"
 # short-option clusters, abbreviations of --mirror and --force*, escaped or quoted + refspecs
 check deny deny "git push -4f origin feature/7.4"
 check deny deny "git push -6f origin feature/7.4"
@@ -269,12 +289,12 @@ check deny deny "echo y | git push --force origin feature/7.4"
 check deny deny "env GIT_TRACE=1 git push --force origin feature/7.4"
 check deny deny "bash -c 'git push --force origin feature/7.4'"
 check deny deny "GIT_DIR=/x/.git /usr/bin/git push -f origin feature/7.4"
-check deny deny "git $stacked feature/7.4 2>&1" # the stacked form plus a redirection is not the whole command
+check deny deny "git $stacked feature/guard-allow-list 2>&1" # the stacked form plus a redirection is not the whole command
 check deny deny "git push origin feature/7.4 2>&1 -f"
 check deny deny "true # note\\"$'\n'"git push --force origin feature/7.4" # the comment ends at the newline
 check deny deny "gh pr view 5 <(git push --force origin feature/7.4)"
-check deny deny "git -C /\$(git rev-parse --show-toplevel) $stacked feature/7.5" # read before the placeholder
-check deny deny "git -C \"\$(git rev-parse --show-toplevel)\" $stacked feature/7.5"
+check deny deny "git -C /\$(git rev-parse --show-toplevel) $stacked feature/ci-hardening" # read before the placeholder
+check deny deny "git -C \"\$(git rev-parse --show-toplevel)\" $stacked feature/ci-hardening"
 check deny deny "git push \$'--force' origin feature/7.4" # ANSI-C quoting, the rough reading sees --force
 check deny deny "env -u gh git push --force origin feature/7.4"
 check deny deny "sudo -u git git push -f origin feature/7.4"
