@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, "story/**"]
+    branches: [main]
 
 # Least privilege: every job reads the repo and nothing more.
 permissions:
@@ -237,6 +237,8 @@ jobs:
     # installs Trivy.
     # actionlint's pin is its line in the release's actionlint_<version>_checksums.txt; shellcheck publishes no checksum
     # file, so its pin is GitHub's digest of the release asset. Change a version and its pin together.
+    # Curl starts no retry after --retry-max-time, so a download's worst case is --retry-max-time + --retry-delay +
+    # --max-time, 95 s; both fit in the job's timeout with its other steps, about a minute on main.
     env:
       ACTIONLINT_VERSION: 1.7.12
       ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
@@ -246,8 +248,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0 # the infra path check reads every commit
 
       - run: scripts/floor-guard.sh
+
+      # Every infra/... path named in the repository exists, so a moved or deleted file leaves no stale mention
+      # (scripts/check-infra-paths.sh; a record may name a file an earlier commit held). It reads the whole history.
+      - name: infra paths exist
+        run: scripts/check-infra-paths.sh
 
       # ad-012 clauses 1 and 3: each gate needs every check job, and every check job runs unconditionally. publish,
       # deploy and deploy-switched-off run only on main after the checks, so ci-passed does not need them. yq is
@@ -262,10 +270,12 @@ jobs:
       - run: scripts/run-breaks.test.sh
       - run: scripts/deploy-workflow.test.sh
       - run: scripts/main-protection.test.sh
+      # The guard hook's Bash rules: python3 is preinstalled on the runner image.
+      - run: scripts/guard.test.sh
 
       - name: Install actionlint
         run: |
-          curl -fsSL --max-time 60 -o "$RUNNER_TEMP/actionlint.tar.gz" \
+          curl -fsSL --max-time 60 --retry 5 --retry-delay 5 --retry-max-time 30 --retry-all-errors -o "$RUNNER_TEMP/actionlint.tar.gz" \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
           echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check --strict
           mkdir -p "$RUNNER_TEMP/bin"
@@ -276,7 +286,7 @@ jobs:
       # lint steps run.
       - name: Install shellcheck
         run: |
-          curl -fsSL --max-time 60 -o "$RUNNER_TEMP/shellcheck.tar.xz" \
+          curl -fsSL --max-time 60 --retry 5 --retry-delay 5 --retry-max-time 30 --retry-all-errors -o "$RUNNER_TEMP/shellcheck.tar.xz" \
             "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
           echo "${SHELLCHECK_SHA256}  $RUNNER_TEMP/shellcheck.tar.xz" | sha256sum --check --strict
           mkdir -p "$RUNNER_TEMP/bin"
@@ -401,7 +411,7 @@ jobs:
       worker: ${{ steps.images.outputs.worker }}
       gateway: ${{ steps.images.outputs.gateway }}
       core-banking: ${{ steps.images.outputs.core-banking }}
-      provision: ${{ steps.images.outputs.zitadel }}
+      zitadel: ${{ steps.images.outputs.zitadel }}
     env:
       TRIVY_NO_PROGRESS: "true" # no download progress bars in the log
     steps:
@@ -428,7 +438,8 @@ jobs:
               --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
               --label "org.opencontainers.image.revision=$GITHUB_SHA" \
               "${@:3}" "$2"
-            trivy image --image-src docker --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 "$image"
+            trivy image --image-src docker --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 \
+              --ignorefile .github/trivyignore.yaml "$image"
             docker push "$image"
             digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image")
             revision=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
@@ -476,7 +487,7 @@ jobs:
       worker: ${{ needs.publish.outputs.worker }}
       gateway: ${{ needs.publish.outputs.gateway }}
       core-banking: ${{ needs.publish.outputs.core-banking }}
-      provision: ${{ needs.publish.outputs.zitadel }}
+      zitadel: ${{ needs.publish.outputs.zitadel }}
 
   # Runs when deploy is switched off, so every main run shows publish's five references and that nothing was sent.
   deploy-switched-off:
@@ -491,9 +502,9 @@ jobs:
           WORKER: ${{ needs.publish.outputs.worker }}
           GATEWAY: ${{ needs.publish.outputs.gateway }}
           CORE_BANKING: ${{ needs.publish.outputs.core-banking }}
-          PROVISION: ${{ needs.publish.outputs.zitadel }}
+          ZITADEL: ${{ needs.publish.outputs.zitadel }}
         run: |
-          for pair in "api=$API" "worker=$WORKER" "gateway=$GATEWAY" "core-banking=$CORE_BANKING" "provision=$PROVISION"; do
+          for pair in "api=$API" "worker=$WORKER" "gateway=$GATEWAY" "core-banking=$CORE_BANKING" "zitadel=$ZITADEL"; do
             name=${pair%%=*}
             reference=${pair#*=}
             if [[ -z $reference ]]; then

@@ -26,8 +26,10 @@ policies in `modules/deploy-role` and `modules/compute`, the Transaction Search 
 state bucket policy in `bootstrap`), rendered with `templatefile()`. Each is valid JSON before rendering, with its
 placeholders only inside JSON strings, so `IamNamesTests` in the infra test project (`infra/tests`) reads every action
 and condition key from the files with `System.Text.Json` and checks it against AWS's public service reference (no AWS
-call). The values are ARNs, IDs, the region, paths and the OIDC subject, none of which holds a `"` or `\`; a value that
-could would need `jsonencode()`. The mocked Terraform tests pin each rendered policy.
+call). The values are ARNs, IDs, the region, paths and the OIDC subject, none of which holds a `"` or `\`; each module
+input that reaches a template refuses both in a `validation` block, and a value that could hold one would need
+`jsonencode()`. The mocked Terraform tests pin each rendered policy that takes a value; the compute trust policy has no
+placeholders.
 
 What to know before applying it:
 
@@ -57,8 +59,9 @@ What to know before applying it:
 - AWS CLI 2.32.0 or later, for `aws login`.
 - `gh`, signed in to the repository, for the repository variables and the deploy.
 
-Every command below runs from the repository root unless it says otherwise, with `REGION` set to one of `us-east-1`,
-`us-west-2`, `eu-west-1` or `eu-central-1`:
+Every command below runs from the repository root unless it says otherwise, with `REGION` set to one of `af-south-1`,
+`us-east-1`, `us-west-2`, `eu-west-1` or `eu-central-1` (`af-south-1` is an opt-in region: enable it in the account
+first):
 
 ```sh
 export REGION=eu-west-1
@@ -148,6 +151,9 @@ rm -rf "$(dirname "$plan_file")"
 cd -
 ```
 
+`terraform init` fills in the bucket and region of the S3 backend in `envs/dev/backend.tf`; `envs/dev/terraform.tf`
+pins Terraform and the providers.
+
 The saved plan holds the origin-verify value and the budget address in clear text (Terraform, *Command: plan*), so it
 is written to a temporary directory outside the repository and removed after the apply; `*.tfplan` is also ignored by
 git. Plans and applies run only from this machine, never from CI (AD-28).
@@ -173,7 +179,6 @@ put_secret(){ # NAME: the value on standard input
 
 letters_and_digits 64 | put_secret APP_DB_PASSWORD                  # [A-Za-z0-9]{32,128}
 letters_and_digits 64 | put_secret ZITADEL_DB_PASSWORD              # [A-Za-z0-9]{32,128}
-letters_and_digits 64 | put_secret LOGIN_SESSION_COOKIE_SECRET      # [A-Za-z0-9]{32,128}
 letters_and_digits 64 | put_secret QA_DB_PASSWORD                   # [A-Za-z0-9]{32,128}
 letters_and_digits 32 | put_secret ZITADEL_MASTERKEY                # exactly 32 of [A-Za-z0-9]
 { letters_and_digits 60; printf 'Aa1-'; } | put_secret ZITADEL_ADMIN_PASSWORD   # [A-Za-z0-9-]{32,128}, each class
@@ -396,7 +401,7 @@ Before `terraform destroy`, delete what Terraform did not create under its paths
 the Api's key ring.
 
 ```sh
-for name in APP_DB_PASSWORD ZITADEL_DB_PASSWORD LOGIN_SESSION_COOKIE_SECRET QA_DB_PASSWORD ZITADEL_MASTERKEY \
+for name in APP_DB_PASSWORD ZITADEL_DB_PASSWORD QA_DB_PASSWORD ZITADEL_MASTERKEY \
   ZITADEL_ADMIN_PASSWORD LINKING_OTP_HMAC_KEY MAILPIT_UI_AUTH; do
   aws ssm delete-parameter --name "/disputedesk/dev/$name"
 done

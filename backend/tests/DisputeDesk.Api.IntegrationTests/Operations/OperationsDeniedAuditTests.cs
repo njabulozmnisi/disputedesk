@@ -237,7 +237,7 @@ public class OperationsDeniedAuditTests(PostgresFixture postgres, TransactionsSt
         }
     }
 
-    /// <summary>A token shaped like the API's ID token for customer A, as in <see cref="OperationsRolesTests"/>.</summary>
+    /// <summary>A token shaped like the web app's ID token for customer A, as in <see cref="OperationsRolesTests"/>.</summary>
     private static SecurityTokenDescriptor CustomerIdToken(FakeZitadel zitadel, params string[] roles)
     {
         SecurityTokenDescriptor idToken = zitadel.AccessToken(CustomerLogin, roles);

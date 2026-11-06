@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { fixtureLogin, queryDatabase, origin } from './support';
+import { enterHostedCredentials, fixtureLogin, queryDatabase, origin } from './support';
 
 // Story 6.6: forwarded headers are trusted only from the Compose network, and the identity origin never logs
 // the end-session id_token_hint. Four hops: browser (Zitadel), network (gateway and a direct hop to the Api),
@@ -32,10 +32,7 @@ async function signIn(browser: Browser, loginKey: string, extraHeaders: Record<s
   }
   const page = await context.newPage();
   await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
+  await enterHostedCredentials(page, login);
   await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   await page.close();
   return context;
@@ -128,6 +125,9 @@ test('criterion 1: forged host and scheme never reach the OIDC redirect_uri; sig
     expect(await (await page.request.get('/api/v1/authentication/session')).json()).toEqual({ state: 'linked' });
 
     const { requestToken } = await (await page.request.get('/api/v1/antiforgery')).json();
+    // A live app tab leaves for /signed-out as soon as it sees a 401, so the form is posted from a page that is not
+    // the app (the session JSON); the redirect chain is then observed without the tab racing it.
+    await page.goto('/api/v1/authentication/session');
     const navigations: string[] = [];
     page.on('request', (navigation) => navigation.isNavigationRequest() && navigations.push(navigation.url()));
     await page.evaluate((antiforgery) => {

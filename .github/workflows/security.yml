@@ -5,7 +5,7 @@ name: Security
 on:
   pull_request:
   push:
-    branches: [main, "story/**"]
+    branches: [main]
   # Weekly, so advisories published after a merge still surface when the code has not changed.
   schedule:
     - cron: "17 3 * * 1"
@@ -38,7 +38,7 @@ jobs:
 
       - name: Install gitleaks
         run: |
-          curl -fsSL --max-time 300 -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+          curl -fsSL --max-time 300 --retry 5 --retry-delay 10 --retry-max-time 240 --retry-all-errors -o "$RUNNER_TEMP/gitleaks.tar.gz" \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --strict
           mkdir -p "$RUNNER_TEMP/bin"
@@ -123,7 +123,7 @@ jobs:
       # image is not scanned on its own, its files are scanned inside the gateway. docker-image:// of the local,
       # never-pushed tag works because the default docker driver reads the daemon's image store; a docker-container
       # builder (for example from setup-buildx-action) would try a registry pull instead.
-      - name: Build the api, worker, core-banking, gateway and provision images
+      - name: Build the api, worker, core-banking, gateway and zitadel images
         run: |
           docker build -t disputedesk-api:ci --target api-local backend
           docker build -t disputedesk-worker:ci --target worker-local backend
@@ -132,13 +132,14 @@ jobs:
           docker build -t disputedesk-gateway:ci --build-context spa=docker-image://disputedesk-spa:ci infra/images/gateway
           docker build -t disputedesk-zitadel:ci infra/images/zitadel
 
+      # The image scans read the same triaged findings (.github/trivyignore.yaml), each scoped to its path.
       - name: Image scan
         run: |
-          trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-api:ci
-          trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-worker:ci
-          trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-core-banking:ci
-          trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-gateway:ci
-          trivy image --severity HIGH,CRITICAL --exit-code 1 disputedesk-zitadel:ci
+          trivy image --severity HIGH,CRITICAL --exit-code 1 --ignorefile .github/trivyignore.yaml disputedesk-api:ci
+          trivy image --severity HIGH,CRITICAL --exit-code 1 --ignorefile .github/trivyignore.yaml disputedesk-worker:ci
+          trivy image --severity HIGH,CRITICAL --exit-code 1 --ignorefile .github/trivyignore.yaml disputedesk-core-banking:ci
+          trivy image --severity HIGH,CRITICAL --exit-code 1 --ignorefile .github/trivyignore.yaml disputedesk-gateway:ci
+          trivy image --severity HIGH,CRITICAL --exit-code 1 --ignorefile .github/trivyignore.yaml disputedesk-zitadel:ci
 
   # ad-012 clause 3: the Security required check, the same rule as ci.yml's ci-passed. A skipped job reports
   # success to a required check, so this job reads each needed job's result and passes only when every one is success;

@@ -46,7 +46,7 @@ There is no moat here, and the brief does not pretend otherwise. The differences
 
 - **Bank customers** (the people using the portal). They want to dispute a transaction in under two minutes without phoning anyone, and to see at any time where their dispute stands.
 - **Operations and automation** (actors calling the API). Support tooling, LLM agents and scheduled processes that review, escalate and resolve disputes. For the demo, the Scalar API viewer stands in for another team's operations tool.
-- **Engineers who maintain or review the solution.** The requirements put security first and testing a close second, and treat over-engineering as a defect as serious as missing rigour. They need to see within minutes how each area is handled: every acceptance criterion proved by a test, one trace from browser to Worker, clean security scans, and a README that ends with a map from each area to where it is addressed.
+- **Engineers who maintain or review the solution.** The requirements put security first and testing a close second, and treat over-engineering as a defect as serious as missing rigour. They need to see within minutes how each area is handled: every acceptance criterion proved by a test, one trace from browser to the relay, clean security scans, and a README that ends with a map from each area to where it is addressed.
 
 ## Success criteria
 

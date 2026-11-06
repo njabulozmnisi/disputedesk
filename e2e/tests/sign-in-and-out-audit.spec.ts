@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
 import {
-  antiforgeryCookieName, expectProblemShape, fixtureLogin, origin, queryDatabase, sessionCookieName,
+  antiforgeryCookieName, expectProblemShape, fixtureLogin, origin, queryDatabase, sessionCookieName, skipTwoFactorSetup,
 } from './support';
 
 // Story 2.8: sign-in and sign-out are audited, and every endpoint is denied by default.
@@ -32,12 +32,16 @@ function auditRowsAfter(skip: number): string[] {
 // Own sign-in: this spec tests the sign-in itself, so it drives the hosted login on the page under test.
 async function signIn(page: Page, login: { username: string; password: string }, loginUrl = '/api/v1/authentication/login') {
   await page.goto(loginUrl);
-  // Zitadel keeps its own session after a sign-in, so a second login completes silently, without the form.
-  if (new URL(page.url()).origin === origin) return;
   const account = page.getByRole('button', { name: new RegExp(login.username) });
-  const username = page.getByTestId('username-text-input');
-  const password = page.getByTestId('password-text-input');
-  await expect(account.or(username).or(password)).toBeVisible();
+  const username = page.locator('#loginName');
+  const password = page.locator('#password');
+  // Zitadel keeps its own session after a sign-in, so a second login completes silently, without the form, by way of
+  // the built-in login's form_post page; whichever comes first decides.
+  const atApp = page.waitForURL((url) => url.origin === origin, { timeout: 60_000 }).then(() => true);
+  const atForm = account.or(username).or(password).first().waitFor({ timeout: 60_000 }).then(() => false);
+  atApp.catch(() => undefined);
+  atForm.catch(() => undefined);
+  if (await Promise.race([atApp, atForm])) return;
   if (await account.isVisible()) await account.click();
   if (await username.isVisible()) {
     await username.fill(login.username);
@@ -45,6 +49,7 @@ async function signIn(page: Page, login: { username: string; password: string },
   }
   await password.fill(login.password);
   await password.press('Enter');
+  await skipTwoFactorSetup(page);
   await page.waitForURL((url) => url.origin === origin);
 }
 

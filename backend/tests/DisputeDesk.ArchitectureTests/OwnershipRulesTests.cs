@@ -9,22 +9,22 @@ namespace DisputeDesk.ArchitectureTests;
 
 /// <summary>
 /// AC9, AD-11: the <c>Ownership</c> filter is bypassed only in <c>DisputeDesk.Application/Operations/</c>,
-/// <c>DisputeDesk.Worker/Sla/</c> and <c>DisputeDesk.Infrastructure/Seeding/Seeder.cs</c>, no context is pooled (a pooled context would keep one request's customer for the
+/// <c>DisputeDesk.Infrastructure/Sla/SlaSweep.cs</c> and <c>DisputeDesk.Infrastructure/Seeding/Seeder.cs</c>, no context is pooled (a pooled context would keep one request's customer for the
 /// next; banned in <c>backend/BannedSymbols.txt</c>), and the filter reads a nullable value on the context instead of
 /// <c>CurrentCustomer.CustomerId</c>, which throws when unset. 5.1 AC8: a bypass always names the filter, since the
 /// parameterless form would drop every other filter too, and the customer features never reach into the bypass places.
 /// </summary>
 public class OwnershipRulesTests
 {
-    // AD-11 names exactly these two folders, each in one project, and the one seeder file.
-    private static readonly string[] BypassFolders =
-    [
-        Path.Combine("DisputeDesk.Application", "Operations") + Path.DirectorySeparatorChar,
-        Path.Combine("DisputeDesk.Worker", "Sla") + Path.DirectorySeparatorChar,
-    ];
+    // AD-11 names exactly this folder, in one project, the sweep file and the seeder file.
+    private static readonly string OperationsFolder = Path.Combine("DisputeDesk.Application", "Operations") + Path.DirectorySeparatorChar;
 
-    // A file, not its folder, so no new file in Seeding/ can bypass without changing this rule.
-    private static readonly string SeederFile = Path.Combine("DisputeDesk.Infrastructure", "Seeding", "Seeder.cs");
+    // Files, not their folders, so no new file in Sla/ or Seeding/ can bypass without changing this rule.
+    private static readonly string[] BypassFiles =
+    [
+        Path.Combine("DisputeDesk.Infrastructure", "Sla", "SlaSweep.cs"),
+        Path.Combine("DisputeDesk.Infrastructure", "Seeding", "Seeder.cs"),
+    ];
 
     // The customer feature folders, in any project.
     private static readonly string[] CustomerFeatureFolders = ["Disputes", "Transactions"];
@@ -47,7 +47,7 @@ public class OwnershipRulesTests
             .Select(call => SourceTrees.Describe(call.GetLocation()))
             .ToList();
 
-        Assert.True(violations.Count == 0, "IgnoreQueryFilters outside Operations/, Sla/ and Seeding/Seeder.cs:\n" + string.Join('\n', violations));
+        Assert.True(violations.Count == 0, "IgnoreQueryFilters outside Operations/, Sla/SlaSweep.cs and Seeding/Seeder.cs:\n" + string.Join('\n', violations));
     }
 
     [Fact]
@@ -136,13 +136,13 @@ public class OwnershipRulesTests
 
     [Theory]
     [InlineData("Application/Operations/StartReview/StartReviewHandler.cs", true)]
-    [InlineData("Worker/Sla/SlaSweep.cs", true)]
+    [InlineData("Infrastructure/Sla/SlaSweep.cs", true)]
     [InlineData("Application/Disputes/RaiseDispute/RaiseDisputeHandler.cs", false)]
     [InlineData("Application/OperationsHelpers/Lookup.cs", false)]
     [InlineData("Application/Disputes/Operations/Lookup.cs", false)] // an Operations folder elsewhere in Application
     [InlineData("Api/Operations/OperationsEndpoints.cs", false)]     // Operations/ in another project
-    [InlineData("Infrastructure/Sla/SlaQueries.cs", false)]          // Sla/ outside the Worker
-    [InlineData("Worker/Outbox/Sla/Relay.cs", false)]                 // Sla/ deeper in the Worker
+    [InlineData("Infrastructure/Sla/SlaQueries.cs", false)]          // another file in Sla/
+    [InlineData("Api/Sla/SlaSweep.cs", false)]                       // SlaSweep.cs in another project
     [InlineData("Infrastructure/Seeding/Seeder.cs", true)]
     [InlineData("Infrastructure/Seeding/SeedDispute.cs", false)]      // another file in Seeding/
     [InlineData("Infrastructure/Linking/LinkCustomer.cs", false)]
@@ -170,7 +170,7 @@ public class OwnershipRulesTests
     private static bool IsInBypassPlace(string file)
     {
         string relative = Path.GetRelativePath(SourceRoots.Src, file);
-        return relative == SeederFile || BypassFolders.Any(folder => relative.StartsWith(folder, StringComparison.Ordinal));
+        return BypassFiles.Contains(relative) || relative.StartsWith(OperationsFolder, StringComparison.Ordinal);
     }
 
     /// <summary>Whether <paramref name="file"/> is in a project's top-level <c>Disputes/</c> or <c>Transactions/</c> folder.</summary>
@@ -178,6 +178,21 @@ public class OwnershipRulesTests
     {
         string[] parts = Path.GetRelativePath(SourceRoots.Src, file).Split(Path.DirectorySeparatorChar);
         return parts.Length > 2 && CustomerFeatureFolders.Contains(parts[1]);
+    }
+
+    [Theory]
+    [InlineData("class Seed { AppDbContext Field = new(options); }")]
+    [InlineData("class Seed { AppDbContext Property { get; } = new(options); }")]
+    [InlineData("class Seed { AppDbContext Make() { return new(options); } }")]
+    [InlineData("class Seed { AppDbContext Make() => new(options); }")]
+    [InlineData("class Seed { void Make() { AppDbContext local = new(options); } }")]
+    public void CreatedTypeName_TargetTypedNew_IsTheTypeItsTargetDeclares(string source)
+    {
+        BaseObjectCreationExpressionSyntax creation = CSharpSyntaxTree.ParseText(source, cancellationToken: TestContext.Current.CancellationToken)
+            .GetRoot(TestContext.Current.CancellationToken)
+            .DescendantNodes().OfType<BaseObjectCreationExpressionSyntax>().Single();
+
+        Assert.Equal(nameof(AppDbContext), CreatedTypeName(creation));
     }
 
     private static IEnumerable<string> SourceFiles() =>
@@ -209,11 +224,23 @@ public class OwnershipRulesTests
         _ => null,
     };
 
-    /// <summary>The type <c>new T(...)</c> names, or for a target-typed <c>new(...)</c> the type of the variable it initialises.</summary>
+    /// <summary>
+    /// The type <c>new T(...)</c> names, or for a target-typed <c>new(...)</c> the type on its nearest ancestor that is a
+    /// variable or field declaration, a property declaration or a method declaration (the method's return type).
+    /// </summary>
     private static string? CreatedTypeName(BaseObjectCreationExpressionSyntax creation) => creation switch
     {
         ObjectCreationExpressionSyntax typed => SourceTrees.LastName(typed.Type),
-        _ => creation.FirstAncestorOrSelf<VariableDeclarationSyntax>() is { } declaration ? SourceTrees.LastName(declaration.Type) : null,
+        // shortcut: the walk reads syntax only, so a new(...) passed as an argument or assigned in a method body takes the nearest declaration's type, not its target; use a SemanticModel when a rule must see those
+        _ => creation.Ancestors().Select(DeclaredType).OfType<TypeSyntax>().Select(SourceTrees.LastName).FirstOrDefault(),
+    };
+
+    private static TypeSyntax? DeclaredType(SyntaxNode node) => node switch
+    {
+        VariableDeclarationSyntax variable => variable.Type,
+        PropertyDeclarationSyntax property => property.Type,
+        MethodDeclarationSyntax method => method.ReturnType,
+        _ => null,
     };
 
     private static string? Join(string? left, SimpleNameSyntax right) => left is null ? null : $"{left}.{right.Identifier.ValueText}";

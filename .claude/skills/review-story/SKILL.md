@@ -13,7 +13,7 @@ For a Feature or High-stakes story, before it builds: read the story as a design
 
 ## Post-build review
 
-Diff: `git diff main...HEAD` (or `story/<base>...HEAD` for a stacked story) plus any uncommitted changes in the worktree. Run Pass 1 and Pass 2; on a story below High-stakes, also run the checklist in `.claude/skills/security-story/SKILL.md` (the security agent covers High-stakes). Write `<story>-review.md`.
+Diff: `git diff main...HEAD` (or `feature/<base>...HEAD` for a stacked story) plus any uncommitted changes in the worktree. Run Pass 1 and Pass 2; on a story below High-stakes, also run the checklist in `.claude/skills/security-story/SKILL.md` (the security agent covers High-stakes). Write `<story>-review.md`.
 
 **Severity.** A finding is a correctness or security gap, or a breach of a written rule; style and taste are not findings. High: a criterion unproved or wrong, a security gap, data loss. Medium: a likely defect, a missing boundary test, a home-grown mechanism where a documented standard exists. Low: everything else, simplicity points included unless they hide a defect. Only high and medium open a fix round.
 
@@ -53,7 +53,7 @@ On a re-review, review only the delta since the approved version and say for eac
 - For a focus or timing fix, every path through the changed code is checked (success, each error status, a direct load, a route change), not only the path the fix list named.
 - A mechanism that wraps `<Outlet/>` (a layout, a key, a focus or skip-link handler) is checked on every route with every session state, as the skip-link test in `frontend/src/app/routing.test.tsx` does (7.14).
 - A test stand-in for a pinned upstream image sends that image's real headers and behaviour, read from the image itself (for example a Next.js `routes-manifest.json`), never assumed (7.12).
-- A criterion that forces code around the framework (a disabled validator, a routing workaround, a copy of framework behaviour) is a `[decision]` finding against the criterion, not an accepted diff (simplicity audit 2026-11-03).
+- A criterion that forces code around the framework (a disabled validator, a routing workaround, a copy of framework behaviour) is a `[decision]` finding against the criterion, not an accepted diff.
 
 Rank findings by severity with file and line.
 

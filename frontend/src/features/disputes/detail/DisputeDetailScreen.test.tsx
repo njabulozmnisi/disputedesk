@@ -3,8 +3,8 @@ import { http, HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
 import {
-  getGetApiV1DisputesInfiniteQueryKey,
-  getGetApiV1TransactionsInfiniteQueryKey,
+  getListDisputesInfiniteQueryKey,
+  getListTransactionsInfiniteQueryKey,
 } from '@/api/generated/disputedesk';
 import type { DisputeResponse, TimelineEntryResponse } from '@/api/generated/model';
 import { server } from '@/test/server';
@@ -930,8 +930,8 @@ describe('the withdraw outcomes', () => {
     serveWithdraw(() => HttpResponse.json(withdrawn()));
     const { user, queryClient } = renderApp({ path: `/disputes/${disputeGuid}` });
     await screen.findByRole('heading', { level: 1, name: 'ZXP*GLOBALSVCS 0800' });
-    queryClient.setQueryData(getGetApiV1DisputesInfiniteQueryKey(), { pages: [], pageParams: [] });
-    queryClient.setQueryData(getGetApiV1TransactionsInfiniteQueryKey(), {
+    queryClient.setQueryData(getListDisputesInfiniteQueryKey(), { pages: [], pageParams: [] });
+    queryClient.setQueryData(getListTransactionsInfiniteQueryKey(), {
       pages: [],
       pageParams: [],
     });
@@ -948,12 +948,10 @@ describe('the withdraw outcomes', () => {
       expect(h1()).toHaveFocus();
     });
     expect(screen.getByRole('status')).toHaveTextContent('Dispute withdrawn');
-    expect(queryClient.getQueryState(getGetApiV1DisputesInfiniteQueryKey())?.isInvalidated).toBe(
+    expect(queryClient.getQueryState(getListDisputesInfiniteQueryKey())?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(getListTransactionsInfiniteQueryKey())?.isInvalidated).toBe(
       true,
     );
-    expect(
-      queryClient.getQueryState(getGetApiV1TransactionsInfiniteQueryKey())?.isInvalidated,
-    ).toBe(true);
   });
 
   it('for an upper-case GUID in the URL, shows Withdrawn after the withdraw, as the API answers with the lower-case ID', async () => {
@@ -978,8 +976,8 @@ describe('the withdraw outcomes', () => {
     );
     const { user, queryClient } = renderApp({ path: `/disputes/${disputeGuid}` });
     await screen.findByRole('heading', { level: 1, name: 'ZXP*GLOBALSVCS 0800' });
-    queryClient.setQueryData(getGetApiV1DisputesInfiniteQueryKey(), { pages: [], pageParams: [] });
-    queryClient.setQueryData(getGetApiV1TransactionsInfiniteQueryKey(), {
+    queryClient.setQueryData(getListDisputesInfiniteQueryKey(), { pages: [], pageParams: [] });
+    queryClient.setQueryData(getListTransactionsInfiniteQueryKey(), {
       pages: [],
       pageParams: [],
     });
@@ -990,12 +988,10 @@ describe('the withdraw outcomes', () => {
     await waitFor(() => {
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     });
-    expect(queryClient.getQueryState(getGetApiV1DisputesInfiniteQueryKey())?.isInvalidated).toBe(
+    expect(queryClient.getQueryState(getListDisputesInfiniteQueryKey())?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(getListTransactionsInfiniteQueryKey())?.isInvalidated).toBe(
       true,
     );
-    expect(
-      queryClient.getQueryState(getGetApiV1TransactionsInfiniteQueryKey())?.isInvalidated,
-    ).toBe(true);
     expect(screen.getAllByText('Withdrawn').length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: 'Withdraw dispute' })).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Dispute withdrawn');

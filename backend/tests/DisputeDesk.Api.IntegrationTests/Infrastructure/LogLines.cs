@@ -11,7 +11,7 @@ public static class LogLines
     private static IEnumerable<string> LinesOf(FakeLogRecord record)
     {
         yield return record.Message;
-        foreach ((string key, string? value) in record.State as IReadOnlyList<KeyValuePair<string, string?>> ?? [])
+        foreach ((string key, string? value) in record.StructuredState ?? [])
         {
             yield return $"{key}={value}";
         }

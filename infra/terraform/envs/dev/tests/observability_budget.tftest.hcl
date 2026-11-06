@@ -88,3 +88,23 @@ run "criterion_7_one_monthly_cost_budget_without_credits" {
     error_message = "The budget does not email an alert at 80 % actual and 100 % forecasted."
   }
 }
+
+# Each of these values reaches a template, where a quote or a backslash would change the rendered document.
+run "template_inputs_refuse_a_quote_or_a_backslash" {
+  command = plan
+
+  module {
+    source = "../../modules/observability"
+  }
+
+  variables {
+    name       = "disputedesk-dev"
+    aws_region = "eu-west-1\""
+    account_id = "0000\\0000"
+  }
+
+  expect_failures = [
+    var.aws_region,
+    var.account_id,
+  ]
+}

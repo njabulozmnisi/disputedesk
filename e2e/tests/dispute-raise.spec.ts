@@ -1,8 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, request as playwrightRequest, test, type BrowserContext, type Page, type Route } from '@playwright/test';
+import { errors, expect, request as playwrightRequest, test, type BrowserContext, type Page, type Route } from '@playwright/test';
 import { gatewayContentSecurityPolicy, ownDisputable, problemTypeBase, queryDatabase, axeTags, origin, signInContext } from './support';
 
-// Story 3.6: the raise-a-dispute screens (4a, 4b) with an idempotent submit, through the real gateway, Api,
+// Story 3.6: the raise-a-dispute screens (4a, 4b) with an idempotent submit, through the real gateway, API,
 // database and Zitadel, signed in as seeded customer A (B owns the 404 case). The database is read through qa_readonly.
 // Refusals come from the real API by forging the one POST in flight (another transaction, another customer's row, a
 // key already used); only the cases the API cannot be made to produce (an in-progress key, a 503, a 500, a 400) are
@@ -356,7 +356,7 @@ test('criteria 2, 3: wrong amount: bounds in integer cents, live difference, str
   await expect(summaryOfSecond).toBeVisible();
   await expect(summaryOfSecond).toBeFocused();
   // Focus stays on the summary for 500 ms: a change of the focused element within the window fails the claim.
-  await expect(second.waitForFunction(() => document.activeElement !== document.querySelector('[aria-labelledby="error-summary-title"]'), undefined, { timeout: 500 })).rejects.toThrow('Timeout');
+  await expect(second.waitForFunction(() => document.activeElement !== document.querySelector('[aria-labelledby="error-summary-title"]'), undefined, { timeout: 500 })).rejects.toThrow(errors.TimeoutError);
   await expect(summaryOfSecond).toBeFocused();
   await expect(note).not.toBeFocused();
   expect(await second.getByRole('heading', { name: 'Review your dispute' }).count()).toBe(0);

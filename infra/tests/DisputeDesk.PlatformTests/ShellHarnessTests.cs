@@ -1,16 +1,15 @@
 namespace DisputeDesk.PlatformTests;
 
-/// <summary>Infra's tests are xUnit tests in this project, not shell harnesses (INF-1).</summary>
+/// <summary>Infra's tests are xUnit tests in this project, not shell harnesses.</summary>
 public sealed class ShellHarnessTests
 {
     [Fact]
     public void Infra_HoldsNoShellTestHarness()
     {
-        // infra/tests/smoke.sh, the developer smoke check, is not a harness and matches neither pattern.
+        // infra/tests/smoke.sh, the developer smoke check, is not a harness and does not match the pattern.
         string infra = Path.Combine(SourceRoots.Repo, "infra");
 
         string[] harnesses = [.. Directory.GetFiles(infra, "*.test.sh", SearchOption.AllDirectories)
-            .Concat(Directory.GetFiles(Path.Combine(infra, "aws"), "check-*.sh"))
             .Select(file => Path.GetRelativePath(SourceRoots.Repo, file).Replace('\\', '/'))
             .Order(StringComparer.Ordinal)];
 

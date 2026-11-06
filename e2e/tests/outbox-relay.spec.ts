@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { expect, test, type APIRequestContext, type BrowserContext } from '@playwright/test';
 import { ownDisputable, topicRecords, queryRows, signInContext } from './support';
 
-// Story 4.1: the Worker's outbox relay publishes a raised dispute's event to disputedesk.disputes.
+// Story 4.1: the outbox relay (inside the api locally) publishes a raised dispute's event to disputedesk.disputes.
 // Four hops per raise: the 201 the browser context gets, the Disputes/StoredEvents/OutboxMessages rows (read-only role
 // qa_readonly), the record on the topic (rpk in the redpanda container) and the trace in the Aspire dashboard.
 // The raise is sent at network level from a context signed in through Zitadel (there is no raise screen until story 3.6).
@@ -34,7 +34,7 @@ async function untilSent(disputeId: string, seconds: number) {
 }
 
 const docker = (...args: string[]) => execFileSync('docker', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
-const workerHealth = () => docker('inspect', 'disputedesk-worker-1', '--format', '{{.State.Health.Status}}');
+const apiHealth = () => docker('inspect', 'disputedesk-api-1', '--format', '{{.State.Health.Status}}');
 const recordsFor = (disputeId: string) => topicRecords().filter((record) => record.key === disputeId);
 
 test.beforeAll(async ({ browser }) => {
@@ -94,7 +94,7 @@ test.describe.serial('a raised dispute reaches the topic', () => {
     expect(header('traceparent')!.split('-')[2]).not.toBe(outbox.TraceParent.split('-')[2]);
   });
 
-  test('no customer ID, account, transaction, amount, note or actor on the topic, in the payload or the Worker log', async () => {
+  test('no customer ID, account, transaction, amount, note or actor on the topic, in the payload or the api log', async () => {
     const [record] = recordsFor(disputeId);
     const [stored] = queryRows<any>(`select "ActorId", "Data" from "StoredEvents" where "DisputeId" = '${disputeId}'`);
     const privateValues = [
@@ -105,7 +105,7 @@ test.describe.serial('a raised dispute reaches the topic', () => {
     const everything = JSON.stringify(record);
     for (const value of privateValues) expect(everything, `a private value (${value.length} chars)`).not.toContain(value);
     expect(Object.keys(JSON.parse(record.value).data).sort()).toEqual(['disputeId', 'disputeVersion', 'occurredAt', 'reason', 'status']);
-    const log = docker('logs', 'disputedesk-worker-1');
+    const log = docker('logs', 'disputedesk-api-1');
     for (const value of [stored.Data.customerId, transaction.accountRef, transaction.transactionId, note]) expect(log).not.toContain(value);
   });
 
@@ -132,30 +132,29 @@ test.describe.serial('a raised dispute reaches the topic', () => {
     }
   });
 
-  test('the Worker runs as a non-root user and its relay heartbeat health check is healthy', async () => {
-    expect(docker('exec', 'disputedesk-worker-1', '/usr/local/bin/busybox', 'id', '-u')).not.toBe('0');
-    expect(workerHealth()).toBe('healthy');
-    const busybox = (...args: string[]) => Number(docker('exec', 'disputedesk-worker-1', '/usr/local/bin/busybox', ...args));
+  test('the api runs as a non-root user and its relay heartbeat health check is healthy', async () => {
+    expect(docker('exec', 'disputedesk-api-1', '/usr/local/bin/busybox', 'id', '-u')).not.toBe('0');
+    expect(apiHealth()).toBe('healthy');
+    const busybox = (...args: string[]) => Number(docker('exec', 'disputedesk-api-1', '/usr/local/bin/busybox', ...args));
     const age = busybox('date', '+%s') - busybox('stat', '-c', '%Y', '/tmp/heartbeat-relay');
     expect(age).toBeLessThanOrEqual(15);
   });
 
-  test('one trace from the raise to the Worker producer span in the Aspire dashboard', async ({ page }) => {
+  test('one trace from the raise to the relay\'s producer span in the Aspire dashboard', async ({ page }) => {
     const [outbox] = outboxOf(disputeId);
     const traceId = outbox.TraceParent.split('-')[1];
     await page.goto(`${dashboard}/traces/detail/${traceId}`);
-    // The dashboard names the resource disputedesk-worker-<instance> once the Worker has run as two instances (a restart).
+    // The dashboard names the resource disputedesk-api-<instance> once the api has run as two instances (a restart).
     // The dashboard shows the Producer span `send disputedesk.disputes` as "MSG kafka disputedesk.disputes".
-    await expect(page.getByRole('row', { name: /disputedesk-worker[^:]*: MSG kafka disputedesk\.disputes/ })).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByRole('row', { name: /disputedesk-api[^:]*: MSG kafka disputedesk\.disputes/ })).toBeVisible({ timeout: 45_000 });
     const text = await page.locator('body').innerText();
     expect(text).toContain('disputedesk-api');
-    expect(text).toContain('disputedesk-worker');
     expect(text).toMatch(/POST \/api\/v1\/disputes/);
   });
 });
 
 test.describe.serial('the broker is stopped', () => {
-  test('the row stays Pending with Attempts unchanged and the Worker stays healthy; restarting the broker publishes it', async () => {
+  test('the row stays Pending with Attempts unchanged and the api stays healthy; restarting the broker publishes it', async () => {
     test.setTimeout(240_000);
     const transaction = disputable[1];
     docker('stop', 'disputedesk-redpanda-1');
@@ -168,8 +167,8 @@ test.describe.serial('the broker is stopped', () => {
         const [row] = outboxOf(disputeId);
         expect(row, `after ${second + 4} s`).toMatchObject({ Status: 'Pending', Attempts: 0, SentAtUtc: null, LastError: null });
       }
-      expect(workerHealth()).toBe('healthy');
-      const log = docker('logs', '--since', '60s', 'disputedesk-worker-1');
+      expect(apiHealth()).toBe('healthy');
+      const log = docker('logs', '--since', '60s', 'disputedesk-api-1');
       expect(log).toMatch(/warn: DisputeDesk\.Infrastructure\.Outbox\.OutboxRelay/);
       expect(log).not.toContain(disputeId);
       expect(log).not.toMatch(/Password=/i);
@@ -182,6 +181,6 @@ test.describe.serial('the broker is stopped', () => {
     const records = recordsFor(disputeId);
     expect(records).toHaveLength(1);
     expect(JSON.parse(records[0].value).id).toBe(row.Id);
-    expect(workerHealth()).toBe('healthy');
+    expect(apiHealth()).toBe('healthy');
   });
 });

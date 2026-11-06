@@ -58,8 +58,12 @@ export function RootLayout() {
   const isSignedIn = state === 'unlinked' || state === 'linked';
   const pathname = useRouterState({ select: (router) => router.location.pathname });
   const isStartPage = state === 'anonymous' && pathname === '/';
-  const { signOut, failed: signOutFailed } = useSignOut();
+  const { signOut, failed: signOutFailed, clearFailure: clearSignOutFailure } = useSignOut();
   const warningOpen = useSessionTabs(isSignedIn);
+  // A sign-out failure belongs to the warning it happened in: the next warning opens without it.
+  useEffect(() => {
+    if (!warningOpen) clearSignOutFailure();
+  }, [warningOpen, clearSignOutFailure]);
   useReloadOnPageRestore();
   const mainRef = useRef<HTMLElement>(null);
   const headingSeen = useRef(false);

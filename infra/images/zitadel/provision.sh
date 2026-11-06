@@ -1,30 +1,36 @@
 #!/usr/bin/env bash
-# DisputeDesk Zitadel provisioner: one-shot container, runs on every `docker compose up`.
+# DisputeDesk Zitadel provisioner. Compose runs it inside the zitadel container, as Zitadel's own non-root user, from
+# the service's post_start hook (Compose, "Lifecycle hooks"), so it runs whenever Compose creates, recreates or
+# restarts the container.
 # It creates only what Zitadel's FirstInstance / DefaultInstance environment variables cannot: the project
 # and its roles, the web app, the operations machine user, the fixture logins and the hosted login's
-# label policy (branding). Instance settings (SMTP, login policy, the hosted login) live in docker-compose.yml.
+# label policy (branding). Instance settings (SMTP, login policy) live in docker-compose.yml.
 # Auth:  the IAM_OWNER PAT that FirstInstance writes into the bootstrap volume before Zitadel reports ready.
 # Idempotent: every object is looked up before it is created. Client secrets are shown only once,
 #        so they are (re)generated only when the output file is missing or belongs to another instance.
 # Secrets never appear on a command line: the PAT goes to curl as a header file, bodies go over stdin.
-# Runs as root on purpose: it hands the client file to the .NET images' non-root user (chown).
+# The container is healthy only while the marker exists: it is removed first and written only when every step passed.
 set -euo pipefail
 
-Z="${ZITADEL_URL:?}"
-OUT_FILE="${OUT_DIR:?}/zitadel-clients.json"
-OUT_UID="${OUT_UID:?}"                 # the .NET images' non-root app user, which reads the file later
-FIXTURES="${FIXTURES_FILE:?}"
-APP_ORIGINS="${APP_ORIGINS:?}"         # space-separated origins allowed to complete the sign-in
-AUTH_DEVELOPMENT_MODE="${AUTH_DEVELOPMENT_MODE:?}"   # true only where the app origins are plain http (local)
+MARKER="${PROVISION_MARKER_FILE:?}"
+rm -f "$MARKER"
+
+Z="${PROVISION_CALL_URL:?}"            # Zitadel's public URL as this container calls it (see CURL_OPTS)
+OUT_FILE="${PROVISION_OUT_DIR:?}/zitadel-clients.json"
+FIXTURES="${PROVISION_FIXTURES_FILE:?}"
+PAT_FILE="${PROVISION_PAT_FILE:?}"
+APP_ORIGINS="${PROVISION_APP_ORIGINS:?}"   # space-separated origins allowed to complete the sign-in
+AUTH_DEVELOPMENT_MODE="${PROVISION_AUTH_DEVELOPMENT_MODE:?}"   # true only where the app origins are plain http (local)
 PROJECT_NAME=DisputeDesk
 WEB_APP_NAME=disputedesk-web
 OPS_USERNAME=operations-tools
+READY_DEADLINE=300                     # seconds since the script started (bash's SECONDS)
 
-# curl pins *.localhost to 127.0.0.1 (RFC 6761) and ignores the Docker alias, so connect straight to
-# Zitadel while the Host header stays auth.localhost:8080 (Zitadel resolves the instance from it).
-# --max-time bounds every call, so a hung Zitadel fails the one-shot instead of blocking `docker compose up`.
-CURL_OPTS=(--max-time 30 ${CURL_CONNECT_TO:+--connect-to "$CURL_CONNECT_TO"})
-# Zitadel can refuse connections or answer 503 for a moment after its health check passes, so the first call retries
+# Every call goes to Zitadel in this container (127.0.0.1:8080, PROVISION_CONNECT_TO) with the public host in the Host
+# header, which is how Zitadel finds its instance; the gateway, which starts only after this hook, is never on the path.
+# --max-time bounds every call, so a hung Zitadel fails the hook instead of blocking `docker compose up`.
+CURL_OPTS=(--max-time 30 --connect-to "${PROVISION_CONNECT_TO:?}")
+# Zitadel can refuse connections or answer 503 for a moment after it reports ready, so the first call retries
 # with curl's --retry: on a refused connection or a transient status (408, 429, 500, 502, 503, 504), waiting 1 s and
 # doubling, starting no retry after 30 s. Any other status fails at once, and the last status still fails the run.
 RETRY_OPTS=(--retry 5 --retry-connrefused --retry-max-time 30)
@@ -33,13 +39,22 @@ log(){ printf '[provision] %s\n' "$*" >&2; }
 # It is written straight into the app's JSON, so anything but a JSON boolean is refused up front.
 case "$AUTH_DEVELOPMENT_MODE" in
   true|false) ;;
-  *) log "AUTH_DEVELOPMENT_MODE must be true or false, not '$AUTH_DEVELOPMENT_MODE'"; exit 1 ;;
+  *) log "PROVISION_AUTH_DEVELOPMENT_MODE must be true or false, not '$AUTH_DEVELOPMENT_MODE'"; exit 1 ;;
 esac
+
+# The hook starts right after the container does, before Zitadel listens (Compose runs post_start after the start, not
+# after the health check). Zitadel writes the PAT during its setup, before it reports ready, so the PAT is read after.
+until zitadel ready >/dev/null 2>&1; do
+  if (( SECONDS >= READY_DEADLINE )); then log "Zitadel was not ready within $READY_DEADLINE s"; exit 1; fi
+  sleep 2
+done
+[ -s "$PAT_FILE" ] || { log "Zitadel is ready but $PAT_FILE is missing or empty"; exit 1; }
+log "Zitadel is ready"
 
 umask 077
 AUTH_HEADER=$(mktemp)
 trap 'rm -f "$AUTH_HEADER"' EXIT
-{ printf 'Authorization: Bearer '; tr -d '\n' < "${PAT_FILE:?}"; printf '\n'; } > "$AUTH_HEADER"
+{ printf 'Authorization: Bearer '; tr -d '\n' < "$PAT_FILE"; printf '\n'; } > "$AUTH_HEADER"
 
 # call METHOD PATH [JSON]: prints the body; fails on HTTP >= 400, except 409 when ALLOW_CONFLICT=1.
 # RETRY=1 adds RETRY_OPTS; only the first call, an idempotent GET, uses it.
@@ -48,7 +63,8 @@ call(){
   tmp=$(mktemp)
   code=$(printf '%s' "$d" | curl "${CURL_OPTS[@]}" ${RETRY:+"${RETRY_OPTS[@]}"} -sS -o "$tmp" -w '%{http_code}' -X "$m" "$Z$p" \
     -H @"$AUTH_HEADER" -H 'Content-Type: application/json' -H 'Connect-Protocol-Version: 1' \
-    ${d:+--data-binary @-})
+    ${d:+--data-binary @-}) \
+    || { log "FAIL $m $p -> curl exit $?"; rm -f "$tmp"; return 1; }   # set -e does not reach inside $(call ...)
   if [ "$code" -ge 400 ]; then
     if [ "${ALLOW_CONFLICT:-0}" = 1 ] && [ "$code" = 409 ]; then rm -f "$tmp"; return 0; fi
     log "FAIL $m $p -> $code $(cat "$tmp")"; rm -f "$tmp"; return 1
@@ -78,8 +94,16 @@ BRAND_LOGO_DARK=/brand/wordmark-dark.png
 LABEL_FIELDS='{primaryColor, backgroundColor, warnColor, fontColor, primaryColorDark, backgroundColorDark,
   warnColorDark, fontColorDark, themeMode} | map_values(. // "" | ascii_downcase)'
 
-label_policy=$(bash /label-policy.sh "$BRAND_TOKENS")
+# The first call goes to the API gateway, the part of Zitadel that answers 503 (connection refused inside) for a
+# moment after `ready`, so it is the one that retries.
 preview=$(RETRY=1 call GET /admin/v1/policies/label/_preview | jq -c .policy)
+
+# The issuer the Api validates is Zitadel's own answer, not the call URL: in AWS the call is plain http to this
+# container and the issuer is https (ExternalSecure), at the same host.
+ISSUER=$(call GET /.well-known/openid-configuration | jq -er .issuer)
+log "issuer $ISSUER"
+
+label_policy=$(bash /provision/label-policy.sh "$BRAND_TOKENS")
 if [ "$(jq -c "$LABEL_FIELDS" <<< "$preview")" = "$(jq -c "$LABEL_FIELDS" <<< "$label_policy")" ]; then
   log "label policy colours are current"
 else
@@ -216,7 +240,7 @@ done
 # Kept when the file already describes this instance in this shape (the list exactly [the machine user's ID]); otherwise
 # both secrets are (re)generated.
 if [ -s "$OUT_FILE" ] \
-  && [ "$(jq -r '.Zitadel.Issuer' "$OUT_FILE")" = "$Z" ] \
+  && [ "$(jq -r '.Zitadel.Issuer' "$OUT_FILE")" = "$ISSUER" ] \
   && [ "$(jq -r '.Zitadel.ProjectId' "$OUT_FILE")" = "$PROJECT_ID" ] \
   && [ "$(jq -r '.Zitadel.WebApp.ClientId' "$OUT_FILE")" = "$WEB_APP_CLIENT_ID" ] \
   && jq -e --arg ops "$OPS_ID" '.Operations.AllowedClients == [$ops]' "$OUT_FILE" >/dev/null; then
@@ -229,16 +253,17 @@ else
   OPS_SECRET=$(rpc zitadel.user.v2.UserService/AddSecret "{\"userId\":\"$OPS_ID\"}" | jq -r .clientSecret)
   # The secrets reach jq over stdin (printf is a shell builtin), never as arguments.
   { printf '%s' "$WEB_APP_SECRET" | jq -Rs .; printf '%s' "$OPS_SECRET" | jq -Rs .; } \
-    | jq -s --arg issuer "$Z" --arg project "$PROJECT_ID" \
+    | jq -s --arg issuer "$ISSUER" --arg project "$PROJECT_ID" \
         --arg webAppId "$WEB_APP_CLIENT_ID" --arg opsId "$OPS_USERNAME" --arg opsUserId "$OPS_ID" '{
       Zitadel: {
         Issuer: $issuer, MetadataAddress: "\($issuer)/.well-known/openid-configuration", ProjectId: $project,
         WebApp: { ClientId: $webAppId, ClientSecret: .[0] },
         OperationsTools: { ClientId: $opsId, ClientSecret: .[1] } },
       Operations: { AllowedClients: [$opsUserId] } }' > "$OUT_FILE.tmp"
-  chown "$OUT_UID:$OUT_UID" "$OUT_FILE.tmp"
-  chmod 0400 "$OUT_FILE.tmp"
+  # Owned by this user, readable by its group too: the api joins that group (group_add in docker-compose.yml).
+  chmod 0440 "$OUT_FILE.tmp"
   mv "$OUT_FILE.tmp" "$OUT_FILE"
-  log "wrote $OUT_FILE (owner $OUT_UID, mode 0400)"
+  log "wrote $OUT_FILE (mode 0440)"
 fi
+touch "$MARKER"
 log "done"

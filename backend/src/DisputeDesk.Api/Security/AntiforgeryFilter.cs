@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Antiforgery;
 
-namespace DisputeDesk.Api.Authentication;
+namespace DisputeDesk.Api.Security;
 
 /// <summary>
 /// Requires the antiforgery token (the <c>X-XSRF-TOKEN</c> header, or the form field on the logout form) on every

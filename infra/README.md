@@ -46,16 +46,14 @@ A second stack beside this one (another worktree or a throwaway copy) sets anoth
 
 | Folder | Purpose |
 |---|---|
-| `db/` | Postgres init: `disputedesk` (app, owns its database), `zitadel` (non-superuser, own database), `qa_readonly` (SELECT on the app schema through default privileges, read-only sessions). |
-| `nginx/` | The gateway image: the built SPA files, taken from the SPA image (`frontend/Dockerfile`) through the named build context `spa` (the build-only `spa` service in `docker-compose.yml`, `--build-context` in CI), served by unprivileged nginx. `templates/` holds the config, rendered from the `GATEWAY_*` variables in `docker-compose.yml` at start: two server blocks, fixed upstream Host per origin, security headers and CSP on the app origin, the coarse rate limit and the `/otlp/` proxy. |
-| `images/zitadel/` | One-shot, idempotent provisioner (`provision.sh`: project, roles, web app, operations machine user, fixture logins) and its read-only check of facts invisible from outside (`verify.sh`). |
-| `probe/` | The Aspire dashboard image plus a static `wget` so Compose can healthcheck it (the api gets the same probe from the `api-local` stage in `backend/Dockerfile`). |
-| `smoke.sh` | The black-box smoke check through the gateway: the stack is up and wired (the real Api's Scalar page, Zitadel's headers merged with the gateway's, provisioning, Postgres, Redpanda, Mailpit, the dashboard); every check fails the run. The gateway's own headers are `tests/`'s. |
-| `aws/` | The AWS deploy and its offline checks (`compose.yml`, the AWS override merged onto the root `docker-compose.yml`, AD-28): `deploy.sh` runs on the instance through SSM (writes `.env`, fetches the RDS CA bundle, runs the database init on first deploy, blocks container access to instance metadata, starts Compose); `input-bounds.sh` holds each input's bound, shared with the deploy script; `compose.test.env` holds a dummy value for each input, for the tests in `tests/`; `test-realip.conf` is the trusted range the gateway tests in `tests/` mount. |
-| `terraform/` | The AWS dev environment (never applied: there is no account): `bootstrap/` (the state bucket), `envs/dev/` with its mocked-provider tests (`tests/`), and the modules (network, compute, database, edge, observability, deploy-role, budget). Every IAM policy is a `<name>.json.tftpl` file beside its `main.tf`, rendered with `templatefile()`, whose names `IamNamesTests` in `tests/` checks. The deploy role's GitHub OIDC subject is pinned by `envs/dev/tests/deploy_role.tftest.hcl` and confirmed by a one-time check recorded in `terraform/README.md` (step 8). See `terraform/README.md`. |
-| `nginx/templates-aws/` | The AWS gateway's config, selected by `NGINX_ENVSUBST_TEMPLATE_DIR`: three server blocks (app, identity, Mailpit), each refusing requests without CloudFront's origin-verify header, with the client address and scheme from CloudFront's headers. |
-| `otel-collector/` | The OpenTelemetry Collector config in AWS: OTLP in from the Api and the Worker, traces to X-Ray, logs and metrics to CloudWatch (AD-29). |
-| `tests/` | `DisputeDesk.PlatformTests`, the xUnit tests of infra/'s files (ad-011): `GatewayTests` builds both gateway images and checks their responses and what each upstream receives on a throwaway Docker network (stories 7.4 and 7.12), the one place the gateway's own headers are checked; `ComposeRenderTests` renders the AWS override with the dummy inputs in `aws/compose.test.env` and checks the model and the collector config (story 7.4); `DeployScriptTests` runs `aws/deploy.sh` in a throwaway copy with its external commands stubbed (`PathStubs`), and tests each input's bound once (story 7.5); `DatabaseInitTests` runs it unchanged against a throwaway PostgreSQL 18 with TLS and a non-superuser master (story 7.17); `IamNamesTests` reads every IAM action and condition key from the policy templates under `terraform/` with `System.Text.Json` and checks it against AWS's public service reference, fetched over HTTPS with no credentials and a 5-minute deadline, with the reading rules in `IamNamesRulesTests` and the fetch's bounds in `ServiceReferenceFetchTests` (story 7.16); `ShellHarnessTests` keeps shell test harnesses out of `infra/`; `PlatformScriptTests` runs the provisioning scripts with a stub `curl`, curls `provision.sh`'s retry options against an in-process stand-in for Zitadel, reads the Compose model from `docker compose config`, and reads a file only where no run can show the property. A standalone project with its own `global.json` (the SDK and Microsoft.Testing.Platform) and `.editorconfig`; nothing under `backend/` is referenced. CI's `platform` job runs it. |
+| `images/postgres/` | Postgres init: `disputedesk` (app, owns its database), `zitadel` (non-superuser, own database), `qa_readonly` (SELECT on the app schema through default privileges, read-only sessions). |
+| `images/gateway/` | The gateway image: the built SPA files, taken from the SPA image (`frontend/Dockerfile`) through the named build context `spa` (the build-only `spa` service in `docker-compose.yml`, `--build-context` in CI), served by unprivileged nginx. `templates/` holds the config, rendered from the `GATEWAY_*` variables in `docker-compose.yml` at start: two server blocks, fixed upstream Host per origin, security headers and CSP on the app origin, the coarse rate limit and the `/otlp/` proxy. `templates-aws/` is the AWS gateway's config, selected by `NGINX_ENVSUBST_TEMPLATE_DIR`: three server blocks (app, identity, Mailpit), each refusing requests without CloudFront's origin-verify header, with the client address and scheme from CloudFront's headers. |
+| `images/zitadel/` | The `disputedesk-zitadel` image: Zitadel's own binary on pinned Alpine with bash, curl and jq, run as Zitadel's non-root `zitadel` user (uid 1000). Its Compose `post_start` hook runs the idempotent provisioner (`provision.sh`: project, roles, web app, operations machine user, fixture logins, and the hosted login's label policy from `label-policy.sh`) once `zitadel ready` succeeds; the container is healthy only after the script wrote its provisioned marker. `verify.sh` is the read-only check of facts invisible from outside. |
+| `images/otel-collector/` | The OpenTelemetry Collector config in AWS: OTLP in from the Api and the Worker, traces to X-Ray, logs and metrics to CloudWatch (AD-29). |
+| `deploy/aws/` | The AWS deploy (`compose.yml`, the AWS override merged onto the root `docker-compose.yml`, AD-28): `deploy.sh` runs on the instance through SSM (writes `.env`, fetches the RDS CA bundle, runs the database init on first deploy, blocks container access to instance metadata, starts Compose); `input-bounds.sh` holds each input's bound, shared with the deploy script. |
+| `deploy/runbook.md` | Operator steps, among them the release of a `Failed` outbox row (AD-22). |
+| `terraform/` | The AWS dev environment (never applied: there is no account): `bootstrap/` (the state bucket), `envs/dev/` (`terraform.tf` pins Terraform and the providers, `backend.tf` the S3 state) with its mocked-provider tests (`tests/`), and the modules (network, compute, database, edge, observability, deploy-role, budget). Every IAM policy is a `<name>.json.tftpl` file beside its `main.tf`, rendered with `templatefile()`, whose names `IamNamesTests` in `tests/` checks. The deploy role's GitHub OIDC subject is pinned by `envs/dev/tests/deploy_role.tftest.hcl` and confirmed by a one-time check recorded in `terraform/README.md` (step 8). See `terraform/README.md`. |
+| `tests/` | `smoke.sh`, the black-box smoke check through the gateway: the stack is up and wired (the real Api's Scalar page, Zitadel's headers merged with the gateway's, provisioning, Postgres, the Redpanda topic, Mailpit, the dashboard); every check fails the run. `fixtures/` holds `compose.test.env` (a dummy value for each AWS input) and `test-realip.conf` (the trusted range the gateway tests mount). `DisputeDesk.PlatformTests` holds the xUnit tests of infra/'s files (ad-011): `GatewayTests` builds both gateway images and checks their responses and what each upstream receives on a throwaway Docker network (stories 7.4 and 7.12), the one place the gateway's own headers are checked; `ComposeRenderTests` renders the local file and the AWS override with the dummy inputs and checks the model, the services both environments run and the collector config (story 7.4); `DeployScriptTests` runs `deploy/aws/deploy.sh` in a throwaway copy with its external commands stubbed (`PathStubs`), and tests each input's bound once (story 7.5); `DatabaseInitTests` runs it unchanged against a throwaway PostgreSQL 18 with TLS and a non-superuser master (story 7.17); `IamNamesTests` reads every IAM action and condition key from the policy templates under `terraform/` with `System.Text.Json` and checks it against AWS's public service reference, fetched over HTTPS with no credentials and a 5-minute deadline, with the reading rules in `IamNamesRulesTests` and the fetch's bounds in `ServiceReferenceFetchTests` (story 7.16); `ShellHarnessTests` keeps shell test harnesses out of `infra/`; `PlatformScriptTests` runs the provisioning scripts with a stub `curl`, curls `provision.sh`'s retry options against an in-process stand-in for Zitadel, reads the Compose model from `docker compose config`, and reads a file only where no run can show the property. A standalone project with its own `global.json` (the SDK and Microsoft.Testing.Platform) and `.editorconfig`; nothing under `backend/` is referenced. CI's `platform` job runs it. |
 
 ## Tests
 
@@ -88,6 +86,9 @@ back with `gh secret list`, which shows its name only:
 ```sh
 GH_TOKEN="$(gh auth token --user njabulozmnisi)" gh secret set FORBIDDEN_TERMS --app actions -R njabulozmnisi/disputedesk < .claude/forbidden-terms.local
 ```
+
+A pull request from a fork gets no secrets, so its *Forbidden terms* step fails; a fork pull request is never merged here
+whatever its checks show, and fork-workflow approval stays on.
 
 The ruleset is [`.github/rulesets/main.json`](../.github/rulesets/main.json), the body of the REST call *Create a
 repository ruleset*:
@@ -156,18 +157,26 @@ maintainer the up-to-date requirement gives the same guarantee (ad-012 clause 2)
   `docker-compose.yml`, overridable from an untracked `.env`.
 - Logins for customers A, B and C come from [`backend/fixtures/local.json`](../backend/fixtures/local.json). Sign in with the username.
   The Zitadel console admin is `admin` / `Dev-Only-Admin-1`.
-- Zitadel's bootstrap PATs sit in two volumes: `zitadel-bootstrap` (the IAM_OWNER PAT, seen only by zitadel and
-  the provisioner) and `login-pat` (the login client's PAT, seen only by zitadel and zitadel;
-  `scripts/dev-login.sh` reads it inside the zitadel container for one headless sign-in, never storing it).
-- Generated values are written by the provisioner to `zitadel-clients.json` in the `zitadel-clients` volume, shaped
+- Zitadel's bootstrap PAT (the IAM_OWNER machine user's) sits in the `zitadel-bootstrap` volume, seen only by the
+  zitadel container, where the provisioner reads it.
+- `scripts/dev-login.sh <login>` signs one fixture login in without a browser, through the hosted login's own forms,
+  and leaves the session in a cookie jar.
+- Generated values are written by the provisioner, in the zitadel container's `post_start` hook as `zitadel`
+  (uid 1000), to `zitadel-clients.json` in the `zitadel-clients` volume, shaped
   as .NET configuration: the AD-26 keys `Zitadel:Issuer`, `Zitadel:MetadataAddress`, `Zitadel:ProjectId`,
   `Zitadel:WebApp:ClientId` and `Zitadel:WebApp:ClientSecret`, plus the operations tools' client credentials
   (`Zitadel:OperationsTools:*`, used by `smoke.sh`). The api container mounts it at
-  `/run/zitadel/zitadel-clients.json` (owner 1654, the .NET images' app user, mode 0400). To read it from the host:
+  `/run/zitadel/zitadel-clients.json` (owner and group `zitadel`, mode 0440) and reads it through Zitadel's group
+  (`group_add: ["1000"]`). The provisioner's settings are the `PROVISION_*` variables of the zitadel service. To read
+  the file, or to re-run the read-only check, from the host:
 
   ```sh
-  docker compose run --rm --no-deps -T --entrypoint cat provision /out/zitadel-clients.json
+  docker compose exec -T zitadel cat /provision/out/zitadel-clients.json
+  docker compose exec -T zitadel bash /provision/verify.sh
   ```
+
+  A failed hook fails `docker compose up` and leaves no provisioned marker, so the api never starts; after fixing the
+  cause, `docker compose restart zitadel` runs the hook again.
 
   The provisioner never changes an app or authorization that already exists, so after a change to what it creates
   (for example the web app's roles, URIs or auth method), run `docker compose down -v` once to re-provision.

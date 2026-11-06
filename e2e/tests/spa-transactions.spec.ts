@@ -1,15 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, request as playwrightRequest, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { fixtureLogin, gatewayContentSecurityPolicy, queryDatabase, sessionCookieName, axeTags } from './support';
+import { enterHostedCredentials, fixtureLogin, origin, gatewayContentSecurityPolicy, queryDatabase, sessionCookieName, axeTags } from './support';
 
-// Story 2.4: the SPA shell, session routing and the transactions screen, through the real sign-in and Zitadel.
+// Story 2.4: the SPA shell, session routing and the transactions screen, through the real API and Zitadel.
 // Since story 2.5 the gateway serves the SPA, so SPA_ORIGIN defaults to the gateway and the browser sees the real
 // security headers. Set SPA_ORIGIN to point somewhere else (for example `vite preview` on :4173, which sends no CSP).
 // The browser clock for the inactivity warning is Playwright's, so no test waits 13 minutes.
 
 const spa = process.env.SPA_ORIGIN ?? 'http://localhost:8080';
-const gateway = process.env.APP_ORIGIN ?? 'http://localhost:8080';
 const coreBankingContainer = 'disputedesk-core-banking-1';
 
 type ApiRow = {
@@ -48,11 +47,8 @@ async function signIn(browser: Browser, loginKey: string, timezoneId?: string): 
   const context = await browser.newContext({ timezoneId });
   const page = await context.newPage();
   await page.goto(`${spa}/api/v1/authentication/login`);
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
-  await page.waitForURL((url) => url.origin === gateway, { timeout: 60_000 });
+  await enterHostedCredentials(page, login);
+  await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   return { context, page };
 }
 
@@ -62,18 +58,18 @@ async function signIn(browser: Browser, loginKey: string, timezoneId?: string): 
  * SPA is on another port, so that origin is added to form-action to stand in for it.
  */
 async function withGatewayCsp(page: Page) {
-  if (spa === gateway) return; // the gateway sends its own CSP; do not replace it with a copy
+  if (spa === origin) return; // the gateway sends its own CSP; do not replace it with a copy
   await page.route(`${spa}/**`, async (route) => {
     const request = route.request();
     if (request.resourceType() !== 'document' || request.method() !== 'GET' || new URL(request.url()).pathname.startsWith('/api/')) return route.fallback();
     const response = await route.fetch();
-    await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': gatewayContentSecurityPolicy.replace("form-action 'self'", `form-action 'self' ${gateway}`) } });
+    await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': gatewayContentSecurityPolicy.replace("form-action 'self'", `form-action 'self' ${origin}`) } });
   });
 }
 
 /** Ends the server session from outside the page: the same cookies, a fresh request token, the logout POST (not followed). */
 async function endSessionOutsideThePage(context: BrowserContext) {
-  const outside = await playwrightRequest.newContext({ baseURL: gateway, storageState: await context.storageState() });
+  const outside = await playwrightRequest.newContext({ baseURL: origin, storageState: await context.storageState() });
   const token = (await (await outside.get('/api/v1/antiforgery')).json()).requestToken;
   const logout = await outside.post('/api/v1/authentication/logout', { form: { __RequestVerificationToken: token }, maxRedirects: 0 });
   expect(logout.status()).toBe(302);
@@ -357,7 +353,7 @@ test.describe('linked customer A', () => {
     const failure = signOutPage.waitForRequest((request) => request.url().includes('/oidc/v1/end_session'));
     await signOutPage.getByRole('button', { name: 'Sign out' }).click();
     await failure;
-    await signOutPage.waitForURL(`${gateway}/`);
+    await signOutPage.waitForURL(`${origin}/`);
     expect(seen).toEqual(['antiforgery', 'POST logout navigation=true', 'end_session']);
     expect(logoutBody).toMatch(/^__RequestVerificationToken=[\w%-]{20,}$/);
 
@@ -367,7 +363,7 @@ test.describe('linked customer A', () => {
     expect(Number(queryDatabase('select count(*) from "Sessions"'))).toBe(sessionsBefore - 1);
 
     // The old cookie is dead on the server too.
-    const replay = await playwrightRequest.newContext({ baseURL: gateway, extraHTTPHeaders: { cookie: `${cookieBefore.name}=${cookieBefore.value}` } });
+    const replay = await playwrightRequest.newContext({ baseURL: origin, extraHTTPHeaders: { cookie: `${cookieBefore.name}=${cookieBefore.value}` } });
     expect(await (await replay.get('/api/v1/authentication/session')).json()).toEqual({ state: 'anonymous' });
     expect((await replay.get('/api/v1/transactions')).status()).toBe(401);
     await replay.dispose();
@@ -399,7 +395,7 @@ test.describe('linked customer A', () => {
 });
 
 test.describe('session ends while signed in', () => {
-  test('a 401 on Load more goes to /signed-out?reason=expired&returnUrl, and Sign in again returns through the Api', async ({ browser }) => {
+  test('a 401 on Load more goes to /signed-out?reason=expired&returnUrl, and Sign in again returns through the API', async ({ browser }) => {
     const { context, page } = await signIn(browser, 'customer-a');
     await page.goto(`${spa}/transactions`);
     await expect(page.locator('li')).toHaveCount(20);
@@ -416,16 +412,13 @@ test.describe('session ends while signed in', () => {
     await signInAgain.click();
     const login = fixtureLogin('customer-a');
     // Zitadel may still hold its own session; fill the form only if it asks.
-    const username = page.getByTestId('username-text-input');
-    await Promise.race([username.waitFor({ timeout: 20_000 }).catch(() => undefined), page.waitForURL((url) => url.origin === gateway, { timeout: 20_000 }).catch(() => undefined)]);
+    const username = page.locator('#loginName');
+    await Promise.race([username.waitFor({ timeout: 20_000 }).catch(() => undefined), page.waitForURL((url) => url.origin === origin, { timeout: 20_000 }).catch(() => undefined)]);
     if (await username.isVisible()) {
-      await username.fill(login.username);
-      await username.press('Enter');
-      await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-      await page.getByTestId('password-text-input').press('Enter');
+      await enterHostedCredentials(page, login);
     }
-    // The sign-in redirects to a local path on its own origin; the gateway serves the SPA from story 2.5.
-    await page.waitForURL(`${gateway}/transactions`, { timeout: 60_000 });
+    // The API redirects to a local path on its own origin; the gateway serves the SPA from story 2.5.
+    await page.waitForURL(`${origin}/transactions`, { timeout: 60_000 });
     await context.close();
   });
 });

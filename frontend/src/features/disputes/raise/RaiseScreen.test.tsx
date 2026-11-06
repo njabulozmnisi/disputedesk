@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { HttpResponse } from 'msw';
 
-import { getGetApiV1TransactionsInfiniteQueryKey } from '@/api/generated/disputedesk';
+import { getListTransactionsInfiniteQueryKey } from '@/api/generated/disputedesk';
 import { problemResponse, makeRow, renderApp, serveTransactions, signInAs } from '@/test/support';
 import { chooseReason, continueToReview, openRaiseScreen, recordRaiseRequests } from '@/test/raise';
 import { appSourceFiles } from '@/test/sourceFiles';
@@ -69,7 +69,7 @@ describe('opening the raise screen', () => {
   it('keeps the admitted row from 4a to 4b after the list cache entry is collected', async () => {
     const app = await openRaiseScreen();
     await chooseReason(app.user, 'Unrecognised');
-    app.queryClient.removeQueries({ queryKey: getGetApiV1TransactionsInfiniteQueryKey() });
+    app.queryClient.removeQueries({ queryKey: getListTransactionsInfiniteQueryKey() });
 
     await continueToReview(app.user);
 

@@ -9,7 +9,7 @@ set -euo pipefail
 version=0.76.1
 sha256=c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
 
-curl -fsSL --max-time 300 -o "$RUNNER_TEMP/trivy.tar.gz" \
+curl -fsSL --max-time 300 --retry 5 --retry-delay 10 --retry-max-time 240 --retry-all-errors -o "$RUNNER_TEMP/trivy.tar.gz" \
   "https://github.com/aquasecurity/trivy/releases/download/v${version}/trivy_${version}_Linux-64bit.tar.gz"
 echo "${sha256}  $RUNNER_TEMP/trivy.tar.gz" | sha256sum --check --strict
 mkdir -p "$RUNNER_TEMP/bin"

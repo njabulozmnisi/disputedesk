@@ -8,10 +8,20 @@ variable "name" {
 
 variable "aws_region" {
   type = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.aws_region))
+    error_message = "aws_region must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "account_id" {
   type = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.account_id))
+    error_message = "account_id must hold no quote or backslash: it reaches a template."
+  }
 }
 
 resource "aws_cloudwatch_log_group" "otel" {
@@ -19,7 +29,8 @@ resource "aws_cloudwatch_log_group" "otel" {
   retention_in_days = 7
 }
 
-# The CloudWatch Logs OTLP endpoint writes only to an existing stream; infra/images/otel-collector/config.yaml names this one.
+# The CloudWatch Logs OTLP endpoint writes only to an existing stream; infra/images/otel-collector/config.yaml names
+# this one.
 resource "aws_cloudwatch_log_stream" "otlp" {
   name           = "otlp"
   log_group_name = aws_cloudwatch_log_group.otel.name

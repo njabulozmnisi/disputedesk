@@ -18,9 +18,11 @@ public static class LinkingEndpoints
     public static RouteGroupBuilder MapLinking(this RouteGroupBuilder linkingRoutes)
     {
         linkingRoutes.MapPost("/start", StartAsync)
+            .WithName("StartLinking")
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status429TooManyRequests);
         linkingRoutes.MapPost("/verify", VerifyAsync)
+            .WithName("VerifyLinking")
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)

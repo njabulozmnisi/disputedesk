@@ -3,6 +3,7 @@ using System.Net;
 using System.Text.Json;
 using DisputeDesk.Api.Errors;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
+using DisputeDesk.Api.IntegrationTests.Operations;
 using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Domain;
 using Microsoft.AspNetCore.Http;
@@ -319,6 +320,23 @@ public class ProblemDetailsTests(PostgresFixture postgres)
         Assert.Equal(ProblemJson, response.Content.Headers.ContentType?.MediaType);
         using JsonDocument problem = await ReadJsonAsync(response);
         Assert.Equal($"https://github.com/njabulozmnisi/disputedesk/blob/main/docs/problems/{expectedSlug}.md", problem.RootElement.GetProperty("type").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(problem.RootElement.GetProperty("traceId").GetString()));
+    }
+
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task FrameworkResponse_BearerTokenWithoutTheRole_Is403CarryingTheForbiddenSlug(string environment)
+    {
+        await using var factory = new ApiFactory(postgres.ConnectionString, environment);
+        using HttpClient tool = factory.CreateTool();
+
+        HttpResponseMessage response = await tool.ReadDisputeAsync(Guid.CreateVersion7().ToString(), factory.Zitadel.Issue());
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(ProblemJson, response.Content.Headers.ContentType?.MediaType);
+        using JsonDocument problem = await ReadJsonAsync(response);
+        Assert.Equal(ProblemType.For(CommonProblems.Forbidden), problem.RootElement.GetProperty("type").GetString());
         Assert.False(string.IsNullOrWhiteSpace(problem.RootElement.GetProperty("traceId").GetString()));
     }
 

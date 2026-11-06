@@ -16,6 +16,7 @@ public static class TransactionEndpoints
     public static RouteGroupBuilder MapTransactions(this RouteGroupBuilder customerRoutes)
     {
         customerRoutes.MapGet("/transactions", ListAsync)
+            .WithName("ListTransactions")
             .WithTags("Transactions")
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);

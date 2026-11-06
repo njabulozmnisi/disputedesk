@@ -147,11 +147,11 @@ run "criterion_4_the_origin_is_the_elastic_ip_public_dns" {
 
 # Input bounds: each variable rejects a value just outside its validation, before anything is planned.
 
-run "aws_region_outside_the_four_regions_is_rejected" {
+run "aws_region_outside_the_five_regions_is_rejected" {
   command = plan
 
   variables {
-    aws_region = "af-south-1"
+    aws_region = "sa-east-1"
   }
 
   expect_failures = [var.aws_region]

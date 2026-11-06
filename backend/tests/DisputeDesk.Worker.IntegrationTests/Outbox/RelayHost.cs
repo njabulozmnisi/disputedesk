@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Confluent.Kafka;
 using DisputeDesk.Infrastructure.Observability;
 using DisputeDesk.Infrastructure.Outbox;
-using DisputeDesk.Worker.Sla;
+using DisputeDesk.Infrastructure.Sla;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry.Logs;

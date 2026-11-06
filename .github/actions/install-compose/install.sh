@@ -14,7 +14,7 @@ sha256=47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0
 plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
 mkdir -p "$plugins"
 # A GET, so retrying is safe; curl removes a failed partial download before it retries.
-curl -fsSL --max-time 300 --retry 3 --retry-all-errors -o "$RUNNER_TEMP/docker-compose" \
+curl -fsSL --max-time 300 --retry 5 --retry-delay 10 --retry-max-time 240 --retry-all-errors -o "$RUNNER_TEMP/docker-compose" \
   "https://github.com/docker/compose/releases/download/v${version}/docker-compose-linux-x86_64"
 echo "${sha256}  $RUNNER_TEMP/docker-compose" | sha256sum --check --strict
 install -m 0755 "$RUNNER_TEMP/docker-compose" "$plugins/docker-compose"

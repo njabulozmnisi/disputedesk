@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Proves the committed side of main's protection (ad-012 clause 2), with no network and no GitHub call:
-# - .github/rulesets/main.json is exactly the ruleset of the story's criterion 1, and its two required checks are the
-#   gate jobs of ci.yml and security.yml (criterion 1);
+# - .github/rulesets/main.json is exactly the expected ruleset, and its two required checks are the
+#   gate jobs of ci.yml and security.yml;
 # - infra/README.md's apply commands send the ruleset file and the seven repository settings, the booleans typed with
-#   -F and the strings with -f, as the owner (criterion 2);
+#   -F and the strings with -f, as the owner;
 # - floor-guard's Forbidden terms step, read from ci.yml and run as GitHub runs a step with no shell:, fails when the
 #   FORBIDDEN_TERMS secret is empty or holds no terms (a pull request from a fork), and with terms set behaves as
-#   before: it passes on no match and fails on a match, printing only file:line (criterion 3).
+#   before: it passes on no match and fails on a match, printing only file:line.
 #   scripts/main-protection.test.sh
 # Needs bash, git, yq (v4) and jq.
 set -euo pipefail
@@ -29,7 +29,7 @@ expect() {
 
 scratch=$(mktemp -d); trap 'rm -rf "$scratch"' EXIT
 
-# --- criterion 1: the ruleset file, whole ---
+# --- the ruleset file, whole ---
 expected_ruleset='{
   "name": "main",
   "target": "branch",
@@ -55,8 +55,8 @@ expected_ruleset='{
   ]
 }'
 [[ $(jq -S . "$ruleset") == "$(jq -S . <<< "$expected_ruleset")" ]] ||
-  fail "main.json differs from criterion 1: $(diff <(jq -S . <<< "$expected_ruleset") <(jq -S . "$ruleset") || true)"
-echo "ok  main.json is exactly criterion 1's ruleset"
+  fail "main.json differs from the expected ruleset: $(diff <(jq -S . <<< "$expected_ruleset") <(jq -S . "$ruleset") || true)"
+echo "ok  main.json is exactly the expected ruleset"
 
 # A check run is named after its job's id when the job has no name: (Workflow syntax, jobs.<job_id>.name).
 gate_is_context() { # gate_is_context <workflow> <job>
@@ -67,7 +67,7 @@ gate_is_context "$ci" ci-passed
 gate_is_context "$security" security-passed
 echo "ok  the required contexts are the gate jobs ci-passed (ci.yml) and security-passed (security.yml)"
 
-# --- criterion 2: the apply commands in infra/README.md ---
+# --- the apply commands in infra/README.md ---
 owner_token="GH_TOKEN=\"\$(gh auth token --user njabulozmnisi)\" gh api"
 for line in \
   "$owner_token --method POST repos/njabulozmnisi/disputedesk/rulesets --input .github/rulesets/main.json" \
@@ -80,7 +80,7 @@ for line in \
 done
 echo "ok  infra/README.md applies the ruleset file and the seven settings as the owner (-F booleans, -f strings)"
 
-# --- criterion 3: the Forbidden terms step ---
+# --- the Forbidden terms step ---
 step=$(yq '.jobs["floor-guard"].steps[] | select(.name == "Forbidden terms")' "$ci")
 [[ -n "$step" ]] || fail "floor-guard has no Forbidden terms step"
 [[ $(yq '.env.FORBIDDEN_TERMS' <<< "$step") == "\${{ secrets.FORBIDDEN_TERMS }}" ]] ||
@@ -97,15 +97,16 @@ printf 'first line\nthe word bravo is here\n' > "$repository/notes.txt"
 git -C "$repository" add notes.txt
 
 # run_step [<FORBIDDEN_TERMS value>]: runs the step as GitHub runs a step with no shell: on Linux, bash -e {0}
-# (Workflow syntax, defaults.run.shell); with no argument the variable is unset.
+# (Workflow syntax, defaults.run.shell), with --noprofile --norc to keep this machine's bash start-up files out; with
+# no argument the variable is unset.
 run_step() {
   mkdir -p "$scratch/runner-temp"
   if [[ $# -eq 0 ]]; then
     (cd "$repository" && env -u FORBIDDEN_TERMS RUNNER_TEMP="$scratch/runner-temp" \
-      bash -e "$scratch/forbidden-terms.sh")
+      bash --noprofile --norc -e "$scratch/forbidden-terms.sh")
   else
     (cd "$repository" && FORBIDDEN_TERMS=$1 RUNNER_TEMP="$scratch/runner-temp" \
-      bash -e "$scratch/forbidden-terms.sh")
+      bash --noprofile --norc -e "$scratch/forbidden-terms.sh")
   fi
 }
 

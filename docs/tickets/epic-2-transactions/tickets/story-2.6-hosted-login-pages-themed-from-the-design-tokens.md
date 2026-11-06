@@ -53,7 +53,7 @@ Inputs and their bounds (all are repo files at fixed paths, none comes from the 
    **When** it uploads a file
    **Then** it sends the PAT only through `-H @"$AUTH_HEADER"`, the existing header file, and reuses the existing IAM_OWNER PAT with no new scope or volume
    **And** it never uses `-v`, `--trace`, `set -x` or `-u`, takes its file paths only from constants in the script (curl reads `;`, `<` and `@` in `-F` values as instructions), and on HTTP 400 or above logs only the method, path, status and response body, as `call` does (curl manual; OWASP ASVS 5.0 V13.3.1, V16.2.5)
-   **And** Compose mounts `tokens.css`, the 400 WOFF2 and the two wordmarks into `provision` one file at a time with `:ro`, never the whole `frontend/` directory
+   **And** Compose mounts `tokens.css`, the 400 WOFF2 and the two wordmarks into `zitadel` one file at a time with `:ro`, never the whole `frontend/` directory
 
 5. **The active policy is checked read-only** (R1; FR-1)
    **Given** `infra/images/zitadel/verify.sh`, which already checks Zitadel facts read-only
@@ -68,16 +68,16 @@ Inputs and their bounds (all are repo files at fixed paths, none comes from the 
 7. **The login waits for the branding** (R1, R37; FR-1)
    **Given** `docker-compose.yml`
    **When** the stack starts
-   **And** the rest of the `zitadel` environment, `CSP_FETCH_ENABLED` among it, is unchanged
+   **Then** `zitadel` reports healthy only once its provisioning, the label policy included, has finished, and the api waits for `zitadel: { condition: service_healthy }`, so no sign-in page is offered before the branding is active (Docker Compose specification, `healthcheck`, `depends_on`)
+   **And** the rest of the `zitadel` environment is unchanged
 
 ## Boundaries
 
 - Must not change: email verification and the Mailpit SMTP defaults (`EMAIL_VERIFICATION: "true"`, `mailpit:1025`, and `verify.sh`'s SMTP check), delivered by P0-2.
-- No CSP or header change: the nginx identity server block gets no `add_header`, and no external font or image host is added. The hosted login sends `font-src` and `img-src` `'self' <ZITADEL_API_URL>`, and `/assets/v1/` is served on the identity origin, so the uploaded files load as `'self'`. If the font fails to load, the fix is never a wider `font-src`.
-- One font file: the hosted login injects one `@font-face` with no weight, so text at 600, 700 and 800 on the hosted pages is synthesised bold from the 400 file.
-- No icon: the hosted login v4.20 never reads `iconUrl`, so no icon is uploaded.
+- No CSP or header change: the nginx identity server block gets no `add_header`, and no external font or image host is added. `/assets/v1/` is served on the identity origin, so the uploaded files load as `'self'`. If the font fails to load, the fix is never a wider `font-src`.
+- One font file: the label policy takes one font, so text at 600, 700 and 800 on the hosted pages is synthesised bold from the 400 file.
+- No icon is uploaded.
 - The label policy has no radius or spacing fields; the hosted pages keep their own shapes (DESIGN.md, Theme file and hosted-login theming).
-- The hosted login caches branding for 1 hour: after a rebrand on a running stack, restart `zitadel`.
 - Why not the `ZITADEL_DEFAULTINSTANCE_LABELPOLICY_*` environment variables: they would copy the tokens into Compose by hand, apply only when the instance is created, and carry neither files nor `themeMode`.
 - The SPA's wordmark stays HTML text and a CSS dot (`Header.tsx`); the PNGs are for the hosted pages only.
 - The Dockerfile adds no package: bash, curl and jq are enough; whatever was used to draw the PNGs is not added to the image.
@@ -103,7 +103,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
   - `infra/images/zitadel/verify.sh` (the active-policy check)
   - `infra/images/zitadel/Dockerfile` (`COPY label-policy.sh`)
   - `infra/tests/smoke.sh` (the framing-header check)
-  - `docker-compose.yml` (`provision` mounts the four files `:ro`; `zitadel` `depends_on: provision`)
+  - `docker-compose.yml` (`zitadel` mounts the four files `:ro`)
   - `.github/workflows/ci.yml` (`platform` job: generator and brand-file checks)
   - `frontend/src/theme/wordmark.png`, `frontend/src/theme/wordmark-dark.png` (new)
   - `frontend/src/theme/tokens.css` (a comment naming the wordmark files; no token changes)

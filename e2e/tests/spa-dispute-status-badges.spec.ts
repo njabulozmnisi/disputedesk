@@ -3,7 +3,7 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 import { mkdirSync } from 'node:fs';
 import { ownDisputable, queryDatabase, topicRecords, axeTags, origin, signInContext } from './support';
 
-// Story 3.10: dispute status badges on transaction rows, through the real gateway, Api, database and topic,
+// Story 3.10: dispute status badges on transaction rows, through the real gateway, API, database and topic,
 // signed in as seeded customer A. The API can only produce `submitted` today (withdraw and the operations actions are
 // not built), so the other four statuses, the out-of-contract 'escalated' and the half-set pair are shown by changing
 // the transactions response in the browser (route.fetch, then edit the first rows); the row layout, the badge and

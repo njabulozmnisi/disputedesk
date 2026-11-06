@@ -25,7 +25,7 @@ How to start working on DisputeDesk. To run it, see the [README](../README.md).
 | [`e2e/`](../e2e/) | The Playwright journeys and regression specs |
 | [`backend/fixtures/`](../backend/fixtures/) | The synthetic seed data for the local stack |
 | [`frontend/`](../frontend/) | The React SPA |
-| [`infra/`](../infra/) | The Compose platform's configuration: database init, gateway, Zitadel provisioning |
+| [`infra/`](../infra/) | The platform: the images it builds or configures (gateway, Zitadel with its provisioning, collector, postgres init), the AWS deploy, Terraform and the infra tests |
 | [`scripts/`](../scripts/) | Developer and pipeline scripts: locks, sign-in, the operations token, scans |
 
 | `docs/` subfolder | What is in it |

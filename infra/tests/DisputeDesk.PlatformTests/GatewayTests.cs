@@ -12,7 +12,7 @@ namespace DisputeDesk.PlatformTests;
 [UnsupportedOSPlatform("windows")] // the echo server's files need their Unix modes
 public sealed partial class GatewayTests(GatewayFixture gateway) : IClassFixture<GatewayFixture>
 {
-    private const string Hsts = "max-age=63072000; includeSubDomains"; // two years, as long as the login's own (RFC 6797 6.1.1, 6.1.2)
+    private const string Hsts = "max-age=63072000; includeSubDomains"; // two years (RFC 6797 6.1.1, 6.1.2)
     private const string Viewer = "198.51.100.10";
     private const string GatewayErrorBody = "The gateway could not complete the request.";
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(60);
@@ -187,11 +187,11 @@ public sealed partial class GatewayTests(GatewayFixture gateway) : IClassFixture
     [Fact]
     public async Task LocalOtlpLocation_UpstreamRequest_HoldsNoCookieNoAuthorizationAndNoForwardedHost()
     {
-        // The receiver needs no credentials, so the session cookie and any Authorization stay at the edge; today the
-        // location sends no X-Forwarded-Host or X-Forwarded-Proto, and the receiver's own name as Host.
+        // The receiver needs no credentials, so the session cookie, any Authorization and a client's X-Origin-Verify stay
+        // at the edge; the location sends no X-Forwarded-Host or X-Forwarded-Proto, and the receiver's own name as Host.
         Reply reply = await GatewayAsync("local", HostOf("local", "app"), "/otlp/v1/traces", "-X", "POST", "-H", "Content-Type: application/json",
             "--data", "{}", "-H", "Cookie: __Host-disputedesk=session", "-H", "Authorization: Bearer client-token",
-            "-H", "Forwarded: for=203.0.113.9;host=evil.example;proto=http");
+            "-H", "Forwarded: for=203.0.113.9;host=evil.example;proto=http", "-H", "X-Origin-Verify: client");
         var echoed = Echoed.Parse(reply.Body);
 
         Assert.Equal("18890", echoed.Port);
@@ -288,11 +288,24 @@ public sealed partial class GatewayTests(GatewayFixture gateway) : IClassFixture
     [Theory]
     [InlineData("/.well-known/openid-configuration", "8080")]
     [InlineData("/oauth/v2/authorize", "8080")]
+    [InlineData("/ui/login/loginname", "8080")]
     public async Task AwsGateway_IdentityRoutes_ReachTheirUpstream(string path, string port)
     {
         Echoed echoed = await AwsEchoedAsync("trusted", gateway.AuthHost, path);
 
         Assert.Equal(port, echoed.Port);
+    }
+
+    [Theory]
+    [InlineData("aws")]
+    [InlineData("local")]
+    public async Task IdentityOrigin_Root_RedirectsToTheLoginNamePage(string gatewayName)
+    {
+        // Zitadel's own /ui/login/ forwards to the console, which the AWS gateway closes; the login name page starts a sign-in.
+        Reply reply = await GatewayAsync(gatewayName, HostOf(gatewayName, "auth"), "/");
+
+        Assert.Equal(302, reply.Status);
+        Assert.Equal(["/ui/login/loginname"], reply.Values("location").Select(location => new Uri(new Uri("http://identity.test"), location).AbsolutePath));
     }
 
     // ------------------------------------------------------------------ 7.12 criterion 3: the identity origin's baseline
@@ -316,8 +329,8 @@ public sealed partial class GatewayTests(GatewayFixture gateway) : IClassFixture
     [InlineData("local", "/ui/login/loginname", 200, "same-origin")]
     public async Task IdentityOrigin_Responses_SendTheBaselineOnce(string gatewayName, string path, int status, string referrerPolicy)
     {
-        // The echo on 3000 sends the login's own HSTS, Referrer-Policy and nosniff, which the gateway hides; on 8080 it
-        // sends Zitadel's v1 login's same-origin, which passes through alone, and none on discovery.
+        // The echo sends the hosted login's own HSTS, nosniff and same-origin, of which the gateway hides the first two
+        // and passes the Referrer-Policy through alone, and no Referrer-Policy on discovery.
         Reply reply = await GatewayAsync(gatewayName, HostOf(gatewayName, "auth"), path);
 
         AssertIdentityBaseline(reply, status, HstsCount(gatewayName), referrerPolicy, $"{gatewayName} {path}");

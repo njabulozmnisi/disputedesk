@@ -15,11 +15,11 @@ namespace DisputeDesk.Infrastructure.Persistence;
 /// rules every dispute query and commit obey: the ownership filter (AD-11) and the one commit path (AD-14).
 /// </summary>
 /// <param name="options">The context options.</param>
-/// <param name="currentCustomer">The request's customer in the Api; absent in the Worker and in tools, where the ownership filter matches nothing.</param>
+/// <param name="currentCustomer">The request's customer in the Api; unset or absent in the SLA sweep, the Worker and tools, where the ownership filter matches nothing.</param>
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options, CurrentCustomer? currentCustomer = null)
     : DbContext(options), IAppDbContext, IDataProtectionKeyContext
 {
-    /// <summary>The name of the ownership filter; only <c>Operations/</c> and <c>Sla/</c> may ignore it (AD-11).</summary>
+    /// <summary>The name of the ownership filter; only <c>Operations/</c>, <c>Sla/</c> and <c>Seeding/</c> may ignore it (AD-11).</summary>
     public const string OwnershipFilter = "Ownership";
 
     /// <summary>The Data Protection key ring, shared by every Api instance (AD-7).</summary>

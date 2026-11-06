@@ -53,6 +53,4 @@ public static class OperationsView
         fromStatus,
         toStatus,
         note);
-
-    // AD-4: exactly two decimals, as a string.
 }

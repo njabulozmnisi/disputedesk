@@ -1,4 +1,5 @@
 using DisputeDesk.Application.Abstractions;
+using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +14,7 @@ namespace DisputeDesk.Application.Disputes.GetDispute;
 /// </summary>
 public sealed class GetDisputeHandler(IAppDbContext db)
 {
-    public async Task<Result<Contracts.Disputes.DisputeResponse>> HandleAsync(Guid disputeId, CancellationToken cancellationToken)
+    public async Task<Result<DisputeResponse>> HandleAsync(Guid disputeId, CancellationToken cancellationToken)
     {
         Dispute? dispute = await db.Entities<Dispute>().AsNoTracking()
             .FirstOrDefaultAsync(row => row.Id == disputeId, cancellationToken);

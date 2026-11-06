@@ -59,6 +59,7 @@ public class OperationsAllowlistTests(PostgresFixture postgres, TransactionsStub
     [InlineData("{}")]
     [InlineData("""{ "Operations": {} }""")]
     [InlineData("""{ "Operations": { "AllowedClients": [] } }""")]
+    [InlineData("""{ "Operations": { "Actors": { "ops-tool-test": "operations" } } }""")]
     public void Options_NoListConfigured_BindAnEmptyList(string json)
     {
         // A missing list binds as the empty one, which ReadDispute_EmptyList_Returns403ForTheOnceListedSub refuses.

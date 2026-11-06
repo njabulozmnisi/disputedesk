@@ -86,6 +86,15 @@ expect 1 'b has a job-level if: or needs:' "a check job with its own needs: is n
 expect 1 'no job gate' "a missing gate fails" "$gates" "$(workflow nogate "  a:
 $job")" gate
 expect 2 'usage' "no arguments is a usage error" "$gates"
+expect 2 'yq v4 is required' "no yq on PATH is named" env PATH=/nonexistent "$BASH" "$gates" "$good" gate
+
+one_need=$(workflow one-need "  a:
+$job
+  gate:
+    needs: a
+    if: always()
+$job")
+expect 0 'needs every check job' "a gate's needs given as one job name, not a list" "$gates" "$one_need" gate
 
 # --- the real workflows, with floor-guard's arguments ---
 ci="$root/.github/workflows/ci.yml"
@@ -113,7 +122,7 @@ settings() { # settings <workflow> <gate> <needs as a JSON array>
 settings "$ci" ci-passed '["backend","frontend","platform","terraform","floor-guard","e2e"]'
 settings "$security" security-passed '["gitleaks","codeql","vulnerable-packages","trivy"]'
 
-# --- publish keeps its if: and needs (criterion 6) ---
+# --- publish keeps its if: and needs ---
 [[ $(yq '.jobs.publish.if' "$ci") == "github.event_name == 'push' && github.ref == 'refs/heads/main'" ]] ||
   fail "publish: its if: changed"
 [[ $(yq -o=json -I=0 '.jobs.publish.needs' "$ci") == '["backend","frontend","platform","floor-guard","e2e"]' ]] ||
@@ -139,13 +148,14 @@ uses_after_checkout "$ci" ./.github/actions/install-trivy "publish"
 uses_after_checkout "$security" ./.github/actions/install-trivy "trivy"
 
 # --- each gate's run: script on sample needs contexts ---
-# GitHub runs a bash step as bash --noprofile --norc -eo pipefail {0} (Workflow syntax, defaults.run.shell).
+# GitHub runs a step with no shell: as bash -e {0} (Workflow syntax, defaults.run.shell); --noprofile --norc keeps this
+# machine's bash start-up files out.
 script() { # script <workflow> <gate>: writes the gate's run: script to a file and prints its path.
   GATE=$2 yq '.jobs[strenv(GATE)].steps[0].run' "$1" > "$scratch/$2.sh"
   echo "$scratch/$2.sh"
 }
 run_gate() { # run_gate <script> <needs JSON>
-  NEEDS=$2 bash --noprofile --norc -eo pipefail "$1"
+  NEEDS=$2 bash --noprofile --norc -e "$1"
 }
 result() { printf '"%s":{"result":"%s","outputs":{}}' "$1" "$2"; }
 with_result() { jq -c --arg job "$2" --arg result "$3" '.[$job].result = $result' <<< "$1"; } # <needs> <job> <result>

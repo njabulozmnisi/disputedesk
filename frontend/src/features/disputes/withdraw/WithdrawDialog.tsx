@@ -5,11 +5,11 @@ import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 
 import {
-  getGetApiV1DisputesDisputeIdQueryKey,
-  getGetApiV1DisputesInfiniteQueryKey,
-  getGetApiV1TransactionsInfiniteQueryKey,
-  getPostApiV1DisputesDisputeIdWithdrawMutationKey,
-  usePostApiV1DisputesDisputeIdWithdraw,
+  getGetDisputeQueryKey,
+  getListDisputesInfiniteQueryKey,
+  getListTransactionsInfiniteQueryKey,
+  getWithdrawDisputeMutationKey,
+  useWithdrawDispute,
 } from '@/api/generated/disputedesk';
 import { CustomerStatus } from '@/api/generated/model';
 import { isProblem, problemExtension, traceIdOf, validationFields } from '@/api/problems';
@@ -54,7 +54,7 @@ function asCustomerStatus(value: string | undefined): CustomerStatus | undefined
   return Object.values(CustomerStatus).find((known) => known === value);
 }
 
-const mutationKey = getPostApiV1DisputesDisputeIdWithdrawMutationKey();
+const mutationKey = getWithdrawDisputeMutationKey();
 
 function WithdrawForm({
   disputeId,
@@ -92,20 +92,20 @@ function WithdrawForm({
   }, [noteLevel, noteLength, announce]);
 
   const invalidateDetail = () =>
-    queryClient.invalidateQueries({ queryKey: getGetApiV1DisputesDisputeIdQueryKey(disputeId) });
+    queryClient.invalidateQueries({ queryKey: getGetDisputeQueryKey(disputeId) });
 
   function finishWithdrawn() {
-    void queryClient.invalidateQueries({ queryKey: getGetApiV1DisputesInfiniteQueryKey() });
-    void queryClient.invalidateQueries({ queryKey: getGetApiV1TransactionsInfiniteQueryKey() });
+    void queryClient.invalidateQueries({ queryKey: getListDisputesInfiniteQueryKey() });
+    void queryClient.invalidateQueries({ queryKey: getListTransactionsInfiniteQueryKey() });
     announce('Dispute withdrawn');
     close();
   }
 
-  const withdraw = usePostApiV1DisputesDisputeIdWithdraw({
+  const withdraw = useWithdrawDispute({
     mutation: {
       retry: false,
       onSuccess: (dispute) => {
-        queryClient.setQueryData(getGetApiV1DisputesDisputeIdQueryKey(disputeId), dispute);
+        queryClient.setQueryData(getGetDisputeQueryKey(disputeId), dispute);
         finishWithdrawn();
       },
       onError: async (error) => {

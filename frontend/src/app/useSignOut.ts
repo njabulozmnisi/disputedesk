@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { getGetAntiforgeryTokenQueryOptions } from '@/api/generated/disputedesk';
 import { ApiError } from '@/api/mutator';
@@ -22,7 +22,7 @@ function submitLogoutForm(requestToken: string) {
 }
 
 /**
- * Sign-out is a top-level form POST (AD-7): the sign-in redirects the browser on to the identity provider, and the
+ * Sign-out is a top-level form POST (AD-7): the Api redirects the browser on to the identity provider, and the
  * document navigation drops everything in memory. The form carries a request token fetched just before, so it is never
  * stale. If the fetch fails, the server session is still live: the screen keeps its data and `failed` shows the notice
  * above it. A 401 on the fetch means the session is already over, and the query cache leaves the document
@@ -31,6 +31,11 @@ function submitLogoutForm(requestToken: string) {
 export function useSignOut() {
   const queryClient = useQueryClient();
   const [failed, setFailed] = useState(false);
+
+  // Stable, so an effect can depend on it.
+  const clearFailure = useCallback(() => {
+    setFailed(false);
+  }, []);
 
   async function signOut() {
     setFailed(false);
@@ -47,5 +52,5 @@ export function useSignOut() {
     }
   }
 
-  return { signOut, failed };
+  return { signOut, failed, clearFailure };
 }

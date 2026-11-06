@@ -1,7 +1,7 @@
 # shellcheck shell=bash
-# The inputs of infra/deploy/aws/compose.yml and the bound each value must meet (story 7.4, Inputs; AD-26). Sourced, not run:
-# ComposeRenderTests (infra/tests) checks compose.test.env with it, and the deploy script checks .env with it before any
-# docker call, so both use the same patterns.
+# The inputs of infra/deploy/aws/compose.yml and the bound each value must meet (story 7.4, Inputs; AD-26). Sourced,
+# not run: ComposeRenderTests (infra/tests) checks compose.test.env with it, and the deploy script checks .env with it
+# before any docker call, so both use the same patterns.
 #
 # Every secret is generated from [A-Za-z0-9], never chosen by hand: `;` would add Npgsql connection-string keywords,
 # `?`, `#` and `%` break Zitadel's DSN URL, and `$`, quotes and spaces break .env interpolation. The Zitadel admin
@@ -9,7 +9,7 @@
 
 # shellcheck disable=SC2034 # read by the scripts that source this file
 AWS_INPUTS=(
-  APP_DB_PASSWORD ZITADEL_DB_PASSWORD LOGIN_SESSION_COOKIE_SECRET ZITADEL_MASTERKEY ZITADEL_ADMIN_PASSWORD
+  APP_DB_PASSWORD ZITADEL_DB_PASSWORD ZITADEL_MASTERKEY ZITADEL_ADMIN_PASSWORD
   LINKING_OTP_HMAC_KEY MAILPIT_UI_AUTH GATEWAY_ORIGIN_VERIFY
   APP_HOST AUTH_HOST MAILPIT_HOST DB_HOST AWS_REGION OTEL_LOG_GROUP DATAPROTECTION_SSM_PATH DATAPROTECTION_KMS_KEY_ID
   RDS_CA_BUNDLE GATEWAY_REALIP_CONF API_IMAGE WORKER_IMAGE GATEWAY_IMAGE CORE_BANKING_IMAGE ZITADEL_IMAGE
@@ -25,7 +25,7 @@ KMS_KEY_UUID='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 within_bounds() {
   local name=$1 value=$2
   case $name in
-    APP_DB_PASSWORD | ZITADEL_DB_PASSWORD | LOGIN_SESSION_COOKIE_SECRET | GATEWAY_ORIGIN_VERIFY)
+    APP_DB_PASSWORD | ZITADEL_DB_PASSWORD | GATEWAY_ORIGIN_VERIFY)
       [[ $value =~ ^[A-Za-z0-9]{32,128}$ ]] ;;
     ZITADEL_MASTERKEY)
       [[ $value =~ ^[A-Za-z0-9]{32}$ ]] ;;

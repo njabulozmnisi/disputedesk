@@ -8,10 +8,20 @@ variable "name" {
 
 variable "aws_region" {
   type = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.aws_region))
+    error_message = "aws_region must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "account_id" {
   type = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.account_id))
+    error_message = "account_id must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "vpc_id" {
@@ -31,26 +41,51 @@ variable "database_security_group_id" {
 variable "github_repository" {
   description = "<owner>/<name>, cloned on first boot."
   type        = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.github_repository))
+    error_message = "github_repository must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "clone_directory" {
   description = "Where the repository is cloned; the deploy document runs infra/deploy/aws/deploy.sh from it."
   type        = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.clone_directory))
+    error_message = "clone_directory must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "ssm_path" {
   description = "The deploy script's parameters."
   type        = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.ssm_path))
+    error_message = "ssm_path must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "dataprotection_ssm_path" {
   description = "The Api's Data Protection key ring."
   type        = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.dataprotection_ssm_path))
+    error_message = "dataprotection_ssm_path must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "kms_key_arn" {
   description = "The customer-managed key that encrypts the SecureStrings under both paths."
   type        = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.kms_key_arn))
+    error_message = "kms_key_arn must hold no quote or backslash: it reaches a template."
+  }
 }
 
 locals {

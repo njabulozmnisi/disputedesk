@@ -27,8 +27,8 @@ on:
         description: publish's core-banking image by digest.
         required: true
         type: string
-      provision:
-        description: publish's provision image by digest.
+      zitadel:
+        description: publish's zitadel image by digest.
         required: true
         type: string
   workflow_dispatch:
@@ -88,10 +88,10 @@ jobs:
           WORKER: ${{ inputs.worker }}
           GATEWAY: ${{ inputs.gateway }}
           CORE_BANKING: ${{ inputs.core-banking }}
-          PROVISION: ${{ inputs.provision }}
+          ZITADEL: ${{ inputs.zitadel }}
         run: |
           if [[ $EVENT != workflow_dispatch ]]; then
-            for pair in "api=$API" "worker=$WORKER" "gateway=$GATEWAY" "core-banking=$CORE_BANKING" "provision=$PROVISION"; do
+            for pair in "api=$API" "worker=$WORKER" "gateway=$GATEWAY" "core-banking=$CORE_BANKING" "zitadel=$ZITADEL"; do
               name=${pair%%=*}
               reference=${pair#*=}
               pattern="^ghcr\.io/njabulozmnisi/disputedesk-$name@sha256:[0-9a-f]{64}$"

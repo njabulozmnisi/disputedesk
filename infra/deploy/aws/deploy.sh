@@ -7,24 +7,25 @@
 #    bounds (infra/deploy/aws/input-bounds.sh), so a missing or malformed value stops the deploy before any docker call.
 # 2. Writes the RDS CA bundle and the gateway's set_real_ip_from file for CloudFront's origin-facing ranges.
 # 3. Writes .env, mode 0600, to a temporary file renamed over the old one, so it is never half-written.
-# 4. Creates the database roles and databases on RDS on the first deploy (infra/images/postgres/10-roles-and-databases.sh).
+# 4. Creates the database roles and databases on RDS on the first deploy
+#    (infra/images/postgres/10-roles-and-databases.sh).
 # 5. Lets only the api and the otel-collector containers reach the instance metadata service.
 # 6. Starts the stack and exits with Compose's exit code.
 #
 # It never prints a value it reads: no set -x, no .env, no `docker compose config` or `logs`. DeployScriptTests
 # (infra/tests) runs it with stubs.
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../../.."
 # shellcheck source=infra/deploy/aws/input-bounds.sh
 . infra/deploy/aws/input-bounds.sh
 
 fail(){ echo "deploy: $*" >&2; exit 1; }
 step(){ echo "deploy: $*"; }
 
-# The names read from SSM, and only these: story 7.4's inputs that SSM holds (seven a person creates, eight Terraform
+# The names read from SSM, and only these: story 7.4's inputs that SSM holds (six a person creates, eight Terraform
 # writes), and the two that only the database init uses. Any other parameter under SSM_PATH is ignored.
 FROM_SSM=(
-  APP_DB_PASSWORD ZITADEL_DB_PASSWORD LOGIN_SESSION_COOKIE_SECRET ZITADEL_MASTERKEY ZITADEL_ADMIN_PASSWORD
+  APP_DB_PASSWORD ZITADEL_DB_PASSWORD ZITADEL_MASTERKEY ZITADEL_ADMIN_PASSWORD
   LINKING_OTP_HMAC_KEY MAILPIT_UI_AUTH
   APP_HOST AUTH_HOST MAILPIT_HOST DB_HOST OTEL_LOG_GROUP DATAPROTECTION_SSM_PATH DATAPROTECTION_KMS_KEY_ID
   GATEWAY_ORIGIN_VERIFY

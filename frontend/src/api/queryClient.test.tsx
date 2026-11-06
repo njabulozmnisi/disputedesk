@@ -12,7 +12,7 @@ import {
   getGetSessionQueryKey,
   getGetSessionQueryOptions,
   useLogout,
-  useGetApiV1Transactions,
+  useListTransactions,
 } from './generated/disputedesk';
 import { createQueryClient } from './queryClient';
 
@@ -52,7 +52,7 @@ describe('retries (criterion 2)', () => {
     );
     const { wrapper } = setUp('linked');
 
-    const { result } = renderHook(() => useGetApiV1Transactions(), { wrapper });
+    const { result } = renderHook(() => useListTransactions(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
@@ -66,7 +66,7 @@ describe('retries (criterion 2)', () => {
     );
     const { wrapper } = setUp('linked');
 
-    const { result } = renderHook(() => useGetApiV1Transactions(), { wrapper });
+    const { result } = renderHook(() => useListTransactions(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
@@ -78,7 +78,7 @@ describe('retries (criterion 2)', () => {
     const requests = countRequests('/api/v1/transactions', () => HttpResponse.error());
     const { wrapper } = setUp('linked');
 
-    const { result } = renderHook(() => useGetApiV1Transactions(), { wrapper });
+    const { result } = renderHook(() => useListTransactions(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
@@ -98,7 +98,7 @@ describe('retries (criterion 2)', () => {
     );
     const { wrapper } = setUp('linked');
 
-    const { result } = renderHook(() => useGetApiV1Transactions(), { wrapper });
+    const { result } = renderHook(() => useListTransactions(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
@@ -135,7 +135,7 @@ describe('no refetch the person did not ask for', () => {
       HttpResponse.json({ items: [], nextCursor: null }),
     );
     const { wrapper } = setUp('linked');
-    const { result } = renderHook(() => useGetApiV1Transactions(), { wrapper });
+    const { result } = renderHook(() => useListTransactions(), { wrapper });
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
@@ -172,7 +172,7 @@ describe('errors handled once in the QueryCache and MutationCache (criterion 2)'
     failWith('/api/v1/transactions', 'linking-required', 403);
     const { router, wrapper } = setUp('unlinked');
 
-    renderHook(() => useGetApiV1Transactions(), { wrapper });
+    renderHook(() => useListTransactions(), { wrapper });
 
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/link');
@@ -183,7 +183,7 @@ describe('errors handled once in the QueryCache and MutationCache (criterion 2)'
     failWith('/api/v1/transactions', 'linking-required', 403);
     const { router, queryClient, wrapper } = setUp('linked');
 
-    renderHook(() => useGetApiV1Transactions(), { wrapper });
+    renderHook(() => useListTransactions(), { wrapper });
 
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/link');
@@ -195,7 +195,7 @@ describe('errors handled once in the QueryCache and MutationCache (criterion 2)'
     failWith('/api/v1/transactions', 'unauthorized', 403);
     const { router, wrapper } = setUp('linked');
 
-    const { result } = renderHook(() => useGetApiV1Transactions(), { wrapper });
+    const { result } = renderHook(() => useListTransactions(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);

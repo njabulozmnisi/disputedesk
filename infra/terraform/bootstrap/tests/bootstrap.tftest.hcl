@@ -136,11 +136,11 @@ run "a_bucket_name_of_63_characters_is_accepted" {
   }
 }
 
-run "a_region_outside_the_four_is_rejected" {
+run "a_region_outside_the_five_is_rejected" {
   command = plan
 
   variables {
-    aws_region = "af-south-1"
+    aws_region = "sa-east-1"
   }
 
   expect_failures = [var.aws_region]

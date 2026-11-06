@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Developer smoke check for the local Compose platform: a black-box test through the gateway, plus the
-# provisioner's read-only checks (verify.sh) for facts invisible from outside.
+# provisioner's read-only checks (verify.sh, in the zitadel container) for facts invisible from outside.
 #   scripts/test-lock.sh run stack <owner> -- infra/tests/smoke.sh
 # WARNING: starts and ends with `docker compose down -v`, wiping the shared `disputedesk` stack's data.
 # KEEP_UP=1 leaves it running afterwards. Every check fails the run; secrets never reach a command line.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 GW=http://localhost:8080
 AUTH=http://auth.localhost:8080          # curl resolves *.localhost to 127.0.0.1 (RFC 6761): the gateway
@@ -29,8 +29,9 @@ expect_error(){ # description pattern user database sql
   grep -q "$2" <<< "$out" || fail "$1 failed for the wrong reason: $out"
   ok "$1 refused: $(grep -o "$2.*" <<< "$out" | head -1)"
 }
-in_provisioner(){ local entrypoint=$1; shift; docker compose run --rm --no-deps -T --entrypoint "$entrypoint" provision "$@" 2>/dev/null; }
-clients_hash(){ in_provisioner sha256sum /out/zitadel-clients.json | cut -d' ' -f1; }
+# The provisioner's files and scripts live in the zitadel container (infra/images/zitadel).
+in_zitadel(){ docker compose exec -T zitadel "$@" 2>/dev/null; }
+clients_hash(){ in_zitadel sha256sum /provision/out/zitadel-clients.json | cut -d' ' -f1; }
 
 section "clean slate"
 docker compose down -v --remove-orphans >/dev/null 2>&1
@@ -47,7 +48,7 @@ echo "up and healthy in $((SECONDS - start)) s"
 
 section "docker compose ps -a"
 docker compose ps -a --format 'table {{.Service}}\t{{.Status}}'
-! docker compose ps -a --format '{{.Status}}' | grep -qE 'Exited \([1-9]' || fail "a one-shot container failed"
+! docker compose ps -a --format '{{.Status}}' | grep -qE 'Exited \([1-9]' || fail "a container exited with an error"
 
 section "memory (docker stats --no-stream)"
 # shellcheck disable=SC2046 # split on purpose: one argument per container ID
@@ -55,6 +56,21 @@ stats=$(docker stats --no-stream --format '{{.Name}}\t{{.MemUsage}}' $(docker co
 echo "$stats"
 awk -F'\t' '{split($2, a, " / "); v=a[1]; n=v+0; if (v ~ /GiB/) n*=1024; else if (v ~ /KiB/) n/=1024; t+=n}
             END {printf "TOTAL\t%.1f MiB (%.2f GiB)\n", t, t/1024}' <<< "$stats"
+
+section "provisioning: the zitadel container's post_start hook, as its non-root user, before the api started"
+# The hook writes the marker last and every file as the user it runs as (docker-compose.yml, post_start user: zitadel).
+marker_uid=$(in_zitadel stat -c %u /provision/state/provisioned) || fail "no provisioned marker in the zitadel container"
+[ "$marker_uid" != 0 ] || fail "the hook ran as root"
+ok "the hook ran as uid $marker_uid (marker /provision/state/provisioned)"
+[ "$(in_zitadel stat -c '%u %a' /provision/out/zitadel-clients.json)" = "$marker_uid 440" ] \
+  || fail "zitadel-clients.json is not owned by the hook's user with mode 0440"
+ok "zitadel-clients.json: owner uid $marker_uid, mode 0440 (the api reads it through group_add)"
+# Both times in UTC as YYYY-MM-DDTHH:MM:SS, which compare as text.
+# shellcheck disable=SC2016 # expanded by the container's shell
+provisioned=$(in_zitadel sh -c 'date -u -d "@$(stat -c %Y /provision/state/provisioned)" +%Y-%m-%dT%H:%M:%S')
+api_started=$(docker inspect -f '{{.State.StartedAt}}' "$(docker compose ps -q api)" | cut -c1-19)
+[[ ! "$api_started" < "$provisioned" ]] || fail "the api started ($api_started) before provisioning finished ($provisioned)"
+ok "provisioning finished at $provisioned UTC, the api started at $api_started UTC"
 
 section "api readiness through the gateway"
 [ "$(curl -fsS "$GW/api/health/ready")" = Healthy ] || fail "api readiness"
@@ -99,7 +115,7 @@ discovery=$(curl -fsS "$AUTH/.well-known/openid-configuration")
 jq '{issuer, authorization_endpoint, token_endpoint, code_challenge_methods_supported}' <<< "$discovery"
 [ "$(jq -r .issuer <<< "$discovery")" = "$AUTH" ] || fail "issuer is not $AUTH"
 curl -fsS -o /dev/null "$AUTH/ui/login/loginname" && ok "GET $AUTH/ui/login/loginname -> 200"
-# The branding changes no framing setting: the hosted login still refuses to be framed (the hosted login sends both headers).
+# The branding changes no framing setting: the hosted login still refuses to be framed (it sends both headers).
 login_headers=$(curl -fsS -D - -o /dev/null "$AUTH/ui/login/loginname" | tr -d '\r')
 grep -i '^content-security-policy:' <<< "$login_headers" | grep -q "frame-ancestors 'none'" \
   || fail "hosted login: no frame-ancestors 'none' in its Content-Security-Policy"
@@ -107,12 +123,11 @@ if ! { [ "$(grep -ic '^x-frame-options:' <<< "$login_headers")" = 1 ] && grep -q
   fail "hosted login: not exactly one X-Frame-Options: deny"
 fi
 ok "hosted login: frame-ancestors 'none' and X-Frame-Options: deny once"
-# The identity origin's baseline from the gateway, once each: the upstreams' own HSTS and nosniff are hidden, and locally
+# The identity origin's baseline from the gateway, once each: Zitadel's own HSTS and nosniff are hidden, and locally
 # GATEWAY_HSTS is empty, so no HSTS at all; frame-ancestors 'none' is a policy of its own beside Zitadel's (CSP Level 3,
-# multiple policies). Referrer-Policy once: the gateway's replaces the login's weaker origin-when-cross-origin on Login
-# v2 and fills in for discovery, which sends none; Zitadel's own same-origin passes through alone on its v1 login.
-for path_referrer in "/.well-known/openid-configuration strict-origin-when-cross-origin" "/ui/login/loginname same-origin" \
-                     "/ui/login/loginname strict-origin-when-cross-origin"; do
+# multiple policies). Referrer-Policy once: the gateway's fills in for discovery, which sends none; Zitadel's own
+# same-origin passes through alone on its hosted login.
+for path_referrer in "/.well-known/openid-configuration strict-origin-when-cross-origin" "/ui/login/loginname same-origin"; do
   read -r path referrer <<< "$path_referrer"
   headers=$(curl -fsS -D - -o /dev/null "$AUTH$path" | tr -d '\r')
   [ "$(header_value x-content-type-options <<< "$headers")" = nosniff ] || fail "$AUTH$path: not exactly one X-Content-Type-Options: nosniff"
@@ -125,7 +140,7 @@ for path_referrer in "/.well-known/openid-configuration strict-origin-when-cross
   ok "$AUTH$path: nosniff and frame-ancestors 'none' once each, Referrer-Policy $referrer; no HSTS"
 done
 
-clients=$(in_provisioner cat /out/zitadel-clients.json)
+clients=$(in_zitadel cat /provision/out/zitadel-clients.json)
 project=$(jq -r .Zitadel.ProjectId <<< "$clients")
 web_app=$(jq -r .Zitadel.WebApp.ClientId <<< "$clients")
 
@@ -148,7 +163,7 @@ authorize_lands_on_login(){ # redirect_uri -> 0 when Zitadel accepts it and hand
     --data-urlencode "client_id=$web_app" --data-urlencode "redirect_uri=$1" \
     --data-urlencode response_type=code --data-urlencode scope=openid \
     --data-urlencode code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM --data-urlencode code_challenge_method=S256)
-  [[ "$location" == "$AUTH/ui/login/login?authRequest="* ]]; }
+  [[ "$location" == "$AUTH/ui/login/login?authRequestID="* ]]; }
 for uri in http://localhost:8080/api/signin-oidc http://localhost:5101/api/signin-oidc http://localhost:5102/api/signin-oidc; do
   authorize_lands_on_login "$uri" || fail "registered redirect URI rejected: $uri"
   ok "accepted  $uri"
@@ -158,19 +173,28 @@ for uri in http://localhost:9999/api/signin-oidc http://localhost:8080/signin-oi
   ok "rejected  $uri"
 done
 
+section "headless sign-in through the hosted login (scripts/dev-login.sh)"
+login_jar=$(mktemp)
+scripts/dev-login.sh customer-a "$login_jar" || fail "scripts/dev-login.sh customer-a"
+[ "$(curl -fsS -b "$login_jar" "$GW/api/v1/authentication/session" | jq -r .state)" = linked ] \
+  || fail "customer-a's session is not linked"
+rm -f "$login_jar"
+ok "customer-a signed in through /ui/login with a linked session"
+
 section "Zitadel facts invisible from outside (verify.sh, admin API, read-only)"
-in_provisioner bash /verify.sh | cut -c1-200 || fail "verify.sh"
+in_zitadel bash /provision/verify.sh | cut -c1-200 || fail "verify.sh"
 
 section "provisioning is idempotent"
 before=$(clients_hash)
-log=$(docker compose run --rm --no-deps -T provision 2>&1 | grep '^\[provision\]') || fail "second provisioning run"
+# As the hook runs it: as the image's zitadel user, in the running container.
+log=$(docker compose exec -T zitadel bash /provision/provision.sh 2>&1 | grep '^\[provision\]') || fail "second provisioning run"
 echo "$log"
 ! grep -qE 'created|wrote|colours updated|uploaded' <<< "$log" || fail "the second run changed something"
 grep -q 'label policy colours are current' <<< "$log" || fail "the second run did not find the label policy current"
 grep -q 'secrets not rotated' <<< "$log" || fail "the second run did not keep the client file"
 [ "$(clients_hash)" = "$before" ] || fail "zitadel-clients.json changed"
 ok "second run created nothing; zitadel-clients.json unchanged (sha256 ${before:0:12}...)"
-in_provisioner bash /verify.sh | grep -q '^PASS  label policy: active, from tokens.css' \
+in_zitadel bash /provision/verify.sh | grep -q '^PASS  label policy: active, from tokens.css' \
   || fail "the active label policy changed after the second run"
 ok "the active label policy still matches tokens.css after the second run"
 

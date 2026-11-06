@@ -6,6 +6,7 @@ using DisputeDesk.Api.IntegrationTests.Operations;
 using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Application.Disputes;
+using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Contracts.Json;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Domain.Transactions;
@@ -167,7 +168,7 @@ public class StoredEventReplayTests(PostgresFixture postgres, TransactionsStub s
     }
 
     /// <summary>The timeline built from the stored stream, item for item and in order, as the raise answered it.</summary>
-    private static void AssertSameTimeline(JsonElement answered, IReadOnlyList<Contracts.Disputes.TimelineEntryResponse> built)
+    private static void AssertSameTimeline(JsonElement answered, IReadOnlyList<TimelineEntryResponse> built)
     {
         using JsonDocument rebuilt = JsonSerializer.SerializeToDocument(built, DisputeDeskJson.Options);
         List<JsonElement> expected = [.. answered.EnumerateArray()];

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { expect, test, type Page } from '@playwright/test';
-import { fixtureLogin, ownDisputable, origin } from './support';
+import { errors, expect, test, type Page } from '@playwright/test';
+import { enterHostedCredentials, fixtureLogin, ownDisputable, origin } from './support';
 
 // Story 5.5: Scalar at /scalar/ drives the operations API with a pasted bearer token, behind Scalar:Enabled. In a real
 // browser through the gateway. The page is anonymous; the token comes from scripts/operations-token.sh and is pasted by hand.
@@ -77,10 +77,7 @@ test('Scalar loads, a pasted operations token reads a dispute, the only CSP viol
   const login = fixtureLogin('customer-a');
   const customerPage = await context.newPage();
   await customerPage.goto('/api/v1/authentication/login');
-  await customerPage.getByTestId('username-text-input').fill(login.username);
-  await customerPage.getByTestId('username-text-input').press('Enter');
-  await customerPage.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await customerPage.getByTestId('password-text-input').press('Enter');
+  await enterHostedCredentials(customerPage, login);
   await customerPage.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   const list = await (await context.request.get('/api/v1/transactions?limit=50')).json();
   const row = ownDisputable(list.items as { transactionId: string; disputable: boolean }[], 'scalar-reference', 'a')[0];
@@ -142,5 +139,5 @@ test('another page path under /scalar/ fails closed: its inline script is refuse
   const violations = await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
   expect(violations.some((directive) => directive.startsWith('script-src'))).toBe(true);
   // The page stays blank for 2 s: the operations button appearing within the window fails the claim.
-  await expect(page.getByRole('button', { name: 'Open Group - Operations' }).waitFor({ timeout: 2000 })).rejects.toThrow('Timeout');
+  await expect(page.getByRole('button', { name: 'Open Group - Operations' }).waitFor({ timeout: 2000 })).rejects.toThrow(errors.TimeoutError);
 });

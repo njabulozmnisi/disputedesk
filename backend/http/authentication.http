@@ -1,4 +1,4 @@
-# authentication endpoints on the local stack (docker compose up --wait), through the gateway.
+# The authentication endpoints on the local stack (docker compose up --wait), through the gateway.
 # Sign in first, headless: scripts/dev-login.sh customer-a
 # then copy the disputedesk-session value from the cookie jar it prints into @session below.
 # With curl, pass the jar instead: curl -b <cookie-jar> -c <cookie-jar> ...

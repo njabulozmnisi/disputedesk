@@ -4,26 +4,31 @@ import { fileURLToPath } from 'node:url';
 import { expect, request as playwrightRequest, test, type APIRequestContext, type BrowserContext } from '@playwright/test';
 import { expectProblemShape, topicRecords, origin, queryRows, signInContext } from './support';
 
-// Story 5.3: the Worker's SLA sweep on the real stack. The seeded SLA demo dispute (customer A, due 5 minutes after the
+// Story 5.3: the SLA sweep on the real stack, run inside the api locally. The seeded SLA demo dispute (customer A, due 5 minutes after the
 // seeding instant) is escalated by the sweep as `automation` / `worker:sla-sweep`. The sweep only escalates, so
-// the stored stream and the outbox hold versions 1, 2, 3 with no gap and the warning column and index are gone. Four hops: the SPA badge, the API response, the database (qa_readonly) and the topic.
+// the stored stream and the outbox hold versions 1, 2, 3 with no gap, and there is no warning column or index. Four hops: the SPA badge, the API response, the database (qa_readonly) and the topic.
 // Needs a fresh stack with the committed fixture (the demo dispute is due at seed time + 5 minutes); the spec waits for it.
 // The spec reads only. The one write is the operations escalate that is refused on the already escalated demo dispute.
 
 const root = new URL('../..', import.meta.url).pathname;
 const fixtures = JSON.parse(readFileSync(fileURLToPath(new URL('../../backend/fixtures/local.json', import.meta.url)), 'utf8'));
 const demo = fixtures.disputes.find((entry: { slaDemo?: boolean }) => entry.slaDemo) as { accountRef: string; transactionId: string };
-const worker = 'disputedesk-worker-1';
+const api = 'disputedesk-api-1';
 
 type Json = Record<string, any>;
 
 const docker = (...args: string[]) => execFileSync('docker', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-const workerHealth = () => docker('inspect', worker, '--format', '{{.State.Health.Status}}');
+const apiHealth = () => docker('inspect', api, '--format', '{{.State.Health.Status}}');
 const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 const eventsOf = (id: string) =>
   queryRows<Json>(`select "Id", "Version", "EventType", "ActorType", "ActorId", to_char("OccurredAtUtc" at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') as "At", "Data" from "StoredEvents" where "DisputeId" = '${id}' order by "Version"`);
 const outboxOf = (id: string) => queryRows<Json>(`select "Id", "EventType", "DisputeVersion", "Payload", "TraceParent" from "OutboxMessages" where "DisputeId" = '${id}' order by "DisputeVersion"`);
+// The relay can still be sending (after a broker outage, for example) when the Disputes row turns Escalated, so the
+// topic is read only once every outbox row of the stream is Sent.
+const untilStreamSent = (id: string) =>
+  expect.poll(() => queryRows<Json>(`select "Status" from "OutboxMessages" where "DisputeId" = '${id}' order by "DisputeVersion"`).map((row) => row.Status), { timeout: 45_000 })
+    .toEqual(['Sent', 'Sent', 'Sent']);
 
 let disputeId: string;
 let dueAt: string;
@@ -75,6 +80,7 @@ test('no warning anywhere: the DropSlaWarning migration applied, the stream and 
   const outbox = outboxOf(disputeId);
   expect(outbox.map((message) => message.DisputeVersion)).toEqual([1, 2, 3]);
   expect(outbox.map((message) => message.Id)).toEqual(events.map((event) => event.Id));
+  await untilStreamSent(disputeId);
   const onTopic = topicRecords().filter((record) => record.key === disputeId).map((record) => JSON.parse(record.value) as Json);
   expect(onTopic.map((record) => record.data.disputeVersion).sort()).toEqual([1, 2, 3]);
   expect(onTopic.map((record) => record.id).sort()).toEqual(events.map((event) => event.Id).sort());
@@ -92,6 +98,7 @@ test('one status-changed event with actor type automation and no actor identity:
   expect(published.data).toMatchObject({ disputeId, fromStatus: 'underReview', toStatus: 'escalated', action: 'escalate', actorType: 'automation', disputeVersion: 3 });
   expect(JSON.stringify(published)).not.toMatch(/worker:sla-sweep|actorId|"sub"/);
 
+  await untilStreamSent(disputeId);
   const onTopic = topicRecords().filter((record) => record.key === disputeId && JSON.parse(record.value).data.action === 'escalate');
   expect(onTopic).toHaveLength(1);
   const value = JSON.parse(onTopic[0].value);
@@ -159,25 +166,27 @@ test('across every dispute: at most one escalation, the sweep acts only on open 
   expect(sweepData).not.toMatch(/CUS-|ACC-|TXN-/);
 });
 
-test('the heartbeat is fresh, the Worker is healthy, and its logs hold counts and IDs only', async () => {
-  expect(workerHealth()).toBe('healthy');
-  const busybox = (...args: string[]) => Number(docker('exec', worker, '/usr/local/bin/busybox', ...args));
+test('the heartbeat is fresh, the api is healthy, and its logs hold counts and IDs only', async () => {
+  expect(apiHealth()).toBe('healthy');
+  const busybox = (...args: string[]) => Number(docker('exec', api, '/usr/local/bin/busybox', ...args));
   const age = busybox('date', '+%s') - busybox('stat', '-c', '%Y', '/tmp/heartbeat-sweep');
   expect(age).toBeLessThanOrEqual(35);
-  const log = docker('logs', worker);
+  const log = docker('logs', api);
   expect(log).toMatch(/SLA sweep batch changed \d+ of \d+ claimed disputes/);
   expect(log).not.toMatch(/CUS-|ACC-|TXN-|Password=|Bearer /);
   expect(log).not.toMatch(/SLA sweep could not change|SLA sweep loop failed/);
 });
 
-test('restarting the Worker after the escalation gives no duplicate, and the Worker is healthy again', async () => {
+test('restarting the api after the escalation gives no duplicate, and the api is healthy again', async () => {
   test.setTimeout(240_000);
   const before = queryRows<Json>(`select count(*)::int as "N" from "StoredEvents"`)[0].N;
   const outboxBefore = queryRows<Json>(`select count(*)::int as "N" from "OutboxMessages"`)[0].N;
-  docker('restart', worker);
+  docker('restart', api);
   const deadline = Date.now() + 120_000;
-  while (workerHealth() !== 'healthy' && Date.now() < deadline) await sleep(3000); // the gap between two health checks of the restarted worker
-  expect(workerHealth()).toBe('healthy');
+  while (apiHealth() !== 'healthy' && Date.now() < deadline) await sleep(3000); // the gap between two health checks of the restarted api
+  expect(apiHealth()).toBe('healthy');
+  // The gateway finds the restarted api again only after nginx's lookup retry delay (docker-compose.yml, gateway).
+  await expect.poll(async () => (await fetch(`${origin}/api/v1/authentication/session`).catch(() => null))?.status, { timeout: 90_000, intervals: [1000] }).toBe(200);
   await sleep(70_000); // two more loops of the sweep
   expect(eventsOf(disputeId).filter((event) => event.EventType === 'DisputeEscalated')).toHaveLength(1);
   expect(queryRows<Json>(`select count(*)::int as "N" from "StoredEvents"`)[0].N).toBe(before);

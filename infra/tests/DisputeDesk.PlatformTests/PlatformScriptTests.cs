@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Versioning;
@@ -12,13 +13,51 @@ namespace DisputeDesk.PlatformTests;
 /// <summary>
 /// AC11: what the Zitadel provisioner creates, and the operations allowlist it writes. 7.12 AC6 and AC7: the
 /// gateway templates' access log format and their /api error pages; GatewayTests proves the rest by response.
-/// The provision.sh cases read the file because no run on this machine reaches a Zitadel call: the script first runs
-/// /label-policy.sh and reads /brand/, which only the provisioner image holds.
+/// The provision.sh runs here stop at its first Zitadel call, which a stub curl cannot answer (its arguments name a
+/// random temporary file); the cases after that point read the file, because the script then runs
+/// /provision/label-policy.sh and reads /brand/, which only the zitadel image holds. infra/tests/smoke.sh runs it whole.
 /// </summary>
 [UnsupportedOSPlatform("windows")] // the stubs need their execute bit
 public partial class PlatformScriptTests
 {
     private static readonly string ProvisionScript = File.ReadAllText(Path.Combine(SourceRoots.Repo, "infra/images/zitadel/provision.sh"));
+
+    [Fact]
+    public void GitHubDownloads_EveryCurl_BoundsItsRetries()
+    {
+        // Each is a GET of a release file, so a retry is safe; --retry-max-time ends the retries inside the job's timeout.
+        // The shortest timeout of a job that downloads, floor-guard aside (the next test), is gitleaks' 10 minutes.
+        string[] curls = [.. Directory.GetFiles(Path.Combine(SourceRoots.Repo, ".github"), "*", SearchOption.AllDirectories)
+            .SelectMany(File.ReadLines)
+            .Where(line => line.Contains("curl -", StringComparison.Ordinal))];
+
+        Assert.NotEmpty(curls);
+        Assert.All(curls, curl => Assert.Contains("--retry-max-time", curl, StringComparison.Ordinal));
+        Assert.All(curls, curl => Assert.True(WorstCaseSeconds(curl) < 600, curl));
+    }
+
+    [Fact]
+    public void FloorGuardDownloads_WorstCase_LeavesRoomInsideTheJobTimeout()
+    {
+        // Its other steps take about a minute on main.
+        const int RoomForOtherStepsSeconds = 100;
+        string job = FloorGuardJob().Match(File.ReadAllText(Path.Combine(SourceRoots.Repo, ".github/workflows/ci.yml"))).Groups["job"].Value;
+        int timeoutSeconds = 60 * int.Parse(JobTimeout().Match(job).Groups["minutes"].Value, CultureInfo.InvariantCulture);
+        string[] curls = [.. job.Split('\n').Where(line => line.Contains("curl -", StringComparison.Ordinal))];
+
+        Assert.Equal(2, curls.Length);
+        Assert.All(curls, curl => Assert.Contains("--max-time 60 ", curl, StringComparison.Ordinal));
+        Assert.True(curls.Sum(WorstCaseSeconds) + RoomForOtherStepsSeconds <= timeoutSeconds, string.Join('\n', curls));
+    }
+
+    /// <summary>Curl starts no retry after --retry-max-time, so the last attempt can start just inside it, wait --retry-delay and run for --max-time.</summary>
+    private static int WorstCaseSeconds(string curl)
+    {
+        MatchCollection times = CurlTimes().Matches(curl);
+
+        Assert.Equal(3, times.Count);
+        return times.Sum(time => int.Parse(time.Groups["seconds"].Value, CultureInfo.InvariantCulture));
+    }
 
     [Fact]
     public void ProvisionScript_ProjectRoles_AreTheFourCamelCaseKeys()
@@ -71,7 +110,7 @@ public partial class PlatformScriptTests
 
         JsonNode model = await ComposeModel.RenderAsync(["docker-compose.yml"], variables: variables);
 
-        Assert.Equal(expected, model["services"]!["provision"]!["environment"]!["AUTH_DEVELOPMENT_MODE"]!.GetValue<string>());
+        Assert.Equal(expected, model["services"]!["zitadel"]!["environment"]!["PROVISION_AUTH_DEVELOPMENT_MODE"]!.GetValue<string>());
         // Text: no run here reaches the app's creation (the class summary says why).
         Assert.Contains("\\\"developmentMode\\\":$AUTH_DEVELOPMENT_MODE,", ProvisionScript, StringComparison.Ordinal);
     }
@@ -87,32 +126,107 @@ public partial class PlatformScriptTests
     }
 
     [Fact]
-    public async Task ProvisionScript_DevelopmentModeNotABoolean_FailsBeforeCallingZitadel()
+    public async Task ProvisionScript_DevelopmentModeNotABoolean_RemovesTheMarkerAndFailsBeforeCallingZitadel()
     {
-        // Expected: no curl call, exit 1, one message on standard error.
-        using var stubs = new PathStubs("curl");
-        Dictionary<string, string> environment = stubs.Environment();
-        environment["ZITADEL_URL"] = "http://zitadel.invalid";
-        environment["OUT_DIR"] = stubs.Directory;
-        environment["OUT_UID"] = "1654";
-        environment["FIXTURES_FILE"] = "unused.json";
-        environment["APP_ORIGINS"] = "http://localhost:8080";
-        environment["AUTH_DEVELOPMENT_MODE"] = "yes";
+        // Expected: the marker from an earlier run gone (so the container turns unhealthy), no call, exit 1, one message.
+        using var stubs = new PathStubs("curl", "sleep", "zitadel");
+        Dictionary<string, string> environment = ProvisionEnvironment(stubs);
+        environment["PROVISION_AUTH_DEVELOPMENT_MODE"] = "yes";
+        await File.WriteAllTextAsync(environment["PROVISION_MARKER_FILE"], "", TestContext.Current.CancellationToken);
 
-        ProcessResult run = await Processes.RunAsync("bash", ["infra/images/zitadel/provision.sh"], environment, TimeSpan.FromSeconds(30));
+        ProcessResult run = await RunProvisionAsync(environment);
 
         Assert.Equal(1, run.ExitCode);
-        Assert.Equal("[provision] AUTH_DEVELOPMENT_MODE must be true or false, not 'yes'\n", run.Errors);
+        Assert.Equal("[provision] PROVISION_AUTH_DEVELOPMENT_MODE must be true or false, not 'yes'\n", run.Errors);
         Assert.Empty(run.Output);
+        Assert.Empty(stubs.Calls());
+        Assert.False(File.Exists(environment["PROVISION_MARKER_FILE"]));
+    }
+
+    [Fact]
+    public async Task ProvisionScript_WaitsForZitadelReady_BeforeReadingThePat()
+    {
+        // The hook starts before Zitadel listens, and Zitadel writes the PAT during its setup. Here `zitadel ready` fails
+        // twice, then writes the PAT and succeeds, as Zitadel does; reading the PAT earlier would fail the run on it.
+        using var stubs = new PathStubs("curl", "sleep");
+        Dictionary<string, string> environment = ProvisionEnvironment(stubs);
+        WriteZitadelReadyStub(stubs, failures: 2, writesPat: environment["PROVISION_PAT_FILE"]);
+        stubs.Answer("sleep", ["2"]);
+
+        ProcessResult run = await RunProvisionAsync(environment);
+
+        Assert.NotEqual(0, run.ExitCode);
+        Assert.Equal(3, ZitadelReadyCalls(stubs));
+        Assert.Equal(2, stubs.Calls("sleep").Length);
+        Assert.Contains("[provision] Zitadel is ready\n", run.Errors, StringComparison.Ordinal);
+        // The stub curl fails the call (exit 97), and a failed call ends the run there, inside $(...) too.
+        Assert.EndsWith("[provision] FAIL GET /admin/v1/policies/label/_preview -> curl exit 97\n", run.Errors, StringComparison.Ordinal);
+        // The first call: the label policy preview, at the public URL, connected to this container, with the time limit
+        // every Zitadel call takes from CURL_OPTS.
+        string[] call = Assert.Single(stubs.Calls("curl")).Arguments;
+        Assert.Equal(["--max-time", "30", "--connect-to", "auth.localhost:8080:127.0.0.1:8080"], call[..4]);
+        Assert.Contains("http://auth.localhost:8080/admin/v1/policies/label/_preview", call);
+        Assert.False(File.Exists(environment["PROVISION_MARKER_FILE"]));
+    }
+
+    [Fact]
+    public async Task ProvisionScript_ZitadelReadyWithoutAPat_FailsBeforeAnyCall()
+    {
+        using var stubs = new PathStubs("curl", "sleep");
+        Dictionary<string, string> environment = ProvisionEnvironment(stubs);
+        WriteZitadelReadyStub(stubs, failures: 0, writesPat: null);
+
+        ProcessResult run = await RunProvisionAsync(environment);
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Equal($"[provision] Zitadel is ready but {environment["PROVISION_PAT_FILE"]} is missing or empty\n", run.Errors);
         Assert.Empty(stubs.Calls());
     }
 
     [Fact]
-    public void ProvisionScript_CurlOptions_SetAMaxTime()
+    public async Task ProvisionScript_ZitadelNeverReady_FailsAtTheDeadline()
     {
-        // Every Zitadel call in the script goes through curl "${CURL_OPTS[@]}", so this one option times them all out.
-        // Text: no run here reaches a curl call (the class summary says why).
-        Assert.Contains("CURL_OPTS=(--max-time ", ProvisionScript, StringComparison.Ordinal);
+        // The deadline is 300 s since the script started (bash's SECONDS). bash takes SECONDS from its environment as
+        // an assignment, so the run starts at the deadline and fails on its first unready answer instead of waiting.
+        using var stubs = new PathStubs("curl", "sleep");
+        Dictionary<string, string> environment = ProvisionEnvironment(stubs);
+        environment["SECONDS"] = "300";
+        WriteZitadelReadyStub(stubs, failures: int.MaxValue, writesPat: null);
+
+        ProcessResult run = await RunProvisionAsync(environment);
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Equal("[provision] Zitadel was not ready within 300 s\n", run.Errors);
+        Assert.Equal(1, ZitadelReadyCalls(stubs));
+        Assert.Empty(stubs.Calls());
+    }
+
+    [Fact]
+    public void ProvisionScript_Issuer_IsZitadelsDiscoveryAnswerNotTheCallUrl()
+    {
+        // In AWS the call URL is http://AUTH_HOST and the issuer https://AUTH_HOST (ComposeRenderTests). Text: no run
+        // here gets past the first call (the class summary says why).
+        Assert.Contains("ISSUER=$(call GET /.well-known/openid-configuration | jq -er .issuer)", ProvisionScript, StringComparison.Ordinal);
+        Assert.Contains("--arg issuer \"$ISSUER\"", ProvisionScript, StringComparison.Ordinal);
+        Assert.Contains("[ \"$(jq -r '.Zitadel.Issuer' \"$OUT_FILE\")\" = \"$ISSUER\" ]", ProvisionScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("--arg issuer \"$Z\"", ProvisionScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProvisionScript_Marker_IsRemovedFirstAndWrittenOnlyAtTheEnd_AndTheClientsFileIsOwnerAndGroupReadOnly()
+    {
+        // Text: no run here reaches the end (the class summary says why). set -e ends the run at any failed step, so a
+        // marker written last means every step passed. The api reads the file through Zitadel's group (group_add).
+        string[] lines = ProvisionScript.Split('\n');
+        string[] code = [.. lines.Where(line => line.Length > 0 && !line.StartsWith('#'))];
+
+        Assert.Equal("set -euo pipefail", code[0]);
+        Assert.Equal("MARKER=\"${PROVISION_MARKER_FILE:?}\"", code[1]);
+        Assert.Equal("rm -f \"$MARKER\"", code[2]);
+        Assert.Equal(["touch \"$MARKER\"", "log \"done\""], code[^2..]);
+        Assert.Single(lines, line => line.Contains("$MARKER", StringComparison.Ordinal) && line.Contains("touch", StringComparison.Ordinal));
+        Assert.Contains("  chmod 0440 \"$OUT_FILE.tmp\"", lines);
+        Assert.DoesNotContain("chown", ProvisionScript, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -125,10 +239,11 @@ public partial class PlatformScriptTests
         await File.WriteAllTextAsync(Path.Combine(stubs.Directory, "zitadel-clients.json"), """{"Zitadel":{"ProjectId":"p1","WebApp":{"ClientId":"c1"}}}""", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(Path.Combine(stubs.Directory, "pat"), "test-only-pat", TestContext.Current.CancellationToken);
         Dictionary<string, string> environment = stubs.Environment();
-        environment["ZITADEL_URL"] = "http://zitadel.invalid";
-        environment["FIXTURES_FILE"] = "unused.json";
-        environment["OUT_DIR"] = stubs.Directory;
-        environment["PAT_FILE"] = Path.Combine(stubs.Directory, "pat");
+        environment["PROVISION_CALL_URL"] = "http://zitadel.invalid";
+        environment["PROVISION_CONNECT_TO"] = "zitadel.invalid:80:127.0.0.1:8080";
+        environment["PROVISION_FIXTURES_FILE"] = "unused.json";
+        environment["PROVISION_OUT_DIR"] = stubs.Directory;
+        environment["PROVISION_PAT_FILE"] = Path.Combine(stubs.Directory, "pat");
 
         ProcessResult run = await Processes.RunAsync("bash", ["infra/images/zitadel/verify.sh"], environment, TimeSpan.FromSeconds(30));
 
@@ -142,8 +257,8 @@ public partial class PlatformScriptTests
     [Fact]
     public void ProvisionScript_FirstZitadelCall_IsTheOnlyOneThatRetries()
     {
-        // Zitadel can refuse connections or answer 503 for a moment after its health check passes (story 2.6, QA F1).
-        // Text: no run here reaches a curl call (the class summary says why); the retry cases below run the options.
+        // Zitadel can refuse connections or answer 503 for a moment after it reports ready (story 2.6, QA F1).
+        // Text: the stub curl cannot answer the first call (the class summary says why); the retry cases below run the options.
         string firstCall = ZitadelCall().Match(ProvisionScript).Value;
 
         Assert.Equal("RETRY=1 call GET /admin/v1/policies/label/_preview", firstCall);
@@ -262,6 +377,45 @@ public partial class PlatformScriptTests
         Assert.All(locations, location => Assert.Matches(GatewayErrorPage(), location.Groups["body"].Value));
     }
 
+    /// <summary>provision.sh's inputs as docker-compose.yml sets them, with the files in the stubs' folder.</summary>
+    private static Dictionary<string, string> ProvisionEnvironment(PathStubs stubs)
+    {
+        Dictionary<string, string> environment = stubs.Environment();
+        environment["PROVISION_CALL_URL"] = "http://auth.localhost:8080";
+        environment["PROVISION_CONNECT_TO"] = "auth.localhost:8080:127.0.0.1:8080";
+        environment["PROVISION_PAT_FILE"] = Path.Combine(stubs.Directory, "admin.pat");
+        environment["PROVISION_OUT_DIR"] = stubs.Directory;
+        environment["PROVISION_FIXTURES_FILE"] = "unused.json";
+        environment["PROVISION_MARKER_FILE"] = Path.Combine(stubs.Directory, "provisioned");
+        environment["PROVISION_APP_ORIGINS"] = "http://localhost:8080";
+        environment["PROVISION_AUTH_DEVELOPMENT_MODE"] = "true";
+        return environment;
+    }
+
+    private static Task<ProcessResult> RunProvisionAsync(Dictionary<string, string> environment) =>
+        Processes.RunAsync("bash", ["infra/images/zitadel/provision.sh"], environment, TimeSpan.FromSeconds(30));
+
+    /// <summary>
+    /// A stand-in for `zitadel ready` that fails the first FAILURES calls, then succeeds, writing the PAT file first when
+    /// one is named, as Zitadel writes it during setup before it reports ready. Each call adds a line to zitadel.calls.
+    /// </summary>
+    private static void WriteZitadelReadyStub(PathStubs stubs, int failures, string? writesPat)
+    {
+        string stub = Path.Combine(stubs.Directory, "zitadel");
+        string writePat = writesPat is null ? "" : $"printf 'test-only-pat\\n' > '{writesPat}'";
+        File.WriteAllText(stub, $"""
+            #!/usr/bin/env bash
+            [ "$*" = ready ] || exit 97
+            echo ready >> "$(dirname "$0")/zitadel.calls"
+            [ "$(wc -l < "$(dirname "$0")/zitadel.calls")" -gt {failures} ] || exit 1
+            {writePat}
+
+            """);
+        File.SetUnixFileMode(stub, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
+
+    private static int ZitadelReadyCalls(PathStubs stubs) => File.ReadAllLines(Path.Combine(stubs.Directory, "zitadel.calls")).Length;
+
     // From the "is the file current" test up to the log line it ends with.
     [GeneratedRegex(@"if \[ -s ""\$OUT_FILE"" \][^;]*;[^\n]*then\s*\n\s*log ""\$OUT_FILE is current; secrets not rotated""")]
     private static partial Regex CurrentCheck();
@@ -312,6 +466,15 @@ public partial class PlatformScriptTests
 
     [GeneratedRegex(@"RETRY_OPTS=\((?<options>[^)]*)\)")]
     private static partial Regex RetryOptionsArray();
+
+    [GeneratedRegex(@"--(?:max-time|retry-delay|retry-max-time) (?<seconds>\d+)")]
+    private static partial Regex CurlTimes();
+
+    [GeneratedRegex(@"^  floor-guard:\n(?<job>.*?)(?=^  [a-z-]+:\n)", RegexOptions.Multiline | RegexOptions.Singleline)]
+    private static partial Regex FloorGuardJob();
+
+    [GeneratedRegex(@"timeout-minutes: (?<minutes>\d+)")]
+    private static partial Regex JobTimeout();
 
     [GeneratedRegex(@"ROLES='(?<roles>[^']*)'")]
     private static partial Regex RolesBlock();

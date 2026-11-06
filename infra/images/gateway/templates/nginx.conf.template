@@ -186,20 +186,20 @@ http {
       proxy_set_header Authorization "";
       proxy_set_header X-Forwarded-For $remote_addr;
       proxy_set_header Forwarded "";
+      proxy_set_header X-Origin-Verify "";
     }
   }
 
   # ---------------------------------------------------------------------------------------------
-  # Identity origin: Zitadel API and the hosted login on one host (a separate login origin fights the
-  # login's own CSP, see the Zitadel lab notes). Zitadel resolves its instance from the Host,
-  # which must be exactly ExternalDomain:ExternalPort. No app CSP here: the login sets its own.
+  # Identity origin: Zitadel, which serves its API, console and hosted login (/ui/login) itself. Zitadel resolves its
+  # instance from the Host, which must be exactly ExternalDomain:ExternalPort. No app CSP here: Zitadel sets its own.
   # ---------------------------------------------------------------------------------------------
   server {
     listen 8080;
     server_name ${GATEWAY_AUTH_SERVER_NAME};
 
     # The identity baseline on every response (identity-headers.conf), each header once, the upstreams' own copies
-    # hidden. Referrer-Policy once: Zitadel's own same-origin on its console and v1 login, the gateway's
+    # hidden. Referrer-Policy once: Zitadel's own same-origin on its console and hosted login, the gateway's
     # strict-origin-when-cross-origin wherever the upstream sends none (the 302 below, discovery).
     include /etc/nginx/identity-headers.conf;
 
@@ -213,10 +213,9 @@ http {
     proxy_set_header Forwarded "";
     proxy_set_header X-Origin-Verify "";
 
+    location = / { return 302 /ui/login/loginname; }
 
-    location = / { return 302 /ui/login/; }
-
-    # OIDC, REST, Connect (HTTP/1.1), console and assets.
+    # OIDC, REST, Connect (HTTP/1.1), the hosted login (/ui/login), console and assets.
     location / {
       proxy_pass http://zitadel_api;
       proxy_buffering off;

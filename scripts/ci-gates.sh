@@ -5,17 +5,18 @@
 # block a merge once the gate is the required check, so this fails, naming each job that is wrong.
 # Usage: scripts/ci-gates.sh <workflow file> <gate job> [<main-only job>...]
 #        (CI's floor-guard job: ci.yml ci-passed publish deploy deploy-switched-off; security.yml security-passed)
-# Needs yq v4 (preinstalled on ubuntu-24.04). Exit codes: 0 ok; 1 a job is wrong; 2 usage.
+# Needs yq v4 (preinstalled on ubuntu-24.04). Exit codes: 0 ok; 1 a job is wrong; 2 usage, or no yq.
 set -euo pipefail
 
 [[ $# -ge 2 ]] || { echo "usage: scripts/ci-gates.sh <workflow file> <gate job> [<main-only job>...]" >&2; exit 2; }
+command -v yq >/dev/null || { echo "ci-gates: yq v4 is required on PATH" >&2; exit 2; }
 file=$1; export GATE=$2; shift 2
 skip=("$GATE" "$@")
 # Prints its input lines except the gate and the main-only jobs.
 drop_skipped() { grep -vxF -f <(printf '%s\n' "${skip[@]}") || true; }
 
 expected=$(yq '.jobs | keys | .[]' "$file" | drop_skipped | sort)
-needs=$(yq '.jobs[strenv(GATE)].needs[]' "$file" | sort)
+needs=$(yq '.jobs[strenv(GATE)].needs | ([] + .) | .[]' "$file" | sort)
 conditional=$(yq '.jobs | to_entries | .[] | select(.value | (has("if") or has("needs"))) | .key' "$file" | drop_skipped)
 
 failed=0

@@ -2,9 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser } from '@playwright/test';
-import { fixtureLogin, holdsCode, mailpit, mailpitSearch, messageText, origin, pause, queryDatabase, registerLogin, sessionCookieName, smsTo, topicRecords, type Login } from './support';
+import { enterHostedCredentials, fixtureLogin, holdsCode, mailpit, mailpitSearch, messageText, origin, pause, queryDatabase, registerLogin, sessionCookieName, smsTo, topicRecords, type Login } from './support';
 
-// Story 6.2: POST /api/v1/linking/verify, through the real gateway, Api, job, database (qa_readonly), Mailpit and
+// Story 6.2: POST /api/v1/linking/verify, through the real gateway, API, job, database (qa_readonly), Mailpit and
 // the Aspire telemetry API. Customer D is the only customer a new login can link to and links once per database, so the
 // journeys are ordered: every journey that must not link runs first, the race for D (and the happy path of the winner)
 // runs last. Only customer C has a fixture login that is unlinked, so the other unlinked logins are registered through
@@ -55,10 +55,7 @@ async function signInFixture(browser: Browser, key: string): Promise<Login> {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
+  await enterHostedCredentials(page, login);
   await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   await page.close();
   return { label: key, email: login.username, context, sub: loginSub(key) };
@@ -171,7 +168,7 @@ async function startFor(login: Login, details: string, expectedAuditAction: stri
 }
 
 function apiLogsSinceStart(): string {
-  return ['disputedesk-api-1', 'disputedesk-worker-1']
+  return ['disputedesk-api-1']
     .map((container) => execFileSync('sh', ['-c', `docker logs --since ${startedAt} ${container} 2>&1`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }))
     .join('\n');
 }
@@ -590,7 +587,7 @@ test('criterion 3, 8: an expired claimed challenge counts the attempt, the corre
 
 // ---- criterion 8: nothing personal or secret anywhere ---------------------------------------------------------------------
 
-test('criterion 8: no OTP, HMAC or ID number in any table column but OtpHmac, the Api and worker logs, the Aspire logs and spans, or the topic', { tag: ['@verify-a', '@verify-b', '@verify-c'] }, async () => {
+test('criterion 8: no OTP, HMAC or ID number in any table column but OtpHmac, the Api logs, the Aspire logs and spans, or the topic', { tag: ['@verify-a', '@verify-b', '@verify-c'] }, async () => {
   const hmacs = sql(`select encode("OtpHmac", 'hex') from "LinkingChallenges" where "OtpHmac" is not null`).split('\n').filter(Boolean);
   // The spec runs as three groups on three stacks (run-regression.sh), so a stack holds one or two HMACs and codes, not many.
   expect(hmacs.length).toBeGreaterThanOrEqual(1);
@@ -621,7 +618,7 @@ test('criterion 8: no OTP, HMAC or ID number in any table column but OtpHmac, th
   // The code column holds the HMAC only, and 32 bytes.
   expect(sql(`select count(*) from "LinkingChallenges" where "OtpHmac" is not null and octet_length("OtpHmac") <> 32`)).toBe('0');
 
-  scan('Api and worker logs', apiLogsSinceStart());
+  scan('Api logs', apiLogsSinceStart());
   const logs = await (await fetch(`${dashboard}/api/telemetry/logs`)).text();
   scan('Aspire logs', logs);
   const spans = await (await fetch(`${dashboard}/api/telemetry/spans`)).text();

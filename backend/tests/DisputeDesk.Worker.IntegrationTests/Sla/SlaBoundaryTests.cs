@@ -1,6 +1,6 @@
 using DisputeDesk.Application.Disputes;
 using DisputeDesk.Domain.Disputes;
-using DisputeDesk.Worker.Sla;
+using DisputeDesk.Infrastructure.Sla;
 
 namespace DisputeDesk.Worker.IntegrationTests.Sla;
 

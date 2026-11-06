@@ -9,18 +9,18 @@
 | Area | Redpanda (v26.2.x) | Apache Kafka 4.x (KRaft) |
 | --- | --- | --- |
 | Client compatibility | Kafka protocol; librdkafka validated; idempotent producer and `Acks.All` proven by this repo's relay tests | Reference implementation |
-| Footprint | One C++ binary, no JVM; 276 MiB idle measured locally (P0-2 smoke); 512 MB in the AWS override | JVM broker; 1 GiB default heap ([Kafka 4.4 source](https://github.com/apache/kafka/tree/4.4.0)) |
+| Footprint | One C++ binary, no JVM; locally `--memory=192M` under a 384 MiB limit (253.3 MiB × 1.5, rounded up to 64 MiB; the figure is the highest `docker stats` sample of the stack run of 2026-11-06, taken in the first seconds after start, in a run that includes the broker stop-and-restart test); `--memory=512M` under 768 MiB in the AWS override | JVM broker; 1 GiB default heap ([Kafka 4.4 source](https://github.com/apache/kafka/tree/4.4.0)) |
 | Local setup | `--mode=dev-container --smp=1`; `Testcontainers.Redpanda` | KRaft combined mode, about ten settings; `Testcontainers.Kafka` |
-| Tooling in the image | `rpk` (health check, topic creation, the e2e helper), Admin API, Prometheus metrics on 9644, built-in schema registry ([Monitor Redpanda](https://docs.redpanda.com/current/manage/monitoring/)) | `kafka-*.sh`, JMX; registry and UI are separate products |
+| Tooling in the image | `rpk` (health check, the e2e helper), Admin API, Prometheus metrics on 9644, built-in schema registry ([Monitor Redpanda](https://docs.redpanda.com/current/manage/monitoring/)) | `kafka-*.sh`, JMX; registry and UI are separate products |
 | Web UI | Redpanda Console, free for community features ([Console enterprise licence](https://docs.redpanda.com/streaming/current/console/config/enterprise-license/)) | kafbat/kafka-ui, AKHQ (Apache 2.0) |
 | Licence | Core under BSL 1.1: free to use, not to resell as a streaming service; enterprise features under the RCL ([Licensing overview](https://docs.redpanda.com/current/get-started/licensing/overview/)) | Apache 2.0 |
 | Maturity | Younger, one vendor; Jepsen 2022 findings were fixed ([Jepsen](https://jepsen.io/analyses/redpanda-21.10.1)) | Long-lived Apache project, widest operator knowledge |
 
-Memory is the binding constraint: the AWS dev instance has 4 GiB and the AWS Compose limits leave 26 MiB of headroom (`infra/deploy/aws/check-compose.sh`), so a JVM broker at its defaults does not fit without cuts elsewhere.
+Memory is the binding constraint: the AWS dev instance has 4 GiB and the AWS Compose memory limits take most of it (the budget at the top of `infra/deploy/aws/compose.yml`), so a JVM broker at its defaults does not fit without cuts elsewhere.
 
 **Options rejected.**
 
-- *Apache Kafka 4.x:* larger at its defaults on a memory-bound instance, and the project uses nothing Kafka adds. Switching costs configuration and tests only (Compose, the AWS override, `OutboxFixture.cs`, the e2e helper that runs `rpk`, `check-compose.sh`, docs).
+- *Apache Kafka 4.x:* larger at its defaults on a memory-bound instance, and the project uses nothing Kafka adds. Switching costs configuration and tests only (Compose, the AWS override, `OutboxFixture.cs`, the e2e helper that runs `rpk`, `ComposeRenderTests`, docs).
 - *Amazon MSK:* excluded by the kickoff specification, and it needs Terraform, VPC subnets in two or three zones, and a cost beyond the free plan.
 - *No broker (consumers poll the outbox or an events feed), SQS or SNS FIFO, EventBridge:* each changes the PRD, which names Kafka headers (FR-27, FR-28, NFR-OBS-1); polling couples consumers to this database and has no global position (P17); SQS cannot replay a deleted message for a new consumer.
 - *Prometheus, Grafana or a second OpenTelemetry Collector for broker metrics:* more containers for one broker with one producer; Aspire already shows the producer spans and `disputedesk.outbox.failed`.

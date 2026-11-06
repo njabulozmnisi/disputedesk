@@ -31,7 +31,7 @@ public class LayerTests
         AssertReferencesNone(DomainAssembly, forbidden);
     }
 
-    /// <summary>Contracts uses the Domain enums that are identical on the wire (AD-1, D14b), and no other solution assembly.</summary>
+    /// <summary>Contracts uses the Domain enums that are identical on the wire (AD-1), and no other solution assembly.</summary>
     [Fact]
     public void ContractsAssembly_References_OnlyDomainOfTheSolution()
     {
@@ -43,7 +43,7 @@ public class LayerTests
     }
 
     /// <summary>
-    /// The enums identical on the wire exist once, in Domain (D14b). Contracts keeps only the two customer-view enums,
+    /// The enums identical on the wire exist once, in Domain (AD-1). Contracts keeps only the two customer-view enums,
     /// whose members differ from Domain's, and the four enums with no Domain twin.
     /// </summary>
     [Fact]
@@ -52,6 +52,20 @@ public class LayerTests
         IEnumerable<string> enums = ContractsAssembly.GetTypes().Where(type => type.IsEnum).Select(type => type.Name).Order(StringComparer.Ordinal);
 
         Assert.Equal(["AuditAction", "AuditResult", "CustomerStatus", "SessionState", "StoredEventType", "TimelineActor"], enums);
+    }
+
+    /// <summary>The assembly reference allows any Domain type, so this holds Contracts to the enums (AD-1).</summary>
+    [Fact]
+    public void ContractsAssembly_PublicSignatures_NameOnlyEnumsFromDomain()
+    {
+        List<Type> domainTypes = [.. ContractsAssembly.GetExportedTypes()
+            .SelectMany(SignatureTypes)
+            .SelectMany(WithItsParts)
+            .Where(type => type.Assembly == DomainAssembly)
+            .Distinct()];
+
+        Assert.NotEmpty(domainTypes);
+        Assert.All(domainTypes, type => Assert.True(type.IsEnum, $"{type.FullName} is in a Contracts signature and is not an enum."));
     }
 
     [Fact]
@@ -130,6 +144,22 @@ public class LayerTests
 
         Assert.True(violations.Count == 0, "Types named like a namespace:\n" + string.Join('\n', violations));
     }
+
+    /// <summary>The type of every public field and property, every constructor and method parameter, and every method's return.</summary>
+    private static IEnumerable<Type> SignatureTypes(Type type) =>
+        type.GetFields().Select(field => field.FieldType)
+            .Concat(type.GetProperties().Select(property => property.PropertyType))
+            .Concat(type.GetConstructors().SelectMany(constructor => constructor.GetParameters()).Select(parameter => parameter.ParameterType))
+            .Concat(type.GetMethods().SelectMany(method => method.GetParameters().Select(parameter => parameter.ParameterType).Append(method.ReturnType)));
+
+    /// <summary>
+    /// <paramref name="type"/> and its generic arguments, at any depth. An array or an <c>out</c> parameter, such as a
+    /// record's <c>Deconstruct</c> has, stands for its element.
+    /// </summary>
+    private static IEnumerable<Type> WithItsParts(Type type) =>
+        type.GetElementType() is { } element
+            ? WithItsParts(element)
+            : type.GetGenericArguments().SelectMany(WithItsParts).Prepend(type);
 
     private static string NameOf(Assembly assembly) => assembly.GetName().Name ?? assembly.FullName ?? string.Empty;
 

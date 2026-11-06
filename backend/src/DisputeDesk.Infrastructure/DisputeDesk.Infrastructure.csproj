@@ -16,7 +16,8 @@
   <ItemGroup>
     <!-- The publish mapping tests call the internal CommitRows directly (InternalsVisibleToAttribute). -->
     <InternalsVisibleTo Include="DisputeDesk.Api.IntegrationTests" />
-    <!-- The relay tests call the internal OutboxRelay.CreateProducerConfig, OutboxRelay.Backoff and OutboxRelay.Classify directly. -->
+    <!-- The relay tests call the internal OutboxRelay.CreateProducerConfig, OutboxRelay.Backoff and OutboxRelay.Classify
+         directly, and the SLA tests run one loop of the sweep (SlaSweep.SweepAsync). -->
     <InternalsVisibleTo Include="DisputeDesk.Worker.IntegrationTests" />
   </ItemGroup>
 </Project>

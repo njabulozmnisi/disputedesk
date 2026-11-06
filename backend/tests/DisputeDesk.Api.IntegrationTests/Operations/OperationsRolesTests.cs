@@ -80,7 +80,7 @@ public class OperationsRolesTests(PostgresFixture postgres, TransactionsStub stu
     }
 
     /// <summary>
-    /// A token shaped like the API's ID token for a customer: the same issuer, the web app client and the project as
+    /// A token shaped like the web app's ID token for a customer: the same issuer, the web app client and the project as
     /// audience, the customer's login as <c>sub</c>, and the ID token's own claims.
     /// </summary>
     private static SecurityTokenDescriptor CustomerIdToken(FakeZitadel zitadel, params string[] roles)

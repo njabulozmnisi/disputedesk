@@ -1,6 +1,10 @@
 using System.Diagnostics;
+using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using DisputeDesk.Application.Abstractions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 
 namespace DisputeDesk.Api.IntegrationTests.CoreBanking;
 
@@ -19,6 +23,31 @@ public sealed class SimSwapCheckTests(CoreBankingStubFactory stub) : IClassFixtu
         bool passes = await services.GetRequiredService<ISimSwapCheck>().PassesAsync(cellphone, CancellationToken);
 
         Assert.Equal(expected, passes);
+    }
+
+    [Fact]
+    public async Task PassesAsync_HttpClientTraceOnInConfiguration_NoRecordHoldsTheCellphone()
+    {
+        const string Cellphone = "+27820000004";
+        IConfiguration logging = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["LogLevel:Default"] = "Information",
+                ["LogLevel:System.Net.Http.HttpClient"] = "Trace",
+            })
+            .Build();
+        await using ServiceProvider services = CoreBankingServices.Build(
+            stub.BaseUrl,
+            configure => configure.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Information).AddConfiguration(logging)));
+        FakeLogCollector logs = services.GetFakeLogCollector();
+        ILogger clientHandler = services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("System.Net.Http.HttpClient.ISimSwapCheck.ClientHandler");
+
+        await services.GetRequiredService<ISimSwapCheck>().PassesAsync(Cellphone, CancellationToken);
+
+        Assert.True(clientHandler.IsEnabled(LogLevel.Trace));
+        Assert.NotEmpty(logs.Lines());
+        Assert.DoesNotContain(logs.Lines(), line => line.Contains(Cellphone, StringComparison.Ordinal));
     }
 
     [Fact]

@@ -106,7 +106,7 @@ run "criterion_5_the_role_sends_only_the_deploy_document_to_the_instance" {
       workerImage      = { type = "String", description = "A published image by digest.", allowedPattern = "^ghcr\\.io/example-owner/disputedesk-[a-z-]+@sha256:[0-9a-f]{64}$", interpolationType = "ENV_VAR" }
       gatewayImage     = { type = "String", description = "A published image by digest.", allowedPattern = "^ghcr\\.io/example-owner/disputedesk-[a-z-]+@sha256:[0-9a-f]{64}$", interpolationType = "ENV_VAR" }
       coreBankingImage = { type = "String", description = "A published image by digest.", allowedPattern = "^ghcr\\.io/example-owner/disputedesk-[a-z-]+@sha256:[0-9a-f]{64}$", interpolationType = "ENV_VAR" }
-      zitadelImage   = { type = "String", description = "A published image by digest.", allowedPattern = "^ghcr\\.io/example-owner/disputedesk-[a-z-]+@sha256:[0-9a-f]{64}$", interpolationType = "ENV_VAR" }
+      zitadelImage     = { type = "String", description = "A published image by digest.", allowedPattern = "^ghcr\\.io/example-owner/disputedesk-[a-z-]+@sha256:[0-9a-f]{64}$", interpolationType = "ENV_VAR" }
     }
     error_message = "The deploy document's parameters do not carry their allowedPattern and ENV_VAR interpolation."
   }
@@ -158,4 +158,37 @@ run "criterion_5_the_image_pattern_names_this_repository_owner_in_lower_case" {
     condition     = jsondecode(aws_iam_role.deploy.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:Example-Owner@123456/disputedesk@456789:environment:dev"
     error_message = "The trust policy's subject does not keep the owner's case or name this repository's dev environment."
   }
+}
+
+# Each of these values reaches a template, where a quote or a backslash would change the rendered document.
+run "template_inputs_refuse_a_quote_or_a_backslash" {
+  command = plan
+
+  module {
+    source = "../../modules/deploy-role"
+  }
+
+  variables {
+    name                       = "disputedesk\"dev"
+    aws_region                 = "eu-west-1\\"
+    github_repository          = "example-owner/disputedesk\""
+    github_repository_owner_id = "123456\\"
+    github_repository_id       = "456789\""
+    github_environment         = "dev\\"
+    instance_arn               = "arn:aws:ec2:*\""
+    clone_directory            = "/opt\\disputedesk"
+    ssm_path                   = "/x\", \"*"
+  }
+
+  expect_failures = [
+    var.name,
+    var.aws_region,
+    var.github_repository,
+    var.github_repository_owner_id,
+    var.github_repository_id,
+    var.github_environment,
+    var.instance_arn,
+    var.clone_directory,
+    var.ssm_path,
+  ]
 }

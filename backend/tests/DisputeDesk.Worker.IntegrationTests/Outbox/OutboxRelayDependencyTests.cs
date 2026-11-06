@@ -1,6 +1,7 @@
 using DisputeDesk.Infrastructure;
 using DisputeDesk.Infrastructure.Outbox;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Infrastructure.Sla;
 using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -32,7 +33,7 @@ public class OutboxRelayDependencyTests(OutboxFixture outbox)
     }
 
     [Theory]
-    [InlineData(null)] // missing: no argument, and none in the Worker's appsettings
+    [InlineData(null)] // missing: no argument, and none in appsettings.json
     [InlineData("")]
     [InlineData("   ")]
     public async Task WorkerHost_MissingOrBlankConnectionString_StopsAtStartNamingTheSettingWithoutItsValue(string? connectionString)
@@ -43,7 +44,11 @@ public class OutboxRelayDependencyTests(OutboxFixture outbox)
             args = [.. args, $"--ConnectionStrings:DisputeDesk={connectionString}"];
         }
 
-        using IHost host = WorkerHost.CreateBuilder(args).Build();
+        HostApplicationBuilder builder = WorkerHost.CreateBuilder(args);
+        // Neither loop runs: a connection string in the machine's environment would start them on the database it names.
+        builder.Services.Remove(builder.Services.Single(service => service.ImplementationType == typeof(OutboxRelay)));
+        builder.Services.Remove(builder.Services.Single(service => service.ImplementationType == typeof(SlaSweep)));
+        using IHost host = builder.Build();
 
         OptionsValidationException error = await Assert.ThrowsAsync<OptionsValidationException>(() => host.StartAsync(TestContext.Current.CancellationToken));
 

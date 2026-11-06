@@ -26,7 +26,7 @@
   - Load by replay: a handler replays the dispute's stored events in `Version` order and decides from that state; the `Disputes` row is a read model written in the same transaction. On a version clash the handler reloads and decides once more, and only a second clash, or a status that forbids the action, returns 409 (AD-15).
 - From the first release, migrations follow expand, migrate, contract; before it, the history may be reshaped in place, since only disposable local and CI databases hold the schema (architecture AD-22). Migrations are always high-stakes and never run in parallel stories.
 - Everything is stored in UTC. Inject `TimeProvider`; never read the system clock (the guard hook blocks it).
-- The customer is resolved from the identity link table, never from a request field or a client-controlled claim. Ownership is the EF Core 10 named query filter `"Ownership"`; bypasses use `IgnoreQueryFilters(["Ownership"])` in the three named places only (the `Operations/` feature folder, the Worker's sweep and the seeder, `Infrastructure/Seeding/Seeder.cs`).
+- The customer is resolved from the identity link table, never from a request field or a client-controlled claim. Ownership is the EF Core 10 named query filter `"Ownership"`; bypasses use `IgnoreQueryFilters(["Ownership"])` in the three named places only (the `Operations/` feature folder, the SLA sweep in `Infrastructure/Sla/` and the seeder, `Infrastructure/Seeding/Seeder.cs`).
 
 ## Database naming
 
@@ -55,7 +55,7 @@ PascalCase throughout, which is what EF Core and Npgsql generate by default (dec
 
 ## Reliability and observability
 
-- OpenTelemetry traces, metrics and logs. Trace context travels through the outbox row into Kafka headers to the Worker.
+- OpenTelemetry traces, metrics and logs. Trace context travels through the outbox row and the relay into the Kafka headers.
 - `/health/live` and `/health/ready`. `traceId` in every ProblemDetails.
 - Log through `[LoggerMessage]` source-generated methods with PascalCase placeholders; never string interpolation.
 

@@ -72,7 +72,7 @@ R41 (parent R41): Every sign-in and every sign-out writes an audit entry, with t
 ## Notes
 
 - Decision: 2026-10-26 — epic Requirements are the parent's lines only, ids kept (`R<n> (parent R<n>)`); each line names the part this epic delivers where the parent line is shared.
-- Decision: 2026-10-26 — the tracer bullet is the chain of stories 1 to 5 (stub, API, transactions endpoint, SPA screen, gateway): a seeded linked customer signs in and lists transactions from the stub in the SPA. One story through every layer would exceed one agent session and cross the backend and frontend builder areas; story 2 (sign-in and Zitadel) is the least certain and runs first in lane A.
+- Decision: 2026-10-26 — the tracer bullet is the chain of stories 1 to 5 (stub, sign-in, transactions endpoint, SPA screen, gateway): a seeded linked customer signs in and lists transactions from the stub in the SPA. One story through every layer would exceed one agent session and cross the backend and frontend builder areas; story 2 (sign-in and Zitadel) is the least certain and runs first in lane A.
 - Waits on 1.2 because: 1 needs what those stories build (see its References and Description).
 - Waits on 1.2, 1.5 because: 2 needs what those stories build (see its References and Description).
 - Waits on: epic 1 (the merged P0 baseline).

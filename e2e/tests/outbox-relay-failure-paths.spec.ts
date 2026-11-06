@@ -1,11 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type APIRequestContext, type BrowserContext } from '@playwright/test';
-import { ownDisputable, topicRecords, queryRows, signInContext } from './support';
+import { origin, ownDisputable, topicRecords, queryRows, signInContext } from './support';
 
-// Story 4.2: the Worker's outbox relay rides out a broker outage and a shutdown.
+// Story 4.2: the outbox relay (inside the api locally) rides out a broker outage and a shutdown.
 // Four hops: the 201 the browser context gets, the OutboxMessages rows (read-only role qa_readonly), the records on the
-// topic (rpk in the redpanda container) and the Worker's log and the Aspire traces (no customer data on either).
+// topic (rpk in the redpanda container) and the api's log and the Aspire traces (no customer data on either).
 // A transaction is disputed once: the spec raises on its reserved transactions (support.ts).
 
 type Row = { transactionId: string; accountRef: string; description: string; disputable: boolean };
@@ -43,7 +43,13 @@ const composeEnvironment = {
 const docker = (...args: string[]) => execFileSync('docker', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
 const compose = (...args: string[]) =>
   execFileSync('docker', ['compose', ...args], { encoding: 'utf8', cwd: repositoryRoot, env: composeEnvironment, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-const workerHealth = () => docker('inspect', 'disputedesk-worker-1', '--format', '{{.State.Health.Status}}');
+const apiHealth = () => docker('inspect', 'disputedesk-api-1', '--format', '{{.State.Health.Status}}');
+/**
+ * After the api restarts, the gateway finds it again only after nginx's lookup retry delay (the gateway service in
+ * docker-compose.yml), so the api answers through the gateway some seconds after Docker reports it healthy.
+ */
+const untilApiAnswersThroughTheGateway = () =>
+  expect.poll(async () => (await fetch(`${origin}/api/v1/authentication/session`).catch(() => null))?.status, { timeout: 90_000, intervals: [1000] }).toBe(200);
 const recordsFor = (disputeId: string) => topicRecords().filter((record) => record.key === disputeId);
 /** AD-17 is at-least-once: at least one record per row, and every copy carries the row's CloudEvent id (the outbox ID). */
 function expectRecordsOf(disputeId: string, outboxId: string, description: string) {
@@ -61,13 +67,18 @@ async function untilSent(disputeId: string, seconds: number) {
   await expect.poll(() => outboxOf(disputeId)[0]?.Status, { timeout: seconds * 1000, intervals: [1000] }).toBe('Sent');
 }
 
-/** The Worker's log lines between two instants, grouped: each console-logger entry is a header line (level and category) then its message. */
-function workerEntries(since: string, until: string) {
-  const lines = docker('logs', '--since', since, '--until', until, 'disputedesk-worker-1').split('\n');
+/**
+ * The relay's and the host's log lines between two instants, grouped: each console-logger entry is a header line (level and
+ * category) then its message. The api's other categories (requests, linking, EF Core) belong to other specs.
+ */
+function relayEntries(since: string, until: string) {
+  const lines = docker('logs', '--since', since, '--until', until, 'disputedesk-api-1').split('\n');
   const entries: { level: string; category: string; message: string }[] = [];
   for (let index = 0; index < lines.length; index++) {
     const header = lines[index].match(/^(\w+): ([\w.]+)\[\d+\]/);
-    if (header) entries.push({ level: header[1], category: header[2], message: (lines[index + 1] ?? '').trim() });
+    if (header && /^(DisputeDesk\.Infrastructure\.Outbox\.|Microsoft\.Hosting\.|Microsoft\.Extensions\.Hosting\.)/.test(header[2])) {
+      entries.push({ level: header[1], category: header[2], message: (lines[index + 1] ?? '').trim() });
+    }
   }
   return entries;
 }
@@ -94,10 +105,11 @@ test.beforeAll(async ({ browser }) => {
 test.afterAll(async () => {
   try {
     docker('start', 'disputedesk-redpanda-1');
-    compose('start', 'worker');
+    compose('start', 'api');
   } catch {
     // Already running.
   }
+  await untilApiAnswersThroughTheGateway();
   await customerA.close();
   await customerB.close();
 });
@@ -107,7 +119,7 @@ type OtlpSpan = { name: string; kind: number; startTimeUnixNano: string; status?
 type OtlpResourceSpans = { resource: { attributes: OtlpAttribute[] }; scopeSpans: { spans: OtlpSpan[] }[] };
 
 /**
- * How many producer send spans of the Worker started between `from` and `until` (ISO instants) ended with status Error (OTLP
+ * How many producer send spans of the relay started between `from` and `until` (ISO instants) ended with status Error (OTLP
  * status code 2) and carry `error.type`, from the dashboard's telemetry API. Only the relay's own span counts: kind PRODUCER
  * (OTLP span kind 4), named `send disputedesk.disputes` (OutboxRelay.SendAsync), which sets `error.type` to the Kafka error
  * code when the send fails. A failed send is not always on one of the spec's own rows: a row raised by the spec before, still
@@ -119,7 +131,7 @@ async function failedProducerSendSpansBetween(from: string, until: string): Prom
   const last = BigInt(Date.parse(until)) * 1_000_000n;
   const spans = ((body.data?.resourceSpans ?? []) as OtlpResourceSpans[]).flatMap((resource) => {
     const service = resource.resource.attributes.find((attribute) => attribute.key === 'service.name')?.value.stringValue ?? '';
-    return service.startsWith('disputedesk-worker') ? resource.scopeSpans.flatMap((scope) => scope.spans) : [];
+    return service.startsWith('disputedesk-api') ? resource.scopeSpans.flatMap((scope) => scope.spans) : [];
   });
   return spans.filter((span) => span.kind === 4 && span.name === 'send disputedesk.disputes' && span.status?.code === 2
     && span.attributes?.some((attribute) => attribute.key === 'error.type')
@@ -132,7 +144,7 @@ test.describe.serial('a 30 second broker outage', () => {
   let outageStart = '';
   let outageEnd = '';
 
-  test('raises succeed, rows stay Pending with Attempts 0 and no LastError, the Worker stays healthy', async () => {
+  test('raises succeed, rows stay Pending with Attempts 0 and no LastError, the api stays healthy', async () => {
     docker('stop', 'disputedesk-redpanda-1');
     const startedAt = Date.now();
     outageStart = new Date(startedAt).toISOString();
@@ -142,7 +154,7 @@ test.describe.serial('a 30 second broker outage', () => {
     const healthSamples: string[] = [];
     while (Date.now() - startedAt < outageSeconds * 1000) {
       await sleep(5000);
-      healthSamples.push(workerHealth());
+      healthSamples.push(apiHealth());
       for (const { disputeId } of raised) {
         expect(outboxOf(disputeId)[0], `row of ${disputeId.slice(0, 8)} during the outage`).toMatchObject({ Status: 'Pending', Attempts: 0, SentAtUtc: null, LastError: null });
       }
@@ -153,7 +165,7 @@ test.describe.serial('a 30 second broker outage', () => {
   });
 
   test('the warnings of the outage hold only codes; their number is reported', async () => {
-    const entries = workerEntries(outageStart, outageEnd);
+    const entries = relayEntries(outageStart, outageEnd);
     const warnings = entries.filter((entry) => entry.level === 'warn');
     const tally = new Map<string, number>();
     for (const entry of warnings) tally.set(entry.message, (tally.get(entry.message) ?? 0) + 1);
@@ -161,8 +173,8 @@ test.describe.serial('a 30 second broker outage', () => {
     for (const [message, count] of tally) console.log(`QA42 warning x${count}: ${message}`);
     console.log(`QA42 non-warn levels: ${JSON.stringify([...new Set(entries.filter((entry) => entry.level !== 'warn').map((entry) => `${entry.level}:${entry.message}`))])}`);
     expect(warnings.length).toBeGreaterThan(0);
-    const log = docker('logs', '--since', outageStart, '--until', outageEnd, 'disputedesk-worker-1');
-    for (const marker of markersOf(raised)) expect(log, 'a private value in the Worker log').not.toContain(marker);
+    const log = docker('logs', '--since', outageStart, '--until', outageEnd, 'disputedesk-api-1');
+    for (const marker of markersOf(raised)) expect(log, 'a private value in the api log').not.toContain(marker);
     for (const { disputeId } of raised) expect(log).not.toContain(disputeId);
     expect(log).not.toMatch(/Password=|Host=|redpanda:9092|Exception/i);
     for (const message of tally.keys()) {
@@ -189,21 +201,21 @@ test.describe.serial('a 30 second broker outage', () => {
       expect(names).toEqual(expect.arrayContaining(['content-type', 'traceparent']));
       expect(names).not.toContain('baggage');
     }
-    expect(workerHealth()).toBe('healthy');
+    expect(apiHealth()).toBe('healthy');
   });
 
-  test('the Worker log and the Aspire traces of the outage hold no customer data', async ({ page }) => {
+  test('the api log and the Aspire traces of the outage hold no customer data', async ({ page }) => {
     const markers = markersOf(raised);
-    const log = docker('logs', '--since', outageStart, 'disputedesk-worker-1');
-    for (const marker of markers) expect(log, 'a private value in the Worker log').not.toContain(marker);
-    // The dashboard shows each raise's trace with the Worker's producer span, where error.type sits on a failed send.
+    const log = docker('logs', '--since', outageStart, 'disputedesk-api-1');
+    for (const marker of markers) expect(log, 'a private value in the api log').not.toContain(marker);
+    // The dashboard shows each raise's trace with the relay's producer span, where error.type sits on a failed send.
     for (const { disputeId } of raised) {
       const traceId = outboxOf(disputeId)[0].TraceParent.split('-')[1];
       await page.goto(`${dashboard}/traces/detail/${traceId}`);
-      // The dashboard names the resource disputedesk-worker-<instance> once the Worker has run as two instances (a restart).
+      // The dashboard names the resource disputedesk-api-<instance> once the api has run as two instances (a restart).
       // A raise during the outage has failed sends (Status = Error) and the final successful one.
-      const producerRows = page.getByRole('row', { name: /disputedesk-worker[^:]*: MSG kafka disputedesk\.disputes/ });
-      // The Worker exports in batches; reload the trace until its producer spans arrive.
+      const producerRows = page.getByRole('row', { name: /disputedesk-api[^:]*: MSG kafka disputedesk\.disputes/ });
+      // The api exports in batches; reload the trace until its producer spans arrive.
       await expect(async () => {
         await page.reload();
         await expect(producerRows.last(), `producer span of trace ${traceId.slice(0, 8)}`).toBeVisible({ timeout: 4000 });
@@ -216,7 +228,7 @@ test.describe.serial('a 30 second broker outage', () => {
     // 10 s send timeout), not from the trace page's row text, and not only on this spec's rows (see failedProducerSendSpansBetween).
     const windowEnd = new Date(Date.parse(outageEnd) + 15_000).toISOString();
     expect(await failedProducerSendSpansBetween(outageStart, windowEnd), 'a send attempted during the outage has an Error producer span').toBeGreaterThanOrEqual(1);
-    // Every span the Worker sent and every Worker log record in the dashboard, searched as page text.
+    // Every span the api sent and every api log record in the dashboard, searched as page text.
     for (const path of ['/traces', '/structuredlogs']) {
       await page.goto(`${dashboard}${path}`);
       await page.waitForLoadState('networkidle');
@@ -226,7 +238,7 @@ test.describe.serial('a 30 second broker outage', () => {
   });
 });
 
-test.describe.serial('the Worker is stopped while a send is in flight', () => {
+test.describe.serial('the api is stopped while a send is in flight', () => {
   test.setTimeout(300_000);
   const raised: Raised[] = [];
 
@@ -237,10 +249,10 @@ test.describe.serial('the Worker is stopped while a send is in flight', () => {
     raised.push(await raise(customerB.request, disputableB[1], 'QA 4.2 shutdown note marker two'));
     await sleep(3000);
     const startedAt = Date.now();
-    compose('stop', 'worker');
+    compose('stop', 'api');
     const seconds = (Date.now() - startedAt) / 1000;
-    const exitCode = docker('inspect', 'disputedesk-worker-1', '--format', '{{.State.ExitCode}}');
-    console.log(`QA42 worker stop took ${seconds.toFixed(1)} s, exit code ${exitCode}`);
+    const exitCode = docker('inspect', 'disputedesk-api-1', '--format', '{{.State.ExitCode}}');
+    console.log(`QA42 api stop took ${seconds.toFixed(1)} s, exit code ${exitCode}`);
     expect(seconds).toBeLessThan(graceSeconds);
     expect(exitCode).toBe('0');
     for (const { disputeId } of raised) {
@@ -248,49 +260,51 @@ test.describe.serial('the Worker is stopped while a send is in flight', () => {
       // Never Failed, never Sent without its record: with the broker down the in-flight row is Pending, untouched.
       expect(row, 'row after stop').toMatchObject({ Status: 'Pending', Attempts: 0, SentAtUtc: null, LastError: null });
     }
-    const log = docker('logs', '--tail', '40', 'disputedesk-worker-1');
+    const log = docker('logs', '--tail', '40', 'disputedesk-api-1');
     // librdkafka's FAIL facility arrives at error level (Kafka client log line); nothing else is error or critical.
-    const severe = workerEntries('5m', '0s').filter((entry) => entry.level === 'fail' || entry.level === 'crit');
+    const severe = relayEntries('5m', '0s').filter((entry) => entry.level === 'fail' || entry.level === 'crit');
     expect(severe.every((entry) => entry.message === 'Kafka client log line (FAIL)'), JSON.stringify(severe.map((entry) => entry.message))).toBe(true);
     console.log(`QA42 error-level lines in last 5 min: ${severe.length}`);
     expect(log).not.toMatch(/^crit:/m);
-    console.log(`QA42 worker last log level counts: ${JSON.stringify(workerEntries('5m', '0s').slice(-10).map((entry) => entry.level))}`);
+    console.log(`QA42 api last log level counts: ${JSON.stringify(relayEntries('5m', '0s').slice(-10).map((entry) => entry.level))}`);
   });
 
-  test('restarting the Worker and the broker resumes: every row Sent with its record', async () => {
+  test('restarting the api and the broker resumes: every row Sent with its record', async () => {
     docker('start', 'disputedesk-redpanda-1');
-    compose('start', 'worker');
+    compose('start', 'api');
     for (const { disputeId } of raised) await untilSent(disputeId, 150);
     for (const { disputeId } of raised) {
       const [row] = outboxOf(disputeId);
       expect(row).toMatchObject({ Status: 'Sent', Attempts: 0, LastError: null });
       expectRecordsOf(disputeId, row.Id, 'after the restart');
     }
-    await expect.poll(workerHealth, { timeout: 90_000, intervals: [2000] }).toBe('healthy');
-    const log = docker('logs', 'disputedesk-worker-1');
-    for (const marker of markersOf(raised)) expect(log, 'a private value in the Worker log').not.toContain(marker);
+    await expect.poll(apiHealth, { timeout: 90_000, intervals: [2000] }).toBe('healthy');
+    await untilApiAnswersThroughTheGateway();
+    const log = docker('logs', 'disputedesk-api-1');
+    for (const marker of markersOf(raised)) expect(log, 'a private value in the api log').not.toContain(marker);
   });
 });
 
-test.describe.serial('the Worker is stopped with the broker up', () => {
+test.describe.serial('the api is stopped with the broker up', () => {
   test.setTimeout(180_000);
 
   test('a stop right after a raise exits 0 within the grace period; every row is Sent with its record or Pending untouched', async () => {
     const raised = [await raise(customerA.request, disputableA[3], 'QA 4.2 live stop note marker')];
     const startedAt = Date.now();
-    compose('stop', 'worker');
+    compose('stop', 'api');
     const seconds = (Date.now() - startedAt) / 1000;
-    console.log(`QA42 live stop took ${seconds.toFixed(1)} s, exit code ${docker('inspect', 'disputedesk-worker-1', '--format', '{{.State.ExitCode}}')}`);
+    console.log(`QA42 live stop took ${seconds.toFixed(1)} s, exit code ${docker('inspect', 'disputedesk-api-1', '--format', '{{.State.ExitCode}}')}`);
     expect(seconds).toBeLessThan(graceSeconds);
-    expect(docker('inspect', 'disputedesk-worker-1', '--format', '{{.State.ExitCode}}')).toBe('0');
+    expect(docker('inspect', 'disputedesk-api-1', '--format', '{{.State.ExitCode}}')).toBe('0');
     const [row] = outboxOf(raised[0].disputeId);
     if (row.Status === 'Sent') {
       expectRecordsOf(raised[0].disputeId, row.Id, 'Sent only with its record on the topic');
     } else {
       expect(row).toMatchObject({ Status: 'Pending', Attempts: 0, LastError: null, SentAtUtc: null });
     }
-    compose('start', 'worker');
+    compose('start', 'api');
     await untilSent(raised[0].disputeId, 90);
     expectRecordsOf(raised[0].disputeId, row.Id, 'after the restart');
+    await untilApiAnswersThroughTheGateway();
   });
 });

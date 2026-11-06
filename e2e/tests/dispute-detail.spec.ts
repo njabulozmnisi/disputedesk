@@ -144,7 +144,7 @@ test('the detail answers 200 from the stored snapshot while core banking is down
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Story 3.12: the dispute detail, timeline and withdraw screen in the browser, through the real gateway, Api,
+// Story 3.12: the dispute detail, timeline and withdraw screen in the browser, through the real gateway, API,
 // database and topic. Customer B's two reserved transactions (TXN-B-0002 and TXN-B-0012, support.ts) are raised in
 // beforeAll: `withdrawn` is withdrawn for real, `open` stays open and takes every mocked refusal. This stack has no
 // operations actions before story 5.2 merges into the tested tree, so a Resolved, Rejected or Upheld dispute (and an

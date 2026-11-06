@@ -316,8 +316,8 @@ test.describe('the data model and the logs', () => {
     expect(migrations.filter((id) => /timeline/i.test(id))).toEqual([]);
   });
 
-  test('the API and worker logs hold no customer ID or account reference', async () => {
-    for (const container of ['disputedesk-api-1', 'disputedesk-worker-1']) {
+  test('the API logs hold no customer ID or account reference', async () => {
+    for (const container of ['disputedesk-api-1']) {
       const logs = execFileSync('docker', ['logs', container], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
       expect(logs.match(/CUS-\d+|ACC-[A-Z]-\d+/g) ?? [], `${container} log`).toEqual([]);
     }

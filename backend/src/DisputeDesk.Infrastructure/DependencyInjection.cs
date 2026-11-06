@@ -1,5 +1,7 @@
 using DisputeDesk.Application.Abstractions;
+using DisputeDesk.Infrastructure.Outbox;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Infrastructure.Sla;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +26,27 @@ public static class DependencyInjection
             provider.GetRequiredService<IConfiguration>().GetConnectionString(ConnectionStringName)));
         services.AddScoped<IAppDbContext>(provider => provider.GetRequiredService<AppDbContext>());
 
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the outbox relay and the SLA sweep, which the Worker always runs and the Api runs when
+    /// <c>Worker:InProcess</c> is true (AD-27). Both need <c>ConnectionStrings:DisputeDesk</c>, and the relay
+    /// <c>Kafka:BootstrapServers</c>; the error names the key, never its value (Microsoft Learn, Options pattern:
+    /// options validation).
+    /// </summary>
+    public static IServiceCollection AddOutboxRelayAndSlaSweep(this IServiceCollection services)
+    {
+        services.AddOptions<KafkaOptions>()
+            .BindConfiguration(KafkaOptions.SectionName)
+            .Validate(options => !string.IsNullOrWhiteSpace(options.BootstrapServers), "Kafka:BootstrapServers is required.")
+            .ValidateOnStart();
+        services.AddOptions<ConnectionStringsOptions>()
+            .BindConfiguration(ConnectionStringsOptions.SectionName)
+            .Validate(options => !string.IsNullOrWhiteSpace(options.DisputeDesk), $"{ConnectionStringsOptions.SectionName}:{ConnectionStringName} is required.")
+            .ValidateOnStart();
+        services.AddHostedService<OutboxRelay>();
+        services.AddHostedService<SlaSweep>();
         return services;
     }
 }

@@ -47,12 +47,13 @@ ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "DisputeDesk.Api.dll"]
 
-# Local Compose only: the api image plus a static busybox installed under the applet name `wget`, so Compose
-# can probe /health/ready (chiseled images have no shell or HTTP client). Cloud load balancers probe over
-# HTTP and use `api` unchanged.
+# Local Compose only: the api image plus a static busybox, so Compose can probe /health/ready and check the age of
+# the relay's and the sweep's heartbeat files, which the api writes when it runs them in-process (AD-25; chiseled
+# images have no shell or HTTP client). It keeps the api's non-root user. Cloud load balancers probe over HTTP and
+# use `api` unchanged.
 FROM ${PROBE_IMAGE} AS probe
 FROM api AS api-local
-COPY --from=probe /bin/busybox /usr/local/bin/wget
+COPY --from=probe /bin/busybox /usr/local/bin/busybox
 
 # Local Compose only: the worker image plus busybox, so Compose can check the age of the relay's heartbeat file
 # (AD-25). It keeps the worker's non-root user.

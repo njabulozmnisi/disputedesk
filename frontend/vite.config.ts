@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 // The browser only ever calls same-origin /api. In development and preview, Vite forwards it to the gateway of the
-// local Compose stack, which holds the session cookie and the API.
+// local Compose stack, which holds the session cookie and the Api.
 const gateway = process.env.GATEWAY_ORIGIN ?? 'http://localhost:8080';
 
 export default defineConfig({

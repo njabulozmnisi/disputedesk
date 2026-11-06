@@ -9,15 +9,14 @@
 #   curl -b <cookie-jar> http://localhost:8080/api/v1/authentication/session
 #
 # How it works:
-#   1. GET /api/v1/authentication/login starts the flow; Zitadel's authorize endpoint hands it to the hosted login with an auth
-#      request ID.
-#   2. The script does what the hosted login does on its server: it checks the fixture password with the Session API and
-#      finishes the auth request with the OIDC API. It authenticates as the login client, with the PAT that only
-#      the zitadel container holds. It is read there for this run only, kept in a private temporary file
-#      (mode 600, removed on exit) so it never appears on a command line, and never saved.
-#   3. The callback goes back to the Api, which stores the session and sets the session cookie.
+#   1. GET /api/v1/authentication/login starts the flow; Zitadel's authorize endpoint hands it to Zitadel's hosted
+#      login (/ui/login) with an auth request ID.
+#   2. The script fills in the hosted login's forms as a browser would: the login name, the password, and Skip on
+#      the optional two-factor setup prompt. Each form carries Zitadel's CSRF token (gorilla.csrf.Token) and its
+#      cookie, which stay in a private temporary jar (removed on exit).
+#   3. Zitadel's callback goes back to the Api, which stores the session and sets the session cookie.
 # Needs the stack running (docker compose up --wait), curl and jq. It holds no secret: the password comes from
-# the fixture file, which holds dev-only values.
+# the fixture file, which holds dev-only values, and reaches curl on stdin, never as an argument.
 set -euo pipefail
 
 APP="${APP_ORIGIN:-http://localhost:8080}"
@@ -41,39 +40,58 @@ umask 077
 rm -f "$jar"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+zitadel_jar="$work/zitadel.cookies"
+page="$work/page"
 
-# 1. The Api starts the code flow (its correlation and nonce cookies go into the jar); Zitadel hands over to the hosted login.
+# submit PATH FIELD...: posts the hosted login form on the current page to PATH, with its CSRF token and the auth
+# request ID, as form fields read from stdin (curl -d @-, one NAME=value per line, URL-encoded); the answer replaces
+# the page. Prints the status and the redirect URL.
+submit(){
+  local path=$1 token
+  shift
+  token=$(sed -n 's/.*name="gorilla.csrf.Token" value="\([^"]*\)".*/\1/p' "$page" | head -1)
+  [ -n "$token" ] || die "the hosted login page has no CSRF token (before $path)"
+  { printf 'gorilla.csrf.Token=%s&authRequestID=%s' "$(jq -rn --arg v "$token" '$v | @uri')" "$auth_request"
+    for field in "$@"; do printf '&%s' "$field"; done; } \
+    | curl -sS -c "$zitadel_jar" -b "$zitadel_jar" -o "$page" -w '%{http_code} %{redirect_url}' --data-binary @- "$AUTH$path"
+}
+# form_action: the action of the current page's form.
+form_action(){ sed -n 's/.*<form[^>]*action="\([^"]*\)".*/\1/p' "$page" | head -1; }
+
+# 1. The Api starts the code flow (its correlation and nonce cookies go into the jar); Zitadel hands over to its login.
 authorize=$(curl -sS -c "$jar" -b "$jar" -o /dev/null -w '%{redirect_url}' "$APP/api/v1/authentication/login")
 [[ "$authorize" == "$AUTH/oauth/v2/authorize?"* ]] || die "the Api did not redirect to Zitadel (got '$authorize')"
-hosted_login=$(curl -sS -o /dev/null -w '%{redirect_url}' "$authorize")
-auth_request=$(sed -n 's/.*[?&]authRequest=\([^&]*\).*/\1/p' <<< "$hosted_login")
-[ -n "$auth_request" ] || die "Zitadel did not hand over to the hosted login (got '$hosted_login')"
+hosted_login=$(curl -sS -c "$zitadel_jar" -b "$zitadel_jar" -o /dev/null -w '%{redirect_url}' "$authorize")
+auth_request=$(sed -n 's/.*[?&]authRequestID=\([0-9]*\).*/\1/p' <<< "$hosted_login")
+[ -n "$auth_request" ] || die "Zitadel did not hand over to its hosted login (got '$hosted_login')"
 
-# 2. What the hosted login does on its server, as the login client.
-{ printf 'Authorization: Bearer '
-  docker compose -f "$ROOT/docker-compose.yml" exec -T zitadel cat /zitadel/login/provisioning-hook.pat | tr -d '\n'
-  printf '\n'; } > "$work/auth-header"
-rpc(){ curl -sS --fail-with-body -X POST "$AUTH/$1" -H @"$work/auth-header" \
-  -H 'Content-Type: application/json' -H 'Connect-Protocol-Version: 1' --data-binary @-; }
+# 2. The hosted login's forms, in order.
+curl -sS -c "$zitadel_jar" -b "$zitadel_jar" -o "$page" "$hosted_login"
+username=$(jq -r '.username | @uri' <<< "$login")
+submit /ui/login/loginname "loginName=$username" > /dev/null
+[ "$(form_action)" = /ui/login/password ] || die "Zitadel did not ask for the password of '$key'"
+password=$(jq -r '.password | @uri' <<< "$login")
+answer=$(submit /ui/login/password "password=$password")
+if [ "$(form_action)" = /ui/login/mfa/prompt ]; then
+  answer=$(submit /ui/login/mfa/prompt "skip=true")      # two-factor setup is optional (the login policy's default)
+fi
+callback=${answer#* }
+[[ "$callback" == "$AUTH/oauth/v2/authorize/callback?"* ]] || die "Zitadel did not complete the sign-in of '$key' (got '$answer')"
 
-session=$(jq -c '{checks: {user: {loginName: .username}, password: {password: .password}}}' <<< "$login" \
-  | rpc zitadel.session.v2.SessionService/CreateSession) || die "password check failed for '$key'"
-callback=$(jq -c --arg id "$auth_request" '{authRequestId: $id, session: {sessionId, sessionToken}}' <<< "$session" \
-  | rpc zitadel.oidc.v2.OIDCService/CreateCallback | jq -r .callbackUrl) || die "Zitadel refused the auth request"
-
-# 3. Back to the Api. Zitadel answers either with the callback URL itself or with an auto-submitting form_post page.
-if [[ "$callback" != "$APP/"* ]]; then
-  curl -sS -o "$work/page" "$callback"
-  action=$(sed -n 's/.*<form[^>]*action="\([^"]*\)".*/\1/p' "$work/page" | head -1)
-  [ -n "$action" ] || die "unexpected answer from Zitadel's callback (no form_post page)"
+# 3. Back to the Api. Zitadel answers either with a redirect to the Api's callback or with an auto-submitting
+# form_post page.
+answer=$(curl -sS -c "$zitadel_jar" -b "$zitadel_jar" -o "$page" -w '%{http_code} %{redirect_url}' "$callback")
+if [ "${answer%% *}" = 200 ]; then
+  action=$(form_action)
+  [[ "$action" == "$APP/"* ]] || die "unexpected answer from Zitadel's callback (no form_post page)"
   fields=()
   for name in code state; do
-    value=$(sed -n "s/.*name=\"$name\"[^>]*value=\"\([^\"]*\)\".*/\1/p" "$work/page" | head -1)
+    value=$(sed -n "s/.*name=\"$name\"[^>]*value=\"\([^\"]*\)\".*/\1/p" "$page" | head -1)
     fields+=(--data-urlencode "$name=$value")
   done
   status=$(curl -sS -c "$jar" -b "$jar" -o /dev/null -w '%{http_code}' "${fields[@]}" "$action")
 else
-  status=$(curl -sS -c "$jar" -b "$jar" -o /dev/null -w '%{http_code}' "$callback")
+  status=$(curl -sS -c "$jar" -b "$jar" -o /dev/null -w '%{http_code}' "${answer#* }")
 fi
 [ "$status" = 302 ] || die "the Api's callback answered $status, not 302"
 

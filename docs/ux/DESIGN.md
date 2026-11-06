@@ -354,7 +354,7 @@ The identity provider's hosted sign-in and sign-up pages are themed from the sam
 | Background colour | `{colors.background}` / `{colors.background-dark}` | #F4F5F7 / #12171E |
 | Warning colour | `{colors.destructive}` / `{colors.destructive-dark}` | #B42318 / #FF8A7E |
 | Font colour | `{colors.foreground}` / `{colors.foreground-dark}` | #1E2430 / #EEF1F5 |
-| Logo (light, dark) | `wordmark.png` / `wordmark-dark.png` beside the theme file, named in its comment; PNG only, at most 512 KiB (the hosted login never reads an icon, so none is uploaded) | |
+| Logo (light, dark) | `wordmark.png` / `wordmark-dark.png` beside the theme file, named in its comment; PNG only, at most 512 KiB; no icon is uploaded | |
 | Font | Nunito Sans: upload the 400 WOFF2 from `fonts/` (the policy takes one font file) | |
 | Theme mode | auto (follows the device) | |
 

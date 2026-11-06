@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text;
 using Confluent.Kafka;
+using Confluent.Kafka.Admin;
 using DisputeDesk.Infrastructure.Observability;
 using DisputeDesk.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -18,9 +19,10 @@ namespace DisputeDesk.Infrastructure.Outbox;
 /// The single outbox relay (AD-17). Whoever holds a PostgreSQL advisory lock publishes the head row of each dispute to
 /// Kafka, one send at a time, and marks it Sent once the broker confirms it. Every other instance only retries the lock.
 /// An unreachable dependency only delays it; a record the client permanently refuses is retried and set Failed on the
-/// 5th refusal; on shutdown it finishes the one record in flight and takes no new one (AD-25).
+/// 5th refusal; on shutdown it finishes the one record in flight and takes no new one (AD-25). Before its first send it
+/// creates the topic, so the topic always has its 3 partitions, whichever host runs the relay.
 /// <para>
-/// <c>buildProducer</c> builds the producer from the relay's configured builder. The Worker registers none, so DI passes
+/// <c>buildProducer</c> builds the producer from the relay's configured builder. A host registers none, so DI passes
 /// the default, null, and the relay calls <c>Build()</c> (Microsoft Learn, .NET dependency injection: a constructor
 /// argument DI does not provide takes its default value); a test registers one to make sends fail with a chosen
 /// <see cref="Error"/>.
@@ -35,6 +37,9 @@ public sealed partial class OutboxRelay(
     Func<ProducerBuilder<string, string>, IProducer<string, string>>? buildProducer = null) : BackgroundService
 {
     public const string Topic = "disputedesk.disputes";
+
+    /// <summary>The topic's partitions; a dispute's events share one through their key, the dispute ID (AD-17).</summary>
+    public const int TopicPartitions = 3;
 
     /// <summary>
     /// Touched every loop; the Compose health check fails when it is older than 30 seconds (AD-25). The system temporary
@@ -113,6 +118,7 @@ public sealed partial class OutboxRelay(
         IProducer<string, string> producer = BuildProducer();
         string connectionString = connectionStrings.Value.DisputeDesk;
         NpgsqlConnection? lockConnection = null;
+        bool topicCreated = false;
         int failures = 0;
         try
         {
@@ -122,6 +128,12 @@ public sealed partial class OutboxRelay(
                 TouchHeartbeat();
                 try
                 {
+                    if (!topicCreated)
+                    {
+                        await CreateTopicAsync();
+                        topicCreated = true;
+                    }
+
                     lockConnection ??= await TryTakeLockAsync(connectionString, stoppingToken);
                     int handled = lockConnection is null ? 0 : await PublishBatchAsync(lockConnection, producer, stoppingToken);
                     failures = 0;
@@ -139,6 +151,12 @@ public sealed partial class OutboxRelay(
                 {
                     // Transient: the row stays Pending with no attempt counted, and this instance keeps the lock.
                     LogSendDeferred(exception.Error.Code.ToString());
+                    wait = Backoff(++failures);
+                }
+                catch (KafkaException exception)
+                {
+                    // The topic could not be created yet; nothing is sent until it is.
+                    LogDependencyUnavailable("kafka", exception.Error.Code.ToString());
                     wait = Backoff(++failures);
                 }
                 catch (Exception exception) when (IsPostgresFailure(exception))
@@ -201,6 +219,34 @@ public sealed partial class OutboxRelay(
             })
             .SetErrorHandler((_, error) => LogDependencyUnavailable("kafka", error.Code.ToString()));
         return buildProducer is null ? builder.Build() : buildProducer(builder);
+    }
+
+    /// <summary>
+    /// Creates the topic with its 3 partitions and one replica through the Kafka admin API, so the broker never creates it
+    /// with its own defaults. A topic that already exists counts as created, so every start and every host can run it
+    /// (Confluent.Kafka, <see cref="IAdminClient.CreateTopicsAsync"/>; Apache Kafka, CreateTopics API). Both timeouts are
+    /// 10 seconds, so one try never outlives the heartbeat threshold.
+    /// </summary>
+    private async Task CreateTopicAsync()
+    {
+        using IAdminClient admin = new AdminClientBuilder(new AdminClientConfig { BootstrapServers = kafkaOptions.Value.BootstrapServers })
+            .SetLogHandler((_, log) =>
+            {
+                var level = (LogLevel)log.LevelAs(LogLevelType.MicrosoftExtensionsLogging);
+                LogKafkaClient(level, log.Facility);
+            })
+            .SetErrorHandler((_, error) => LogDependencyUnavailable("kafka", error.Code.ToString()))
+            .Build();
+        var topic = new TopicSpecification { Name = Topic, NumPartitions = TopicPartitions, ReplicationFactor = 1 };
+        var timeouts = new CreateTopicsOptions { RequestTimeout = TimeSpan.FromSeconds(10), OperationTimeout = TimeSpan.FromSeconds(10) };
+        try
+        {
+            await admin.CreateTopicsAsync([topic], timeouts);
+        }
+        catch (CreateTopicsException exception) when (exception.Results.All(result => result.Error.Code == ErrorCode.TopicAlreadyExists))
+        {
+            // Created by an earlier start or by the other host.
+        }
     }
 
     /// <summary>

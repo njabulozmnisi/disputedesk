@@ -23,7 +23,7 @@ namespace DisputeDesk.Worker.IntegrationTests.Outbox;
 public sealed class OutboxFixture : IAsyncLifetime
 {
     // The Compose image, pinned by tag and digest (AD-27), not the module's default tag.
-    private const string RedpandaImage =
+    public const string RedpandaImage =
         "docker.redpanda.com/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce";
 
     /// <summary>Marker text for a hand-built row of the marker dispute (<see cref="CommitMarkerDisputeAsync"/>).</summary>
@@ -67,9 +67,11 @@ public sealed class OutboxFixture : IAsyncLifetime
             await db.Database.MigrateAsync();
         }
 
-        // As every relay does at start-up: the dispute events topic with 3 partitions.
+        // The topic as every relay creates it at start-up (OutboxRelayTopicTests), made here once so the record reads never
+        // depend on which test starts a relay first. Each relay started on this broker then finds it already there.
         using IAdminClient admin = new AdminClientBuilder(new AdminClientConfig { BootstrapServers = BootstrapServers }).Build();
-        await admin.CreateTopicsAsync([new TopicSpecification { Name = OutboxRelay.Topic, NumPartitions = 3, ReplicationFactor = 1 }]);
+        await admin.CreateTopicsAsync(
+            [new TopicSpecification { Name = OutboxRelay.Topic, NumPartitions = OutboxRelay.TopicPartitions, ReplicationFactor = 1 }]);
     }
 
     public async ValueTask DisposeAsync()

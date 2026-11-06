@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace DisputeDesk.Api.Authentication;
 
-/// <summary>The API's confidential client: <c>Zitadel:WebApp:ClientId</c> and <c>Zitadel:WebApp:ClientSecret</c>.</summary>
+/// <summary>The web app's confidential client in Zitadel: <c>Zitadel:WebApp:ClientId</c> and <c>Zitadel:WebApp:ClientSecret</c>.</summary>
 public sealed class ZitadelClientOptions
 {
     [Required]

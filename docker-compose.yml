@@ -18,8 +18,8 @@
 # shell only, so export them there rather than in .env when running it.
 #
 # Every credential below is a fixed DEV-ONLY value, overridable from an untracked .env file.
-# Generated client IDs and secrets never touch the repo: the provisioner writes them to the
-# `zitadel-clients` volume (see infra/README.md).
+# Generated client IDs and secrets never touch the repo: the provisioner, in the zitadel container, writes them to
+# the `zitadel-clients` volume (see infra/README.md).
 # Images are pinned by tag and by multi-arch index digest.
 name: disputedesk
 
@@ -49,7 +49,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-    mem_limit: 512m
+    mem_limit: 320m
 
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce
@@ -59,7 +59,7 @@ services:
       - start
       - --mode=dev-container
       - --smp=1
-      - --memory=1G
+      - --memory=192M
       - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
       # Clients on the host are told to reconnect to the advertised address, so it follows the host port.
       - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:${DISPUTEDESK_REDPANDA_PORT:-19092}
@@ -73,7 +73,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
-    mem_limit: 1536m                               # --memory=1G for Seastar plus process overhead
+    # Peak 253.3 MiB × 1.5, rounded up to 64 MiB. The peak is docker stats' highest sample in the run of 2026-11-06,
+    # taken in the first seconds after start; that run includes the broker stop-and-restart test.
+    mem_limit: 384m
 
   # Optional and local only: started only with the `console` profile, so a plain `up` and the AWS deploy never run it
   # (ComposeRenderTests in infra/tests). No sign-in: it is published on loopback only.
@@ -94,10 +96,12 @@ services:
       redpanda: { condition: service_healthy }
     mem_limit: 128m                                # idle near 50 MiB (docker stats, 2026-11-02)
 
+  # Zitadel plus its provisioner (infra/images/zitadel): the post_start hook below creates the project, roles, web app,
+  # operations machine user and fixture logins. Everything runs as the image's non-root zitadel user.
   zitadel:
-    image: ghcr.io/zitadel/zitadel:v4.20.0@sha256:9ea0e9ecfdc43115da871242e40a0320f2ece864c7cd8b5d41a863a7f4902499
+    image: disputedesk-zitadel:local
+    build: ./infra/images/zitadel
     restart: unless-stopped
-    user: "0"                                      # writes the bootstrap PAT files into fresh (root-owned) volumes
     command: start-from-init --masterkeyFromEnv
     environment:
       ZITADEL_EXTERNALDOMAIN: auth.localhost
@@ -128,22 +132,48 @@ services:
 
       # DefaultInstance: instance defaults applied when the instance is created. The login policy defaults
       # already allow self-registration, leave MFA optional and allow TOTP, so they are not restated here.
+      # Zitadel's own login at /ui/login, which also enforces email verification before a sign-in completes.
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_SMTP_HOST: mailpit:1025
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_TLS: "false"
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROM: noreply@disputedesk.test
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROMNAME: DisputeDesk
+
+      # The provisioner's settings (provision.sh, verify.sh). It calls this container at 127.0.0.1:8080 with the
+      # public host in the Host header, and takes the issuer from Zitadel's discovery document.
+      PROVISION_CALL_URL: http://auth.localhost:8080
+      PROVISION_CONNECT_TO: auth.localhost:8080:127.0.0.1:8080
+      PROVISION_PAT_FILE: /zitadel/bootstrap/admin.pat
+      PROVISION_OUT_DIR: /provision/out
+      PROVISION_FIXTURES_FILE: /fixtures/local.json
+      PROVISION_MARKER_FILE: /provision/state/provisioned   # in the container, not a volume: a recreate removes it
+      PROVISION_APP_ORIGINS: http://localhost:8080 http://localhost:5101 http://localhost:5102
+      PROVISION_AUTH_DEVELOPMENT_MODE: ${AUTH_DEVELOPMENT_MODE:-true}   # allows the plain-http origins; false in AWS (AD-24)
     volumes:
       - zitadel-bootstrap:/zitadel/bootstrap
+      - zitadel-clients:/provision/out
+      - ./backend/fixtures/local.json:/fixtures/local.json:ro
+      # The hosted login's branding sources (story 2.6), one file each, never the whole frontend/ directory.
+      - ./frontend/src/theme/tokens.css:/brand/tokens.css:ro
+      - ./frontend/src/theme/fonts/nunito-sans-latin-400-normal.woff2:/brand/nunito-sans-latin-400-normal.woff2:ro
+      - ./frontend/src/theme/wordmark.png:/brand/wordmark.png:ro
+      - ./frontend/src/theme/wordmark-dark.png:/brand/wordmark-dark.png:ro
+    # Compose runs the hook in this container right after it starts, and every service that depends on zitadel waits
+    # for it to end (Compose, "Lifecycle hooks"). A failed hook fails `up`.
+    post_start:
+      - command: ["bash", "/provision/provision.sh"]
+        user: zitadel
+    # Healthy only once this container's provisioning succeeded, so a failed hook keeps the api from ever starting.
+    # retries covers the hook's 300 s readiness deadline plus its run.
     healthcheck:
-      test: ["CMD", "/app/zitadel", "ready"]
+      test: ["CMD-SHELL", "test -f /provision/state/provisioned && zitadel ready"]
       interval: 10s
       timeout: 30s
-      retries: 12
+      retries: 36
       start_period: 20s
     depends_on:
       postgres: { condition: service_healthy }
-    mem_limit: 768m
+    mem_limit: 448m                                # session peak 275.0 MiB × 1.5, rounded up to 64 MiB (docker stats, 2026-11-06)
 
   mailpit:
     image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
@@ -174,11 +204,11 @@ services:
       timeout: 5s
       retries: 20
       start_period: 5s
-    mem_limit: 256m
+    mem_limit: 192m
 
   api:
     image: disputedesk-api-local:local
-    build: { context: ./backend, target: api-local }   # the api image plus a wget probe for the healthcheck
+    build: { context: ./backend, target: api-local }   # the api image plus busybox for the readiness and heartbeat checks
     restart: unless-stopped
     init: true   # as PID 1, dotnet never gets the SIGABRT of its own crash (pid_namespaces(7)) and spins instead of exiting
     environment:
@@ -204,17 +234,29 @@ services:
       # AD-23: only the default network (pinned below) may forward headers, and only for the public app host.
       ForwardedHeaders__TrustedNetwork: ${DISPUTEDESK_SUBNET:-10.201.89.0/24}
       ForwardedHeaders__AllowedHosts: localhost
+      # Locally the api also runs the outbox relay and the SLA sweep, so there is no worker container; in AWS the
+      # worker runs them (infra/deploy/aws/compose.yml).
+      Worker__InProcess: "true"
+      Kafka__BootstrapServers: redpanda:9092
     volumes:
       - zitadel-clients:/run/zitadel:ro            # zitadel-clients.json (the Zitadel:* keys, client IDs and secrets)
       - ./backend/fixtures/local.json:/fixtures/local.json:ro   # the seed source, the same file the stub reads
+    # Zitadel's group (gid 1000): the provisioner writes zitadel-clients.json as its user, readable by owner and group.
+    group_add: ["1000"]
+    # AD-25: the relay touches its file every loop (at least every 10 s); older than 30 s means a hung relay. The SLA
+    # sweep touches its own every 30-second loop and after each batch; older than 90 s (three missed loops) means a
+    # hung sweep. Both write under the system temporary directory, so the api must not set TMPDIR.
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
+      test: ["CMD", "/usr/local/bin/busybox", "sh", "-c",
+             "now=$$(/usr/local/bin/busybox date +%s) && test $$(( now - $$(/usr/local/bin/busybox stat -c %Y /tmp/heartbeat-relay) )) -le 30 && test $$(( now - $$(/usr/local/bin/busybox stat -c %Y /tmp/heartbeat-sweep) )) -le 90 && /usr/local/bin/busybox wget -q -O /dev/null http://127.0.0.1:8080/health/ready"]
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 10s
     depends_on:
       postgres: { condition: service_healthy }
+      redpanda: { condition: service_healthy }
+      zitadel: { condition: service_healthy }      # healthy only once provisioning wrote zitadel-clients.json
       core-banking: { condition: service_healthy }
       # The issuer's auth.localhost must reach the gateway's alias from the api's first lookup. Before the alias
       # exists, Docker's DNS passes the name to the host's resolver, which may answer loopback for *.localhost
@@ -223,51 +265,19 @@ services:
       gateway: { condition: service_started }
     # Longer than the host's 30-second ShutdownTimeout, so an in-flight request or linking job can finish (AD-25).
     stop_grace_period: 35s
-    mem_limit: 512m
+    mem_limit: 320m
 
-  worker:
-    image: disputedesk-worker:local
-    build: { context: ./backend, target: worker-local }   # the worker image plus busybox for the heartbeat check
-    restart: unless-stopped
-    init: true   # as PID 1, dotnet never gets the SIGABRT of its own crash (pid_namespaces(7)) and spins instead of exiting
-    environment:
-      <<: *app-config
-      DOTNET_ENVIRONMENT: Development
-      OTEL_SERVICE_NAME: disputedesk-worker
-      Kafka__BootstrapServers: redpanda:9092
-    # AD-25: the host's 30-second shutdown timeout finishes the record in flight; Compose waits 5 s more before SIGKILL.
-    stop_grace_period: 35s
-    # AD-25: the relay touches its file every loop (at least every 10 s); older than 30 s means a hung relay.
-    # The SLA sweep touches its own every 30-second loop and after each batch; older than 90 s (three missed loops,
-    # decided 2026-10-27) means a hung sweep. Both write under the system temporary directory, so the worker must not
-    # set TMPDIR.
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/busybox", "sh", "-c",
-             "now=$$(/usr/local/bin/busybox date +%s) && test $$(( now - $$(/usr/local/bin/busybox stat -c %Y /tmp/heartbeat-relay) )) -le 30 && test $$(( now - $$(/usr/local/bin/busybox stat -c %Y /tmp/heartbeat-sweep) )) -le 90"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    depends_on:
-      postgres: { condition: service_healthy }
-      api: { condition: service_healthy }   # the Api applies the migrations; the Worker never runs on an old schema (AD-22)
-    mem_limit: 384m
-
+  # No health check: the image is chiseled (no shell, no HTTP client), so the gateway waits only for it to start.
   aspire-dashboard:
     image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6.1@sha256:03099004e132a7ca2feb66c5fa24715ffeaaf2fffab6f8b2cda23de3abd3ea45
-    restart: unless-stopped
+    restart: unless-stopped                        # runs as the image's non-root app user
     environment:
       ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"   # dev only: no sign-in for the UI or OTLP
     ports:
       - "127.0.0.1:${DISPUTEDESK_DASHBOARD_PORT:-18888}:18888"   # UI, loopback only
       - "127.0.0.1:${DISPUTEDESK_OTLP_GRPC_PORT:-4317}:18889"    # OTLP/gRPC for apps run on the host
       - "127.0.0.1:${DISPUTEDESK_OTLP_HTTP_PORT:-4318}:18890"    # OTLP/HTTP for apps run on the host
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:18888/health"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    mem_limit: 512m
+    mem_limit: 384m
 
   # Build-only: the built SPA files (frontend/Dockerfile, at /dist/) that the gateway image copies in. The profile
   # keeps it from ever getting a container; `up --build` still builds it, because the gateway's build names it
@@ -284,12 +294,12 @@ services:
       additional_contexts: { spa: "service:spa" }   # the built SPA files, not the frontend source (ad-011)
     restart: unless-stopped
     # Fixed on purpose (AD-24 keeps the zero-click http://localhost:8080 and http://auth.localhost:8080): 8080 is
-    # also baked into Zitadel's issuer and the hosted login URLs, the sign-in redirect URIs and the GATEWAY_* and zitadel
-    # Host headers, and containers reach the issuer through this gateway's network alias on its container port.
+    # also baked into Zitadel's issuer, the sign-in redirect URIs and the GATEWAY_* and provisioner Host headers, and
+    # containers reach the issuer through this gateway's network alias on its container port.
     ports: ["127.0.0.1:8080:8080"]
     environment:
-      # Rendered into the nginx templates at start (infra/images/gateway/templates). Hosts are Host header values (with the
-      # port); the server name is the identity host as nginx matches it (without the port).
+      # Rendered into the nginx templates at start (infra/images/gateway/templates). Hosts are Host header values (with
+      # the port); the server name is the identity host as nginx matches it (without the port).
       GATEWAY_APP_HOST: localhost:8080
       GATEWAY_AUTH_HOST: auth.localhost:8080
       GATEWAY_AUTH_SERVER_NAME: auth.localhost
@@ -312,7 +322,7 @@ services:
       # the api starts after this gateway (see the api's depends_on).
       zitadel: { condition: service_healthy }
       aspire-dashboard: { condition: service_started }
-    mem_limit: 64m
+    mem_limit: 128m
 
 # AD-23: the Api trusts forwarded headers from this subnet (ForwardedHeaders__TrustedNetwork above), so it is pinned
 # rather than picked by Docker. It sits outside Docker's default address pools; DISPUTEDESK_SUBNET moves it (header).
@@ -325,5 +335,5 @@ networks:
 volumes:
   pgdata:
   redpanda:
-  zitadel-bootstrap:                               # IAM_OWNER PAT: zitadel (writes) and provision (reads) only
-  zitadel-clients:
+  zitadel-bootstrap:                               # IAM_OWNER PAT: written by FirstInstance, read by the provisioner
+  zitadel-clients:                                 # zitadel-clients.json: zitadel writes, the api reads

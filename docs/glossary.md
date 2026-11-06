@@ -9,6 +9,7 @@ Domain terms, settled during grilling. Use these words; avoid the synonyms liste
 | **Linked customer** | A login that has proved it belongs to a customer and is linked to that customer's ID. | verified user, enrolled user |
 | **Linking** | How a login proves it belongs to a customer: their ID number and account number, then a one-time code sent to the cellphone on the bank's record. | enrolment, onboarding, registration |
 | **OTP** | The one-time code used in linking: 6 digits, valid for 5 minutes, usable once. | PIN, verification code, token |
+| **Session cookie** | The one cookie the browser holds after sign-in: an HttpOnly cookie carrying only a random session key. The Api keeps the session and every token on the server, under that key. | auth cookie, session token |
 | **Account** | A bank account that holds transactions. | wallet, profile |
 | **Transaction** | A settled or pending movement on an account, read from the bank's core banking system. | payment, charge, debit (as a general term) |
 | **Transaction date** | The date the card transaction was made, in South African time; the 90-day window counts from it. | posting date, settlement date |

@@ -61,7 +61,7 @@ test('the token is a Zitadel access token for this project with the machine user
   const roles = payload[`urn:zitadel:iam:org:project:${payload.aud[0]}:roles`];
   expect(Object.keys(roles).sort()).toEqual(['dispute.escalate', 'dispute.read', 'dispute.resolve', 'dispute.startReview']);
   expect(payload.sub).toBe(operationsSub);
-  const mapped = execFileSync('docker', ['compose', 'run', '--rm', '--no-deps', '-T', '--entrypoint', 'cat', 'provision', '/out/zitadel-clients.json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  const mapped = execFileSync('docker', ['compose', 'exec', '-T', 'zitadel', 'cat', '/provision/out/zitadel-clients.json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
   expect(JSON.parse(mapped).Operations.AllowedClients).toEqual([operationsSub]);
 });
 

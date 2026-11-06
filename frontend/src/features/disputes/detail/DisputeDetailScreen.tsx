@@ -1,7 +1,7 @@
 import { Link, useLocation, useParams } from '@tanstack/react-router';
 import { useRef, useState, type ReactNode, type RefObject } from 'react';
 
-import { useGetApiV1DisputesDisputeId } from '@/api/generated/disputedesk';
+import { useGetDispute } from '@/api/generated/disputedesk';
 import type { DisputeResponse } from '@/api/generated/model';
 import type { ApiError } from '@/api/mutator';
 import { isProblem, traceIdOf } from '@/api/problems';
@@ -175,7 +175,7 @@ function LoadedCard({
  */
 export function DisputeDetailScreen() {
   const { disputeId } = useParams({ from: '/_linked/disputes/$disputeId' });
-  const query = useGetApiV1DisputesDisputeId(disputeId);
+  const query = useGetDispute(disputeId);
   // Set when a withdraw is answered 404: the dispute is gone, whatever the cache still holds.
   const [goneDisputeId, setGoneDisputeId] = useState<string>();
   const justSubmitted = useLocation({

@@ -6,8 +6,8 @@ using DisputeDesk.Domain.Transactions;
 using DisputeDesk.Infrastructure;
 using DisputeDesk.Infrastructure.Observability;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Infrastructure.Sla;
 using DisputeDesk.Worker.IntegrationTests.Outbox;
-using DisputeDesk.Worker.Sla;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -39,6 +39,7 @@ public sealed class SweepRig : IAsyncDisposable
 
     private readonly ServiceProvider _services;
     private readonly ActivityListener _spanListener;
+    private readonly MeterListener _meterListener;
 
     private SweepRig(string connectionString, IInterceptor[] interceptors)
     {
@@ -64,6 +65,21 @@ public sealed class SweepRig : IAsyncDisposable
         };
         ActivitySource.AddActivityListener(_spanListener);
 
+        // Process-wide as well, and by the meter's name, so it hears every instrument of a Worker host's sweep too.
+        _meterListener = new MeterListener
+        {
+            InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == Telemetry.MeterName)
+                {
+                    listener.EnableMeasurementEvents(instrument);
+                }
+            },
+        };
+        _meterListener.SetMeasurementEventCallback<long>(RecordMeasurementTags);
+        _meterListener.SetMeasurementEventCallback<double>(RecordMeasurementTags);
+        _meterListener.Start();
+
         // Only this rig's sweep: its own meter factory is the meters' scope.
         IMeterFactory meterFactory = _services.GetRequiredService<IMeterFactory>();
         Escalations = new MetricCollector<long>(meterFactory, Telemetry.MeterName, "disputedesk.sla.escalations");
@@ -85,6 +101,9 @@ public sealed class SweepRig : IAsyncDisposable
 
     /// <summary>The sweep's <c>disputedesk.dispute_actions</c> counter.</summary>
     public MetricCollector<long> Actions { get; }
+
+    /// <summary>Each tag of each measurement on the DisputeDesk meter, whichever instrument took it, as <c>instrument name=value</c>.</summary>
+    public LockedCollection<string> MeasurementTags { get; } = new();
 
     public FakeLogCollector Logs { get; }
 
@@ -178,9 +197,18 @@ public sealed class SweepRig : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _spanListener.Dispose();
+        _meterListener.Dispose();
         Escalations.Dispose();
         Actions.Dispose();
         await _services.DisposeAsync();
+    }
+
+    private void RecordMeasurementTags<T>(Instrument instrument, T measurement, ReadOnlySpan<KeyValuePair<string, object?>> tags, object? state)
+    {
+        foreach (KeyValuePair<string, object?> tag in tags)
+        {
+            MeasurementTags.Add($"{instrument.Name} {tag.Key}={tag.Value}");
+        }
     }
 
     private static Dispute NewDispute(DateTimeOffset raisedAt, DisputeStatus status)
@@ -213,7 +241,7 @@ public sealed class SweepRig : IAsyncDisposable
             yield return $"exception={record.Exception}";
         }
 
-        foreach ((string key, string? value) in record.State as IReadOnlyList<KeyValuePair<string, string?>> ?? [])
+        foreach ((string key, string? value) in record.StructuredState ?? [])
         {
             yield return $"{key}={value}";
         }

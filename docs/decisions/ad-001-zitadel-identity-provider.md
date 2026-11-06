@@ -4,12 +4,12 @@
 
 **Context.** DisputeDesk needs sign-up, email verification, password reset and sign-in (FR-1 to FR-3), but it is not an identity platform: in production the bank's own identity platform owns logins (PRD §7, Non-goals). Building any of that inside DisputeDesk would be code the bank throws away, and two stories could each assume the other enforces email verification (AD-6, Prevents).
 
-**Decision.** Zitadel v4, self-hosted with the hosted login, stands in for the bank's identity platform (AD-6).
+**Decision.** Zitadel v4, self-hosted with its built-in login pages at `/ui/login`, stands in for the bank's identity platform (AD-6).
 
 - Zitadel owns logins, sign-up, email verification and password reset; DisputeDesk builds none of them.
-- It is configured with no manual steps: the FirstInstance and DefaultInstance environment variables, plus the idempotent `provision.sh`, which writes the client settings to `zitadel-clients.json` under the configuration keys of AD-26.
+- It is configured with no manual steps: the FirstInstance and DefaultInstance environment variables, plus the idempotent `provision.sh`, which runs inside the Zitadel container once Zitadel is ready and writes the client settings to `zitadel-clients.json` under the configuration keys of AD-26. The built-in login is chosen with `ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"`, so Zitadel serves its own login pages.
 - The hosted pages are themed through Zitadel's label policy, generated from the theme tokens at provisioning time.
-- An unverified login is blocked twice: the hosted login requires email verification (`EMAIL_VERIFICATION`), and the API also rejects an ID token without `email_verified: true` in `OnTokenValidated`.
+- An unverified login is blocked twice: Zitadel's own login asks for email verification before it completes any sign-in of a login whose email is not verified, and the Api also rejects an ID token without `email_verified: true` in `OnTokenValidated`.
 - DisputeDesk never calls Zitadel management APIs at runtime.
 - The Api reaches Zitadel only through the built-in OpenID Connect handler for customers (AD-7) and the built-in JwtBearer handler for operations tools (AD-8); operations roles are Zitadel project roles, one per action (AD-9).
 
@@ -23,5 +23,5 @@
 
 - Sign-up, verification and password reset follow Zitadel's documented flows, so DisputeDesk holds no password and no verification logic.
 - The Api depends on Zitadel only through standard OpenID Connect sign-in and bearer-token validation (AD-7, AD-8), plus the configuration keys `provision.sh` writes (AD-26). Moving linking into the bank's identity platform is the bank-scale end state in `docs/production-path.md` (PRD §6.2).
-- The hosted login still shows Zitadel's default copy and no favicon (story 2.6 QA); the hosted login text customisation is a production-path item.
+- The hosted pages still show Zitadel's default copy (story 2.6 QA); customising their text is a production-path item.
 - Operations tool credentials are issued by Zitadel to a machine user; how real tools hold them is a production-path item (AD-26, stories 5.1 and 5.5).

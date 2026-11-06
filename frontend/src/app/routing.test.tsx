@@ -185,7 +185,7 @@ describe('public routes render for any state', () => {
     expect(router.state.location.pathname).toBe('/signed-out');
   });
 
-  // "Sign in again" returns to the same route; the API accepts only local paths (IsLocalUrl, AD-7).
+  // "Sign in again" returns to the same route; the Api accepts only local paths (IsLocalUrl, AD-7).
   it.each(states)(
     'sends "Sign in again" back to the route the person was on when %s',
     async (state) => {
@@ -199,8 +199,8 @@ describe('public routes render for any state', () => {
     },
   );
 
-  // The SPA applies no redirect rule of its own: the API accepts only a local URL (IsLocalUrl, AD-7; OWASP, Unvalidated
-  // Redirects and Forwards), so each of these reaches the login link as an encoded query and the API refuses it.
+  // The SPA applies no redirect rule of its own: the Api accepts only a local URL (IsLocalUrl, AD-7; OWASP, Unvalidated
+  // Redirects and Forwards), so each of these reaches the login link as an encoded query and the Api refuses it.
   it.each([
     'https://evil.example/',
     '//evil.example/',
@@ -214,7 +214,7 @@ describe('public routes render for any state', () => {
     '/\\',
     '/\t/',
     '/\\[',
-  ])('hands the returnUrl %j to the sign-in link, which decides', async (returnUrl) => {
+  ])('hands the returnUrl %j to the login link, which decides', async (returnUrl) => {
     signInAs('anonymous');
     renderApp({ path: `/signed-out?reason=expired&returnUrl=${encodeURIComponent(returnUrl)}` });
 
@@ -234,7 +234,7 @@ describe('public routes render for any state', () => {
     );
   });
 
-  it('hands a raw %09 (tab) in the query string to the sign-in link', async () => {
+  it('hands a raw %09 (tab) in the query string to the login link', async () => {
     signInAs('anonymous');
     renderApp({ path: '/signed-out?reason=expired&returnUrl=/%09/evil.example' });
 
@@ -244,7 +244,7 @@ describe('public routes render for any state', () => {
     );
   });
 
-  it('keeps a returnUrl of exactly the 2048 characters the API accepts', async () => {
+  it('keeps a returnUrl of exactly the 2048 characters the Api accepts', async () => {
     signInAs('anonymous');
     const longest = `/${'a'.repeat(2047)}`;
     renderApp({ path: `/signed-out?reason=expired&returnUrl=${longest}` });
@@ -255,7 +255,7 @@ describe('public routes render for any state', () => {
     );
   });
 
-  it('does not build a login link from a returnUrl over the 2048 characters the API accepts', async () => {
+  it('does not build a login link from a returnUrl over the 2048 characters the Api accepts', async () => {
     signInAs('anonymous');
     const tooLong = `/${'a'.repeat(2048)}`;
     renderApp({ path: `/signed-out?reason=expired&returnUrl=${tooLong}` });
@@ -725,9 +725,9 @@ describe('the skip link', () => {
         const { user, queryClient, unmount } = renderApp({ path });
         await screen.findByRole('heading', { level: 1 });
         await waitFor(() => {
-          expect(
-            queryClient.getQueryData<SessionResponse>(getGetSessionQueryKey())?.state,
-          ).toBe(state);
+          expect(queryClient.getQueryData<SessionResponse>(getGetSessionQueryKey())?.state).toBe(
+            state,
+          );
         });
 
         await user.tab();

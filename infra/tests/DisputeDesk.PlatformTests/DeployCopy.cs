@@ -27,7 +27,7 @@ internal sealed partial class DeployCopy : IDisposable
     /// <summary>The names deploy.sh reads from SSM: story 7.4's inputs that SSM holds, and the two the init alone uses.</summary>
     public static readonly string[] SsmNames =
     [
-        "APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "LOGIN_SESSION_COOKIE_SECRET", "ZITADEL_MASTERKEY", "ZITADEL_ADMIN_PASSWORD",
+        "APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "ZITADEL_MASTERKEY", "ZITADEL_ADMIN_PASSWORD",
         "LINKING_OTP_HMAC_KEY", "MAILPIT_UI_AUTH", "APP_HOST", "AUTH_HOST", "MAILPIT_HOST", "DB_HOST", "OTEL_LOG_GROUP",
         "DATAPROTECTION_SSM_PATH", "DATAPROTECTION_KMS_KEY_ID", "GATEWAY_ORIGIN_VERIFY", "QA_DB_PASSWORD", "RDS_MASTER_PASSWORD",
     ];
@@ -53,7 +53,7 @@ internal sealed partial class DeployCopy : IDisposable
     [
         .. new[]
         {
-            "APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "LOGIN_SESSION_COOKIE_SECRET", "ZITADEL_MASTERKEY", "ZITADEL_ADMIN_PASSWORD",
+            "APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "ZITADEL_MASTERKEY", "ZITADEL_ADMIN_PASSWORD",
             "LINKING_OTP_HMAC_KEY", "MAILPIT_UI_AUTH", "GATEWAY_ORIGIN_VERIFY",
         }.Select(name => AwsInputs.TestValues()[name]),
         QaPassword, MasterPassword,

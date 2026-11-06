@@ -4,9 +4,9 @@ import { Link, Navigate, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, type ReactNode } from 'react';
 
 import {
-  getGetApiV1TransactionsInfiniteQueryKey,
-  postApiV1Disputes,
-  usePostApiV1Disputes,
+  getListTransactionsInfiniteQueryKey,
+  raiseDispute,
+  useRaiseDispute,
 } from '@/api/generated/disputedesk';
 import type { TransactionResponse } from '@/api/generated/model';
 import { ApiError } from '@/api/mutator';
@@ -84,18 +84,18 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
   const openSpan = useRaiseOpenSpan();
 
   const invalidateTransactions = () =>
-    queryClient.invalidateQueries({ queryKey: getGetApiV1TransactionsInfiniteQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListTransactionsInfiniteQueryKey() });
 
-  // Every attempt for this draft goes through the generated `postApiV1Disputes` with the draft's request and key, so
+  // Every attempt for this draft goes through the generated `raiseDispute` with the draft's request and key, so
   // each one carries `X-XSRF-TOKEN` from `customFetch`. `mutationFn` runs again for each resend, so it runs the call
   // inside the one submit span of the attempt.
-  const mutation = usePostApiV1Disputes({
+  const mutation = useRaiseDispute({
     mutation: {
       mutationFn: ({ data }) => {
         const span = submitSpan.current;
         if (!span) throw new Error('send() starts the submit span');
         return withRaiseSubmit(span, () =>
-          postApiV1Disputes(data, { headers: { 'Idempotency-Key': draft.key } }),
+          raiseDispute(data, { headers: { 'Idempotency-Key': draft.key } }),
         );
       },
       retry: (failureCount, error) =>

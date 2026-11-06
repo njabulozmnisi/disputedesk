@@ -141,7 +141,7 @@ describe('a session that ends in this tab', () => {
     expectLeftOnce(replace);
   });
 
-  it('leaves once when a tab switch, its session answer and several 401s all end the session', async () => {
+  it('leaves once when a tab switch, its session answer and a 401 all end the session', async () => {
     const replace = stubLocation();
     const { router } = await openTransactions();
     signInAs('anonymous');

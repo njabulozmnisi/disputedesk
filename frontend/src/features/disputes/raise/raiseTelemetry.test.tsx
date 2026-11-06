@@ -2,7 +2,7 @@ import type { SpanContext } from '@opentelemetry/api';
 import { act, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 
-import { getApiV1DisputesDisputeId, getApiV1Transactions } from '@/api/generated/disputedesk';
+import { getDispute, listTransactions } from '@/api/generated/disputedesk';
 import {
   chooseReason,
   continueToReview,
@@ -336,8 +336,8 @@ describe('the exported spans', () => {
         HttpResponse.json({ items: [seedRow()], nextCursor: null }),
       ),
     );
-    await getApiV1Transactions({ cursor: 'cursor-seed-8L1N' });
-    await getApiV1DisputesDisputeId(guid);
+    await listTransactions({ cursor: 'cursor-seed-8L1N' });
+    await getDispute(guid);
   }
 
   async function fillAndSubmit(user: Awaited<ReturnType<typeof openRaiseScreen>>['user']) {
@@ -439,7 +439,7 @@ describe('the exported spans', () => {
   it('holds the sanitized URL even when the request fails', async () => {
     server.use(http.get('*/api/v1/transactions', () => HttpResponse.error()));
 
-    await getApiV1Transactions({ cursor: 'cursor-seed-8L1N' }).catch(() => undefined);
+    await listTransactions({ cursor: 'cursor-seed-8L1N' }).catch(() => undefined);
 
     const [span] = spansNamed('GET');
     expect(span?.attributes['url.full']).toBe(`${window.location.origin}/api/v1/transactions`);

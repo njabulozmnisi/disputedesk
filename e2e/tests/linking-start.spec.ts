@@ -3,9 +3,9 @@ import { request as httpRequest } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { holdsCode, otpCodesSentTo, queryDatabase, telemetryValues, topicRecords, origin, signInContext } from './support';
+import { enterHostedCredentials, holdsCode, otpCodesSentTo, queryDatabase, telemetryValues, topicRecords, origin, signInContext } from './support';
 
-// Story 6.1: POST /api/v1/linking/start, through the real gateway, Api, job, database (qa_readonly) and Mailpit.
+// Story 6.1: POST /api/v1/linking/start, through the real gateway, API, job, database (qa_readonly) and Mailpit.
 // Signed in as customer C's login, the one fixture login with no link; customer A's login is linked (the 403 case).
 // The bank-record details of customers A, C and D come from backend/fixtures/local.json at run time and are never printed:
 // assertions compare, they do not echo. The OTP is read from the Mailpit message only to check its shape.
@@ -46,10 +46,7 @@ async function signInAs(browser: Browser, login: { username: string; password: s
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
+  await enterHostedCredentials(page, login);
   await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   await page.close();
   return context;
@@ -447,7 +444,7 @@ function holdCustomerLock(): { release: () => Promise<void> } {
 const lockWaiters = () => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and not granted`));
 const lockHolders = () => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and granted and classid = ${lockNamespace}`));
 async function untilLockHeld(): Promise<void> {
-  await expect.poll(() => lockHolders() === 1, { message: 'the lock holder', timeout: 40_000 }).toBe(true);
+  await expect.poll(() => lockHolders(), { message: 'the lock holder', timeout: 40_000 }).toBe(1);
 }
 
 /** A start without the pacing delay, for the parallel starts. */
@@ -488,7 +485,7 @@ test.describe('story 6.5', () => {
       // Four starts at once, then the two that wait in the queue once the four jobs have left it: sent all six together, the
       // channel (capacity 2) can still hold the first ones when the last arrive, and the sixth gets a 429 (seen in e2e-fix run E).
       const first = await Promise.all(pool.slice(0, jobsAtOnce).map((login) => startAt(login, details(customerD))));
-      await expect.poll(() => lockWaiters() === jobsAtOnce, { message: '4 jobs waiting on the lock', timeout: 40_000 }).toBe(true);
+      await expect.poll(() => lockWaiters(), { message: '4 jobs waiting on the lock', timeout: 40_000 }).toBe(jobsAtOnce);
       const queued = await Promise.all(pool.slice(jobsAtOnce, 6).map((login) => startAt(login, details(customerD))));
       for (const result of [...first, ...queued]) {
         expect(result.status).toBe(202);
@@ -497,7 +494,7 @@ test.describe('story 6.5', () => {
       // Every job reaches the lock (4 at once; the other 2 wait in the queue) and none has counted or claimed yet.
       expect(sendsToD(), 'nothing is claimed while the lock is held').toBe(2);
       await holder.release();
-      await expect.poll(() => auditSummary(mark).filter((row) => !row.startsWith('LinkingStart|')).length === 6, { message: '6 job stops', timeout: 40_000 }).toBe(true);
+      await expect.poll(() => auditSummary(mark).filter((row) => !row.startsWith('LinkingStart|')).length, { message: '6 job stops', timeout: 40_000 }).toBe(6);
     } finally {
       execFileSync('docker', ['start', 'disputedesk-mailpit-1'], { encoding: 'utf8' });
     }
@@ -533,7 +530,7 @@ test.describe('story 6.5', () => {
       expect(result.text).toBe('');
       expect(comparable(result.headers)).toEqual(comparable(reference.headers));
     }
-    await expect.poll(() => auditSummary(mark).filter((row) => !row.startsWith('LinkingStart|')).length === 3, { message: '3 stops', timeout: 40_000 }).toBe(true);
+    await expect.poll(() => auditSummary(mark).filter((row) => !row.startsWith('LinkingStart|')).length, { message: '3 stops', timeout: 40_000 }).toBe(3);
     const rows = auditSummary(mark);
     expect(rows.filter((row) => row.startsWith('LinkingNoMatch|Rejected|null|true|'))).toHaveLength(1);
     expect(tail(rows, pool[7].sub).filter((row) => row.startsWith(dPrefix('LinkingSendCapped', 'Rejected')))).toHaveLength(1);
@@ -552,7 +549,7 @@ test.describe('story 6.5', () => {
     await untilLockHeld();
     const result = await startAt(pool[0], details(customerD));
     expect(result.status).toBe(202);
-    await expect.poll(() => lockWaiters() === 1, { message: 'the job waiting on the lock', timeout: 40_000 }).toBe(true);
+    await expect.poll(() => lockWaiters(), { message: 'the job waiting on the lock', timeout: 40_000 }).toBe(1);
     const killed = execFileSync('docker', ['exec', 'disputedesk-postgres-1', 'psql', '-U', 'postgres', '-d', 'disputedesk', '-At', '-c',
       `select count(*) from (select pg_terminate_backend(pid) from pg_locks where locktype = 'advisory' and not granted) killed`], { encoding: 'utf8' }).trim();
     expect(killed).toBe('1');
@@ -606,7 +603,7 @@ test.describe('story 6.5', () => {
     await untilLockHeld();
     // 4 jobs run (waiting on the lock) and `queueCapacity` wait in the channel: all accepted.
     for (const login of pool.slice(0, accepted)) expect((await startAt(login, details(customerD))).status).toBe(202);
-    await expect.poll(() => lockWaiters() === jobsAtOnce, { message: '4 jobs waiting on the lock', timeout: 40_000 }).toBe(true);
+    await expect.poll(() => lockWaiters(), { message: '4 jobs waiting on the lock', timeout: 40_000 }).toBe(jobsAtOnce);
     const matching = await startAt(pool[accepted], details(customerD));
     const nonMatching = await startAt(pool[accepted + 1], details(unmatchedDetails));
     for (const result of [matching, nonMatching]) {
@@ -632,7 +629,7 @@ test.describe('story 6.5', () => {
     }
     await holder.release();
     // The accepted starts all run to their stop (D is at the cap) and the two refused ones never do.
-    await expect.poll(() => auditSummary(mark).filter((row) => row.startsWith('LinkingSendCapped|')).length === accepted, { message: 'the accepted jobs to stop', timeout: 60_000 }).toBe(true);
+    await expect.poll(() => auditSummary(mark).filter((row) => row.startsWith('LinkingSendCapped|')).length, { message: 'the accepted jobs to stop', timeout: 60_000 }).toBe(accepted);
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const finalRows = auditSummary(mark);
     expect(count(finalRows, 'LinkingSendCapped|')).toBe(accepted);

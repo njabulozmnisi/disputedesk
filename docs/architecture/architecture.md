@@ -34,16 +34,16 @@ Each AD states its current rule only: **Rule** (two to five sentences), **Detail
 
 ## Design Paradigm
 
-**Clean Architecture (ports and adapters) with feature folders.** Dependencies point inward. Domain holds the rules, Application holds the use cases, and Infrastructure is the only layer that knows about Postgres, Kafka, HTTP clients or SMTP. Two hosts compose them: the **Api** (browser sessions and REST) and the **Worker** (outbox relay and SLA sweep). Two patterns sit on top: **server-side browser sessions**, so the Api holds the tokens and the browser holds only a session cookie, and a **transactional outbox**, so every published dispute event commits with its change. Each dispute change is a **stored event** in the dispute's own append-only stream (ad-009); a handler loads a dispute by replaying its stream, and the `Disputes` row is a read model of that stream.
+**Clean Architecture (ports and adapters) with feature folders.** Dependencies point inward. Domain holds the rules, Application holds the use cases, and Infrastructure is the only layer that knows about Postgres, Kafka, HTTP clients or SMTP. Two hosts compose them: the **Api** (browser sessions and REST) and the **Worker** (outbox relay and SLA sweep). Locally the Api also runs the relay and the sweep in its own process (`Worker:InProcess`), and in AWS the Worker host runs them; both hosts register them through one Infrastructure registration (AD-27). Two patterns sit on top: **server-side browser sessions**, so the Api holds the tokens and the browser holds only a session cookie, and a **transactional outbox**, so every published dispute event commits with its change. Each dispute change is a **stored event** in the dispute's own append-only stream (ad-009); a handler loads a dispute by replaying its stream, and the `Disputes` row is a read model of that stream.
 
 | Layer | Project (`backend/src/`) | Holds |
 | --- | --- | --- |
 | Domain | `DisputeDesk.Domain` | `Dispute` aggregate and its stored event types, action rules, disputability, money, `Result`/`Error` |
 | Contracts | `DisputeDesk.Contracts` | Wire shapes only: API request and response records, dispute event records, problem slugs, audit vocabulary. References only Domain, for the enums identical on the wire |
-| Application | `DisputeDesk.Application` | Feature folders (`Linking/`, `Transactions/`, `Disputes/`, `Operations/`, `Sla/`) with handlers, the three ports, `IAppDbContext`, `CurrentCustomer` |
-| Infrastructure | `DisputeDesk.Infrastructure` | `AppDbContext`, migrations, port adapters, outbox relay, Kafka producer, session store, telemetry |
-| Api | `DisputeDesk.Api` | Endpoint groups per feature, auth schemes and policies, ProblemDetails mapping, authentication endpoints |
-| Worker | `DisputeDesk.Worker` | Hosted services that run the relay and the sweep |
+| Application | `DisputeDesk.Application` | Feature folders (`Linking/`, `Transactions/`, `Disputes/`, `Operations/`) with handlers; `Audit/` (`AuditLog.Record`); `Abstractions/` (the three ports, `IAppDbContext`, `CurrentCustomer`) |
+| Infrastructure | `DisputeDesk.Infrastructure` | `AppDbContext`, migrations, port adapters, the linking job and OTP verification (`Linking/`), the outbox relay and Kafka producer (`Outbox/`), the SLA sweep (`Sla/`) and the one registration both hosts use for them, the `Sessions` entity, seeding, telemetry |
+| Api | `DisputeDesk.Api` | Endpoint groups per feature (the customer and linking route groups in `Customers/` and `Linking/`), sign-in, sign-out and the session store (`Authentication/`), the antiforgery filter and forwarded-header trust (`Security/`), authorisation policies, ProblemDetails mapping |
+| Worker | `DisputeDesk.Worker` | The host that runs the relay and the sweep in AWS |
 
 ```mermaid
 flowchart LR
@@ -115,7 +115,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 
 - **Binds:** every endpoint, the SPA, R30
 - **Prevents:** a generic status endpoint; offset paging; casing drift; a stale frontend contract
-- **Rule:** .NET 10 minimal APIs, with every resource route under `/api/v1` except the OIDC callbacks (AD-7) and `/health/*`; each action has its own endpoint, named after it, and every `Location` header points to a real GET. Lists use keyset pagination with an opaque base64url cursor. JSON property names and enum values are camelCase (`underReview`, `startReview`) through one shared `JsonSerializerOptions`, used by both API and events. Enums go through one `JsonConverterFactory` that creates `CamelCaseNameOnlyEnumConverter<TEnum>` for every enum type: it writes the camelCase name, and reads an enum in a JSON request body only from exactly that name, refusing a number, a list and any other casing. The built-in `JsonStringEnumConverter` reads names ignoring case with no option to stop it, so one strict custom converter gives the whole wire contract one enum rule (D5; Microsoft Learn, *How to write custom converters*, factory pattern). The built-in OpenAPI document is generated at build time to `backend/openapi.json`, committed and drift-checked (`ci.yml`).
+- **Rule:** .NET 10 minimal APIs, with every resource route under `/api/v1` except the OIDC callbacks (AD-7) and `/health/*`; each action has its own endpoint, named after it, and every `Location` header points to a real GET. Lists use keyset pagination with an opaque base64url cursor. JSON property names and enum values are camelCase (`underReview`, `startReview`) through one shared `JsonSerializerOptions`, used by both API and events. Enums go through one `JsonConverterFactory` that creates `CamelCaseNameOnlyEnumConverter<TEnum>` for every enum type: it writes the camelCase name, and reads an enum in a JSON request body only from exactly that name, refusing a number, a list and any other casing. The built-in `JsonStringEnumConverter` reads names ignoring case with no option to stop it, so one strict custom converter gives the whole wire contract one enum rule (Microsoft Learn, *How to write custom converters*, factory pattern). The built-in OpenAPI document is generated at build time to `backend/openapi.json`, committed and drift-checked (`ci.yml`).
 - **Details:**
   - Pages: default 20, maximum 50, and an undecodable cursor gets 400. A page is `{ "items": [...], "nextCursor": "..." }`, with `nextCursor` null on the last page.
   - Transactions are ordered by transaction date then transaction ID, disputes by `CreatedAtUtc` then `Id`, both newest first. The disputes list has no filter in v1, and the SPA groups the pages it has loaded into open and closed.
@@ -127,11 +127,14 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 
 - **Binds:** R1, R2, R3, R21, R37
 - **Prevents:** DisputeDesk building sign-up, password or verification logic; each of two stories assuming the other enforces email verification
-- **Rule:** Zitadel v4 (self-hosted, the hosted login) owns logins, sign-up, email verification and password reset, and DisputeDesk never calls Zitadel management APIs at runtime. It is configured zero-click: FirstInstance and DefaultInstance environment variables, plus the idempotent `provision.sh`, which writes client settings to `zitadel-clients.json` under the configuration keys in AD-26. Unverified logins are blocked twice: the hosted login requires email verification (`EMAIL_VERIFICATION`), and the API also rejects an ID token without `email_verified: true` in `OnTokenValidated`.
-- **Details:** the hosted pages are themed through the label policy, generated from the theme tokens at provisioning time.
+- **Rule:** Zitadel v4 (self-hosted, with its built-in login pages at `/ui/login`) owns logins, sign-up, email verification and password reset, and DisputeDesk never calls Zitadel management APIs at runtime. It is configured zero-click: FirstInstance and DefaultInstance environment variables, plus the idempotent `provision.sh`, which writes client settings to `zitadel-clients.json` under the configuration keys in AD-26. Unverified logins are blocked twice: Zitadel's login asks for email verification before it completes the sign-in of a login whose email is not verified, and the Api also rejects an ID token without `email_verified: true` in `OnTokenValidated`.
+- **Details:**
+  - The built-in login is selected with `ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"`, read when the instance is created.
+  - `provision.sh` runs inside the `zitadel` container, from the `disputedesk-zitadel` image's Compose `post_start` hook, once `zitadel ready` succeeds; the container reports healthy only after the script has written its provisioned marker, and the api waits for that (AD-27).
+  - The hosted pages are themed through the label policy, generated from the theme tokens at provisioning time.
 - **Rejected:** Keycloak (the fallback, unused); Duende IdentityServer (banned); a mock OIDC server.
 
-### AD-7 - browser session model [ADOPTED]
+### AD-7 - Browser session model [ADOPTED]
 
 - **Binds:** R2, R3, R26, the SPA
 - **Prevents:** a token reaching the browser; lost sessions; session fixation; idle sign-out earlier than 15 minutes; a CSRF-able logout
@@ -140,7 +143,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
   - **Sign-in.** The OpenID Connect handler uses the code flow, PKCE and `client_secret_post`, matching the provisioned Zitadel app. The web app has only the authorization-code grant.
   - **Server-side session.** The `ITicketStore` lives in Api, because the Worker image lacks the ASP.NET Core shared framework that defines `ITicketStore`. `StoreAsync` always mints a new 256-bit random key, and the row stores its SHA-256 in `KeyHash`. `RetrieveAsync` checks `ExpiresAtUtc` and `AbsoluteExpiresAtUtc` against `TimeProvider`, and deletes and rejects an expired row. Otherwise it moves `ExpiresAtUtc` forward on each request that carries the cookie; the absolute limit never moves. An hourly timer in the Api deletes expired rows.
   - **Linking keeps the key.** A successful link keeps the session and its key: linked state is read from `CustomerLinks` on every request. The key is not renewed after linking; session fixation is already blocked, because the key is minted server-side at sign-in and the store rejects any key it did not mint. Renewal at a privilege change is production-path entry P32.
-  - **Keys and tokens.** Data Protection keys persist to Postgres (`DataProtectionKeys`) locally. In AWS the key ring is stored with AWS's documented `Amazon.AspNetCore.DataProtection.SSM` package (`PersistKeysToAWSSystemsManager`) as SSM Parameter Store SecureStrings, encrypted at rest with KMS. The two key-ring mechanisms are kept: the human kept the 2026-10-27 decision of SSM Parameter Store with KMS for AWS (audit D7, 2026-11-03). Only the ID token is kept, inside the protected server-side ticket, for the end-session `id_token_hint`; access and refresh tokens are never stored.
+  - **Keys and tokens.** Data Protection keys persist to Postgres (`DataProtectionKeys`) locally. In AWS the key ring is stored with AWS's documented `Amazon.AspNetCore.DataProtection.SSM` package (`PersistKeysToAWSSystemsManager`) as SSM Parameter Store SecureStrings, encrypted at rest with KMS. The two key-ring mechanisms are kept: the human kept the 2026-10-27 decision of SSM Parameter Store with KMS for AWS (human decision 2026-11-03). Only the ID token is kept, inside the protected server-side ticket, for the end-session `id_token_hint`; access and refresh tokens are never stored.
   - **Expiry.** The ticket store renews the idle limit on every authenticated API request; the cookie does not. The cookie has no expiry date and holds only the session key; it is written at sign-in and cleared at sign-out, never renewed, so a request in flight during logout cannot set it again (`ExpireTimeSpan` is the 12-hour absolute limit). The SPA never polls. Two minutes before the idle limit it shows a warning dialog whose "Stay signed in" calls `GET /api/v1/authentication/session`, an authenticated request that renews the idle limit (WCAG 2.2 SC 2.2.1 Timing Adjustable). Each tab also ends the session in the browser 15 minutes after the last API response in that tab (a per-tab wall-clock deadline, checked when its timer fires and when the page becomes visible or gains focus); no deadline or message is shared between tabs. The session query alone refetches on window focus (TanStack Query `refetchOnWindowFocus`), so a tab brought to the front learns of a session ended elsewhere; a live answer renews the session. Every end (a 401, an `anonymous` session answer, the tab's deadline) is a `location.replace` to the session-ended screen, a document navigation that drops the old document's memory, and that screen makes no API request. The deadline is a privacy cutoff; the server's session stays the authority.
   - **Endpoints.** `GET /api/v1/authentication/login?returnUrl=` accepts only local paths (`IsLocalUrl`) and otherwise uses `/`. `GET /api/v1/authentication/session` returns `{ "state": "anonymous" | "unlinked" | "linked" }`. `GET /api/v1/antiforgery` returns the request token. Callbacks stay at `/api/signin-oidc` and `/api/signout-callback-oidc`.
   - **Logout.** `POST /api/v1/authentication/logout` is a top-level form POST carrying `__RequestVerificationToken`. It validates antiforgery only for an authenticated caller, deletes any session row the cookie names, clears the session and antiforgery cookies, and redirects to Zitadel end-session with `client_id`, `post_logout_redirect_uri` = the app origin's `/api/signout-callback-oidc` (the handler's `SignedOutCallbackPath`, which then lands the browser on `/`), and the session's `id_token_hint`, so Zitadel ends its session without a prompt (an anonymous logout sends no hint). The ID token crosses the browser only in that one redirect, already spent and short-lived; without it Zitadel asks for a click and its session outlives sign-out. The redirect is made by the OIDC handler's built-in `SignOutAsync`, which also sends `state` (OpenID Connect RP-Initiated Logout 1.0), and logout records `SignOut` (AD-14a). A failed `SignIn` audit save stops the sign-in; a failed `SignOut` audit save is logged as an error and does not stop the sign-out, because logout must end the session (OWASP Session Management Cheat Sheet).
@@ -154,10 +157,10 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 - **Rule:** **Customer** routes (`/api/v1/transactions`, `/api/v1/disputes...`) and **linking** routes (`/api/v1/linking/...`) accept only the cookie scheme, **operations** routes (`/api/v1/operations/disputes/...`) accept only JwtBearer, and every policy pins its scheme, so the wrong or a missing credential gets 401 or 403, never a 302. Every route checks in the framework's order (FR-24): 401, 403, 400, 404, 409, 422, then 400 for a rule that needs the loaded resource. Authentication and authorisation come first, then the built-in minimal API validation of the request, then the lookup, the status and the business rules. A cookie-scheme 401 carries no `WWW-Authenticate` header, a deliberate deviation from RFC 9110 §15.5.2 because no challenge scheme for cookies is standardised; JwtBearer 401s carry `WWW-Authenticate: Bearer` (RFC 6750 §3).
 - **Details:**
   - **Schemes.** The cookie scheme's `OnRedirectToLogin` and `OnRedirectToAccessDenied` events return 401 and 403. JwtBearer validates issuer, audience (the Zitadel project ID), lifetime and signature, with `MapInboundClaims = false` and `RoleClaimType = "role"`.
-  - **Endpoints with a body** (raise, withdraw, resolve) keep the built-in validation. A request the framework cannot bind (a route ID that is not a GUID, no body, malformed JSON, a wrong JSON type, an enum value that is a number, a list, an unknown name or any casing but the exact camelCase name) gets the framework's 400 `validation`, and a non-JSON body on a cookie route gets 415 `validation`; there is no custom body reading (Microsoft Learn, *Parameter binding in minimal APIs*). A bound body is checked by its data annotations and `IValidatableObject` with the same 400 shape, before the handler and so before the lookup (Microsoft Learn, *Validation support in minimal APIs*).
+  - **Endpoints with a body** (raise, withdraw, resolve) keep the built-in validation. A request the framework cannot bind (a route ID that is not a GUID, no body, malformed JSON, a wrong JSON type, an enum value that is a number, a list, an unknown name or any casing but the exact camelCase name) gets the framework's 400 `validation`, and a non-JSON body on a cookie route gets 415 `validation`; there is no custom body reading (Microsoft Learn, *Parameter binding in minimal APIs*). A bound body is checked by its data annotations and `IValidatableObject` with the same 400 shape, before the handler and so before the lookup (Microsoft Learn, *Validation support in minimal APIs*). The built-in validation still checks the bound body when the route ID is not a GUID, so a non-GUID route ID with a bad body answers 400 naming the body field. On a cookie route the body validation runs before the group's `AntiforgeryFilter`; both answer 400 `validation`, and no handler runs.
   - **Raise.** The `Idempotency-Key` filter's own answers before the lookup (AD-16) belong to the key, not to this order. The comparison of the expected amount with the loaded transaction's amount is the trailing 400, because the amount is known only once the transaction is loaded.
-  - **Resolve with a non-JSON body.** Resolve, the one operations endpoint with a JSON body, declares only JSON, so routing hands a `text/plain` body to the framework's 415 endpoint, which has no bearer policy and is answered by the cookie fallback policy: 401 with no `WWW-Authenticate: Bearer`, for a missing, refused or valid token alike, writing no dispute, stored event or outbox row. A refused token there writes no `Denied` entry (AD-14a). Human decision, 2026-11-04.
-- **Rejected:** a fallback policy that also accepts JwtBearer (any validly signed project token would then satisfy deny-by-default everywhere); one policy scheme that picks cookie or bearer per request; antiforgery on the operations group; 404 before 400, which needed `.DisableValidation()`, a body check after the lookup and a second order for raise, when 403 before 404 alone stops ID probing (D1).
+  - **Resolve with a non-JSON body.** Resolve, the one operations endpoint with a JSON body, declares only JSON, so routing hands a `text/plain` body to the framework's 415 endpoint, which has no bearer policy and is answered by the cookie fallback policy: 401 with no `WWW-Authenticate: Bearer`, for a missing, refused or valid token alike, writing no dispute, stored event or outbox row. A customer cookie on the same request satisfies the fallback policy and gets the 415 `validation`, writing no dispute, stored event, outbox or audit row. A refused token there writes no `Denied` entry (AD-14a). Human decision, 2026-11-04.
+- **Rejected:** a fallback policy that also accepts JwtBearer (any validly signed project token would then satisfy deny-by-default everywhere); one policy scheme that picks cookie or bearer per request; antiforgery on the operations group; 404 before 400, which needed `.DisableValidation()`, a body check after the lookup and a second order for raise, when 403 before 404 alone stops ID probing.
 
 ### AD-9 - Operations roles and actor mapping [ADOPTED]
 
@@ -167,7 +170,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 - **Details:**
   - Operations clients request the scope `openid urn:zitadel:iam:org:project:id:<projectId>:aud urn:zitadel:iam:org:projects:roles`.
   - The generic `urn:zitadel:iam:org:project:roles` claim is not read, because it is not bound to this project and could carry another project's roles (ASVS 5.0 V10.3.2).
-  - The Worker acts as `automation` with identity `worker:sla-sweep`, in-process and without a token. Withdraw needs no role.
+  - The SLA sweep acts as `automation` with identity `worker:sla-sweep`, in-process and without a token. Withdraw needs no role.
 - **Rejected:** coarse roles; OAuth scopes as permissions; Zitadel Actions.
 
 ### AD-10 - Authorisation states and customer resolution [ADOPTED]
@@ -184,7 +187,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 
 - **Binds:** R17, every query over disputes, their stored events and their timelines
 - **Prevents:** a forgotten `Where` leaking another customer's dispute, stored events or timeline; a filter that bakes in the first customer's ID; a customer path reusing an operations loader
-- **Rule:** `AppDbContext` adds the EF Core 10 named query filter `"Ownership"` to `Dispute`, `d => d.CustomerId == CurrentCustomerId` over an instance member set per context from `CurrentCustomer`, and `StoredEvent` carries the same filter through its dispute; with no current customer it matches nothing. `IgnoreQueryFilters(["Ownership"])` appears only in the `Operations/` feature folder, the Worker's sweep and the seeder (`Infrastructure/Seeding/Seeder.cs`, AD-30), and an architecture test fails on any other use. Another customer's dispute and an unknown ID return identical 404 bodies apart from `traceId`.
+- **Rule:** `AppDbContext` adds the EF Core 10 named query filter `"Ownership"` to `Dispute`, `d => d.CustomerId == CurrentCustomerId` over an instance member set per context from `CurrentCustomer`, and `StoredEvent` carries the same filter through its dispute; with no current customer it matches nothing. `IgnoreQueryFilters(["Ownership"])` appears only in the `Operations/` feature folder, the SLA sweep (`Infrastructure/Sla/`) and the seeder (`Infrastructure/Seeding/Seeder.cs`, AD-30), and an architecture test fails on any other use. Another customer's dispute and an unknown ID return identical 404 bodies apart from `traceId`.
 - **Details:**
   - The filter never uses a captured local or a static. `AddDbContextPool` is forbidden.
   - `StoredEvent` (ad-009) is reachable only through its dispute's stream (EF Core *Global query filters*: filter the required dependent through its navigation). Loading by replay and the timeline both read the stored events (AD-13), so no query reads `StoredEvents` without that filter outside the three bypasses.
@@ -207,7 +210,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
   - **Cap window.** `OtpSentAtUtc` is the claiming job's start instant (AD-4's one reading), at most one `Linking:Budget` before the claim, so the cap's hour can be short by up to one budget; accepted (ASVS 5.0 V2.4.1, rated low). `Linking:Budget` is 1 to 30 seconds, never longer than Npgsql's default 30-second command timeout, so the budget always ends a lock wait by its own path.
   - **Logging.** Request-body logging is off on linking routes.
   - **Restart.** [ASSUMPTION] An Api restart drops queued jobs, so the person sees wrong codes and starts again.
-- **Rejected:** the lookup inside the request (timing); handing jobs to the Worker through a table (it would persist data derived from the ID number); sending before the SIM-swap check.
+- **Rejected:** the lookup inside the request (timing); handing jobs to the relay's host through a table (it would persist data derived from the ID number); sending before the SIM-swap check.
 
 ### AD-13 - The `Dispute` aggregate owns every rule; customers see a mapped view
 
@@ -280,10 +283,10 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 
 - **Binds:** R23, R26, R28
 - **Prevents:** an event for a rolled-back change; events out of order per dispute; two relays after a lost lock; Kafka downtime marking rows failed; a consumer seeing a different `id` from the stored event
-- **Rule:** One Worker relay, leader by a session-level `pg_try_advisory_lock`, publishes the outbox rows AD-14 writes to `disputedesk.disputes` at least once, keyed by dispute ID, and never re-mints a row's ID, which is its stored event's ID and the CloudEvent `id` (ad-009). Order is defined only within one dispute, by `DisputeVersion`: per dispute the relay sends the lowest-version row that isn't `Sent` and awaits its delivery report before the dispute's next row. Consumers apply an event only if its `disputeVersion` is newer than the last one they applied for that dispute, and treat a repeated CloudEvent `id` as a duplicate (Enterprise Integration Patterns, *Idempotent Receiver*).
+- **Rule:** One relay, leader by a session-level `pg_try_advisory_lock`, publishes the outbox rows AD-14 writes to `disputedesk.disputes` at least once, keyed by dispute ID, and never re-mints a row's ID, which is its stored event's ID and the CloudEvent `id` (ad-009). Order is defined only within one dispute, by `DisputeVersion`: per dispute the relay sends the lowest-version row that isn't `Sent` and awaits its delivery report before the dispute's next row. Consumers apply an event only if its `disputeVersion` is newer than the last one they applied for that dispute, and treat a repeated CloudEvent `id` as a duplicate (Enterprise Integration Patterns, *Idempotent Receiver*).
 - **Details:**
   - **Rows.** Tests check that each outbox row's ID is its stored event's ID, and that the published CloudEvent `id` is the outbox row's ID.
-  - **Leadership.** The relay is a Worker hosted service. It holds `pg_try_advisory_lock` on one fixed key and does every outbox read and update on that same connection. A session-level advisory lock lasts as long as its connection, so before each batch the relay checks that connection with a cheap query. On error it disposes the connection and stops producing. A test terminates the lock connection and checks for handover.
+  - **Leadership.** The relay is a hosted service in Infrastructure, run by the Api locally and by the Worker in AWS (AD-27). It holds `pg_try_advisory_lock` on one fixed key and does every outbox read and update on that same connection. A session-level advisory lock lasts as long as its connection, so before each batch the relay checks that connection with a cheap query. On error it disposes the connection and stops producing. A test terminates the lock connection and checks for handover.
   - **Order.** There is no global position and no order across disputes (ad-009; cross-dispute options are deferred to `docs/production-path.md`). A `Failed` or not-yet-due head row means that dispute is skipped. Every stored event has an outbox row, so a dispute's outbox rows have no version gaps.
   - **Delivery guarantee.** The advisory lock cannot fence a Kafka send already in flight when a leader loses its connection, so across a leader handover an earlier event of a dispute can arrive late or twice; consumer deduplication handles it. Fencing with Kafka transactions (KIP-98, a fixed `transactional.id`) is the stronger option, in `docs/production-path.md`.
   - **Seeded rows.** Seeded disputes have outbox rows like any other (AD-30), so relay tests set up their own rows and never assume an empty outbox.
@@ -295,11 +298,11 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 
 - **Binds:** R22
 - **Prevents:** double escalation; a sweep with its own rules; untraced sweep events
-- **Rule:** A Worker hosted service runs every 30 seconds [ASSUMPTION: within "at least once a minute"], claims due disputes in batches of up to 50 with `FOR UPDATE SKIP LOCKED`, loads each by replay (AD-13), calls `Dispute.Escalate` with `Automation` / `worker:sla-sweep` and commits through AD-14, repeating until a batch comes back short, which catches up after downtime. The sweep only escalates: it has one claim, and records nothing for a dispute before its SLA is due.
+- **Rule:** A hosted service in Infrastructure, run in the same host as the relay, runs every 30 seconds [ASSUMPTION: within "at least once a minute"], claims due disputes in batches of up to 50 with `FOR UPDATE SKIP LOCKED`, loads each by replay (AD-13), calls `Dispute.Escalate` with `Automation` / `worker:sla-sweep` and commits through AD-14, repeating until a batch comes back short, which catches up after downtime. The sweep only escalates: it has one claim, and records nothing for a dispute before its SLA is due.
 - **Details:**
   - **Trace.** For each batch the sweep starts an Activity `disputedesk.sla_sweep.batch`.
   - **Escalation claim.** One named raw-SQL method: `SELECT ... FROM "Disputes" WHERE "Status" IN ('Submitted','UnderReview') AND "SlaDueAtUtc" <= @now ORDER BY "SlaDueAtUtc" LIMIT 50 FOR UPDATE SKIP LOCKED`, through the partial index `IX_Disputes_SlaDueAtUtc` (filtered on those two statuses).
-  - **Transactions.** Each batch is one transaction holding its row locks from claim to commit, with a savepoint per dispute. The claim returns IDs, and only `Worker/Sla/` loads streams through the named bypass (AD-11).
+  - **Transactions.** Each batch is one transaction holding its row locks from claim to commit, with a savepoint per dispute. The claim returns IDs, and only `Infrastructure/Sla/` loads streams through the named bypass (AD-11).
 - **Rejected:** a cron container; Quartz or Hangfire; escalating without the aggregate; a stored warning before the SLA is due (no journey, metric or consumer reads it).
 
 ### AD-19 - Dispute event contract [ADOPTED]
@@ -329,7 +332,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 - **Rule:** `raised.v1` data is exactly `disputeId`, `reason`, `status` (`submitted`), `occurredAt` and `disputeVersion` (1). It carries no customer ID, amount or note. Consumers call the bearer-only `GET /api/v1/operations/disputes/<disputeId>` (`dispute.read`).
 - **Rejected:** a fat event with the snapshot; a `channel` field.
 
-### AD-20 - One trace from browser to Worker; named signals [ADOPTED]
+### AD-20 - One trace from browser to the relay; named signals [ADOPTED]
 
 - **Binds:** R36, the SM-1 to SM-4 signals
 - **Prevents:** a broken trace at the outbox; a prerelease Kafka package; metrics that can't produce the success metrics
@@ -361,7 +364,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 
 - **Binds:** R7, R10, R15, R26, R28, R29, R31
 - **Prevents:** the same table added twice; two writers for one table; a Worker running on an old schema; stored events read, logged or traced more widely than disputes
-- **Rule:** The `disputedesk` database uses plural PascalCase table names and PascalCase column names that match the C# entity properties, as EF Core and Npgsql generate them by default [ADOPTED], with the constraint names below, and each table has only the writers listed below. The Api applies EF Core migrations at start-up, under EF Core's migration lock, before it reports ready, and the Worker starts after the Api is healthy. Stored events are private records with the same access as `Disputes`, never logged or traced. Nothing is deleted from `Disputes`, `StoredEvents` or `AuditLogEntries` in v1.
+- **Rule:** The `disputedesk` database uses plural PascalCase table names and PascalCase column names that match the C# entity properties, as EF Core and Npgsql generate them by default [ADOPTED], with the constraint names below, and each table has only the writers listed below. The Api applies EF Core migrations at start-up, under EF Core's migration lock, before it reports ready, and in AWS the Worker starts after the Api is healthy. Locally the in-process relay and sweep start only after the Api's migrations: the Api applies them before its host starts its hosted services (EF Core, *Applying Migrations*: apply migrations at runtime; ASP.NET Core, *App startup*: hosted services start when `Run` executes), so neither runs on a missing schema. Stored events are private records with the same access as `Disputes`, never logged or traced. Nothing is deleted from `Disputes`, `StoredEvents` or `AuditLogEntries` in v1.
 - **Details:**
   - **Names.** Every table's primary key is `Id`; a foreign key column is `<EntityName>Id`. Constraints are `PK_<TableName>`, `FK_<DependentTable>_<PrincipalTable>_<ForeignKeyColumn>`, `IX_<TableName>_<ColumnNames>`, `UQ_<TableName>_<ColumnNames>` (set with `HasDatabaseName`, since EF Core names unique indexes `IX_`) and `CK_<TableName>_<Description>`. Columns holding a UTC instant end in `Utc`. Enum values are stored as `text` holding the C# member name (PascalCase, `HasConversion<string>()`), instants as `timestamptz` and money as `numeric(19,2)` plus a currency code. Handwritten SQL double-quotes every identifier. `DataProtectionKeys` is the shape `DataProtection.EntityFrameworkCore` defines, unchanged. The ER diagram below is the starting schema; the reviewer checks each generated migration against these names.
   - **Writers.**
@@ -369,7 +372,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
     | Table | Written by |
     | --- | --- |
     | `CustomerLinks`, `LinkingChallenges`, `IdempotencyKeys`, `Sessions`, `DataProtectionKeys` | the Api only |
-    | `Disputes` (the read model of each stream) | the Api, the Worker and the seeder, only through AD-13 and AD-14 |
+    | `Disputes` (the read model of each stream) | the Api, the SLA sweep and the seeder, only through AD-13 and AD-14 |
     | `StoredEvents` | inserted only by AD-14; never updated or deleted (the AD-14 guard) |
     | `OutboxMessages` | inserted only by AD-14, updated only by the relay, with one operator exception: releasing a `Failed` row (below) |
     | `AuditLogEntries` | insert only |
@@ -404,16 +407,16 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
   - In AWS, Zitadel runs with `ExternalSecure=true`, `ExternalPort=443` and TLS mode external, and the web app has `developmentMode` off.
 - **Rejected:** mkcert (a host step, which breaks "Docker only"); a self-signed gateway certificate (browser warnings).
 
-### AD-25 - Health, shutdown and Worker liveness [Accepted 2026-10-26]
+### AD-25 - Health, shutdown and relay liveness [Accepted 2026-10-26]
 
 - **Binds:** R27
-- **Prevents:** a hung Worker that still reports running; a readiness check that fails on every Kafka blip
-- **Rule:** The Api keeps `/health/live` (no checks) and `/health/ready` (Postgres and Zitadel discovery, not core banking). The Worker exposes no HTTP: the relay and the sweep each touch their own heartbeat file every loop, and the Compose health check reads them. Both hosts keep the default 30-second `HostOptions.ShutdownTimeout` and finish the in-flight request or, for the relay, the one record in flight; Compose sets `stop_grace_period: 35s`.
+- **Prevents:** a hung relay or sweep that still reports running; a readiness check that fails on every Kafka blip
+- **Rule:** The Api keeps `/health/live` (no checks) and `/health/ready` (Postgres and Zitadel discovery, not core banking). The relay and the sweep expose no HTTP: in whichever host runs them (the Api locally, the Worker in AWS) each touches its own heartbeat file every loop, and that host's Compose health check reads them. Both hosts keep the default 30-second `HostOptions.ShutdownTimeout` and finish the in-flight request or, for the relay, the one record in flight; Compose sets `stop_grace_period: 35s`.
 - **Details:**
   - The files are `/tmp/heartbeat-relay` and `/tmp/heartbeat-sweep`. A relay that isn't leader touches its file on each lock attempt.
-  - A `worker-local` Dockerfile target adds busybox under its own name, and the Compose health check fails if the relay file is older than 30 seconds or the sweep file is older than 90 seconds (three missed 30-second sweep loops).
+  - The local Dockerfile targets add a static busybox for the Compose health checks, which fail if the relay file is older than 30 seconds or the sweep file is older than 90 seconds (three missed 30-second sweep loops).
   - At shutdown the relay stops taking new rows, waits for the in-flight send's delivery report (bounded by the delivery timeout) and marks it Sent, or leaves it Pending for the next start (at-least-once, AD-17).
-- **Rejected:** Kestrel in the Worker just for probes; Kafka in the Worker's readiness.
+- **Rejected:** Kestrel in the Worker just for probes; Kafka in any readiness check.
 
 ### AD-26 - Configuration and secrets per environment [ADOPTED]
 
@@ -421,7 +424,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 - **Prevents:** secrets in the repo; dev defaults in AWS; colliding configuration keys; environment checks in feature code
 - **Rule:** One options class per configuration section, bound with `ValidateOnStart`, under exactly the keys below, which `provision.sh` also uses for the `Zitadel:*` and `Operations:*` values it writes. Secrets come only from the environment, never from the repo or an image. Feature switches are configuration keys, never `IsDevelopment()` in feature code. Scalar is served at `/scalar/` and holds no credential, locally or in AWS.
 - **Details:**
-  - **Keys.** `Kafka:BootstrapServers` (`localhost:19092` for a host-run Worker, `redpanda:9092` in Compose; plaintext on the private network in v1, a `// shortcut:`, with broker SASL/SCRAM or mTLS in `docs/production-path.md`), `Zitadel:Issuer`, `Zitadel:MetadataAddress`, `Zitadel:ProjectId`, `Zitadel:WebApp:ClientId`, `Zitadel:WebApp:ClientSecret`, `Authentication:SessionCookie:Name`, `Authentication:AntiforgeryCookie:Name`, `Authentication:CorrelationCookie:Name`, `Authentication:NonceCookie:Name`, `Authentication:Cookie:SecurePolicy`, `Operations:AllowedClients` (an array of subs, written only by `provision.sh`; no `appsettings*.json` holds an `Operations` section, because the binder merges arrays by index across providers), `Linking:OtpHmacKey`, `Linking:QueueCapacity`, `Linking:Budget`, `Linking:RateLimits:*`, `ForwardedHeaders:TrustedNetwork`, `ForwardedHeaders:AllowedHosts`, `CoreBanking:BaseUrl`, `Seed:Enabled`, `Scalar:Enabled`, `DataProtection:SsmParameterPath` (unset: the key ring in Postgres; set: in SSM Parameter Store, AD-7), `DataProtection:KmsKeyId` (the KMS key that encrypts the key ring, required when the path is set).
+  - **Keys.** `Kafka:BootstrapServers` (`localhost:19092` for a host-run process, `redpanda:9092` in Compose; plaintext on the private network in v1, a `// shortcut:`, with broker SASL/SCRAM or mTLS in `docs/production-path.md`), `Zitadel:Issuer`, `Zitadel:MetadataAddress`, `Zitadel:ProjectId`, `Zitadel:WebApp:ClientId`, `Zitadel:WebApp:ClientSecret`, `Authentication:SessionCookie:Name`, `Authentication:AntiforgeryCookie:Name`, `Authentication:CorrelationCookie:Name`, `Authentication:NonceCookie:Name`, `Authentication:Cookie:SecurePolicy`, `Operations:AllowedClients` (an array of subs, written only by `provision.sh`; no `appsettings*.json` holds an `Operations` section, because the binder merges arrays by index across providers), `Linking:OtpHmacKey`, `Linking:QueueCapacity`, `Linking:Budget`, `Linking:RateLimits:*`, `ForwardedHeaders:TrustedNetwork`, `ForwardedHeaders:AllowedHosts`, `CoreBanking:BaseUrl`, `Seed:Enabled`, `Scalar:Enabled`, `DataProtection:SsmParameterPath` (unset: the key ring in Postgres; set: in SSM Parameter Store, AD-7), `DataProtection:KmsKeyId` (the KMS key that encrypts the key ring, required when the path is set).
   - **Files.** `docker-compose.yml` keeps its dev-only defaults. `infra/deploy/aws/compose.yml` (ad-011) uses `${VAR:?}` with no inline defaults, and `.env` is written from SSM SecureStrings at deploy.
   - **Secrets.** The OTP HMAC key, database passwords, the Zitadel master key, the Mailpit basic-auth credentials and the origin-verify header value.
   - **Feature switches.** Scalar and the seeder are on in the AWS demo.
@@ -431,21 +434,24 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 ### AD-27 - Compose platform and runtime units [ADOPTED]
 
 - **Binds:** R26, R37
-- **Prevents:** stories adding containers; a second public entry point
-- **Rule:** The runtime units are fixed: gateway (nginx, the only public entry), api, worker, postgres, redpanda, zitadel, mailpit, aspire-dashboard and `core-banking` (AD-21). The SPA is built by `frontend/Dockerfile` as a build-only `spa` service under the Compose profile `build`, never started, and copied into the gateway image through a named build context (ad-011). Images are multi-stage, non-root, and pinned by tag and digest.
+- **Prevents:** stories adding containers; a second public entry point; local and AWS drifting apart
+- **Rule:** The runtime units are fixed. Locally: gateway (nginx, the only public entry), api (which also runs the relay and the sweep, `Worker:InProcess=true`), postgres, redpanda, zitadel, mailpit, aspire-dashboard and `core-banking` (AD-21). In AWS the same units, except that RDS replaces postgres, the otel collector replaces aspire-dashboard (AD-29), and a separate worker runs the relay and the sweep; a test pins that the two environments differ only in these units. The SPA is built by `frontend/Dockerfile` as a build-only `spa` service under the Compose profile `build`, never started, and copied into the gateway image through a named build context (ad-011). Images are multi-stage, non-root, and pinned by tag and digest.
 - **Details:**
   - postgres holds the databases `disputedesk` and `zitadel` and the role `qa_readonly`.
-  - The worker has a heartbeat health check (AD-25) and `depends_on: api (healthy)`.
+  - The relay's host creates `disputedesk.disputes` with 3 partitions at start-up through the Kafka AdminClient (`CreateTopicsAsync`; an existing topic counts as success), registered with the relay by `AddOutboxRelayAndSlaSweep` (`Infrastructure/DependencyInjection.cs`, the one registration both hosts call), so the topic exists before the first event. The broker sets no topic auto-creation flag.
+  - zitadel runs the `disputedesk-zitadel` image: Zitadel's own binary plus the provisioning scripts and their tools, run as Zitadel's non-root user. Its `post_start` hook runs `provision.sh` (AD-6); the script removes the provisioned marker first and writes it only on success, the health check requires the marker, and the api has `depends_on: zitadel (healthy)`.
+  - aspire-dashboard is the plain pinned image; the services that use it depend on it starting, not on a health check.
+  - In AWS the worker has the heartbeat health check (AD-25) and `depends_on: api (healthy)`.
   - One opt-in exception: `redpanda-console` under the Compose profile `console`, local only, off by default, never started in AWS, published only on `127.0.0.1` (ad-010).
-- **Rejected:** a separate SPA container; Kubernetes locally.
+- **Rejected:** a separate SPA container; Kubernetes locally; a one-shot provisioning container (a second container holding Zitadel's administrator token); a one-shot topic-creation container (the relay's host already connects to the broker).
 
 ### AD-28 - AWS dev environment [ADOPTED]
 
 - **Binds:** R38
 - **Prevents:** a deployment shape that differs from local; long-lived keys; a stack that doesn't fit the instance; a wrong public host
-- **Rule:** One EC2 instance runs the same Compose stack plus `infra/deploy/aws/compose.yml`, with RDS PostgreSQL in place of the postgres container and three CloudFront distributions in front, all defined in Terraform under `infra/terraform/`. After `publish` on `main`, CI's `deploy` job calls the reusable `deploy.yml` with the five published digests when the repository variable `DEPLOY_ENABLED` is `true`; `deploy.yml` is also dispatched by hand for rollback. Its job runs in the GitHub environment `dev`, which only `main` may use, assumes a GitHub OIDC deploy role that trusts the subject `environment:dev`, and runs the instance's deploy script through SSM Run Command, so there are no long-lived keys. Until the new free-plan account exists, the code is checked only with `terraform fmt -check`, `terraform validate` and `terraform test` plans against mocked providers, and no AWS command is run. AWS-only mechanisms stay as built until an apply is possible: no new ones are added before then, except the deploy after `publish` and the `environment:dev` trust (ad-012), whose live role assumption is proved only by the first deploy; the mocked Terraform tests pin the new subject.
+- **Rule:** One EC2 instance runs the same Compose stack plus `infra/deploy/aws/compose.yml`, with RDS PostgreSQL in place of the postgres container, the worker as its own unit (AD-27) and three CloudFront distributions in front, all defined in Terraform under `infra/terraform/`. After `publish` on `main`, CI's `deploy` job calls the reusable `deploy.yml` with the five published digests when the repository variable `DEPLOY_ENABLED` is `true`; `deploy.yml` is also dispatched by hand for rollback. Its job runs in the GitHub environment `dev`, which only `main` may use, assumes a GitHub OIDC deploy role that trusts the subject `environment:dev`, and runs the instance's deploy script through SSM Run Command, so there are no long-lived keys. Until the new free-plan account exists, the code is checked only with `terraform fmt -check`, `terraform validate` and `terraform test` plans against mocked providers, and no AWS command is run. AWS-only mechanisms stay as built until an apply is possible: no new ones are added before then, except the deploy after `publish` and the `environment:dev` trust (ad-012), whose live role assumption is proved only by the first deploy; the mocked Terraform tests pin the new subject.
 - **Details:**
-  - **Terraform.** Modules (`network`, `compute`, `database`, `edge`, `deploy-role`, `observability`, `budget`) and one root, `envs/dev`. Each module is called once today; the seven stay so a second environment can reuse them (decided 2026-11-03, D8). Each IAM policy document is a `<name>.json.tftpl` file beside its module's `main.tf`, rendered with `templatefile()`, and the infra test project reads every `Action` and condition key from those files with `System.Text.Json` and checks them against AWS's service reference (D9; human decision 2026-11-04). The deploy role's OIDC subject is pinned by `tests/deploy_role.tftest.hcl` and confirmed by a one-time check recorded in `infra/terraform/README.md`, not by a CI job. The S3 backend uses `use_lockfile = true`; a separate `bootstrap` root creates the state bucket.
+  - **Terraform.** Modules (`network`, `compute`, `database`, `edge`, `deploy-role`, `observability`, `budget`) and one root, `envs/dev`. Each module is called once today; the seven stay so a second environment can reuse them (decided 2026-11-03). Each IAM policy document is a `<name>.json.tftpl` file beside its module's `main.tf`, rendered with `templatefile()`, and the infra test project reads every `Action` and condition key from those files with `System.Text.Json` and checks them against AWS's service reference (human decision 2026-11-04). The deploy role's OIDC subject is pinned by `tests/deploy_role.tftest.hcl` and confirmed by a one-time check recorded in `infra/terraform/README.md`, not by a CI job. The S3 backend uses `use_lockfile = true`; a separate `bootstrap` root creates the state bucket.
   - **Compute.** One EC2 c7i-flex.large (AL2023, Elastic IP, IMDSv2 hop limit 2, SSM Session Manager, no SSH, 2 GiB swap). Only the `api` and `otel-collector` containers may reach the instance metadata service: the override pins their addresses on a fixed Compose subnet, and the deploy script inserts a `DOCKER-USER` iptables rule that drops traffic to 169.254.169.254 from every other container, the Amazon ECS Developer Guide's method for blocking container access to instance metadata; a test asserts the rule. The override's memory limits total about 3.4 GiB, with Redpanda at `--memory=512M` [ASSUMPTION: the AWS story measures it].
   - **Database.** RDS PostgreSQL db.t4g.micro, single AZ and private, holds both databases. Roles come from a one-shot init that applies `infra/images/postgres` against RDS [ASSUMPTION]. Npgsql and Zitadel connect with `sslmode=verify-full` and the RDS CA bundle. Backups are kept 1 day, and `skip_final_snapshot = true`.
   - **Edge.** Three CloudFront distributions, app, auth and mail (Mailpit), use `CachingDisabled` and forward Host, cookies and query strings to nginx on port 80. Terraform outputs their domains to SSM, and from there into `.env` (gateway hosts, Zitadel `ExternalDomain`, `APP_ORIGINS`). The security group admits only the CloudFront origin-facing prefix list, and nginx rejects requests without the secret origin header. CloudFront reaches the origin over plain HTTP for the free-plan demo, which holds only synthetic data; it is a `# shortcut:` in Terraform, and an HTTPS or VPC origin, a domain, an ACM certificate with a TLS 1.2 minimum viewer protocol, and WAF are a `docs/production-path.md` item, as are the default CloudFront certificate's TLS 1.0 minimum and the absence of WAF. In AWS, containers reach the identity origin at its public HTTPS URL through CloudFront, not through a network alias, and the CloudFront origin-facing ranges reach nginx's `set_real_ip_from` as a file the deploy script writes from AWS's `ip-ranges.json`.
@@ -496,7 +502,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 
 - **Binds:** R33, R34, R35
 - **Prevents:** each story bolting its own job onto CI; unclear images in GHCR
-- **Rule:** `ci.yml` jobs: `backend` (P0-4, plus the migrations drift check), `frontend` (`tsc --noEmit`, ESLint, Prettier, Vitest, Orval regeneration drift), `platform` (Compose validation), and `e2e` (Compose up, Playwright journeys with an axe scan, ZAP baseline). `security.yml` (P0-4) stays. Every check job runs on every pull request and every `main` push, with no docs-only skip. Two gate jobs report the result: `ci-passed` in `ci.yml` and `security-passed` in `security.yml` each need every check job of their workflow, run with `if: always()` and fail unless each succeeded, so a later job left out of a gate's `needs` fails a `floor-guard` step. The pinned Compose and Trivy installs are the local composite actions under `.github/actions/` (ad-012). On main a `publish` job, the only one with `packages: write`, pushes `api`, `worker`, `gateway` (with the SPA), `core-banking` and `provision` to GHCR, tagged `sha-` plus the first 12 characters of the commit SHA, and the deploy references digests. `deploy.yml` only consumes the published images by digest: CI's `deploy` job calls it with `publish`'s five digests, and it is dispatched by hand for rollback. A ruleset on `main` (`.github/rulesets/main.json`) requires a pull request, the `ci-passed` and `security-passed` checks on an up-to-date branch and CodeQL's code-scanning results, and blocks force pushes and deletion; the repository allows squash merging only, with auto-merge and branch deletion on merge (ad-012 clause 2). A pull request's checks test GitHub's merge of the up-to-date branch, and `main`'s own run builds, scans and publishes the squash commit (ad-012 clause 6).
+- **Rule:** `ci.yml` jobs: `backend` (P0-4, plus the migrations drift check), `frontend` (`tsc --noEmit`, ESLint, Prettier, Vitest, Orval regeneration drift), `platform` (Compose validation), and `e2e` (Compose up, Playwright journeys with an axe scan, ZAP baseline). `security.yml` (P0-4) stays. Every check job runs on every pull request and every `main` push, with no docs-only skip. Two gate jobs report the result: `ci-passed` in `ci.yml` and `security-passed` in `security.yml` each need every check job of their workflow, run with `if: always()` and fail unless each succeeded, so a later job left out of a gate's `needs` fails a `floor-guard` step. The pinned Compose and Trivy installs are the local composite actions under `.github/actions/` (ad-012). On main a `publish` job, the only one with `packages: write`, pushes `api`, `worker`, `gateway` (with the SPA), `core-banking` and `zitadel` to GHCR, tagged `sha-` plus the first 12 characters of the commit SHA, and the deploy references digests. `deploy.yml` only consumes the published images by digest: CI's `deploy` job calls it with `publish`'s five digests, and it is dispatched by hand for rollback. A ruleset on `main` (`.github/rulesets/main.json`) requires a pull request, the `ci-passed` and `security-passed` checks on an up-to-date branch and CodeQL's code-scanning results, and blocks force pushes and deletion; the repository allows squash merging only, with auto-merge and branch deletion on merge (ad-012 clause 2). A pull request's checks test GitHub's merge of the up-to-date branch, and `main`'s own run builds, scans and publishes the squash commit (ad-012 clause 6).
 - **Rejected:** a separate CI system; `latest` tags.
 
 ## Consistency Conventions
@@ -531,7 +537,7 @@ Only these arrows are allowed. Api and Worker reach Contracts transitively. The 
 | xunit.v3 / Testcontainers.PostgreSql | 4.0.2 / 4.16.0 |
 | PostgreSQL (container) | 18.6 |
 | Redpanda / Redpanda Console | v26.2.6 / v3.13.1 (Console under the opt-in `console` profile, AD-27) |
-| Zitadel / Zitadel Login | v4.20.0 |
+| Zitadel | v4.20.0 |
 | nginx (`nginxinc/nginx-unprivileged`) | 1.31.7 (1.31.8 has no unprivileged build yet and no security fixes) |
 | Mailpit | v1.32.0 |
 | Node | 24.22.1 (`.nvmrc`) |
@@ -551,21 +557,17 @@ Versions were checked against nuget.org, npm and the HashiCorp registry on 2026-
 flowchart LR
   B[Browser SPA] -->|localhost:8080 and auth.localhost:8080| GW[gateway nginx]
   GW -->|static SPA| SPA[SPA files]
-  GW -->|/api/*| API[api: browser sessions and REST]
+  GW -->|/api/*| API[api: browser sessions, REST, relay and SLA sweep]
   GW -->|/otlp/*| ASP[aspire-dashboard]
-  GW -->|auth host| ZL[zitadel]
-  GW -->|auth host| Z[zitadel]
+  GW -->|auth host| Z[zitadel, provisioned by its post_start hook]
   API -->|OIDC back channel via gateway alias| GW
   API --> PG[(postgres)]
   API -->|core banking and SIM-swap| CB[core-banking stub]
   API -->|SMTP| MP[mailpit]
+  API -->|disputedesk.disputes| RP[redpanda]
   Z --> PG
   Z -->|SMTP| MP
-  WK[worker: relay and SLA sweep] --> PG
-  WK -->|disputedesk.disputes| RP[redpanda]
   API -->|OTLP| ASP
-  WK -->|OTLP| ASP
-  PR[provision one-shot] --> Z
 ```
 
 ### Deployment view: AWS dev
@@ -574,7 +576,6 @@ flowchart LR
 flowchart LR
   subgraph EC2[EC2 c7i-flex.large: Compose plus aws override]
     GW[nginx] --> API[api]
-    GW --> ZL[zitadel]
     GW --> Z[zitadel]
     GW -->|/otlp/| COL[otel collector contrib]
     WK[worker] --> RP[redpanda]
@@ -605,7 +606,7 @@ sequenceDiagram
   participant A as Api
   participant C as core-banking stub
   participant P as Postgres
-  participant W as Worker relay
+  participant W as relay (Api locally, Worker in AWS)
   participant K as Redpanda
   B->>G: POST /api/v1/disputes with cookie, X-XSRF-TOKEN, Idempotency-Key, traceparent
   G->>A: same headers plus X-Forwarded-For, -Proto, -Host
@@ -741,7 +742,7 @@ erDiagram
 
 | Group | Scheme and policy | Routes |
 | --- | --- | --- |
-| API | cookie; anonymous allowed | `GET /api/v1/authentication/login`, `POST /api/v1/authentication/logout`, `GET /api/v1/authentication/session`, `GET /api/v1/antiforgery`; callbacks `/api/signin-oidc`, `/api/signout-callback-oidc` |
+| Authentication | cookie; anonymous allowed | `GET /api/v1/authentication/login`, `POST /api/v1/authentication/logout`, `GET /api/v1/authentication/session`, `GET /api/v1/antiforgery`; callbacks `/api/signin-oidc`, `/api/signout-callback-oidc` |
 | Linking | cookie, `Unlinked`, rate limited | `POST /api/v1/linking/start` (202), `POST /api/v1/linking/verify` |
 | Customer | cookie, `Linked` | `GET /api/v1/transactions`, `POST /api/v1/disputes` (Idempotency-Key, 201), `GET /api/v1/disputes`, `GET /api/v1/disputes/<disputeId>`, `POST /api/v1/disputes/<disputeId>/withdraw` |
 | Operations | bearer, one role each | `GET /api/v1/operations/disputes/<disputeId>` (`dispute.read`), `POST .../start-review`, `.../escalate`, `.../resolve` |
@@ -767,14 +768,14 @@ The repository uses one top-level folder per stack (`backend/`, `frontend/`, `e2
 
 | Quality area | Where it lives | Governed by |
 | --- | --- | --- |
-| Architecture and scalability | Six projects and two hosts; a stateless Api (sessions and keys in Postgres); a second Worker would be harmless | AD-1, AD-2, AD-7, AD-17, AD-18, AD-27 |
+| Architecture and scalability | Six projects and two hosts (one process locally, two in AWS); a stateless Api (sessions and keys in Postgres); a second relay or sweep would be harmless | AD-1, AD-2, AD-7, AD-17, AD-18, AD-27 |
 | Resilience and operational readiness | Tuned resilience handler on the stub, the outbox through Kafka downtime, heartbeats, graceful shutdown, deploy rollback | AD-17, AD-21, AD-25, AD-28 |
 | Data and domain modelling | `Dispute` aggregate, stored events loaded by replay with a read model, one commit path, uniqueness and concurrency, one clock read, schema | AD-4, AD-13, AD-14, AD-15, AD-22, ad-009 |
 | API design | `/api/v1`, action endpoints, keyset paging, ProblemDetails, committed OpenAPI, idempotent raise | AD-3, AD-5, AD-8, AD-16 |
-| Security (primary) | API, scheme pinning, roles, authorisation states, ownership filter, linking without disclosure, trusted proxies, cookies, audit | AD-6 to AD-12, AD-14a, AD-23, AD-24, AD-26 |
+| Security (primary) | Browser sessions, scheme pinning, roles, authorisation states, ownership filter, linking without disclosure, trusted proxies, cookies, audit | AD-6 to AD-12, AD-14a, AD-23, AD-24, AD-26 |
 | Code quality | Layer tests, analysers, glossary terms, no banned libraries | AD-1, AD-3, AD-32, conventions |
 | Testing (important) | Domain unit tests, Testcontainers integration tests, OpenAPI and event contract tests, Playwright and ZAP on the stack | AD-13, AD-19, AD-32, conventions |
-| Observability | One trace from browser to Worker, named business metrics, Aspire and CloudWatch | AD-20, AD-29 |
+| Observability | One trace from browser to the relay, named business metrics, Aspire and CloudWatch | AD-20, AD-29 |
 | Infrastructure and DevOps | Zero-click Compose, CI and GHCR, the Terraform dev environment, OIDC deploy | AD-26, AD-27, AD-28, AD-32 |
 | Documentation | This spine and its [amendment history](spine-amendments.md), plus the decision records in `docs/decisions/`: ad-001 to ad-003 and ad-005 to ad-011 (Zitadel, `IAppDbContext`, Result types, QA data integrity, actor-agnostic actions, browser session, linking, stored events, Redpanda, team folders); the delivery-process record ad-004 (model roles) is in `docs/process/` | all |
 

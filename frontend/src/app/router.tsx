@@ -162,9 +162,9 @@ const raiseReviewRoute = createRoute({
   component: ReviewScreen,
 });
 
-// The SPA applies no redirect rule of its own: the API accepts only a local URL of at most 2048 characters (IsLocalUrl,
+// The SPA applies no redirect rule of its own: the Api accepts only a local URL of at most 2048 characters (IsLocalUrl,
 // AD-7; OWASP, Unvalidated Redirects and Forwards). The SPA passes on a string of 1 to 2048 characters, and drops a
-// longer one because the API would answer it with 400 instead of showing the plain sign-in link.
+// longer one because the Api would answer it with 400 instead of showing the plain sign-in link.
 const maxReturnUrlLength = 2048;
 function returnUrlOrUndefined(value: unknown): string | undefined {
   if (typeof value !== 'string' || value.length === 0 || value.length > maxReturnUrlLength) {

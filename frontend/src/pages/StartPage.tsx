@@ -1,7 +1,7 @@
 import { usePageHeading } from '@/app/usePageHeading';
 import { Button } from '@/components/ui/button';
 
-// Sign-in and sign-up are hosted by the identity provider: the SPA only navigates to the API (AD-7). The API has one
+// Sign-in and sign-up are hosted by the identity provider: the SPA only navigates to the Api (AD-7). The Api has one
 // entry point, and the hosted page offers "create a login".
 const signInUrl = '/api/v1/authentication/login';
 

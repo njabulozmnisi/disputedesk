@@ -21,7 +21,7 @@ const rows = <T>(sql: string): T[] => JSON.parse(queryDatabase(`select coalesce(
 const evidence = (line: string) => console.log(`EVIDENCE ${line}`);
 
 /** The hosted (Zitadel) pages are scanned and recorded, never failed on: DisputeDesk only themes them (AD-6, story 2.6). */
-async function recordHostedAxe(page: Page, stage: 'register' | 'password' | 'verify') {
+async function recordHostedAxe(page: Page, stage: 'register' | 'verify') {
   const result = await new AxeBuilder({ page }).withTags(axeTags).analyze();
   const found = result.violations.map((violation) => `${violation.id} (${violation.impact}, ${violation.nodes.length} nodes)`);
   evidence(`hosted ${stage} page axe: ${found.length === 0 ? 'no violations' : found.join('; ')}`);
@@ -172,8 +172,8 @@ test('UJ-1: sign up, link to D, raise on TXN-D-0030, sign out, traced to the dat
   page.on('request', (request) => request.isNavigationRequest() && request.url().includes('/api/signin-oidc') && silentSignIn.push(request.url()));
   await page.goto('/api/v1/authentication/login');
   const account = page.getByRole('button', { name: new RegExp(login.email) });
-  const usernameField = page.getByTestId('username-text-input');
-  const passwordField = page.getByTestId('password-text-input');
+  const usernameField = page.locator('#loginName');
+  const passwordField = page.locator('#password');
   await expect(account.or(usernameField).or(passwordField)).toBeVisible();
   if (await account.isVisible()) await account.click();
   if (await usernameField.isVisible()) {
@@ -181,7 +181,7 @@ test('UJ-1: sign up, link to D, raise on TXN-D-0030, sign out, traced to the dat
     await usernameField.press('Enter');
   }
   await expect(passwordField).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe('/ui/login/password');
+  expect(new URL(page.url()).pathname).toMatch(/^\/ui\/login\//);
   expect(silentSignIn).toEqual([]);
   await login.context.close();
 });

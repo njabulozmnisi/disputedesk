@@ -37,18 +37,16 @@ public class SourceRulesTests
     }
 
     /// <summary>
-    /// Story 5.3 AC8, AD-14a: only the SLA sweep (<c>Worker/Sla/</c>) and the seeder (<c>Infrastructure/Seeding/</c>) name
-    /// <c>ActorType.Automation</c>, so no HTTP path can record an automation actor. The wire mapping in
-    /// <c>DisputeWire.cs</c> only translates a recorded actor type for the outbox and the operations read.
+    /// Story 5.3 AC8, AD-14a: only the SLA sweep (<c>Infrastructure/Sla/SlaSweep.cs</c>) and the seeder (<c>Infrastructure/Seeding/</c>) name
+    /// <c>ActorType.Automation</c>, so no HTTP path can record an automation actor.
     /// </summary>
     [Fact]
-    public void ProductionSource_AutomationActorType_AppearsOnlyInTheSweepTheSeederAndTheWireMapping()
+    public void ProductionSource_AutomationActorType_AppearsOnlyInTheSweepAndTheSeeder()
     {
         string[] allowed =
         [
-            Path.Combine("DisputeDesk.Worker", "Sla") + Path.DirectorySeparatorChar,
+            Path.Combine("DisputeDesk.Infrastructure", "Sla", "SlaSweep.cs"),
             Path.Combine("DisputeDesk.Infrastructure", "Seeding") + Path.DirectorySeparatorChar,
-            Path.Combine("DisputeDesk.Application", "Disputes", "DisputeWire.cs"),
         ];
         var violations = ProductionSourceFiles()
             .Where(file => !allowed.Any(path => Path.GetRelativePath(SourceRoot, file).StartsWith(path, StringComparison.Ordinal)))
@@ -56,14 +54,14 @@ public class SourceRulesTests
             .Select(node => SourceTrees.Describe(node.GetLocation()))
             .ToList();
 
-        Assert.True(violations.Count == 0, "ActorType.Automation outside Worker/Sla/, the seeder and the wire mapping:\n" + string.Join('\n', violations));
+        Assert.True(violations.Count == 0, "ActorType.Automation outside the sweep and the seeder:\n" + string.Join('\n', violations));
     }
 
     [Fact]
     public void ProductionSource_AutomationActorType_IsFoundInTheSweep()
     {
         // Proves the scan reads the file the rule exempts, so an empty violation list is not a scan that found nothing.
-        Assert.NotEmpty(AutomationActorTypes(Path.Combine(SourceRoot, "DisputeDesk.Worker", "Sla", "SlaSweep.cs")));
+        Assert.NotEmpty(AutomationActorTypes(Path.Combine(SourceRoot, "DisputeDesk.Infrastructure", "Sla", "SlaSweep.cs")));
     }
 
     /// <summary>
@@ -76,8 +74,9 @@ public class SourceRulesTests
     {
         var violations = new[] { SourceRoots.Src, SourceRoots.Tests, SourceRoots.Stubs }
             .SelectMany(root => Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
-            .Where(file => !SourceRoots.IsBuildOutput(file) && file != RaiseDisputeRequestFile)
+            .Where(file => !SourceRoots.IsBuildOutput(file))
             .SelectMany(QualifiedEnumsIdenticalOnTheWire)
+            .Where(node => node.SyntaxTree.FilePath != RaiseDisputeRequestFile || node.ToString() != QualifiedReason)
             .Select(node => SourceTrees.Describe(node.GetLocation()))
             .ToList();
 
@@ -88,8 +87,25 @@ public class SourceRulesTests
     public void BackendSource_EnumIdenticalOnTheWire_QualifiedIsFoundInRaiseDisputeRequest()
     {
         // Proves the scan finds the one qualified name the rule exempts, so an empty violation list is not a scan that found nothing.
-        Assert.NotEmpty(QualifiedEnumsIdenticalOnTheWire(RaiseDisputeRequestFile));
+        Assert.Equal([QualifiedReason], QualifiedEnumsIdenticalOnTheWire(RaiseDisputeRequestFile).Select(node => node.ToString()));
     }
+
+    /// <summary>The rules read what the parser understood, so a file it cannot read would pass every rule unseen.</summary>
+    [Fact]
+    public void BackendSource_EveryFile_ParsesWithNoSyntaxError()
+    {
+        var violations = new[] { SourceRoots.Src, SourceRoots.Tests, SourceRoots.Stubs }
+            .SelectMany(root => Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+            .Where(file => !SourceRoots.IsBuildOutput(file))
+            .SelectMany(file => SourceTrees.Root(file).SyntaxTree.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Select(diagnostic => diagnostic.ToString())
+            .ToList();
+
+        Assert.True(violations.Count == 0, "Syntax errors:\n" + string.Join('\n', violations));
+    }
+
+    private const string QualifiedReason = "Domain.Disputes.Reason";
 
     private static readonly string[] EnumsIdenticalOnTheWire =
     [

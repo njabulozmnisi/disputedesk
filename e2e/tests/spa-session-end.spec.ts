@@ -1,4 +1,4 @@
-import { expect, request as playwrightRequest, test, type BrowserContext, type Page } from '@playwright/test';
+import { errors, expect, request as playwrightRequest, test, type BrowserContext, type Page } from '@playwright/test';
 import { origin, sessionCookieName, signInContext } from './support';
 
 // Every session ends in the browser by a document navigation
@@ -175,7 +175,7 @@ test('a page restored from the back/forward cache reloads; a pageshow that is no
   await page.goto('/transactions');
   await expect(page.locator('li')).toHaveCount(20);
   const marker = () => page.evaluate(() => (window as unknown as { qaMarker?: string }).qaMarker ?? null);
-  const noReload = expect(page.waitForEvent('load', { timeout: 1000 })).rejects.toThrow('Timeout');
+  const noReload = expect(page.waitForEvent('load', { timeout: 1000 })).rejects.toThrow(errors.TimeoutError);
   await page.evaluate(() => {
     (window as unknown as { qaMarker?: string }).qaMarker = 'before';
     window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }));
@@ -205,7 +205,7 @@ test('direct loads of an unknown path and of /signed-out?reason=expired while si
       await page.waitForLoadState('networkidle');
       expect(requests.filter((request) => request.split(' ')[1].startsWith('/api/')), `${path}: API requests`).toEqual([]);
     }
-    await expect(page.waitForFunction(() => document.activeElement !== document.body, undefined, { timeout: 500 }), `${path}: focus left alone on load`).rejects.toThrow('Timeout');
+    await expect(page.waitForFunction(() => document.activeElement !== document.body, undefined, { timeout: 500 }), `${path}: focus left alone on load`).rejects.toThrow(errors.TimeoutError);
     expect(await page.evaluate(() => document.activeElement === document.body), `${path}: focus left alone on load`).toBe(true);
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Skip to main content' }), path).toBeFocused();

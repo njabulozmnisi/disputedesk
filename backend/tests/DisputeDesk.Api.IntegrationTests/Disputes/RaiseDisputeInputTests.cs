@@ -155,12 +155,12 @@ public sealed class RaiseDisputeInputTests(PostgresFixture postgres, RaiseDisput
         await using ApiFactory factory = await TransactionsApi.StartAsync(postgres, coreBanking);
         using HttpClient browser = await factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
 
-        JsonElement created = await browser.RaiseCreatedAsync(Body(reason: "wrongAmount", expectedAmount: "80.00"));
+        JsonElement created = await browser.RaiseCreatedAsync(BodyWithReason("\"wrongAmount\""));
 
         Assert.Equal("wrongAmount", created.GetProperty("reason").GetString());
     }
 
-    // D5 (AD-5): the shared converter factory reads an enum only from its exact camelCase name, so another casing, a
+    // AD-5: the shared converter factory reads an enum only from its exact camelCase name, so another casing, a
     // number or a list of names fails to bind like an unknown name.
     [Theory]
     [InlineData("\"WrongAmount\"")]
@@ -170,16 +170,26 @@ public sealed class RaiseDisputeInputTests(PostgresFixture postgres, RaiseDisput
     public async Task Raise_ReasonNotItsExactCamelCaseName_Returns400(string reason)
     {
         int coreBankingRequests = CoreBanking.RequestCount;
-        string json = $$"""{"accountRef":"{{DisputesApi.AccountA}}","transactionId":"{{DisputesApi.Disputable}}","reason":{{reason}},"expectedAmount":"80.00","note":"{{Marker}}"}""";
 
-        HttpResponseMessage response = await Browser.RaiseAsync(json);
+        HttpResponseMessage response = await Browser.RaiseAsync(BodyWithReason(reason));
 
         await response.AssertValidationProblemWithNoFieldAsync();
-        Assert.DoesNotContain(Marker, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        string body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.DoesNotContain(Marker, body, StringComparison.Ordinal);
+        // Only a string reason: the number 1 is a short literal that the random traceId can hold by chance.
+        if (reason.StartsWith('"'))
+        {
+            Assert.DoesNotContain(reason.Trim('"'), body, StringComparison.Ordinal);
+        }
+
         Assert.Equal(coreBankingRequests, CoreBanking.RequestCount);
         Assert.Equal(RowCounts.None, await Factory.CountRowsAsync());
         Assert.Empty(await Factory.KeyRowsAsync());
     }
+
+    /// <summary>A body with <paramref name="reason"/> written as raw JSON, so it can be a value <c>Body</c> could not send.</summary>
+    private static string BodyWithReason(string reason) =>
+        $$"""{"accountRef":"{{DisputesApi.AccountA}}","transactionId":"{{DisputesApi.Disputable}}","reason":{{reason}},"expectedAmount":"80.00","note":"{{Marker}}"}""";
 
     [Fact]
     public async Task Raise_SeveralBrokenFields_Returns400NamingEach()

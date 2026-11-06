@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace DisputeDesk.Contracts.Json;
 
 /// <summary>
-/// The one enum rule of the wire contract (AD-5, D5): writes a member's camelCase name, and reads an enum only from
+/// The one enum rule of the wire contract (AD-5): writes a member's camelCase name, and reads an enum only from
 /// exactly that name (<c>upheld</c>, never <c>Upheld</c>). The built-in <see cref="JsonStringEnumConverter"/> reads names
 /// ignoring case and has no option to stop it (Microsoft Learn, <i>JsonStringEnumConverter</i>: "Reading is case
 /// insensitive"), so this is a custom converter (Microsoft Learn, <i>How to write custom converters</i>). A number, a list

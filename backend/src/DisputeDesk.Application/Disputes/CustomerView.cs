@@ -65,6 +65,4 @@ public static class CustomerView
         dispute.Description,
         DisputeWire.ToMoney(dispute.TransactionAmount, dispute.Currency),
         dispute.MaskedCard);
-
-    // AD-4: exactly two decimals, as a string.
 }

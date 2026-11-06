@@ -4,11 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '@/test/server';
 import { failWith, serveAntiforgeryToken, serveTransactions } from '@/test/support';
 
-import {
-  getSession,
-  getApiV1Transactions,
-  logout,
-} from './generated/disputedesk';
+import { getSession, listTransactions, logout } from './generated/disputedesk';
 import { ApiError, onApiResponse } from './mutator';
 
 // Criterion 1: every API call goes through the one mutator.
@@ -74,7 +70,7 @@ describe('the Orval mutator', () => {
   it('throws an ApiError carrying the status and the problem body for a non-2xx response', async () => {
     failWith('/api/v1/transactions', 'core-banking-unavailable', 503);
 
-    const error = await getApiV1Transactions().catch((caught: unknown) => caught);
+    const error = await listTransactions().catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 503, problem: { traceId: 'trace-1' } });
@@ -88,7 +84,7 @@ describe('the Orval mutator', () => {
       ),
     );
 
-    const error = await getApiV1Transactions().catch((caught: unknown) => caught);
+    const error = await listTransactions().catch((caught: unknown) => caught);
 
     expect(error).toMatchObject({ status: 502, problem: undefined });
   });
@@ -100,16 +96,18 @@ describe('the Orval mutator', () => {
         () => new HttpResponse(null, { status: 429, headers: { 'Retry-After': '900' } }),
       ),
     );
-    const withHeader = await getApiV1Transactions().catch((caught: unknown) => caught);
+    const withHeader = await listTransactions().catch((caught: unknown) => caught);
     failWith('/api/v1/transactions', 'core-banking-unavailable', 503);
-    const without = await getApiV1Transactions().catch((caught: unknown) => caught);
+    const without = await listTransactions().catch((caught: unknown) => caught);
 
     expect(withHeader).toMatchObject({ status: 429, retryAfter: '900' });
     expect(without).toMatchObject({ status: 503, retryAfter: null });
   });
 
   it('answers a session request that has no JSON body without throwing', async () => {
-    server.use(http.get('*/api/v1/authentication/session', () => new HttpResponse(null, { status: 200 })));
+    server.use(
+      http.get('*/api/v1/authentication/session', () => new HttpResponse(null, { status: 200 })),
+    );
 
     await expect(getSession()).resolves.toBeUndefined();
   });
@@ -118,11 +116,11 @@ describe('the Orval mutator', () => {
     const statuses: number[] = [];
     const stopListening = onApiResponse((status) => statuses.push(status));
     serveTransactions();
-    await getApiV1Transactions();
+    await listTransactions();
     failWith('/api/v1/transactions', 'core-banking-unavailable', 503);
-    await getApiV1Transactions().catch(() => undefined);
+    await listTransactions().catch(() => undefined);
     stopListening();
-    await getApiV1Transactions().catch(() => undefined);
+    await listTransactions().catch(() => undefined);
 
     expect(statuses).toEqual([200, 503]);
   });
@@ -135,7 +133,9 @@ describe('the Orval mutator', () => {
       traceparents[`${request.method} ${new URL(request.url).pathname}`] =
         request.headers.get('traceparent');
     });
-    server.use(http.post('*/api/v1/authentication/logout', () => new HttpResponse(null, { status: 200 })));
+    server.use(
+      http.post('*/api/v1/authentication/logout', () => new HttpResponse(null, { status: 200 })),
+    );
     const span = trace.getTracer('test').startSpan('caller');
 
     await context.with(trace.setSpan(context.active(), span), () => logout());

@@ -29,7 +29,7 @@ public class OperationsCredentialTests(PostgresFixture postgres, TransactionsStu
 
     [Theory]
     [InlineData("/api/v1/disputes/{0}")]                  // a customer route (Linked, cookie only)
-    [InlineData("/api/v1/antiforgery")]               // the default policy
+    [InlineData("/api/v1/antiforgery")]                   // the default policy
     [InlineData("/api/v1/operations/disputes/{0}/notes")] // no endpoint under the operations prefix: the fallback policy
     [InlineData("/api/v1/operations/unknown")]
     public async Task CookieRoute_ValidOperationsTokenOnly_Returns401WithoutAChallengeHeader(string pathFormat)

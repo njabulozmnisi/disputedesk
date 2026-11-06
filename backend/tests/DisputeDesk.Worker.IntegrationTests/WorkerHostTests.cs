@@ -1,6 +1,6 @@
 using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Infrastructure.Outbox;
-using DisputeDesk.Worker.Sla;
+using DisputeDesk.Infrastructure.Sla;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -14,13 +14,16 @@ public class WorkerHostTests
     /// </summary>
     public const string UnreachablePostgresArgument = "--ConnectionStrings:DisputeDesk=Host=127.0.0.1;Port=1;Username=unused;Password=unused";
 
+    /// <summary>The command-line argument for a broker nothing listens on (port 1), so a started relay never reaches a real one.</summary>
+    public const string UnreachableKafkaArgument = "--Kafka:BootstrapServers=127.0.0.1:1";
+
     private static readonly TimeSpan ShutdownBudget = TimeSpan.FromSeconds(10);
 
     [Fact]
     public async Task WorkerHost_StartThenStop_CompletesCleanly()
     {
         // Development turns on ValidateOnBuild and ValidateScopes, so a broken registration fails here.
-        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development", UnreachablePostgresArgument]);
+        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development", UnreachablePostgresArgument, UnreachableKafkaArgument]);
         // No SLA sweep: a started host would escalate the due disputes of whatever database its configuration names.
         builder.Services.Remove(builder.Services.Single(service => service.ImplementationType == typeof(SlaSweep)));
         using IHost host = builder.Build();

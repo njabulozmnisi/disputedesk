@@ -43,7 +43,7 @@ Verify: authentication and ProblemDetails integration tests pass.
 
 5. **Antiforgery on unsafe methods** (R2; NFR-SEC-1)
    **Given** a signed-in login
-   **When** it posts to an unsafe API or customer route without `X-XSRF-TOKEN`
+   **When** it posts to an unsafe authentication or customer route without `X-XSRF-TOKEN`
    **Then** the response is 400 with problem slug `validation`
    **And** the token from `GET /api/v1/antiforgery` makes the same request pass
 

@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Navigate, Outlet, useParams } from '@tanstack/react-router';
 import { createContext, useContext, useEffect, useRef, useState, type RefObject } from 'react';
 
-import { getGetApiV1TransactionsInfiniteQueryKey } from '@/api/generated/disputedesk';
+import { getListTransactionsInfiniteQueryKey } from '@/api/generated/disputedesk';
 import type { TransactionPageResponse, TransactionResponse } from '@/api/generated/model';
 import { recordRaiseOpen } from '@/telemetry/raiseSpans';
 
@@ -31,7 +31,7 @@ export function useRaiseOpenSpan(): RefObject<SpanContext | undefined> {
 // There is no GET for one transaction, so the row comes from the pages the list query has cached.
 function cachedRow(queryClient: QueryClient, transactionId: string) {
   const pages = queryClient.getQueryData<InfiniteData<TransactionPageResponse>>(
-    getGetApiV1TransactionsInfiniteQueryKey(),
+    getListTransactionsInfiniteQueryKey(),
   )?.pages;
   return pages?.flatMap((page) => page.items).find((row) => row.transactionId === transactionId);
 }
@@ -67,6 +67,6 @@ function RaiseGuard({ transactionId }: { transactionId: string }) {
 
 /** The parent of 4a and 4b (under the `_linked` layout route): the cached disputable row, or a redirect to the list. */
 export function RaiseLayout() {
-  const { transactionId = '' } = useParams({ strict: false });
+  const { transactionId } = useParams({ from: '/_linked/transactions/$transactionId/dispute' });
   return <RaiseGuard key={transactionId} transactionId={transactionId} />;
 }

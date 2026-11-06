@@ -42,7 +42,7 @@ supervisor_checks = ["Throwaway copy: run `npm run journeys` twice on one stack;
 id = 3
 type = "story"
 title = "CI runs the journeys with ZAP and publishes images to GHCR"
-description = "Adds the `e2e` job (fresh Compose stack, the journeys project with axe, the ZAP baseline gated on `.zap/rules.tsv`) on pull requests and main, the main-only `publish` job that pushes the five images to GHCR tagged sha-<12> with digests recorded (this story owns publishing; 7.5 only consumes), each image Trivy-scanned before its push and labelled with its source and revision, and Trivy scans of core-banking and provision (AD-32)."
+description = "Adds the `e2e` job (fresh Compose stack, the journeys project with axe, the ZAP baseline gated on `.zap/rules.tsv`) on pull requests and main, the main-only `publish` job that pushes the five images to GHCR tagged sha-<12> with digests recorded (this story owns publishing; 7.5 only consumes), each image Trivy-scanned before its push and labelled with its source and revision, and Trivy scans of core-banking and zitadel (AD-32)."
 verify = "`actionlint` passes; the PR run's `e2e` job is green with five journeys passed and ZAP exit 0; after merge the `publish` summary lists five digests and GHCR shows five packages tagged sha-<12>."
 covers = ["R33", "R35"]
 after = [2]
@@ -53,7 +53,7 @@ owner = "backend"
 lane = "A"
 high_stakes = false
 migration = false
-touches = [".github/workflows/ci.yml (e2e, publish)", ".github/workflows/security.yml (Trivy: core-banking, provision)", ".zap/rules.tsv (new)", "e2e/playwright.config.ts (forbidOnly)"]
+touches = [".github/workflows/ci.yml (e2e, publish)", ".github/workflows/security.yml (Trivy: core-banking, zitadel)", ".zap/rules.tsv (new)", "e2e/playwright.config.ts (forbidOnly)"]
 supervisor_checks = ["Throwaway branch: delete the 10049 line from .zap/rules.tsv; the e2e job fails at ZAP with exit 2.", "Throwaway branch: add test.only to a journey; the e2e job fails.", "Check the first green PR run, then the publish summary and the GHCR package list after merge: five packages tagged sha-<12>, no latest.", "Throwaway branch: make one image's Trivy scan in publish fail; the job stops before any docker push."]
 
 [[entry]]

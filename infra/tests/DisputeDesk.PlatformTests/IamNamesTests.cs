@@ -7,7 +7,7 @@ namespace DisputeDesk.PlatformTests;
 /// </summary>
 public sealed class ServiceReferenceFixture : IAsyncLifetime
 {
-    private static readonly TimeSpan Deadline = TimeSpan.FromMinutes(5);
+    internal static readonly TimeSpan Deadline = TimeSpan.FromMinutes(5);
 
     internal ServiceReference Reference { get; private set; } = new(new HashSet<string>(), new Dictionary<string, string[]>(), []);
 

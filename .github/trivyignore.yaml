@@ -1,12 +1,17 @@
 # Triaged Trivy findings (NFR-SEC-8: a High or Critical finding fails the build unless triaged here).
-# Each entry is scoped to one path and says why it is accepted.
-misconfigurations:
-  - id: DS-0002
+# Each entry is scoped to one path and says why it is accepted; a vulnerability entry also expires, so it is decided
+# again (Trivy, "Filtering", .trivyignore.yaml, read with --ignorefile).
+vulnerabilities:
+  - id: CVE-2026-116587
     paths:
-      - "infra/images/zitadel/Dockerfile"
+      - "app/zitadel"
+    expired_at: 2027-02-05
     statement: >-
-      Local Compose only, one-shot and never deployed. The provisioner runs as root on purpose: it chowns the
-      generated client file to the .NET images' non-root user (see provision.sh).
+      go-jose v4.1.4, compiled into the pinned Zitadel v4.20.0 binary of the disputedesk-zitadel image (denial of
+      service, fixed in go-jose 4.1.6; Zitadel v4.20.1 still pins 4.1.4). Likely reachable: Zitadel parses JOSE
+      objects from callers (signed tokens and client assertions). Accepted until a Zitadel release ships the fixed
+      go-jose; docs/production-path.md records it. Human decision 2026-11-05.
+misconfigurations:
   - id: AWS-0011
     paths:
       - "infra/terraform/modules/edge/main.tf"

@@ -14,7 +14,7 @@ refined: false
 
 ## Description
 
-Adds two jobs to `ci.yml` (AD-32). The `e2e` job, on every pull request and every push to main, brings the Compose stack up fresh, runs story 7.1's `journeys` Playwright project (UJ-1, UJ-2, UJ-5a, UJ-5b, UJ-5d) with its axe checks, then runs the ZAP baseline against the gateway with a reviewed rules file, and fails on any failure. The `publish` job, on pushes to main only and only after every CI job passes, builds the five images from their Dockerfile targets and pushes them to GHCR tagged by commit SHA, recording each digest for the deploy. This story owns publishing; the AWS story 7.5 only consumes the images (decided 2026-10-30, AD-32 amended). The Security workflow's Trivy job also scans the two images published for the first time, `core-banking` and `provision`.
+Adds two jobs to `ci.yml` (AD-32). The `e2e` job, on every pull request and every push to main, brings the Compose stack up fresh, runs story 7.1's `journeys` Playwright project (UJ-1, UJ-2, UJ-5a, UJ-5b, UJ-5d) with its axe checks, then runs the ZAP baseline against the gateway with a reviewed rules file, and fails on any failure. The `publish` job, on pushes to main only and only after every CI job passes, builds the five images from their Dockerfile targets and pushes them to GHCR tagged by commit SHA, recording each digest for the deploy. This story owns publishing; the AWS story 7.5 only consumes the images (decided 2026-10-30, AD-32 amended). The Security workflow's Trivy job also scans the two images published for the first time, `core-banking` and `zitadel`.
 
 ## Requirements
 
@@ -67,7 +67,7 @@ Inputs:
 6. **The Trivy gate covers every published image** (R33; NFR-SEC-8)
    **Given** `security.yml`'s `trivy` job
    **When** it runs on a pull request
-   **Then** it also builds `core-banking` (`backend`, target `core-banking`) and `provision` (`infra/images/zitadel`) and scans both with `trivy image --severity HIGH,CRITICAL --exit-code 1`, as it does `api`, `worker` and `gateway`, and its `api` and `worker` builds name `--target api-local` and `--target worker-local`, so the scanned targets are the published ones; this is the pull-request gate, and criterion 5's scan is the gate on the pushed bytes, because commits often reach main by direct push (`scripts/push-and-watch.sh`)
+   **Then** it also builds `core-banking` (`backend`, target `core-banking`) and `zitadel` (`infra/images/zitadel`) and scans both with `trivy image --severity HIGH,CRITICAL --exit-code 1`, as it does `api`, `worker` and `gateway`, and its `api` and `worker` builds name `--target api-local` and `--target worker-local`, so the scanned targets are the published ones; this is the pull-request gate, and criterion 5's scan is the gate on the pushed bytes, because commits often reach main by direct push (`scripts/push-and-watch.sh`)
 
 ## Boundaries
 
@@ -93,7 +93,7 @@ Deliberate-break proofs and Docker checks, run by the supervisor, not the verifi
 - Packages: none. The ZAP image is pinned by digest, as Compose pins its images.
 - Touches:
   - `.github/workflows/ci.yml` (the `e2e` and `publish` jobs)
-  - `.github/workflows/security.yml` (Trivy builds and scans `core-banking` and `provision`; `--target api-local` and `--target worker-local`)
+  - `.github/workflows/security.yml` (Trivy builds and scans `core-banking` and `zitadel`; `--target api-local` and `--target worker-local`)
   - `.zap/rules.tsv` (new)
   - `e2e/playwright.config.ts` (`forbidOnly`)
 

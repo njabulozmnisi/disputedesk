@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
-import { usePostApiV1LinkingStart } from '@/api/generated/disputedesk';
+import { useStartLinking } from '@/api/generated/disputedesk';
 import { ApiError } from '@/api/mutator';
 import { isProblem, traceIdOf, validationFields } from '@/api/problems';
 import { usePageHeading } from '@/app/usePageHeading';
@@ -45,7 +45,7 @@ export function DetailsScreen() {
 
   // `gcTime: 0` drops the mutation, and the values in its variables, once this screen is gone (TanStack Query,
   // useMutation).
-  const mutation = usePostApiV1LinkingStart({
+  const mutation = useStartLinking({
     mutation: {
       gcTime: 0,
       onSuccess: () => {

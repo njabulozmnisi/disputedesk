@@ -215,7 +215,7 @@ public class SeededDisputesTests(PostgresFixture postgres)
     [Fact]
     public async Task Seed_DatabaseAlreadyMigrated_SeedsEveryDisputeInsideTheMigrationTransaction()
     {
-        // With no migration pending, EF Core seeds inside its own transaction: the customer contexts must join it.
+        // With no migration pending, EF Core seeds inside its own transaction: the seeder writes on the migrating context, inside that transaction.
         string connectionString = await postgres.CreateMigratedDatabaseAsync();
         await using ApiFactory factory = SeededApi.Create(connectionString, new TestClock());
         using HttpClient client = factory.CreateClient();

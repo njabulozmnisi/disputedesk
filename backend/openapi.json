@@ -10,6 +10,7 @@
         "tags": [
           "Authentication"
         ],
+        "operationId": "Login",
         "parameters": [
           {
             "name": "returnUrl",
@@ -52,6 +53,7 @@
         "tags": [
           "Authentication"
         ],
+        "operationId": "GetSession",
         "responses": {
           "500": {
             "description": "Internal Server Error",
@@ -76,11 +78,45 @@
         }
       }
     },
-    "/api/v1/antiforgery": {
-      "get": {
+    "/api/v1/authentication/logout": {
+      "post": {
         "tags": [
           "Authentication"
         ],
+        "operationId": "Logout",
+        "responses": {
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/antiforgery": {
+      "get": {
+        "tags": [
+          "Antiforgery"
+        ],
+        "operationId": "GetAntiforgeryToken",
         "responses": {
           "500": {
             "description": "Internal Server Error",
@@ -115,43 +151,12 @@
         }
       }
     },
-    "/api/v1/authentication/logout": {
-      "post": {
-        "tags": [
-          "Authentication"
-        ],
-        "responses": {
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "302": {
-            "description": "Found"
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/transactions": {
       "get": {
         "tags": [
           "Transactions"
         ],
+        "operationId": "ListTransactions",
         "parameters": [
           {
             "name": "cursor",
@@ -245,6 +250,7 @@
         "tags": [
           "Disputes"
         ],
+        "operationId": "RaiseDispute",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -373,6 +379,7 @@
         "tags": [
           "Disputes"
         ],
+        "operationId": "ListDisputes",
         "parameters": [
           {
             "name": "cursor",
@@ -457,6 +464,7 @@
         "tags": [
           "Disputes"
         ],
+        "operationId": "GetDispute",
         "parameters": [
           {
             "name": "disputeId",
@@ -537,6 +545,7 @@
         "tags": [
           "Disputes"
         ],
+        "operationId": "WithdrawDispute",
         "parameters": [
           {
             "name": "disputeId",
@@ -637,6 +646,7 @@
         "tags": [
           "Operations"
         ],
+        "operationId": "ReadDispute",
         "parameters": [
           {
             "name": "disputeId",
@@ -722,6 +732,7 @@
         "tags": [
           "Operations"
         ],
+        "operationId": "StartDisputeReview",
         "parameters": [
           {
             "name": "disputeId",
@@ -817,6 +828,7 @@
         "tags": [
           "Operations"
         ],
+        "operationId": "EscalateDispute",
         "parameters": [
           {
             "name": "disputeId",
@@ -912,6 +924,7 @@
         "tags": [
           "Operations"
         ],
+        "operationId": "ResolveDispute",
         "parameters": [
           {
             "name": "disputeId",
@@ -1017,6 +1030,7 @@
         "tags": [
           "Linking"
         ],
+        "operationId": "StartLinking",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1089,6 +1103,7 @@
         "tags": [
           "Linking"
         ],
+        "operationId": "VerifyLinking",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1980,6 +1995,9 @@
   "tags": [
     {
       "name": "Authentication"
+    },
+    {
+      "name": "Antiforgery"
     },
     {
       "name": "Transactions"

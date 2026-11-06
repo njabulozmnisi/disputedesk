@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Response } from '@playwright/test';
-import { fixtureLogin, queryDatabase, sessionCookieName } from './support';
+import { fixtureLogin, queryDatabase, sessionCookieName, skipTwoFactorSetup } from './support';
 
 // Session fix (AD-7, Expiry): the session cookie is written at sign-in and cleared at sign-out, never renewed. The ticket
 // store slides the row's idle limit on each request; the absolute limit never moves. One browser, customer A.
@@ -38,8 +38,8 @@ async function signIn() {
   await page.goto('/api/v1/authentication/login');
   // After a logout Zitadel may show an account picker or the username step; the password is always asked.
   const account = page.getByRole('button', { name: new RegExp(customerA.username) });
-  const username = page.getByTestId('username-text-input');
-  const password = page.getByTestId('password-text-input');
+  const username = page.locator('#loginName');
+  const password = page.locator('#password');
   await expect(account.or(username).or(password)).toBeVisible();
   if (await account.isVisible()) await account.click();
   if (await username.isVisible()) {
@@ -48,6 +48,7 @@ async function signIn() {
   }
   await password.fill(customerA.password);
   await password.press('Enter');
+  await skipTwoFactorSetup(page);
   await page.waitForURL((url) => url.origin === 'http://localhost:8080');
   const created = queryDatabase('select "Id" from "Sessions"').split('\n').filter((id) => id && !knownIds.includes(id));
   expect(created).toHaveLength(1);

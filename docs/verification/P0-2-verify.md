@@ -14,7 +14,7 @@ VERDICT: PASS
 | AC4 Loopback-only host ports | Static review of every published port | yes |
 | AC5 Database roles and isolation | `smoke.sh`: Postgres roles, SELECT, denied INSERT and denied Zitadel connection | yes |
 | AC6 Redpanda configuration and topic | Static flags; `smoke.sh`: topic name, partitions and replicas | yes |
-| AC7 Identity provisioning | `verify.sh`: project, API, logins, registration, TOTP, SMTP; `smoke.sh`: JWT roles, PKCE authorization and idempotence | yes |
+| AC7 Identity provisioning | `verify.sh`: project, web app, logins, registration, TOTP, SMTP; `smoke.sh`: JWT roles, PKCE authorization and idempotence | yes |
 | AC8 Gateway routing and headers | Static nginx review; `smoke.sh`: readiness, placeholder, headers, discovery and login | yes |
 | AC9 Synthetic fixtures | Static review of customer relationships, SIM-swap flags, accounts and logins | yes |
 | AC10 No real secrets | `gitleaks dir --redact --no-banner .`: no leaks; dev-default annotations reviewed | yes |

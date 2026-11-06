@@ -34,6 +34,10 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
 
     private static readonly Dictionary<string, string> TestValues = AwsInputs.TestValues();
 
+    /// <summary>The inputs that are secrets (input-bounds.sh generates each from [A-Za-z0-9]).</summary>
+    private static readonly string[] SecretInputs =
+        ["APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "ZITADEL_MASTERKEY", "ZITADEL_ADMIN_PASSWORD", "LINKING_OTP_HMAC_KEY", "MAILPIT_UI_AUTH", "GATEWAY_ORIGIN_VERIFY"];
+
     // ---- criterion 1: every input is required, and only the inputs are
 
     [Fact]
@@ -54,14 +58,13 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
         {
             ["APP_DB_PASSWORD"] = 1,
             ["ZITADEL_DB_PASSWORD"] = 1,
-            ["LOGIN_SESSION_COOKIE_SECRET"] = 1,
             ["ZITADEL_MASTERKEY"] = 1,
             ["ZITADEL_ADMIN_PASSWORD"] = 1,
             ["LINKING_OTP_HMAC_KEY"] = 1,
             ["MAILPIT_UI_AUTH"] = 1,
             ["GATEWAY_ORIGIN_VERIFY"] = 1,
             ["APP_HOST"] = 3,
-            ["AUTH_HOST"] = 9,
+            ["AUTH_HOST"] = 5,
             ["MAILPIT_HOST"] = 1,
             ["DB_HOST"] = 2,
             ["AWS_REGION"] = 2,
@@ -118,12 +121,19 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
     public async Task Render_WithoutAnInput_FailsNamingIt(string name)
     {
         string envFile = Path.GetTempFileName();
-        await File.WriteAllLinesAsync(envFile, TestValues.Where(input => input.Key != name).Select(input => $"{input.Key}={input.Value}"), TestContext.Current.CancellationToken);
+        ProcessResult render;
+        try
+        {
+            await File.WriteAllLinesAsync(envFile, TestValues.Where(input => input.Key != name).Select(input => $"{input.Key}={input.Value}"), TestContext.Current.CancellationToken);
 
-        ProcessResult render = await Processes.RunAsync(
-            "docker", ["compose", "-f", AwsComposeModel.Files[0], "-f", AwsComposeModel.Files[1], "--env-file", envFile, "config", "--quiet"],
-            Processes.BaseEnvironment(), CommandTimeout);
-        File.Delete(envFile);
+            render = await Processes.RunAsync(
+                "docker", ["compose", "-f", AwsComposeModel.Files[0], "-f", AwsComposeModel.Files[1], "--env-file", envFile, "config", "--quiet"],
+                Processes.BaseEnvironment(), CommandTimeout);
+        }
+        finally
+        {
+            File.Delete(envFile);
+        }
 
         Assert.NotEqual(0, render.ExitCode);
         Assert.Contains($"required variable {name} is missing a value", render.Errors, StringComparison.Ordinal);
@@ -137,6 +147,79 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
         Assert.Equal(
             ["api", "core-banking", "gateway", "mailpit", "otel-collector", "redpanda", "worker", "zitadel"],
             aws.Services.AsObject().Select(service => service.Key).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task LocalAndAws_RunTheSameServices_ExceptTheListedOnes()
+    {
+        // The listed exceptions (compose.yml's header): RDS and the collector stand in for postgres and the dashboard in
+        // AWS, and the worker runs inside the api locally.
+        string[] localOnly = ["aspire-dashboard", "postgres"];
+        string[] awsOnly = ["otel-collector", "worker"];
+        JsonNode local = (await ComposeModel.RenderAsync(["docker-compose.yml"]))["services"]!;
+
+        string[] localServices = [.. local.AsObject().Select(service => service.Key).Except(localOnly).Order(StringComparer.Ordinal)];
+        string[] awsServices = [.. aws.Services.AsObject().Select(service => service.Key).Except(awsOnly).Order(StringComparer.Ordinal)];
+
+        Assert.Equal(localServices, awsServices);
+        Assert.All(localOnly, service => Assert.True(local.AsObject().ContainsKey(service), $"{service} is not a local service."));
+        Assert.All(awsOnly, service => Assert.True(aws.Services.AsObject().ContainsKey(service), $"{service} is not an AWS service."));
+    }
+
+    [Fact]
+    public async Task Worker_RunsInsideTheApiLocally_AndInItsOwnContainerInAws()
+    {
+        JsonNode local = (await ComposeModel.RenderAsync(["docker-compose.yml"]))["services"]!;
+
+        Assert.False(local.AsObject().ContainsKey("worker"));
+        Assert.Equal("true", local["api"]!["environment"]!["Worker__InProcess"]!.GetValue<string>());
+        Assert.Equal("redpanda:9092", local["api"]!["environment"]!["Kafka__BootstrapServers"]!.GetValue<string>());
+        Assert.Null(aws.Services["api"]!["environment"]!["Worker__InProcess"]);
+        Assert.Equal("redpanda:9092", EnvironmentValue("worker", "Kafka__BootstrapServers"));
+    }
+
+    public static TheoryData<string> Renders() => ["local", "aws"];
+
+    [Theory]
+    [MemberData(nameof(Renders))]
+    public async Task Zitadel_ProvisionsInItsPostStartHookAsItsOwnUser_AndTheApiWaitsForTheMarker(string render)
+    {
+        // Compose, "Lifecycle hooks": the hook runs inside the container, as the hook's user; dependents wait for it.
+        JsonNode services = render == "aws" ? aws.Services : (await ComposeModel.RenderAsync(["docker-compose.yml"]))["services"]!;
+        JsonNode zitadel = services["zitadel"]!;
+        JsonNode hook = Assert.Single(zitadel["post_start"]!.AsArray())!;
+        string marker = zitadel["environment"]!["PROVISION_MARKER_FILE"]!.GetValue<string>();
+
+        Assert.Equal(["bash", "/provision/provision.sh"], Strings(hook["command"]!));
+        Assert.Equal("zitadel", hook["user"]!.GetValue<string>());
+        Assert.False(zitadel.AsObject().ContainsKey("user"), "zitadel overrides its image's non-root user.");
+        Assert.Equal(["CMD-SHELL", $"test -f {marker} && zitadel ready"], Strings(zitadel["healthcheck"]!["test"]!));
+        Assert.StartsWith("/provision/state/", marker, StringComparison.Ordinal);
+        Assert.Equal("service_healthy", services["api"]!["depends_on"]!["zitadel"]!["condition"]!.GetValue<string>());
+        Assert.Equal(["1000"], Strings(services["api"]!["group_add"]!));
+    }
+
+    [Theory]
+    [MemberData(nameof(Renders))]
+    public async Task Zitadel_ProvisionerSettings_CallItselfWithThePublicHost_AndHoldNoSecret(string render)
+    {
+        // Zitadel binds ZITADEL_* variables to its own configuration, so the provisioner's are PROVISION_*; none holds a
+        // secret, because the hook shares Zitadel's environment.
+        JsonNode services = render == "aws" ? aws.Services : (await ComposeModel.RenderAsync(["docker-compose.yml"]))["services"]!;
+        JsonObject environment = services["zitadel"]!["environment"]!.AsObject();
+        string[] secrets = [.. SecretInputs.Select(name => TestValues[name])];
+        string authHost = render == "aws" ? TestValues["AUTH_HOST"] : "auth.localhost:8080";
+        string port = render == "aws" ? "80" : "8080";
+
+        string[] provisionValues = [.. environment.Where(variable => variable.Key.StartsWith("PROVISION_", StringComparison.Ordinal))
+            .Select(variable => variable.Value!.GetValue<string>())];
+        Assert.Equal(8, provisionValues.Length);
+        Assert.DoesNotContain(provisionValues, value => secrets.Any(secret => value.Contains(secret, StringComparison.Ordinal)));
+        Assert.DoesNotContain(provisionValues, value => DevOnlyValue().IsMatch(value));
+        Assert.Equal($"http://{authHost}", environment["PROVISION_CALL_URL"]!.GetValue<string>());
+        Assert.Equal($"{authHost.Split(':')[0]}:{port}:127.0.0.1:8080", environment["PROVISION_CONNECT_TO"]!.GetValue<string>());
+        Assert.Equal(render == "aws" ? "false" : "true", environment["PROVISION_AUTH_DEVELOPMENT_MODE"]!.GetValue<string>());
+        Assert.Equal("false", environment["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED"]!.GetValue<string>());
     }
 
     [Fact]
@@ -184,31 +267,25 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
     /// <summary>
     /// Each service whose environment compose.yml replaces with !override, with the exact keys it sets, and its
     /// depends_on keys (replaced with !override, or cleared with !reset, so empty): a dropped tag merges the base file's
-    /// keys back in (Compose, "Merge Compose files").
+    /// keys back in (Compose, "Merge Compose files"). The worker, which only compose.yml defines, is listed too.
     /// </summary>
     public static TheoryData<string, string[], string[]> OverriddenServices() => new()
     {
         {
             "zitadel",
             [
-                "GOMEMLIMIT", "ZITADEL_DATABASE_POSTGRES_DSN", "ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED",
+                "GOMEMLIMIT", "PROVISION_APP_ORIGINS", "PROVISION_AUTH_DEVELOPMENT_MODE", "PROVISION_CALL_URL", "PROVISION_CONNECT_TO",
+                "PROVISION_FIXTURES_FILE", "PROVISION_MARKER_FILE", "PROVISION_OUT_DIR", "PROVISION_PAT_FILE",
+                "ZITADEL_DATABASE_POSTGRES_DSN", "ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED",
                 "ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROM", "ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROMNAME", "ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_SMTP_HOST",
                 "ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_TLS", "ZITADEL_EXTERNALDOMAIN", "ZITADEL_EXTERNALPORT", "ZITADEL_EXTERNALSECURE", "ZITADEL_FIRSTINSTANCE_INSTANCENAME",
                 "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS", "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_VERIFIED",
                 "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_FIRSTNAME", "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_LASTNAME", "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD",
-                "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED", "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME", 
-                "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME",
+                "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED", "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME", "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME",
                 "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME", "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE", "ZITADEL_FIRSTINSTANCE_ORG_NAME",
-                "ZITADEL_FIRSTINSTANCE_PATPATH", "ZITADEL_MASTERKEY", "ZITADEL_PORT",
-                "ZITADEL_TLS_ENABLED",
+                "ZITADEL_FIRSTINSTANCE_PATPATH", "ZITADEL_MASTERKEY", "ZITADEL_PORT", "ZITADEL_TLS_ENABLED",
             ],
             []
-        },
-        { "provision", ["APP_ORIGINS", "AUTH_DEVELOPMENT_MODE", "FIXTURES_FILE", "OUT_DIR", "OUT_UID", "PAT_FILE", "ZITADEL_URL"], ["gateway", "zitadel"] },
-        {
-            
-            ["CUSTOM_REQUEST_HEADERS", "EMAIL_VERIFICATION", "NEXT_PUBLIC_BASE_PATH", "ZITADEL_API_URL", "ZITADEL_SERVICE_USER_TOKEN_FILE", "ZITADEL_SESSION_COOKIE_SECRET"],
-            ["zitadel"]
         },
         { "mailpit", ["MP_SMTP_AUTH_ACCEPT_ANY", "MP_SMTP_AUTH_ALLOW_INSECURE", "MP_UI_AUTH"], [] },
         {
@@ -218,12 +295,12 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
                 "ForwardedHeaders__AllowedHosts", "ForwardedHeaders__TrustedNetwork", "Linking__OtpHmacKey", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_PROTOCOL",
                 "OTEL_SERVICE_NAME", "Scalar__Enabled", "Seed__Enabled", "Seed__FixturesPath", "Sms__Host", "Sms__Port", "Sms__UseTls",
             ],
-            ["core-banking"]
+            ["core-banking", "zitadel"]
         },
         {
             "worker",
             ["ConnectionStrings__DisputeDesk", "DOTNET_ENVIRONMENT", "Kafka__BootstrapServers", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_SERVICE_NAME"],
-            ["api"]
+            ["api", "redpanda"]
         },
         {
             "gateway",
@@ -262,10 +339,15 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
         }
 
         Assert.DoesNotMatch(DevOnlyValue(), render);
-        Assert.Equal("false", aws.Services["provision"]!["environment"]!["AUTH_DEVELOPMENT_MODE"]!.GetValue<string>());
+        Assert.Equal("false", EnvironmentValue("zitadel", "PROVISION_AUTH_DEVELOPMENT_MODE"));
+        // The one plain-http public URL: the provisioner's call, which goes to its own container's 127.0.0.1:8080
+        // (Zitadel_ProvisionerSettings_CallItselfWithThePublicHost_AndHoldNoSecret), never over the network.
+        string provisionCall = $"\"PROVISION_CALL_URL\":\"http://{TestValues["AUTH_HOST"]}\"";
+        Assert.Contains(provisionCall, render, StringComparison.Ordinal);
+        string rest = render.Replace(provisionCall, "", StringComparison.Ordinal);
         foreach (string name in new[] { "APP_HOST", "AUTH_HOST", "MAILPIT_HOST" })
         {
-            Assert.DoesNotContain($"http://{TestValues[name]}", render, StringComparison.Ordinal);
+            Assert.DoesNotContain($"http://{TestValues[name]}", rest, StringComparison.Ordinal);
             Assert.DoesNotContain($"{TestValues[name]}:8080", render, StringComparison.Ordinal);
         }
     }
@@ -316,7 +398,7 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
     [InlineData("worker", "WORKER_IMAGE")]
     [InlineData("gateway", "GATEWAY_IMAGE")]
     [InlineData("core-banking", "CORE_BANKING_IMAGE")]
-    [InlineData("provision", "ZITADEL_IMAGE")]
+    [InlineData("zitadel", "ZITADEL_IMAGE")]
     public void Service_RunsItsPublishedImageAndBuildsNothing(string service, string image)
     {
         Assert.Equal(TestValues[image], aws.Services[service]!["image"]!.GetValue<string>());
@@ -369,14 +451,38 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
     [Fact]
     public void LongRunningServices_FitTheInstancesMemoryBudget()
     {
-        // The long-running services' mem_limit total stays within 3482 MiB (3.4 GiB); the one-shots finish before the api starts.
+        // Every service runs for as long as the stack does; their mem_limit total stays within 3482 MiB (3.4 GiB).
         const long BudgetMib = 3482;
-        string[] longRunning = ["redpanda", "zitadel", "mailpit", "core-banking", "api", "worker", "otel-collector", "gateway"];
+        string[] longRunning = [.. aws.Services.AsObject().Select(service => service.Key)];
 
         Assert.Contains("--memory=512M", Strings(aws.Services["redpanda"]!["command"]!));
         Assert.All(longRunning, service => Assert.NotNull(aws.Services[service]!["mem_limit"]));
         long totalMib = longRunning.Sum(service => long.Parse(aws.Services[service]!["mem_limit"]!.ToString(), System.Globalization.CultureInfo.InvariantCulture) / 1048576);
         Assert.True(totalMib <= BudgetMib, $"The long-running services' mem_limit total {totalMib} MiB, over {BudgetMib}.");
+    }
+
+    [Fact]
+    public void AwsServices_SetTheirOwnMemoryLimits_NoneFromTheLocalFile()
+    {
+        // The figures in infra/deploy/aws/compose.yml's header; the local limits are sized for a laptop and differ.
+        Dictionary<string, long> expectedMib = new()
+        {
+            ["redpanda"] = 768,
+            ["zitadel"] = 704,
+            ["mailpit"] = 128,
+            ["core-banking"] = 192,
+            ["api"] = 512,
+            ["worker"] = 320,
+            ["otel-collector"] = 128,
+            ["gateway"] = 64,
+        };
+
+        Assert.Equal(
+            expectedMib.OrderBy(service => service.Key),
+            aws.Services.AsObject().ToDictionary(
+                service => service.Key,
+                service => long.Parse(service.Value!["mem_limit"]!.ToString(), System.Globalization.CultureInfo.InvariantCulture) / 1048576)
+                .OrderBy(service => service.Key));
     }
 
     // ---- criterion 5: the collector config

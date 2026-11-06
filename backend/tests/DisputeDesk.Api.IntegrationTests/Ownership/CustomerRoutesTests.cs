@@ -1,4 +1,4 @@
-using DisputeDesk.Api.Authorization;
+using DisputeDesk.Api.Customers;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Routing;

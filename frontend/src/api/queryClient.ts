@@ -59,6 +59,7 @@ export function createQueryClient(getRouter: () => Pick<AppRouter, 'navigate'>):
 
   function handleSuccess(_data: unknown, query: { queryHash: string }) {
     if (query.queryHash !== hashKey(getGetSessionQueryKey())) return;
+    // The cache holds the typed response; `onSuccess` hands over only the untyped data and the query's hash.
     const state = queryClient.getQueryData<SessionResponse>(getGetSessionQueryKey())?.state;
     const nowSignedIn = state === 'unlinked' || state === 'linked';
     if (signedIn && !nowSignedIn) leaveForSessionEnded();

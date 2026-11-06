@@ -1,9 +1,10 @@
-using DisputeDesk.Api.Authentication;
+using DisputeDesk.Api.Authorization;
 using DisputeDesk.Api.Linking.RateLimiting;
+using DisputeDesk.Api.Security;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 
-namespace DisputeDesk.Api.Authorization;
+namespace DisputeDesk.Api.Linking;
 
 /// <summary>
 /// The linking routes (AD-8, AD-10) and their <c>Unlinked</c> policy: the session cookie only, a signed-in login, and

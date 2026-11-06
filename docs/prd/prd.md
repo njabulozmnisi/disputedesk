@@ -137,7 +137,7 @@ This PRD adds:
 - **Role:** a permission on an actor's API credential: `dispute.read`, `dispute.startReview`, `dispute.escalate` or `dispute.resolve`. Role keys are camelCase after the `dispute.` prefix. Settled on 2026-10-26.
 - **Customer endpoint:** an endpoint called by the SPA with the session cookie. Withdraw is one.
 - **Operations endpoint:** an endpoint called with a bearer token: start review, escalate, resolve, and reading a dispute.
-- **Worker:** the background process that relays dispute events and runs the SLA sweep.
+- **Worker:** the background work that relays dispute events and runs the SLA sweep. Locally it runs inside the Api host; in AWS it runs as its own process, the Worker host.
 - **Transaction date:** the date the core-banking source gives as the date the transaction was made (the authorisation date), not the posting date. It stands in for the scheme's processing date (dispute-lifecycle research, section 1).
 
 The six technical terms above (actor type, authorisation state, role, customer endpoint, operations endpoint, Worker) stay in this PRD only and are not added to `docs/glossary.md`. Settled on 2026-10-26.
@@ -241,7 +241,7 @@ Linking attempts, start and verify combined, are limited to 5 per login and 20 p
 - A login's 6th attempt within 15 minutes returns 429 (RFC 6585) with `Retry-After` (RFC 9110).
 - An IP address's 21st attempt within 15 minutes returns 429, whichever logins are used.
 - "In any 15 minutes" follows the built-in sliding-window limiter: the window is split into segments, and permits come back one segment at a time. Settled on 2026-10-30 (story 6.3).
-- The per-IP limiter runs before the per-login limiter. Chained limiters run in order, and a time-based limiter does not return a permit it already granted when a later limiter in the chain rejects the request ([Microsoft Learn, *Rate limiting middleware*](https://learn.microsoft.com/aspnet/core/performance/rate-limit), *Chain limiters in a named policy*; the global `PartitionedRateLimiter.CreateChained` section documents only that the limiters run in sequence, and the permit that is not returned is a property of the time-based limiter types), so a request the login limit rejects has already spent IP permits; brute-force protection is unchanged. How many it spends is not documented behaviour, so it is not a requirement; a test pins today's count as a regression check (decided 2026-11-03, simplicity audit D14).
+- The per-IP limiter runs before the per-login limiter. Chained limiters run in order, and a time-based limiter does not return a permit it already granted when a later limiter in the chain rejects the request ([Microsoft Learn, *Rate limiting middleware*](https://learn.microsoft.com/aspnet/core/performance/rate-limit), *Chain limiters in a named policy*; the global `PartitionedRateLimiter.CreateChained` section documents only that the limiters run in sequence, and the permit that is not returned is a property of the time-based limiter types), so a request the login limit rejects has already spent IP permits; brute-force protection is unchanged. How many it spends is not documented behaviour, so it is not a requirement; a test pins today's count as a regression check (decided 2026-11-03).
 - Requests rejected with 429 do not count against the limiter that rejected them. Settled on 2026-10-30 (story 6.3).
 - The client IP is read from forwarded headers only when they come from the known proxies (nginx, and CloudFront in AWS); locally that is the Compose network's configured range. Otherwise the connection address is used. A test shows that a spoofed `X-Forwarded-For` from an unknown source is ignored.
 - Limits are held in memory on the single Api instance. This is stated in the README, and shared limits for scale-out are a production-path note.
@@ -480,7 +480,7 @@ The Worker escalates every dispute that is still Submitted or Under review once 
 - The sweep runs at least once a minute [ASSUMPTION]. It claims due disputes in bounded batches with `FOR UPDATE SKIP LOCKED`, so a second Worker cannot double-escalate. After downtime it catches up.
 - Disputes that are already Escalated, Resolved or Withdrawn are left alone. A dispute escalated by hand before the SLA is not escalated again.
 - If the sweep loses a version race, it reloads the dispute's stored events. If the dispute is still Submitted or Under review and past the SLA, it escalates. Otherwise it skips. The timeline never shows a duplicate entry.
-- The sweep only escalates: it records nothing for a dispute before its SLA is due (decided 2026-11-03, simplicity audit D3).
+- The sweep only escalates: it records nothing for a dispute before its SLA is due (decided 2026-11-03).
 - SLA time comes from `TimeProvider`, so tests can move the clock.
 
 ### 4.9 Dispute events
@@ -532,19 +532,19 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 
 - **NFR-ARC-1:** the backend is .NET 10 minimal APIs in Clean Architecture. Domain and application code reference no infrastructure, and an architecture test enforces this.
 - **NFR-ARC-2:** the runtime units are as follows. Nothing else is added.
-  - **Locally:** an nginx gateway serving the SPA, the Api host (browser sessions and REST), the Worker (outbox relay and SLA sweep), PostgreSQL, Redpanda, Zitadel, Mailpit, the Aspire Dashboard and the core-banking stub service (a stand-in for the bank's core banking, behind `ICoreBankingClient` and `ISimSwapCheck`).
-  - **In AWS:** the same Compose stack, except that RDS replaces the PostgreSQL container and CloudWatch receives the telemetry through an OpenTelemetry Collector (CloudWatch's OTLP endpoints need SigV4 signing, which the .NET exporter can't do).
-- **NFR-ARC-3:** v1 runs one Api instance and one Worker instance. Sessions, idempotency keys and the audit log are in PostgreSQL, so the Api scales out without session loss. In-memory rate-limit state is the one exception (FR-8). Scale-out itself is a production-path note.
+  - **Locally:** an nginx gateway serving the SPA, the Api host (browser sessions and REST, plus the Worker's outbox relay and SLA sweep in the same process), PostgreSQL, Redpanda, Zitadel, Mailpit, the Aspire Dashboard and the core-banking stub service (a stand-in for the bank's core banking, behind `ICoreBankingClient` and `ISimSwapCheck`).
+  - **In AWS:** the same Compose stack, except that RDS replaces the PostgreSQL container, the Worker host runs the outbox relay and SLA sweep as its own unit, and CloudWatch receives the telemetry through an OpenTelemetry Collector (CloudWatch's OTLP endpoints need SigV4 signing, which the .NET exporter can't do).
+- **NFR-ARC-3:** v1 runs one Api instance and, in AWS, one Worker instance. Sessions, idempotency keys and the audit log are in PostgreSQL, so the Api scales out without session loss. In-memory rate-limit state is the one exception (FR-8). Scale-out itself is a production-path note.
 - **NFR-ARC-4:** a second Worker instance would be harmless. The relay holds a PostgreSQL advisory lock, so only one relay publishes and per-dispute order is kept. The SLA sweep uses `SKIP LOCKED` (FR-26).
 - **NFR-ARC-5:** external systems are reached only through the ports `ICoreBankingClient`, `ISimSwapCheck` and `ISmsSender`. The only single-implementation interfaces allowed are these three and `IAppDbContext`, the persistence seam the architecture tests enforce.
 
 ### 5.2 Resilience and operational readiness
 
-- **NFR-RES-1:** the Api host exposes `/health/live` (the process is up) and `/health/ready` (dependencies are reachable, PostgreSQL included). The Worker exposes no HTTP: its outbox relay and SLA sweep each touch a heartbeat file every loop, and the Compose health check fails when either file is stale. Compose health checks use both.
+- **NFR-RES-1:** the Api host exposes `/health/live` (the process is up) and `/health/ready` (dependencies are reachable, PostgreSQL included). The outbox relay and SLA sweep expose no HTTP: in whichever host runs them (the Api host locally, the Worker host in AWS) each touches a heartbeat file every loop, and that host's Compose health check fails when either file is stale. Compose health checks use both.
 - **NFR-RES-2:** calls to `ICoreBankingClient` go through the standard resilience handler: a timeout, retries with jitter on idempotent reads, and a circuit breaker. Once the policies are exhausted, the caller gets 503 ProblemDetails.
 - **NFR-RES-3:** raising a dispute and taking actions keep working while Kafka is down. Events wait in the outbox and are published, in order per dispute, when Kafka returns. The relay retries with backoff and stops at the first failure in each dispute's sequence.
 - **NFR-RES-4:** an outbox row the broker rejects permanently (not a transient failure) is marked failed after 5 attempts. It is counted in a metric and logged with its event ID. Later events for that dispute wait until an operator acts, as described in the README runbook [ASSUMPTION: a failed state in the outbox, not a dead-letter topic; see §9 Q4].
-- **NFR-RES-5:** the Api host and the Worker shut down gracefully on SIGTERM, finishing in-flight requests and the outbox record in flight within 30 seconds (rows not yet sent stay Pending for the next start) [ASSUMPTION].
+- **NFR-RES-5:** the Api host and the Worker host shut down gracefully on SIGTERM, finishing in-flight requests and the outbox record in flight within 30 seconds (rows not yet sent stay Pending for the next start) [ASSUMPTION].
 
 ### 5.3 Data and domain modelling
 
@@ -572,7 +572,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 - **NFR-API-3:** lists use keyset pagination with opaque cursors.
 - **NFR-API-4:** each action has its own endpoint, named after the action. There is no generic "update status" endpoint.
 - **NFR-API-5:** customer endpoint responses never contain an actor's identity or an SLA, and Escalated is mapped as FR-17 describes.
-- **NFR-API-6:** money travels as decimal strings, and enum values use camelCase (FR-28). One converter (AD-5) reads an enum in a JSON request body only from its exact camelCase name; a number, a list or any other casing is refused with 400 `validation`. Settled on 2026-11-03 (D5).
+- **NFR-API-6:** money travels as decimal strings, and enum values use camelCase (FR-28). One converter (AD-5) reads an enum in a JSON request body only from its exact camelCase name; a number, a list or any other casing is refused with 400 `validation`. Settled on 2026-11-03.
 
 ### 5.5 Security (primary)
 
@@ -613,7 +613,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
 
 ### 5.8 Observability
 
-- **NFR-OBS-1:** the SPA, the Api host and the Worker emit OpenTelemetry traces, metrics and logs. One trace runs browser → API → outbox → Kafka → Worker. The `traceparent` and `tracestate` are stored on the outbox row and injected into the Kafka headers by hand, with no prerelease Kafka instrumentation package.
+- **NFR-OBS-1:** the SPA, the Api host and the Worker emit OpenTelemetry traces, metrics and logs. One trace runs browser → API → outbox → relay → Kafka. The `traceparent` and `tracestate` are stored on the outbox row and injected into the Kafka headers by hand, with no prerelease Kafka instrumentation package.
 - **NFR-OBS-2:** logs are structured, carry the trace ID, and contain no personal data.
 - **NFR-OBS-3:** these business metrics are emitted for §8:
   - disputes raised, by reason;
@@ -624,7 +624,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
   - failed outbox rows.
 
   Raise-screen opens and time to submit come from the SPA's browser spans.
-- **NFR-OBS-4:** the Aspire Dashboard runs locally and CloudWatch is used in AWS. Both work with no manual setup after start-up. AWS takes in no browser telemetry (architecture AD-29), so the browser-span metrics behind SM-1 and SM-2 are measured on the local stack only in v1 (decided 2026-11-03, simplicity audit D11).
+- **NFR-OBS-4:** the Aspire Dashboard runs locally and CloudWatch is used in AWS. Both work with no manual setup after start-up. AWS takes in no browser telemetry (architecture AD-29), so the browser-span metrics behind SM-1 and SM-2 are measured on the local stack only in v1 (decided 2026-11-03).
 
 ### 5.9 Infrastructure and DevOps
 

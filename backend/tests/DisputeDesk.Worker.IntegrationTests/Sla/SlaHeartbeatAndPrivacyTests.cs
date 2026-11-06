@@ -1,7 +1,7 @@
 using DisputeDesk.Domain.Disputes;
+using DisputeDesk.Infrastructure.Sla;
 using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using DisputeDesk.Worker.IntegrationTests.Outbox;
-using DisputeDesk.Worker.Sla;
 
 namespace DisputeDesk.Worker.IntegrationTests.Sla;
 

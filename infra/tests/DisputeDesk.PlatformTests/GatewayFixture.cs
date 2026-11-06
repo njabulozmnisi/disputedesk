@@ -5,8 +5,8 @@ namespace DisputeDesk.PlatformTests;
 
 /// <summary>
 /// Both gateway images on a throwaway Docker network with no host port (stories 7.4 and 7.12): the AWS gateway with the
-/// environment infra/deploy/aws/compose.yml gives it, the local gateway with docker-compose.yml's, a real Mailpit, and nginx
-/// echo servers standing in for the api, Zitadel, the login and the OTLP receiver, which answer with every header they
+/// environment infra/deploy/aws/compose.yml gives it, the local gateway with docker-compose.yml's, a real Mailpit, and
+/// nginx echo servers standing in for the api, Zitadel and the OTLP receiver, which answer with every header they
 /// received. Clients run on the network at fixed addresses, one inside test-realip.conf's range (as CloudFront would be)
 /// and one outside it. A second network holds a second AWS gateway whose Mailpit is the echo, so the Mailpit location's
 /// upstream request can be seen too. Everything it starts is removed when the class ends, also when a start fails.
@@ -115,7 +115,7 @@ public sealed class GatewayFixture : IAsyncLifetime
         string echo = $"{_work}:/echo:ro";
         string[] echoCommand = ["--entrypoint", "nginx", "disputedesk-gateway:aws-test", "-c", "/echo/echo.conf", "-g", "daemon off;"];
         await MustAsync(CommandTimeout, ["run", "-d", "--name", $"{Run}-echo", "--network", Run, "--network-alias", "api",
-            "--network-alias", "zitadel", "--network-alias", "-v", echo, .. echoCommand]);
+            "--network-alias", "zitadel", "-v", echo, .. echoCommand]);
         await MustAsync(CommandTimeout, "network", "connect", "--alias", "mailpit", MailNetwork, $"{Run}-echo");
         // The OTLP receiver's stand-in, under the name the local gateway sends browser telemetry to.
         await MustAsync(CommandTimeout, ["run", "-d", "--name", $"{Run}-otlp", "--network", Run, "--network-alias", "aspire-dashboard", "-v", echo, .. echoCommand]);
@@ -212,21 +212,14 @@ public sealed class GatewayFixture : IAsyncLifetime
                   default_type text/plain;
                   return 500 "the api's own error\n";
                 }
-                # Zitadel's v1 login sends its own Referrer-Policy, which the identity origin passes through.
+                # The security headers zitadel:v4.20.0 sends on its hosted login (/ui/login/loginname, read from the
+                # running image): the gateway hides its HSTS and nosniff, and passes its Referrer-Policy and
+                # X-Frame-Options through.
                 location /ui/login/ {
+                  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
                   add_header Referrer-Policy "same-origin";
-                  js_content echo.dump;
-                }
-              }
-              # The login (3000): the headers zitadel:v4.20.0 sends on /ui/login/* (its routes-manifest.json).
-              server {
-                listen 3000;
-                location / {
-                  add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload";
-                  add_header Referrer-Policy "origin-when-cross-origin";
                   add_header X-Content-Type-Options "nosniff";
-                  add_header X-Frame-Options "deny";
-                  add_header X-XSS-Protection "1; mode=block";
+                  add_header X-Frame-Options "DENY";
                   js_content echo.dump;
                 }
               }

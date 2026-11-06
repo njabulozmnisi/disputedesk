@@ -169,7 +169,7 @@ public static partial class WebAppAuthentication
                 return Task.CompletedTask;
             }
 
-            // Zitadel's login already requires a verified email; the API checks again (AD-6).
+            // Zitadel's login already requires a verified email; the Api checks again (AD-6).
             if (context.Principal?.FindFirst("email_verified")?.Value is not "true")
             {
                 context.Fail("The login's email address is not verified.");

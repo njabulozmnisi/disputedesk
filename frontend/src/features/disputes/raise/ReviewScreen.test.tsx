@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
-import { getGetApiV1TransactionsInfiniteQueryKey } from '@/api/generated/disputedesk';
+import { getListTransactionsInfiniteQueryKey } from '@/api/generated/disputedesk';
 import { server } from '@/test/server';
 import {
   chooseReason,
@@ -273,7 +273,7 @@ describe('after a 201', () => {
     expect(requests).toHaveLength(1);
     expect(screen.getByRole('status')).toHaveTextContent('Dispute submitted');
     const stateOf = (key: readonly unknown[]) => queryClient.getQueryState(key)?.isInvalidated;
-    expect(stateOf(getGetApiV1TransactionsInfiniteQueryKey())).toBe(true);
+    expect(stateOf(getListTransactionsInfiniteQueryKey())).toBe(true);
     expect(stateOf(['infinite', '/api/v1/disputes'])).toBe(true);
     expect(stateOf(['/api/v1/disputes', 'D-7'])).toBe(true);
     expect(stateOf(['/api/v1/other'])).toBe(false);
@@ -543,9 +543,9 @@ describe('a refused submit', () => {
     );
     expect(backToTransactions()).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
-    expect(
-      queryClient.getQueryState(getGetApiV1TransactionsInfiniteQueryKey())?.isInvalidated,
-    ).toBe(true);
+    expect(queryClient.getQueryState(getListTransactionsInfiniteQueryKey())?.isInvalidated).toBe(
+      true,
+    );
   });
 
   it.each([
@@ -561,9 +561,9 @@ describe('a refused submit', () => {
     expect(notice).toHaveTextContent("This transaction can't be disputed any more.");
     expect(notice).toHaveTextContent(extra);
     expect(backToTransactions()).toBeInTheDocument();
-    expect(
-      queryClient.getQueryState(getGetApiV1TransactionsInfiniteQueryKey())?.isInvalidated,
-    ).toBe(true);
+    expect(queryClient.getQueryState(getListTransactionsInfiniteQueryKey())?.isInvalidated).toBe(
+      true,
+    );
   });
 
   it('404 says the transaction is no longer available', async () => {

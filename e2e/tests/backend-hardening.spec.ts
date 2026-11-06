@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { fixtureLogin, origin, queryDatabase, queryRows, signInContext } from './support';
+import { enterHostedCredentials, fixtureLogin, origin, queryDatabase, queryRows, signInContext } from './support';
 
 // Story 7.13 (backend hardening), walked on the real stack: the OIDC transient cookies' names and attributes with the
 // local configured names (criterion 1), a refused raise audited (criterion 4) and sign-out audited (criterion 5). Database through qa_readonly.
@@ -38,10 +38,7 @@ test('criterion 1: the OIDC correlation and nonce cookies carry the configured n
   });
 
   await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
+  await enterHostedCredentials(page, login);
   await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   await expect.poll(async () => (await (await page.request.get('/api/v1/authentication/session')).json()).state).toBe('linked');
   expect(page.url().startsWith('http://localhost:8080/')).toBe(true);

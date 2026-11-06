@@ -2,6 +2,7 @@ using DisputeDesk.Application.Abstractions;
 using DisputeDesk.Application.Audit;
 using DisputeDesk.Application.Disputes.GetDispute;
 using DisputeDesk.Contracts.Audit;
+using DisputeDesk.Contracts.Disputes;
 using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
 using Microsoft.EntityFrameworkCore;
@@ -20,8 +21,8 @@ public sealed class WithdrawDisputeHandler(IAppDbContext db, CurrentCustomer cur
 {
     private Actor Customer => new(ActorType.Customer, currentCustomer.LoginSub);
 
-    public async Task<Result<Contracts.Disputes.DisputeResponse>> HandleAsync(
-        Guid disputeId, Contracts.Disputes.WithdrawDisputeRequest request, CancellationToken cancellationToken)
+    public async Task<Result<DisputeResponse>> HandleAsync(
+        Guid disputeId, WithdrawDisputeRequest request, CancellationToken cancellationToken)
     {
         // The one clock reading (AD-4), cut to the whole microseconds a Postgres timestamptz keeps, as the raise does.
         DateTimeOffset now = Instants.ToWholeMicroseconds(time.GetUtcNow());
@@ -61,7 +62,7 @@ public sealed class WithdrawDisputeHandler(IAppDbContext db, CurrentCustomer cur
     /// retry the instant is the later of <paramref name="now"/> and the stream's latest, so time never runs backwards
     /// within a stream (AD-15).
     /// </summary>
-    private async Task<Result<Contracts.Disputes.DisputeResponse>> WithdrawAsync(
+    private async Task<Result<DisputeResponse>> WithdrawAsync(
         Guid disputeId, string? note, DateTimeOffset now, bool isRetry, CancellationToken cancellationToken)
     {
         // Through the ownership filter (AD-11). A row of an unknown type throws: replay never builds a partial dispute (AD-13).
@@ -101,7 +102,7 @@ public sealed class WithdrawDisputeHandler(IAppDbContext db, CurrentCustomer cur
     }
 
     /// <summary>Audits the refusal as <c>Rejected</c> through <see cref="AuditLog.Record"/> (AD-14a), saves it and returns it.</summary>
-    private async Task<Result<Contracts.Disputes.DisputeResponse>> RefuseAsync(Error error, Guid? disputeId, DateTimeOffset now)
+    private async Task<Result<DisputeResponse>> RefuseAsync(Error error, Guid? disputeId, DateTimeOffset now)
     {
         AuditLog.Record(db, AuditAction.Withdraw, AuditResult.Rejected, Customer, now, currentCustomer.CustomerId, disputeId);
         // Not the request's token, as linking saves its audit entries: a client that disconnects cannot cancel the record

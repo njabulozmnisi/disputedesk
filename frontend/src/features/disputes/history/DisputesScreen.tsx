@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef } from 'react';
 
-import { useGetApiV1DisputesInfinite } from '@/api/generated/disputedesk';
+import { useListDisputesInfinite } from '@/api/generated/disputedesk';
 import type { DisputeSummaryResponse } from '@/api/generated/model';
 import { traceIdOf } from '@/api/problems';
 import { useAnnounce } from '@/app/LiveRegion';
@@ -42,7 +42,7 @@ function LoadingList() {
 export function DisputesScreen() {
   const headingRef = usePageHeading('Disputes');
   const announce = useAnnounce();
-  const query = useGetApiV1DisputesInfinite(undefined, {
+  const query = useListDisputesInfinite(undefined, {
     query: {
       initialPageParam: undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,

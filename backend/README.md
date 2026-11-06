@@ -6,7 +6,7 @@ rules are the root [AGENTS.md](../AGENTS.md) and [docs/conventions/backend.md](.
 
 | Folder | What |
 |---|---|
-| `src/` | The Api and the Worker, in Clean Architecture layers (Domain, Application, Infrastructure, Contracts) |
+| `src/` | The Api and the Worker, in Clean Architecture layers (Domain, Application, Infrastructure, Contracts); locally the Api also runs the Worker's outbox relay and SLA sweep (`Worker:InProcess`) |
 | `stubs/` | The core-banking stub, a stand-in for the bank's core banking and the SIM-swap check |
 | `tests/` | Domain unit tests, integration tests (Postgres through Testcontainers) and architecture tests |
 | `fixtures/` | `local.json`, the synthetic seed data; [fixtures/README.md](fixtures/README.md) explains it |

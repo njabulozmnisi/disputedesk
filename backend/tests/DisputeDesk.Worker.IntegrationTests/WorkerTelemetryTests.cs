@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
-using DisputeDesk.Worker.Sla;
+using DisputeDesk.Infrastructure.Sla;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
@@ -39,7 +39,7 @@ public class WorkerTelemetryTests
     public async Task HttpClient_CallFromWorker_ProducesClientSpan()
     {
         var spans = new List<Activity>();
-        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development", WorkerHostTests.UnreachablePostgresArgument]);
+        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development", WorkerHostTests.UnreachablePostgresArgument, WorkerHostTests.UnreachableKafkaArgument]);
         // No SLA sweep: a started host would escalate the due disputes of whatever database its configuration names.
         builder.Services.Remove(builder.Services.Single(service => service.ImplementationType == typeof(SlaSweep)));
         builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddInMemoryExporter(spans));
@@ -62,7 +62,7 @@ public class WorkerTelemetryTests
     [InlineData("http://127.0.0.1:4317", true)]
     public void AddDisputeDeskTelemetry_OtlpEndpoint_RegistersExporterOnlyWhenSet(string endpoint, bool expected)
     {
-        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development", WorkerHostTests.UnreachablePostgresArgument, $"--OTEL_EXPORTER_OTLP_ENDPOINT={endpoint}"]);
+        HostApplicationBuilder builder = WorkerHost.CreateBuilder(["--environment", "Development", WorkerHostTests.UnreachablePostgresArgument, WorkerHostTests.UnreachableKafkaArgument, $"--OTEL_EXPORTER_OTLP_ENDPOINT={endpoint}"]);
 
         Assert.Equal(expected, builder.Services.Any(FromOtlpExporter));
     }

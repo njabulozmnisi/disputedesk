@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
-  antiforgeryCookieName, expectProblemShape, fixtureLogin, queryDatabase, sessionCookieName,
+  antiforgeryCookieName, enterHostedCredentials, expectProblemShape, fixtureLogin, queryDatabase, sessionCookieName, skipTwoFactorSetup,
 } from './support';
 
 // Story 2.2: sign-in and sign-out through the hosted Zitadel login, one browser, one login (customer A).
@@ -15,10 +15,7 @@ const customerA = fixtureLogin('customer-a');
 // Own sign-in: this spec tests the hosted-login flow itself.
 async function signInThroughHostedLogin(target: Page, loginUrl: string) {
   await target.goto(loginUrl);
-  await target.getByTestId('username-text-input').fill(customerA.username);
-  await target.getByTestId('username-text-input').press('Enter');
-  await target.getByTestId('password-text-input').fill(customerA.password);
-  await target.getByTestId('password-text-input').press('Enter');
+  await enterHostedCredentials(target, customerA);
   await target.waitForURL((url) => url.origin === 'http://localhost:8080');
 }
 
@@ -147,17 +144,17 @@ test('the Zitadel session really ended: a fresh login needs the password', async
   await page.goto('/api/v1/authentication/login');
   // Zitadel remembers the username, so it may show an account picker; choosing the account must still ask for the password.
   const account = page.getByRole('button', { name: new RegExp(customerA.username) });
-  const passwordField = page.getByTestId('password-text-input');
-  await expect(account.or(passwordField).or(page.getByTestId('username-text-input'))).toBeVisible();
+  const passwordField = page.locator('#password');
+  await expect(account.or(passwordField).or(page.locator('#loginName'))).toBeVisible();
   if (await account.isVisible()) {
     await account.click();
   }
-  if (await page.getByTestId('username-text-input').isVisible()) {
-    await page.getByTestId('username-text-input').fill(customerA.username);
-    await page.getByTestId('username-text-input').press('Enter');
+  if (await page.locator('#loginName').isVisible()) {
+    await page.locator('#loginName').fill(customerA.username);
+    await page.locator('#loginName').press('Enter');
   }
   await expect(passwordField).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe('/ui/login/password');
+  expect(new URL(page.url()).pathname).toMatch(/^\/ui\/login\//);
   expect(silentSignIn).toEqual([]);
   page.off('request', watch);
 });
@@ -165,17 +162,18 @@ test('the Zitadel session really ended: a fresh login needs the password', async
 test('with the password the sign-in completes, and a non-local returnUrl lands on /', async () => {
   await page.goto('/api/v1/authentication/login?returnUrl=https://evil.example.com/steal');
   const account = page.getByRole('button', { name: new RegExp(customerA.username) });
-  const passwordField = page.getByTestId('password-text-input');
-  await expect(account.or(passwordField).or(page.getByTestId('username-text-input'))).toBeVisible();
+  const passwordField = page.locator('#password');
+  await expect(account.or(passwordField).or(page.locator('#loginName'))).toBeVisible();
   if (await account.isVisible()) {
     await account.click();
   }
-  if (await page.getByTestId('username-text-input').isVisible()) {
-    await page.getByTestId('username-text-input').fill(customerA.username);
-    await page.getByTestId('username-text-input').press('Enter');
+  if (await page.locator('#loginName').isVisible()) {
+    await page.locator('#loginName').fill(customerA.username);
+    await page.locator('#loginName').press('Enter');
   }
   await passwordField.fill(customerA.password);
   await passwordField.press('Enter');
+  await skipTwoFactorSetup(page);
   await page.waitForURL((url) => url.origin === 'http://localhost:8080');
   expect(page.url()).toBe('http://localhost:8080/');
   expect(sessionRows()).toBe(rowsBefore + 1);

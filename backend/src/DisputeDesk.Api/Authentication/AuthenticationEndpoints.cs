@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using DisputeDesk.Api.Security;
 using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Authentication;
 using DisputeDesk.Infrastructure.Persistence;
@@ -12,7 +13,10 @@ using Microsoft.Extensions.Options;
 
 namespace DisputeDesk.Api.Authentication;
 
-/// <summary>Sign-in, session state, the antiforgery token and sign-out (AD-7), under <c>/api/v1/authentication</c>.</summary>
+/// <summary>
+/// Sign-in, session state and sign-out under <c>/api/v1/authentication</c>, and the antiforgery token at
+/// <c>/api/v1/antiforgery</c> (AD-7).
+/// </summary>
 public static partial class AuthenticationEndpoints
 {
     public static RouteGroupBuilder MapAuthentication(this RouteGroupBuilder apiV1)
@@ -20,11 +24,14 @@ public static partial class AuthenticationEndpoints
         RouteGroupBuilder authentication = apiV1.MapGroup("/authentication").WithTags("Authentication");
 
         // Login, session and logout serve anonymous callers too; everything else falls under the fallback policy (AD-10).
-        authentication.MapGet("/login", LoginAsync).AllowAnonymous().Produces(StatusCodes.Status302Found).ProducesValidationProblem();
-        authentication.MapGet("/session", SessionAsync).AllowAnonymous();
-        authentication.MapGet("/antiforgery", Antiforgery).RequireAuthorization().ProducesProblem(StatusCodes.Status401Unauthorized);
-        authentication.MapPost("/logout", LogoutAsync).AllowAnonymous().AddEndpointFilter<AntiforgeryFilter>()
+        authentication.MapGet("/login", LoginAsync).WithName("Login")
+            .AllowAnonymous().Produces(StatusCodes.Status302Found).ProducesValidationProblem();
+        authentication.MapGet("/session", SessionAsync).WithName("GetSession").AllowAnonymous();
+        authentication.MapPost("/logout", LogoutAsync).WithName("Logout").AllowAnonymous().AddEndpointFilter<AntiforgeryFilter>()
             .Produces(StatusCodes.Status302Found).ProducesProblem(StatusCodes.Status400BadRequest);
+
+        apiV1.MapGet("/antiforgery", Antiforgery).WithName("GetAntiforgeryToken").WithTags("Antiforgery")
+            .RequireAuthorization().ProducesProblem(StatusCodes.Status401Unauthorized);
 
         return authentication;
     }

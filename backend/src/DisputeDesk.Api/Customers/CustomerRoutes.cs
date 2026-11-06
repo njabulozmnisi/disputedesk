@@ -1,9 +1,10 @@
-using DisputeDesk.Api.Authentication;
+using DisputeDesk.Api.Authorization;
+using DisputeDesk.Api.Security;
 using DisputeDesk.Application.Abstractions;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 
-namespace DisputeDesk.Api.Authorization;
+namespace DisputeDesk.Api.Customers;
 
 /// <summary>
 /// The customer routes (AD-8, AD-10) and their <c>Linked</c> policy: the session cookie only, a signed-in login, and a

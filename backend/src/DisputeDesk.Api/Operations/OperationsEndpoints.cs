@@ -32,20 +32,24 @@ public static class OperationsEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
         operations.MapGet("/disputes/{disputeId}", ReadDisputeAsync)
+            .WithName("ReadDispute")
             .RequireAuthorization(OperationsAuthentication.DisputeReadPolicy)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound);
         operations.MapPost(OperationsRoutes.StartReview, StartReviewAsync)
+            .WithName("StartDisputeReview")
             .RequireAuthorization(OperationsAuthentication.StartReviewPolicy)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
         operations.MapPost(OperationsRoutes.Escalate, EscalateAsync)
+            .WithName("EscalateDispute")
             .RequireAuthorization(OperationsAuthentication.EscalatePolicy)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
         operations.MapPost(OperationsRoutes.Resolve, ResolveAsync)
+            .WithName("ResolveDispute")
             .RequireAuthorization(OperationsAuthentication.ResolvePolicy)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -72,8 +76,8 @@ public static class OperationsEndpoints
 
     /// <summary>
     /// Any customer's dispute, with every stored event on its timeline oldest first. Needs the <c>dispute.read</c> role and
-    /// a token <c>sub</c> mapped to the operations actor. 404 <c>not-found</c> for an unknown dispute; 400 <c>validation</c>
-    /// for a <paramref name="disputeId"/> that is not a GUID. Every read, found or not, is audited.
+    /// a token <c>sub</c> in <c>Operations:AllowedClients</c>. 404 <c>not-found</c> for an unknown dispute; 400
+    /// <c>validation</c> for a <paramref name="disputeId"/> that is not a GUID. Every read, found or not, is audited.
     /// </summary>
     /// <remarks>
     /// The policy runs in the authorization middleware, before binding, so the checks run 401, 403, then 400 (AD-8).
@@ -90,9 +94,10 @@ public static class OperationsEndpoints
     }
 
     /// <summary>
-    /// Starts reviewing a submitted dispute (FR-21). Needs the <c>dispute.startReview</c> role and a mapped token
-    /// <c>sub</c>. 200 with the dispute as the operations read shows it; 404 <c>not-found</c> for an unknown dispute; 409
-    /// <c>action-not-allowed</c> with <c>disputeStatus</c> in any other status. Takes no body; one sent is ignored.
+    /// Starts reviewing a submitted dispute (FR-21). Needs the <c>dispute.startReview</c> role and a token <c>sub</c> in
+    /// <c>Operations:AllowedClients</c>. 200 with the dispute as the operations read shows it; 404 <c>not-found</c> for an
+    /// unknown dispute; 409 <c>action-not-allowed</c> with <c>disputeStatus</c> in any other status. Takes no body; one
+    /// sent is ignored.
     /// </summary>
     /// <remarks>The checks run 401, 403, 400 (a <paramref name="disputeId"/> that is not a GUID), 404, 409 (AD-8).</remarks>
     private static Task<Results<Ok<OperationsDisputeResponse>, ProblemHttpResult>> StartReviewAsync(
@@ -103,9 +108,10 @@ public static class OperationsEndpoints
         ActAsync(disputeId, DisputeAction.StartReview, resolve: null, handler, metrics, cancellationToken);
 
     /// <summary>
-    /// Escalates a submitted or under-review dispute (FR-22). Needs the <c>dispute.escalate</c> role and a mapped token
-    /// <c>sub</c>. 200 with the dispute as the operations read shows it; 404 <c>not-found</c> for an unknown dispute; 409
-    /// <c>action-not-allowed</c> with <c>disputeStatus</c> in any other status. Takes no body; one sent is ignored.
+    /// Escalates a submitted or under-review dispute (FR-22). Needs the <c>dispute.escalate</c> role and a token <c>sub</c>
+    /// in <c>Operations:AllowedClients</c>. 200 with the dispute as the operations read shows it; 404 <c>not-found</c> for
+    /// an unknown dispute; 409 <c>action-not-allowed</c> with <c>disputeStatus</c> in any other status. Takes no body; one
+    /// sent is ignored.
     /// </summary>
     /// <remarks>The checks run 401, 403, 400 (a <paramref name="disputeId"/> that is not a GUID), 404, 409 (AD-8).</remarks>
     private static Task<Results<Ok<OperationsDisputeResponse>, ProblemHttpResult>> EscalateAsync(
@@ -117,8 +123,8 @@ public static class OperationsEndpoints
 
     /// <summary>
     /// Resolves an under-review or escalated dispute with an outcome and a note for the customer (FR-23). Needs the
-    /// <c>dispute.resolve</c> role and a mapped token <c>sub</c>. 200 with the dispute as the operations read shows it; 400
-    /// <c>validation</c> for a body or <paramref name="disputeId"/> that does not bind, and naming <c>outcome</c> or
+    /// <c>dispute.resolve</c> role and a token <c>sub</c> in <c>Operations:AllowedClients</c>. 200 with the dispute as the
+    /// operations read shows it; 400 <c>validation</c> for a body or <paramref name="disputeId"/> that does not bind, and naming <c>outcome</c> or
     /// <c>note</c>, before the lookup; 404 <c>not-found</c> for an unknown dispute; 409 <c>action-not-allowed</c> with
     /// <c>disputeStatus</c> in any other status.
     /// </summary>

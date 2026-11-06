@@ -266,7 +266,7 @@ public sealed class DeployScriptTests
     public static TheoryData<string, string> AtTheirBounds()
     {
         var data = new TheoryData<string, string>();
-        foreach (string name in new[] { "APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "LOGIN_SESSION_COOKIE_SECRET", "GATEWAY_ORIGIN_VERIFY", "QA_DB_PASSWORD" })
+        foreach (string name in new[] { "APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "GATEWAY_ORIGIN_VERIFY", "QA_DB_PASSWORD" })
         {
             data.Add(name, Repeat('a', 32));
             data.Add(name, Repeat('Z', 128));
@@ -297,20 +297,20 @@ public sealed class DeployScriptTests
     {
         var data = new TheoryData<string, string>();
         Dictionary<string, string> testValues = AwsInputs.TestValues();
-        foreach (string name in new[] { "APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "LOGIN_SESSION_COOKIE_SECRET", "GATEWAY_ORIGIN_VERIFY", "QA_DB_PASSWORD" })
+        foreach (string name in new[] { "APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "GATEWAY_ORIGIN_VERIFY", "QA_DB_PASSWORD" })
         {
             data.Add(name, Repeat('a', 31));
             data.Add(name, Repeat('a', 129));
         }
 
         // 32 characters, one outside [A-Za-z0-9]: ; adds a connection-string keyword, $ breaks .env interpolation.
-        foreach (string name in new[] { "APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "LOGIN_SESSION_COOKIE_SECRET", "GATEWAY_ORIGIN_VERIFY" })
+        foreach (string name in new[] { "APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "GATEWAY_ORIGIN_VERIFY" })
         {
             data.Add(name, Repeat('a', 31) + "$");
             data.Add(name, Repeat('a', 31) + "-");
         }
 
-        foreach (string name in new[] { "ZITADEL_DB_PASSWORD", "LOGIN_SESSION_COOKIE_SECRET", "GATEWAY_ORIGIN_VERIFY" })
+        foreach (string name in new[] { "ZITADEL_DB_PASSWORD", "GATEWAY_ORIGIN_VERIFY" })
         {
             data.Add(name, Repeat('a', 31) + ";");
         }

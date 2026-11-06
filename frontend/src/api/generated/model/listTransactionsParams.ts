@@ -5,10 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type GetApiV1DisputesParams = {
-/**
- * @maxLength 128
- */
+export type ListTransactionsParams = {
 cursor?: string;
 /**
  * @minimum 1

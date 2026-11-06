@@ -65,7 +65,7 @@ public static class OperationsAuthentication
 
     private static void ConfigureJwtBearer(JwtBearerOptions jwt, IOptions<ZitadelOptions> zitadel)
     {
-        // Signing keys come from Zitadel's discovery document, as for the API's OpenID Connect handler.
+        // Signing keys come from Zitadel's discovery document, as for the web app's OpenID Connect handler.
         jwt.Authority = zitadel.Value.Issuer;
         // Empty (the option's own unset value) derives the address from the authority.
         jwt.MetadataAddress = zitadel.Value.MetadataAddress ?? "";

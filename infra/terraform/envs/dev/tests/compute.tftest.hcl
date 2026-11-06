@@ -226,3 +226,32 @@ run "criterion_7_the_instance_role_is_least_privilege_on_the_two_paths_and_the_o
     error_message = "The instance role's own policy is not least privilege on the two paths and the one key."
   }
 }
+
+# Each of these values reaches a template, where a quote or a backslash would change the rendered document.
+run "template_inputs_refuse_a_quote_or_a_backslash" {
+  command = plan
+
+  module {
+    source = "../../modules/compute"
+  }
+
+  variables {
+    aws_region              = "eu-west-1\""
+    account_id              = "0000\\0000"
+    github_repository       = "example-owner/disputedesk\""
+    clone_directory         = "/opt\\disputedesk"
+    ssm_path                = "/x\", \"*"
+    dataprotection_ssm_path = "/x\\y"
+    kms_key_arn             = "arn:aws:kms:*\""
+  }
+
+  expect_failures = [
+    var.aws_region,
+    var.account_id,
+    var.github_repository,
+    var.clone_directory,
+    var.ssm_path,
+    var.dataprotection_ssm_path,
+    var.kms_key_arn,
+  ]
+}

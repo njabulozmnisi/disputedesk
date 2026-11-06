@@ -12,11 +12,13 @@
 # depends_on or ports changes here replaces it whole with !override, or clears it with !reset, and nothing local
 # survives: no localhost, no dev-only value, no Development environment, no published port but the gateway's.
 #
-# Not started here: postgres (RDS replaces it, with sslmode=verify-full and the RDS CA bundle) and aspire-dashboard (the
-# otel-collector takes its place, AD-29). Both stay in the `local` profile.
+# The same services as locally, except: postgres (RDS replaces it, with sslmode=verify-full and the RDS CA bundle) and
+# aspire-dashboard (the otel-collector takes its place, AD-29) stay in the `local` profile; the worker, which locally
+# runs inside the api, and the otel-collector are added here (ComposeRenderTests checks this list).
 #
-# Memory (mem_limit, MiB), long-running: redpanda 768, zitadel 704, mailpit 128, core-banking 192,
-# api 512, worker 320, otel-collector 128, gateway 64; 3456 in all, under the 3482 (3.4 GiB) budget. The one-shots
+# Memory (mem_limit, MiB, each set here, so none comes from the local limits): redpanda 768, zitadel 704 (its
+# post_start provisioning hook included), mailpit 128, core-banking 192, api 512, worker 320, otel-collector 128,
+# gateway 64; 2816 in all, under the 3482 (3.4 GiB) budget.
 
 # The same extension key as the base file, so the merged x-app-config holds the AWS values, not the local ones.
 x-app-config: &aws-app-config
@@ -35,7 +37,7 @@ services:
     profiles: [local]
 
   redpanda:
-    # The same flags as locally, at half a gigabyte, with no listener or advertised address for host clients.
+    # The same flags as locally, with no listener or advertised address for host clients.
     command:
       - redpanda
       - start
@@ -51,6 +53,8 @@ services:
     mem_limit: 768m                                # --memory=512M for Seastar plus process overhead
 
   zitadel:
+    image: ${ZITADEL_IMAGE:?ZITADEL_IMAGE, the published zitadel image by digest, is required}
+    build: !reset null
     environment: !override
       ZITADEL_EXTERNALDOMAIN: ${AUTH_HOST:?AUTH_HOST, the identity distribution's host name, is required}
       ZITADEL_EXTERNALPORT: "443"
@@ -78,6 +82,16 @@ services:
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_TLS: "false"
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROM: noreply@disputedesk.test
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROMNAME: DisputeDesk
+      # The provisioner calls this container directly with the public host: the gateway starts only after its hook, so
+      # a call through CloudFront could never succeed. The issuer it writes is discovery's, https://AUTH_HOST.
+      PROVISION_CALL_URL: http://${AUTH_HOST:?AUTH_HOST is required}
+      PROVISION_CONNECT_TO: ${AUTH_HOST:?AUTH_HOST is required}:80:127.0.0.1:8080
+      PROVISION_PAT_FILE: /zitadel/bootstrap/admin.pat
+      PROVISION_OUT_DIR: /provision/out
+      PROVISION_FIXTURES_FILE: /fixtures/local.json
+      PROVISION_MARKER_FILE: /provision/state/provisioned
+      PROVISION_APP_ORIGINS: https://${APP_HOST:?APP_HOST, the app distribution's host name, is required}
+      PROVISION_AUTH_DEVELOPMENT_MODE: "false"       # HTTPS origins only (AD-24)
     volumes:
       - *rds-ca
     depends_on: !reset {}                            # RDS is up before the stack
@@ -90,6 +104,7 @@ services:
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
       MP_UI_AUTH: ${MAILPIT_UI_AUTH:?MAILPIT_UI_AUTH, one user:password pair, is required}
     ports: !reset []
+    mem_limit: 128m
 
   core-banking:
     image: ${CORE_BANKING_IMAGE:?CORE_BANKING_IMAGE, the published core-banking image by digest, is required}
@@ -99,8 +114,12 @@ services:
   api:
     image: ${API_IMAGE:?API_IMAGE, the published api image by digest, is required}
     build: !reset null
-    # The health checks stay the base file's: the published api and worker images are the api-local and worker-local
-    # targets, which carry the wget and busybox probes (P57, story 7.3).
+    mem_limit: 512m
+    # No Worker__InProcess: the worker container runs the relay and the sweep here, so the api writes no heartbeat
+    # files and its health check asks for readiness only. The published api image is the api-local target, which
+    # carries busybox (P57, story 7.3).
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/busybox", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
     environment: !override
       <<: *aws-app-config
       ASPNETCORE_ENVIRONMENT: Production
@@ -123,23 +142,40 @@ services:
     volumes:
       - *rds-ca
     depends_on: !override
+      zitadel: { condition: service_healthy }        # healthy only once provisioning wrote zitadel-clients.json
       core-banking: { condition: service_healthy }
     networks:
       default:
         ipv4_address: 10.201.89.10                   # one of the two containers allowed to reach instance metadata
 
+  # The outbox relay and the SLA sweep in their own container (locally they run inside the api).
   worker:
     image: ${WORKER_IMAGE:?WORKER_IMAGE, the published worker image by digest, is required}
-    build: !reset null
-    environment: !override
+    restart: unless-stopped
+    init: true   # as PID 1, dotnet never gets the SIGABRT of its own crash (pid_namespaces(7)) and spins instead of exiting
+    environment:
       <<: *aws-app-config
       DOTNET_ENVIRONMENT: Production
       OTEL_SERVICE_NAME: disputedesk-worker
       Kafka__BootstrapServers: redpanda:9092
     volumes:
       - *rds-ca
-    depends_on: !override
-      api: { condition: service_healthy }
+    # AD-25: the host's 30-second shutdown timeout finishes the record in flight; Compose waits 5 s more before SIGKILL.
+    stop_grace_period: 35s
+    # AD-25: the relay touches its file every loop (at least every 10 s); older than 30 s means a hung relay.
+    # The SLA sweep touches its own every 30-second loop and after each batch; older than 90 s (three missed loops,
+    # decided 2026-10-27) means a hung sweep. Both write under the system temporary directory, so the worker must not
+    # set TMPDIR. The published worker image is the worker-local target, which carries busybox (P57, story 7.3).
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/busybox", "sh", "-c",
+             "now=$$(/usr/local/bin/busybox date +%s) && test $$(( now - $$(/usr/local/bin/busybox stat -c %Y /tmp/heartbeat-relay) )) -le 30 && test $$(( now - $$(/usr/local/bin/busybox stat -c %Y /tmp/heartbeat-sweep) )) -le 90"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      redpanda: { condition: service_healthy }
+      api: { condition: service_healthy }   # the Api applies the migrations; the Worker never runs on an old schema (AD-22)
     mem_limit: 320m
 
   otel-collector:   # AD-29: traces to X-Ray, logs and metrics to CloudWatch, signed with the instance role
@@ -158,6 +194,7 @@ services:
   gateway:
     image: ${GATEWAY_IMAGE:?GATEWAY_IMAGE, the published gateway image by digest, is required}
     build: !reset null
+    mem_limit: 64m
     # CloudFront reaches the instance on port 80; the security group admits only CloudFront's origin-facing ranges.
     ports: !override ["80:8080"]
     environment: !override
@@ -166,8 +203,8 @@ services:
       GATEWAY_AUTH_HOST: ${AUTH_HOST:?AUTH_HOST is required}
       GATEWAY_MAILPIT_HOST: ${MAILPIT_HOST:?MAILPIT_HOST, the Mailpit distribution's host name, is required}
       GATEWAY_AUTH_ORIGIN: https://${AUTH_HOST:?AUTH_HOST is required}
-      # Two years with subdomains (RFC 6797 6.1.1, 6.1.2; OWASP HTTP Headers Cheat Sheet), as long as the login's own
-      # value, which the gateway hides. No preload: CloudFront default domains cannot join a preload list.
+      # Two years with subdomains (RFC 6797 6.1.1, 6.1.2; OWASP HTTP Headers Cheat Sheet); Zitadel's own value is
+      # hidden. No preload: CloudFront default domains cannot join a preload list.
       GATEWAY_HSTS: "max-age=63072000; includeSubDomains"
       GATEWAY_ORIGIN_VERIFY: ${GATEWAY_ORIGIN_VERIFY:?GATEWAY_ORIGIN_VERIFY, the origin-verify header value, is required}
     volumes:
@@ -181,8 +218,8 @@ services:
     # Like CloudFront, the health check sends the origin-verify header; it reads it from the container's environment.
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- --header \"Host: $$GATEWAY_AUTH_HOST\" --header \"X-Origin-Verify: $$GATEWAY_ORIGIN_VERIFY\" http://127.0.0.1:8080/debug/healthz >/dev/null && wget -qO- --header \"X-Origin-Verify: $$GATEWAY_ORIGIN_VERIFY\" http://127.0.0.1:8080/ >/dev/null"]
-    # Upstreams resolve while running (infra/images/gateway/templates-aws), so only Zitadel, which the health check probes, needs
-    # to be up first.
+    # Upstreams resolve while running (infra/images/gateway/templates-aws), so only Zitadel, which the health check
+    # probes, needs to be up first.
     depends_on: !override
       zitadel: { condition: service_healthy }
 

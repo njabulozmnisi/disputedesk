@@ -8,7 +8,7 @@
 #                one in the DisputeDesk.PlatformTests namespace over infra/tests' DisputeDesk.PlatformTests project
 #                under the stack lock (its GatewayTests start containers directly, outside Testcontainers); any other
 #                over backend/DisputeDesk.slnx under the testcontainers lock. Anything else is a shell command run from
-#                the copy's root (for example infra/deploy/aws/deploy.test.sh).
+#                the copy's root (for example scripts/ci-gates.test.sh).
 # Every patch is checked with `git apply --check` before any test runs. A break counts only when its patch applies,
 # its test passes without it, the tests still build, and the test then fails. A break whose test fails without it is
 # reported as FAIL and not counted. ERROR marks a break with no result of its test, also not counted: a patch that does

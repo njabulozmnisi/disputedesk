@@ -1,8 +1,8 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
-import { getApiV1Transactions } from '@/api/generated/disputedesk';
+import { listTransactions } from '@/api/generated/disputedesk';
 import { server } from '@/test/server';
 import {
   cachedCustomerData,
@@ -114,7 +114,7 @@ describe('the inactivity warning', () => {
     await passMinutes(12);
     // A request outside the query cache, so only the timer sees the 401 and the person stays on the page.
     failWith('/api/v1/transactions', 'unauthorized', 401);
-    await act(() => getApiV1Transactions().catch(() => undefined));
+    await act(() => listTransactions().catch(() => undefined));
 
     await passMinutes(1);
 
@@ -332,6 +332,24 @@ describe('Sign out in the warning', () => {
     expect(screen.getByRole('alertdialog')).toContainElement(alert);
     expect(router.state.location.pathname).toBe('/transactions');
     expect(cachedCustomerData(queryClient)).not.toEqual([]);
+  });
+
+  it('shows no earlier sign-out failure when the warning opens again', async () => {
+    failWith('/api/v1/antiforgery', 'core-banking-unavailable', 503);
+    const { user } = await openTransactions();
+    await passMinutes(13);
+    await screen.findByRole('alertdialog');
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    await screen.findByRole('alert');
+    await user.click(screen.getByRole('button', { name: 'Stay signed in' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+
+    await passMinutes(13);
+
+    const dialog = await screen.findByRole('alertdialog', { name: warningTitle });
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
   });
 });
 

@@ -1,7 +1,5 @@
 using DisputeDesk.Infrastructure;
 using DisputeDesk.Infrastructure.Observability;
-using DisputeDesk.Infrastructure.Outbox;
-using DisputeDesk.Worker.Sla;
 
 namespace DisputeDesk.Worker;
 
@@ -13,17 +11,7 @@ public static class WorkerHost
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
         builder.AddDisputeDeskTelemetry("disputedesk-worker", typeof(WorkerHost).Assembly);
         builder.Services.AddInfrastructure();
-        builder.Services.AddOptions<KafkaOptions>()
-            .BindConfiguration(KafkaOptions.SectionName)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // The error names the key, never its value (Microsoft Learn, Options pattern: options validation).
-        builder.Services.AddOptions<ConnectionStringsOptions>()
-            .BindConfiguration(ConnectionStringsOptions.SectionName)
-            .Validate(options => !string.IsNullOrWhiteSpace(options.DisputeDesk), "ConnectionStrings:DisputeDesk is required.")
-            .ValidateOnStart();
-        builder.Services.AddHostedService<OutboxRelay>();
-        builder.Services.AddHostedService<SlaSweep>();
+        builder.Services.AddOutboxRelayAndSlaSweep();
         return builder;
     }
 }

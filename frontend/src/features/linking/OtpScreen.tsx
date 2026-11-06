@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
-import { usePostApiV1LinkingVerify } from '@/api/generated/disputedesk';
+import { useVerifyLinking } from '@/api/generated/disputedesk';
 import { ApiError } from '@/api/mutator';
 import { isProblem, problemInteger, traceIdOf, validationFields } from '@/api/problems';
 import { useAnnounce } from '@/app/LiveRegion';
@@ -75,7 +75,7 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
 
   // `gcTime: 0` drops the mutation, and the code in its variables, once this screen is gone (TanStack Query,
   // useMutation).
-  const mutation = usePostApiV1LinkingVerify({
+  const mutation = useVerifyLinking({
     mutation: {
       gcTime: 0,
       onSuccess: () => {

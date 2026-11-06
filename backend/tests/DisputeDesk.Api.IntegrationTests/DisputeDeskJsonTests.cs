@@ -6,7 +6,7 @@ using DisputeDesk.Domain.Disputes;
 namespace DisputeDesk.Api.IntegrationTests;
 
 /// <summary>
-/// The shared JSON settings (AD-5, D5): an enum on the wire is exactly one member name in camelCase, so a list of names,
+/// The shared JSON settings (AD-5): an enum on the wire is exactly one member name in camelCase, so a list of names,
 /// an unknown name, another casing or a number fails to bind instead of becoming another member or an undefined value.
 /// </summary>
 public class DisputeDeskJsonTests
@@ -38,7 +38,7 @@ public class DisputeDeskJsonTests
     [InlineData("\"6\"")]
     [InlineData("6")]
     [InlineData("[\"wrongAmount\"]")]
-    // Another casing (D5): the built-in converter alone reads these as wrongAmount.
+    // Another casing: the built-in converter alone reads these as wrongAmount.
     [InlineData("\"WrongAmount\"")]
     [InlineData("\"WRONGAMOUNT\"")]
     [InlineData("\"wrongamount\"")]

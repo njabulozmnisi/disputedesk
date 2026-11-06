@@ -8,7 +8,7 @@ namespace DisputeDesk.ArchitectureTests;
 
 /// <summary>
 /// AC12: the headless sign-in script. 5.1 AC7: the operations token script. Also the Compose model's settings for the
-/// Api, the Worker and the gateway, as `docker compose config --format json` renders docker-compose.yml. The scripts run
+/// Api, which runs the outbox relay and the SLA sweep locally, and the gateway, as `docker compose config --format json` renders docker-compose.yml. The scripts run
 /// with stand-ins for curl and docker first on PATH, and stay read as text only for what no run can show. The provisioner
 /// and gateway cases test infra/'s own files, so they are in infra/tests/DisputeDesk.PlatformTests (ad-011).
 /// </summary>
@@ -25,7 +25,7 @@ public partial class PlatformScriptTests
     public async Task OperationsTokenScript_Run_SendsTheClientCredentialsGrantWithTheSecretOnStdinOnly(string? authOrigin, string tokenUrl)
     {
         // RFC 6749 §4.4 with the AD-9 scope, against the local auth origin unless AUTH_ORIGIN names another. Expected: one
-        // docker call that reads the clients file through the provisioner image, one curl call with the credentials as a
+        // docker call that reads the clients file inside the zitadel container, one curl call with the credentials as a
         // config on stdin (-K -), never an argument, which any local user could read from the process list; exit 0, and
         // only the token on stdout.
         string bin = Directory.CreateTempSubdirectory("operations-token-").FullName;
@@ -46,7 +46,7 @@ public partial class PlatformScriptTests
         Assert.Equal(0, exitCode);
         Assert.Equal("stub-access-token\n", output);
         Assert.Empty(errors);
-        Assert.Equal(["compose", "-f", Path.Combine(SourceRoots.Repo, "docker-compose.yml"), "run", "--rm", "--no-deps", "-T", "--entrypoint", "cat", "provision", "/out/zitadel-clients.json"], Assert.Single(docker));
+        Assert.Equal(["compose", "-f", Path.Combine(SourceRoots.Repo, "docker-compose.yml"), "exec", "-T", "zitadel", "cat", "/provision/out/zitadel-clients.json"], Assert.Single(docker));
         Assert.Equal(["-fsS", "--max-time", "30", "-K", "-", tokenUrl, "--data-urlencode", "grant_type=client_credentials",
             "--data-urlencode", "scope=openid urn:zitadel:iam:org:project:id:p1:aud urn:zitadel:iam:org:projects:roles"], Assert.Single(curl));
         Assert.Equal("user = \"operations-tools:stub-secret\"\n", curlInput);
@@ -75,7 +75,7 @@ public partial class PlatformScriptTests
         Directory.Delete(bin, recursive: true);
 
         Assert.Equal(1, exitCode);
-        Assert.Equal("could not read the clients file from the provision volume; is the stack up?\n", errors);
+        Assert.Equal("could not read the clients file in the zitadel container; is the stack up?\n", errors);
         Assert.Empty(output);
         Assert.Empty(curl);
     }
@@ -112,7 +112,6 @@ public partial class PlatformScriptTests
     [Theory]
     [InlineData("core-banking")]
     [InlineData("api")]
-    [InlineData("worker")]
     public async Task Compose_DotNetService_RunsUnderAnInitProcess(string service)
     {
         // A .NET crash (a failed start included) ends in abort(). As a container's PID 1, dotnet never receives that
@@ -189,8 +188,7 @@ public partial class PlatformScriptTests
     [Fact]
     public void DevLoginScript_Source_HoldsNoSecretAndNoBrowser()
     {
-        // Text: no run can show that the file holds no password, no token and no browser call. The login client's PAT
-        // is read inside its container at run time.
+        // Text: no run can show that the file holds no password, no token and no browser call.
         string script = File.ReadAllText(DevLoginPath);
 
         Assert.DoesNotContain("Dev-Only-", script, StringComparison.Ordinal);
@@ -198,31 +196,42 @@ public partial class PlatformScriptTests
         Assert.DoesNotContain("playwright", script, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Compose_Api_RunsTheRelayAndTheSweepInProcess()
+    {
+        // AD-27: locally the Api is the relay's and the sweep's host, so it needs the broker too.
+        JsonNode api = (await RenderComposeAsync())["services"]!["api"]!["environment"]!;
+
+        Assert.Equal("true", api["Worker__InProcess"]!.GetValue<string>());
+        Assert.Equal("redpanda:9092", api["Kafka__BootstrapServers"]!.GetValue<string>());
+    }
+
     [Theory]
     [InlineData("heartbeat-relay", 30)] // AD-25: the relay's loop is at most 10 seconds
     [InlineData("heartbeat-sweep", 90)] // story 5.3 AC7: three missed 30-second sweep loops (decided 2026-10-27)
-    public async Task Compose_WorkerHealthCheck_FailsWhenTheHeartbeatIsOlderThanItsThreshold(string file, int seconds)
+    public async Task Compose_ApiHealthCheck_FailsWhenAHeartbeatIsOlderThanItsThreshold(string file, int seconds)
     {
-        // The worker's health check compares each file's modification time with now, in seconds, as one shell test.
-        // Compose keeps $$ in the model and runs it as $.
-        JsonArray test = (await RenderComposeAsync())["services"]!["worker"]!["healthcheck"]!["test"]!.AsArray();
+        // The api's health check compares each file's modification time with now, in seconds, as one shell test, then
+        // asks for readiness. Compose keeps $$ in the model and runs it as $.
+        JsonArray test = (await RenderComposeAsync())["services"]!["api"]!["healthcheck"]!["test"]!.AsArray();
         string command = test[test.Count - 1]!.GetValue<string>();
         Match check = new Regex(
             @"\$\$\(\(\s*now\s*-\s*\$\$\(/usr/local/bin/busybox\s+stat\s+-c\s+%Y\s+/tmp/" + Regex.Escape(file) + @"\)\s*\)\)\s+-le\s+(?<seconds>\d+)",
             RegexOptions.None,
             TimeSpan.FromSeconds(1)).Match(command);
 
-        Assert.True(check.Success, $"The worker's health check does not test /tmp/{file}: {command}");
+        Assert.True(check.Success, $"The api's health check does not test /tmp/{file}: {command}");
         Assert.Equal(seconds, int.Parse(check.Groups["seconds"].Value, System.Globalization.CultureInfo.InvariantCulture));
-        Assert.Matches(WorkerNow(), command);
+        Assert.Matches(HeartbeatNow(), command);
+        Assert.EndsWith("&& /usr/local/bin/busybox wget -q -O /dev/null http://127.0.0.1:8080/health/ready", command, StringComparison.Ordinal);
     }
 
     [GeneratedRegex(@"Bearer [A-Za-z0-9_\-\.]{20,}")]
     private static partial Regex LiteralBearerToken();
 
-    /// <summary>The worker's health check takes now once, in seconds, and then tests each file.</summary>
+    /// <summary>The api's health check takes now once, in seconds, and then tests each file.</summary>
     [GeneratedRegex(@"^now=\$\$\(/usr/local/bin/busybox\s+date\s+\+%s\)\s*&&\s*test\b")]
-    private static partial Regex WorkerNow();
+    private static partial Regex HeartbeatNow();
 
     /// <summary>
     /// docker-compose.yml's model (Docker, "docker compose config"), rendered with an empty env file so no local .env is

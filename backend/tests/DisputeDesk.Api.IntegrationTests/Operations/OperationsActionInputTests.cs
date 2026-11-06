@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using DisputeDesk.Api.IntegrationTests.Disputes;
 using DisputeDesk.Api.IntegrationTests.Infrastructure;
+using DisputeDesk.Api.IntegrationTests.Transactions;
 using DisputeDesk.Contracts.Audit;
 using DisputeDesk.Contracts.Problems;
 using DisputeDesk.Domain.Disputes;
@@ -102,6 +103,25 @@ public sealed class OperationsActionInputTests(OperationsToolFixture api) : ICla
         Assert.Equal(ProblemType.For(CommonProblems.Unauthorized), await response.ProblemTypeAsync());
         Assert.Empty(response.Headers.WwwAuthenticate);
         // No Denied entry for the refused token either (AD-14a, the unaudited case).
+        Assert.Empty(await api.AuditRowsAsync(disputeId));
+        Assert.Equal(DisputeStatus.UnderReview, (await Factory.DisputeRowAsync(disputeId)).Status);
+        Assert.Equal(storedEvents, (await Factory.StreamAsync(disputeId)).Count);
+        Assert.Equal(outboxRows, (await Factory.OutboxRowsAsync(disputeId)).Count);
+    }
+
+    [Fact]
+    public async Task Resolve_TextPlainBodyWithACustomerCookie_Returns415ValidationAndWritesNoRow()
+    {
+        Guid disputeId = await api.DisputeInAsync(DisputeStatus.UnderReview);
+        int storedEvents = (await Factory.StreamAsync(disputeId)).Count;
+        int outboxRows = (await Factory.OutboxRowsAsync(disputeId)).Count;
+        using HttpClient browser = await Factory.SignInLinkedAsync("login-a", TransactionsApi.CustomerA);
+
+        HttpResponseMessage response = await browser.ActAsync(disputeId.ToString(), "resolve", token: null, OperationsApi.ResolveBody(), "text/plain");
+
+        // The cookie satisfies the fallback policy on routing's 415 endpoint, so the framework's 415 answers, not a 401.
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
+        Assert.Equal(ProblemType.For(CommonProblems.Validation), await response.ProblemTypeAsync());
         Assert.Empty(await api.AuditRowsAsync(disputeId));
         Assert.Equal(DisputeStatus.UnderReview, (await Factory.DisputeRowAsync(disputeId)).Status);
         Assert.Equal(storedEvents, (await Factory.StreamAsync(disputeId)).Count);

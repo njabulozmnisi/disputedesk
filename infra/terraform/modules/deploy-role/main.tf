@@ -5,43 +5,87 @@
 variable "name" {
   description = "The prefix for every resource name."
   type        = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.name))
+    error_message = "name must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "aws_region" {
   type = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.aws_region))
+    error_message = "aws_region must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "github_repository" {
   description = "<owner>/<name>; only its jobs in the environment github_environment may assume the role."
   type        = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.github_repository))
+    error_message = "github_repository must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "github_repository_owner_id" {
   description = "The numeric ID of the repository's owner, as digits."
   type        = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.github_repository_owner_id))
+    error_message = "github_repository_owner_id must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "github_repository_id" {
   description = "The repository's numeric ID, as digits."
   type        = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.github_repository_id))
+    error_message = "github_repository_id must hold no quote or backslash: it reaches a template."
+  }
 }
 
-# Not validated: envs/dev passes the literal "dev" (validate at boundaries).
 variable "github_environment" {
   description = "The GitHub environment whose jobs may assume the role; it allows only main (infra/terraform/README.md, step 8)."
   type        = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.github_environment))
+    error_message = "github_environment must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "instance_arn" {
   type = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.instance_arn))
+    error_message = "instance_arn must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "clone_directory" {
   type = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.clone_directory))
+    error_message = "clone_directory must hold no quote or backslash: it reaches a template."
+  }
 }
 
 variable "ssm_path" {
   type = string
+
+  validation {
+    condition     = !can(regex("[\"\\\\]", var.ssm_path))
+    error_message = "ssm_path must hold no quote or backslash: it reaches a template."
+  }
 }
 
 locals {

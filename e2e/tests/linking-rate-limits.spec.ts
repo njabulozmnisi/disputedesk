@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
-import { holdsCode, otpCodesSentTo, queryDatabase, telemetryValues, topicRecords, origin } from './support';
+import { enterHostedCredentials, holdsCode, otpCodesSentTo, queryDatabase, telemetryValues, topicRecords, origin } from './support';
 
 // Story 6.3: the linking rate limits (5 requests per login, 20 per client IP, a 15-minute window), through the real
 // gateway, Api, job, database (qa_readonly) and Mailpit. The limits are held in memory on the one Api instance, so
@@ -95,10 +95,7 @@ async function signInAs(browser: Browser, login: { username: string; password: s
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
+  await enterHostedCredentials(page, login);
   await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   await page.close();
   return context;
@@ -326,10 +323,10 @@ test('claim: a challenge locked by three wrong codes while its job waits gets no
   const smsBefore = await smsToD();
   const mark = auditMark();
   const holder = holdCustomerLock();
-  await expect.poll(() => lockHolders() === 1, { message: 'the lock holder', timeout: 40_000 }).toBe(true);
+  await expect.poll(() => lockHolders(), { message: 'the lock holder', timeout: 40_000 }).toBe(1);
   try {
     expect((await post(login, startPath, dDetails)).status).toBe(202);
-    await expect.poll(() => lockWaiters() === 1, { message: 'the job waiting on the lock', timeout: 40_000 }).toBe(true);
+    await expect.poll(() => lockWaiters(), { message: 'the job waiting on the lock', timeout: 40_000 }).toBe(1);
     // The start left a blank current challenge; wrong codes lock it like any other.
     expect(challengeOf(login.sub)).toBe('0|null|false|false');
     const first = await post(login, verifyPath, JSON.stringify({ code: wrongCodes[0] }));
@@ -360,10 +357,10 @@ test('criterion 4: with the queue full, the blank challenge of a refused start a
   expect(accepted.length + refused.length).toBeLessThanOrEqual(pool.length - 1);
   const mark = auditMark();
   const holder = holdCustomerLock();
-  await expect.poll(() => lockHolders() === 1, { message: 'the lock holder', timeout: 40_000 }).toBe(true);
+  await expect.poll(() => lockHolders(), { message: 'the lock holder', timeout: 40_000 }).toBe(1);
   try {
     for (const login of accepted) expect((await post(login, startPath, dDetails)).status, login.sub).toBe(202);
-    await expect.poll(() => lockWaiters() === jobsAtOnce, { message: '4 jobs waiting on the lock', timeout: 40_000 }).toBe(true);
+    await expect.poll(() => lockWaiters(), { message: '4 jobs waiting on the lock', timeout: 40_000 }).toBe(jobsAtOnce);
     const refusedWithMatch = await post(refused[0], startPath, dDetails);
     const refusedNoMatch = await post(refused[1], startPath, noMatchDetails);
     for (const observed of [refusedWithMatch, refusedNoMatch]) {

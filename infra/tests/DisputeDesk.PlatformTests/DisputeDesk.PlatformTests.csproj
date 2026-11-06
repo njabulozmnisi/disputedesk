@@ -2,7 +2,8 @@
   <!--
     The tests of infra/'s own files (ad-011). No Directory.Build.props or Directory.Packages.props sits between this
     folder and the repository root, so this file (with ../.editorconfig and ../global.json) is the whole build. Its
-    settings and exact package versions are the backend test projects', copied rather than imported: change both together.
+    settings and exact package versions are the backend test projects', copied rather than imported: keep the shared
+    compiler settings and package versions in step.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>

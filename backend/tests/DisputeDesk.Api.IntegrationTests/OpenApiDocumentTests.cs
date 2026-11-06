@@ -53,6 +53,45 @@ public class OpenApiDocumentTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task RuntimeDocument_EveryOperation_HasItsEndpointNameAsOperationIdAndItsTag()
+    {
+        // Endpoint names are the OpenAPI operationId (Microsoft Learn, Include OpenAPI metadata: operationId), so the
+        // generated SPA client is named after them, not after the paths. Every tag is the path's first segment.
+        (string Method, string Path, string OperationId, string Tag)[] expected =
+        [
+            ("get", "/api/v1/antiforgery", "GetAntiforgeryToken", "Antiforgery"),
+            ("get", "/api/v1/authentication/login", "Login", "Authentication"),
+            ("get", "/api/v1/authentication/session", "GetSession", "Authentication"),
+            ("post", "/api/v1/authentication/logout", "Logout", "Authentication"),
+            ("get", "/api/v1/disputes", "ListDisputes", "Disputes"),
+            ("get", "/api/v1/disputes/{disputeId}", "GetDispute", "Disputes"),
+            ("post", "/api/v1/disputes", "RaiseDispute", "Disputes"),
+            ("post", "/api/v1/disputes/{disputeId}/withdraw", "WithdrawDispute", "Disputes"),
+            ("post", "/api/v1/linking/start", "StartLinking", "Linking"),
+            ("post", "/api/v1/linking/verify", "VerifyLinking", "Linking"),
+            ("get", "/api/v1/operations/disputes/{disputeId}", "ReadDispute", "Operations"),
+            ("post", "/api/v1/operations/disputes/{disputeId}/escalate", "EscalateDispute", "Operations"),
+            ("post", "/api/v1/operations/disputes/{disputeId}/resolve", "ResolveDispute", "Operations"),
+            ("post", "/api/v1/operations/disputes/{disputeId}/start-review", "StartDisputeReview", "Operations"),
+            ("get", "/api/v1/transactions", "ListTransactions", "Transactions"),
+        ];
+        using JsonDocument document = await GetDocumentAsync();
+
+        var operations = document.RootElement.GetProperty("paths").EnumerateObject()
+            .SelectMany(path => path.Value.EnumerateObject()
+                .Where(field => HttpMethodKeys.Contains(field.Name))
+                .Select(operation => (
+                    Method: operation.Name,
+                    Path: path.Name,
+                    OperationId: operation.Value.GetProperty("operationId").GetString() ?? "",
+                    Tag: Assert.Single(operation.Value.GetProperty("tags").EnumerateArray()).GetString() ?? "")))
+            .Order()
+            .ToList();
+
+        Assert.Equal(expected.Order(), operations);
+    }
+
+    [Fact]
     public async Task RuntimeDocument_SecurityScheme_IsOneBearerSchemeOnTheOperationsRoutesOnly()
     {
         using JsonDocument document = await GetDocumentAsync();

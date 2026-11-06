@@ -65,6 +65,7 @@ public class StartLinkingQueueFullTests(PostgresFixture postgres)
         // The queued fifth start runs once a worker is free; neither refused start ever reaches core banking.
         Array.ForEach(holds, hold => hold.Release());
         await factory.WaitForStopsAsync(FillerLogins, [AuditAction.LinkingNoMatch], count: 5);
+        await Task.Delay(LinkingApi.AbsenceWindow, TestContext.Current.CancellationToken);
         Assert.Equal(5, ports.CoreBanking.Calls);
         Assert.Equal(2, (await factory.LinkingAuditsAsync(matchLogin)).Count);
     }

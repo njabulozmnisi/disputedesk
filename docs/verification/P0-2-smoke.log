@@ -16,7 +16,6 @@ provision          Exited (0) 8 seconds ago
 redpanda           Up 22 seconds (healthy)
 worker             Up 16 seconds
 zitadel            Up 16 seconds (healthy)
-zitadel      Up 11 seconds (healthy)
 
 == memory (docker stats --no-stream)
 disputedesk-api-1	38.1MiB / 512MiB
@@ -27,8 +26,7 @@ disputedesk-postgres-1	98.69MiB / 512MiB
 disputedesk-redpanda-1	275.8MiB / 1.5GiB
 disputedesk-worker-1	10.68MiB / 384MiB
 disputedesk-zitadel-1	85.96MiB / 768MiB
-disputedesk-zitadel-1	102.7MiB / 768MiB
-TOTAL	690.6 MiB (0.67 GiB)
+TOTAL	587.9 MiB (0.57 GiB)
 
 == api readiness through the gateway
 ok  GET http://localhost:8080/api/health/ready -> Healthy

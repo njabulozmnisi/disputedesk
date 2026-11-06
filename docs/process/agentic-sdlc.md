@@ -58,8 +58,8 @@ sequenceDiagram
     participant Q as QA (Sonnet + Playwright MCP)
     participant R as Reviewer (Opus, writes only its record)
 
-    S->>S: check-ready, collision check (stacked on story/<base> when it depends on an unmerged story)
-    S->>B: Story from docs/tickets (worktree from main, or from story/<base>)
+    S->>S: check-ready, collision check (stacked on feature/<base> when it depends on an unmerged story)
+    S->>B: Story from docs/tickets (worktree from main, or from feature/<base>)
     B->>B: Test first, all checks, one full run with a results file, breaks list, developer smoke check
     B-->>S: {status: built, criteria → tests, breaks, test_results}, <id>-build.json in the worktree
     par Post-build review, records in docs/verification/
@@ -67,7 +67,7 @@ sequenceDiagram
         R-->>S: <id>-review.md, findings high / medium / low
     and
         S->>V: Read the results file, run the breaks list
-        V->>V: verify-with-copilot.sh, run-breaks in a throwaway copy (testcontainers lock)
+        V->>V: verify-with-copilot.sh, run-breaks in a throwaway copy (testcontainers lock, stack lock for DisputeDesk.PlatformTests names, a filter matching no test is an error)
         V-->>S: <id>-verify.md keyed by SHA and diff hash, findings
     and High-stakes story only (auth, identity, customer data, money, migrations)
         S->>SEC: Security review
@@ -82,12 +82,13 @@ sequenceDiagram
         Q->>Q: stack lock for this run only, walk every criterion: browser → network → DB (read-only role) → events
         Q-->>S: {status: pass|fail}, <id>-qa.md + committed Playwright tests
     end
-    S->>S: Commit on story/<id>, push-and-watch.sh (CI + Security on the branch)
-    S->>S: Rebase onto main, fast-forward main, push-and-watch.sh on main
+    S->>S: Commit on feature/<id>, push, open the pull request (base main, or feature/<base> when stacked)
+    S->>S: Wait for its required checks, arm squash auto-merge on base main pinned to the checked head
+    S->>S: Confirm the squash commit, wait for main's CI and Security runs on it (publish)
     S-->>N: Report after the merge; High-stakes diffs in the review blocks
 ```
 
-Before dispatch the supervisor runs `scripts/check-ready.sh <story>`, which fails while a `[story]` point in the pre-build review has no Sofia disposition, a `[decision]` point exists but the story's front matter lacks `decisions: settled` (the supervisor sets it, citing the epic's `epic-<epic>-decisions.md`, once the human has answered), or a story in the `after` list is neither done nor pushed as a `story/<id>` branch.
+Before dispatch the supervisor runs `scripts/check-ready.sh <story>`, which fails while a `[story]` point in the pre-build review has no Sofia disposition, a `[decision]` point exists but the story's front matter lacks `decisions: settled` (the supervisor sets it, citing the epic's `epic-<epic>-decisions.md`, once the human has answered), or a story in the `after` list is neither done nor pushed as a `feature/<id>` branch on origin.
 
 Pre-build, one reviewer reads each Feature and High-stakes story with the review and security checklists; there is no per-story challenger. The challenger runs only in decision mode, on a new or changed architecture decision, PRD or brief.
 
@@ -101,7 +102,20 @@ A lane on a worker machine runs through `scripts/lane.sh start|wait|collect <hos
 
 The verifier does not re-run the suite. It checks that the builder's results files cover the current diff (the diff hash in `<story>-build.json`), judges each criterion against its test, and runs each `breaks` entry in a throwaway copy: apply the patch, run the named test, expect a failure. A break that still passes, or a results file for another diff, is a high finding.
 
-Every push goes through `scripts/push-and-watch.sh`, which pushes the current branch and exits non-zero unless the CI and Security workflows succeed on the pushed commit. A story is pushed on `story/<id>`; once its run is green it is rebased onto main (pushed and watched again if the rebase changed the commit), main is fast-forwarded to it, and `push-and-watch.sh` runs once more on main. Main only ever receives a commit CI already passed. A story that depends on an unmerged one branches from `story/<base>` and rebases onto main after the base merges.
+Every change reaches main through its pull request (AGENTS.md, Commits): a story on `feature/<story>`, any other change on `feature/<slug>`, the records of a merged story on `feature/records-<story>`. Every `gh` write and read-back runs as the repository owner, `GH_TOKEN="$(gh auth token --user <owner>)" gh …`, written `gh` below; the token is never printed, logged or written to a file. Once every stage the change needs has passed, the supervisor:
+
+1. pushes the branch, `git push origin feature/<id>`, and opens the pull request, `gh pr create --head feature/<id> --base <base> --title <title> --body <body>`, where `<base>` is `main`, or `feature/<base>` for a stacked story, and `<title>` is the commit-message subject (one line, at most 72 characters);
+2. waits for the required checks, `gh pr checks <n> --watch --required`;
+3. arms the merge only when `gh pr view <n> --json baseRefName` reads `main`: `gh pr merge <n> --squash --auto --match-head-commit <sha>`, where `<sha>` is the full 40-character SHA of the commit whose tree the stages checked, or the head `gh pr update-branch` made from it once its checks pass;
+4. before any later push to an armed pull request, runs `gh pr merge <n> --disable-auto`, and re-arms with the new head once its checks pass;
+5. if the pull request still reads `OPEN` once its checks pass, reads `gh pr view <n> --json mergeStateStatus`: `BEHIND` takes the update below, `BLOCKED` waits, `DIRTY` goes to a builder as a fix round;
+6. confirms the merge and its squash SHA, `gh pr view <n> --json state,mergeCommit`, then finds main's runs on it, `gh run list --branch main --commit <squash sha> --workflow CI` (and `Security`), and waits for each, `gh run watch <id> --exit-status`.
+
+A pull request that is only behind main gets `gh pr merge <n> --disable-auto`, then `gh pr update-branch <n>`, with no force push; the local branch then takes the remote head first (`git fetch` and a fast-forward), and the merge is re-armed with the new head once its checks pass, with no other stage re-run. A `DIRTY` pull request, or a drift check that fails after an update, goes to a builder as a fix round, since the supervisor writes no code.
+
+A stacked story's pull request has the base `feature/<base>`. When the base's pull request squash-merges, GitHub deletes `feature/<base>` and retargets the stacked pull request to main ([Managing branches within your repository](https://docs.github.com/en/pull-requests/how-tos/commit-changes/managing-branches-within-your-repository), Deleting a branch); the supervisor confirms it with `gh pr view <n> --json baseRefName` (else `gh pr edit <n> --base main`). It takes the base's last head from `gh pr view <base-pr> --json headRefOid`, runs `git fetch origin` and `git rebase --onto origin/main <that sha> feature/<story>` (on a conflict, `git rebase --abort` and a fix round), and pushes with the one force push the guard lets through, `git [-C <path>] push --force-with-lease --force-if-includes origin feature/<story>`, as the whole command. The pull request's checks run again before any merge.
+
+Pull-request checks test GitHub's merge of the up-to-date branch into main, and main's own run builds, scans and publishes the squash commit (ad-012). Main is never force-pushed, and its ruleset refuses it.
 
 ## 3. What enforces the rules
 
@@ -121,20 +135,20 @@ flowchart LR
     end
     subgraph CI["CI (Phase 0)"]
         CIx[build, tests, architecture tests, OpenAPI drift, floor guard, security scans]:::ci
-        CId[docs-only push: floor guard, gitleaks, forbidden terms only]:::ci
+        CId[every pull request and main: every check job, gated by ci-passed and security-passed]:::ci
     end
 
-    GU --> G1[Commit, push, merge → explicit approval]
+    GU --> G1[Commit, push, merge and the closed list of gh writes → the supervisor only, no prompt]
     GU --> G2[Each agent writes only its own area; the supervisor writes no code]
-    GU --> G3[No hook bypass, force push, hard reset, prune]
+    GU --> G3[No hook bypass, hard reset, prune, or force push but the stacked story's lease-checked push]
     GU --> G4[No system clock, suppressions, DB mocks, banned packages in .NET code]
-    GU --> G5[terraform apply/destroy and aws → explicit approval]
+    GU --> G5[terraform apply/destroy/import, aws, a deploy, DEPLOY_ENABLED → explicit approval]
     GU --> G6[No forbidden terms anywhere]
     SC --> G7[Agent must end with the status contract]
     PC --> G8[No secrets or forbidden terms reach history]
 ```
 
-A push that changes only Markdown and `docs/` skips CI's build, test, e2e and ZAP jobs; the floor guard, gitleaks and the forbidden-terms check still run on it. Every other push runs the full CI, the ZAP baseline included, so QA runs no ZAP scan of its own.
+Every check job runs on every pull request and on every push to main, a docs-only change included (ad-012, clause 1), and `ci-passed` and `security-passed` gate them. The ZAP baseline is one of them, so QA runs no ZAP scan of its own.
 
 ## Agents, skills and files
 

@@ -23,7 +23,7 @@ describe('no token in the browser', () => {
     },
   );
 
-  it('signs in by navigating to the sign-in, from every Sign in button', async () => {
+  it('signs in by navigating to the login endpoint, from every Sign in button', async () => {
     signInAs('anonymous');
     renderApp({ path: '/' });
 
@@ -41,7 +41,7 @@ describe('no token in the browser', () => {
     }
   });
 
-  it('signs in again from the session-ended screen by navigating to the sign-in', async () => {
+  it('signs in again from the session-ended screen by navigating to the login endpoint', async () => {
     signInAs('anonymous');
     renderApp({ path: '/signed-out?reason=expired' });
 

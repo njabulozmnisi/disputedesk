@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 
-import { useGetApiV1TransactionsInfinite } from '@/api/generated/disputedesk';
+import { useListTransactionsInfinite } from '@/api/generated/disputedesk';
 import type { TransactionResponse } from '@/api/generated/model';
 import { useAnnounce } from '@/app/LiveRegion';
 import { usePageHeading } from '@/app/usePageHeading';
@@ -52,7 +52,7 @@ function groupByDay(rows: TransactionResponse[]) {
 export function TransactionsScreen() {
   const headingRef = usePageHeading('Transactions');
   const announce = useAnnounce();
-  const query = useGetApiV1TransactionsInfinite(undefined, {
+  const query = useListTransactionsInfinite(undefined, {
     query: {
       initialPageParam: undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,

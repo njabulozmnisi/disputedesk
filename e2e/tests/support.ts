@@ -106,16 +106,45 @@ export function ownDisputable<T extends DisputableRow>(rows: T[], spec: keyof ty
   return ids.flatMap((id) => rows.filter((row) => row.transactionId === id && row.disputable));
 }
 
-/** Signs a fixture login in through the hosted Zitadel pages and returns the signed-in browser context. */
+// ---- Zitadel's built-in login (Login v1, served under /ui/login) --------------------------------------------------------
+// Field ids and button ids are those of Zitadel v4.20.0's login templates (internal/api/ui/login/static/templates):
+// login.html `loginName`, password.html `password`, register.html `firstname`, `lastname`, `email`, `register-password`,
+// `register-password-confirmation`, init_user.html `code` and `init-button`. The primary button of the login name and
+// password pages has the id `submit-button` ("Next"). Each form POST answers with the next page at the same URL.
+export const hostedLoginName = (page: Page) => page.locator('#loginName');
+export const hostedPassword = (page: Page) => page.locator('#password');
+export const hostedNext = (page: Page) => page.locator('#submit-button');
+
+/**
+ * A login's first sign-in offers two-factor setup (mfa_prompt.html), which the login policy leaves optional: this skips
+ * it when it is shown, and returns once the browser is back at the app or on that page's next step.
+ */
+export async function skipTwoFactorSetup(page: Page) {
+  const skip = page.locator('button[name="skip"]');
+  const atApp = page.waitForURL((url) => url.origin === origin, { timeout: 60_000 }).then(() => 'app' as const);
+  const prompt = skip.waitFor({ timeout: 60_000 }).then(() => 'prompt' as const);
+  // Whichever comes first decides; the other wait ends with the page or its timeout and is not needed.
+  atApp.catch(() => undefined);
+  prompt.catch(() => undefined);
+  if ((await Promise.race([atApp, prompt])) === 'prompt') await skip.click();
+}
+
+/** Fills the login name page and the password page of the built-in login. The caller waits for the redirect back to the app. */
+export async function enterHostedCredentials(page: Page, login: { username: string; password: string }) {
+  await hostedLoginName(page).fill(login.username);
+  await hostedNext(page).click();
+  await hostedPassword(page).fill(login.password, { timeout: 60_000 });
+  await hostedNext(page).click();
+  await skipTwoFactorSetup(page);
+}
+
+/** Signs a fixture login in through the built-in login and returns the signed-in browser context. */
 export async function signInContext(browser: Browser, loginKey: string): Promise<BrowserContext> {
   const login = fixtureLogin(loginKey);
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
+  await enterHostedCredentials(page, login);
   await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   await page.close();
   return context;
@@ -154,38 +183,43 @@ export async function smsTo(cellphone: string, startedAt: string): Promise<MailS
 
 export type Login = { label: string; email: string; context: BrowserContext; sub: string };
 
-/** Registers a new user on Zitadel's register page, confirms the e-mail with the code from Mailpit and signs in. The address is `<prefix>-<label>-<epoch ms>@disputedesk.test`. `inspect`, when given, is called on the hosted register, password and e-mail code pages (UJ-1 scans them with axe). */
-export async function registerLogin(browser: Browser, prefix: string, label: string, inspect?: (page: Page, stage: 'register' | 'password' | 'verify') => Promise<void>): Promise<Login> {
+/**
+ * Registers a new user on the built-in login's register page, confirms the e-mail with the code from Mailpit and signs in.
+ * The register page sets the password, so the built-in login confirms the address in its user activation step (the
+ * "Initialize User" e-mail and its code). The address is `<prefix>-<label>-<epoch ms>@disputedesk.test`. `inspect`, when
+ * given, is called on the register and e-mail code pages (UJ-1 scans them with axe).
+ */
+export async function registerLogin(browser: Browser, prefix: string, label: string, inspect?: (page: Page, stage: 'register' | 'verify') => Promise<void>): Promise<Login> {
   const email = `${prefix}-${label}-${Date.now()}@disputedesk.test`;
   const password = 'Dev-Only-Qa62-Pass1!';
   const knownSessions = queryDatabase('select "Id" from "Sessions"').split('\n').filter(Boolean);
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto('/api/v1/authentication/login');
-  await page.getByRole('button', { name: 'Register new user' }).click();
-  await page.getByTestId('firstname-text-input').waitFor();
+  await page.getByRole('button', { name: 'Register', exact: true }).click();
+  await page.locator('#firstname').waitFor();
   await inspect?.(page, 'register');
-  await page.getByTestId('firstname-text-input').fill('Qa');
-  await page.getByTestId('lastname-text-input').fill(`Sixtwo${label}`);
-  await page.getByTestId('email-text-input').fill(email);
-  await page.getByText('Password', { exact: true }).click();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByTestId('password-text-input').waitFor({ timeout: 60_000 });
-  await inspect?.(page, 'password');
-  await page.getByTestId('password-text-input').fill(password, { timeout: 60_000 });
-  await page.getByTestId('password-confirm-text-input').fill(password);
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('#firstname').fill('Qa');
+  await page.locator('#lastname').fill(`Sixtwo${label}`);
+  await page.locator('#email').fill(email);
+  await page.locator('#register-password').fill(password);
+  await page.locator('#register-password-confirmation').fill(password);
+  await page.locator('#register-button').click();
   let code: string | undefined;
   for (let attempt = 0; attempt < 60 && !code; attempt++) {
-    const messages = await mailpitSearch(`to:${email} subject:"Verify email"`);
-    if (messages.length > 0) code = (await messageText(messages[0].ID)).match(/\bCode ([A-Z0-9]{6})\b/)?.[1];
+    const messages = await mailpitSearch(`to:${email} subject:"Initialize User"`);
+    if (messages.length > 0) code = (await messageText(messages[0].ID)).match(/\(Code ([A-Z0-9]{6})\)/)?.[1];
     if (!code) await pause(500);
   }
   expect(code, `verification e-mail for ${label}`).toBeTruthy();
-  await page.getByTestId('code-text-input').waitFor();
+  await page.locator('#code').waitFor();
   await inspect?.(page, 'verify');
-  await page.getByTestId('code-text-input').fill(code!);
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('#code').fill(code!);
+  await page.locator('#init-button').click();
+  // The page that confirms the activation has one button, "Next", which continues the sign-in.
+  await page.getByRole('heading', { level: 1, name: 'User Activated' }).waitFor();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await skipTwoFactorSetup(page);
   await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   await page.close();
   const newRows = queryDatabase('select "Id" || \'|\' || "LoginSub" from "Sessions"').split('\n').filter((row) => row && !knownSessions.includes(row.split('|')[0]));

@@ -64,8 +64,9 @@ public class OutboxRelayHeartbeatTests(OutboxFixture outbox)
         using var stopTicking = new CancellationTokenSource();
         Task ticking = OutboxFixture.FollowRealTimeAsync(clock, stopTicking.Token);
 
-        // The batch's query waits 4 s on a table lock (under its 5 s command timeout) before it reaches the send, and
-        // nothing listens on the broker address, so the send then waits out its whole 10-second delivery timeout.
+        // The batch's query waits 4 s on a table lock (under its 5 s command timeout) before it reaches the send, and the
+        // broker is paused by then, so the send then waits out its whole 10-second delivery timeout. The broker runs while
+        // the relay starts, so its start-up topic step is done once it holds the outbox lock.
         await using var tableLock = new NpgsqlConnection(outbox.ConnectionString);
         await tableLock.OpenAsync(TestContext.Current.CancellationToken);
         await using NpgsqlTransaction transaction = await tableLock.BeginTransactionAsync(TestContext.Current.CancellationToken);
@@ -75,10 +76,15 @@ public class OutboxRelayHeartbeatTests(OutboxFixture outbox)
         }
 
         TimeSpan oldest = TimeSpan.Zero;
-        await using (RelayHost host = await RelayHost.StartAsync(clock, outbox.ConnectionString, "127.0.0.1:1"))
+        bool paused = false;
+        try
         {
+            await using RelayHost host = await RelayHost.StartAsync(clock, outbox.ConnectionString, outbox.BootstrapServers);
             await Eventually.UntilAsync(() => HeartbeatAt() >= start, OutboxFixture.WaitLimit);
+            await Eventually.UntilAsync(RelayHoldsTheLockAsync, OutboxFixture.WaitLimit);
             var held = Stopwatch.StartNew();
+            await outbox.PauseBrokerAsync();
+            paused = true;
             bool released = false;
             while (host.ProducerSpans.Count == 0)
             {
@@ -94,6 +100,13 @@ public class OutboxRelayHeartbeatTests(OutboxFixture outbox)
                 await Task.Delay(50, TestContext.Current.CancellationToken);
             }
         }
+        finally
+        {
+            if (paused)
+            {
+                await outbox.UnpauseBrokerAsync();
+            }
+        }
 
         await stopTicking.CancelAsync();
         await ticking;
@@ -102,6 +115,17 @@ public class OutboxRelayHeartbeatTests(OutboxFixture outbox)
         // not the fake clock, sets the send's length, so the bound needs that margin. Without the touch just before the
         // send, the 4-second table-lock wait adds to the age (about 14 s), which this bound still fails.
         Assert.InRange(oldest, TimeSpan.Zero, TimeSpan.FromSeconds(12));
+    }
+
+    /// <summary>True once a session holds the relay's advisory lock (PostgreSQL, pg_locks).</summary>
+    private async Task<bool> RelayHoldsTheLockAsync()
+    {
+        await using var connection = new NpgsqlConnection(outbox.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var held = new NpgsqlCommand(
+            "SELECT count(*) > 0 FROM pg_locks WHERE locktype = 'advisory' AND objid::bigint = @key AND granted", connection);
+        held.Parameters.Add(new NpgsqlParameter<long>("key", OutboxRelay.LockKey));
+        return await held.ExecuteScalarAsync(TestContext.Current.CancellationToken) is true;
     }
 
     private static DateTime? HeartbeatAt() =>

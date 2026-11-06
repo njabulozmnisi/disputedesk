@@ -20,7 +20,7 @@ const transactionList = (entries: FixtureDispute[]) => entries.map((entry) => `'
 
 const statusAfter: Record<string, string> = { raise: 'Submitted', startReview: 'UnderReview', escalate: 'Escalated', resolve: 'Resolved', withdraw: 'Withdrawn' };
 const eventTypeOf: Record<string, string> = { raise: 'DisputeRaised', startReview: 'ReviewStarted', escalate: 'DisputeEscalated', resolve: 'DisputeResolved', withdraw: 'DisputeWithdrawn' };
-// Story 5.3: the SLA demo dispute falls due 5 minutes after seeding and the Worker's sweep then escalates it as
+// Story 5.3: the SLA demo dispute falls due 5 minutes after seeding and the SLA sweep then escalates it as
 // worker:sla-sweep, so beforeAll waits for that and the demo dispute is expected Escalated, with that one event after its
 // seeded actions (and one more outbox row).
 const sweepEventTypes = ['DisputeEscalated'];
@@ -224,7 +224,7 @@ test.describe.serial('seeded disputes', () => {
     }
     expect(secrets.size).toBeGreaterThan(8);
     const haystacks: Record<string, string> = {};
-    for (const container of ['disputedesk-api-1', 'disputedesk-worker-1', 'disputedesk-core-banking-1']) {
+    for (const container of ['disputedesk-api-1', 'disputedesk-core-banking-1']) {
       haystacks[container] = docker('logs', container);
     }
     for (const kind of ['spans', 'logs']) {

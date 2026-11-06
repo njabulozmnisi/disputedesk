@@ -39,6 +39,7 @@ public static class DisputeEndpoints
     public static RouteGroupBuilder MapDisputes(this RouteGroupBuilder customerRoutes)
     {
         customerRoutes.MapPost("/disputes", RaiseAsync)
+            .WithName("RaiseDispute")
             .WithTags("Disputes")
             .Produces<DisputeResponse>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
@@ -51,13 +52,16 @@ public static class DisputeEndpoints
             .WithRequestTimeout(RaiseTimeoutPolicy)
             .AddOpenApiOperationTransformer(DocumentIdempotencyKeyAsync);
         customerRoutes.MapGet(DisputeRoutes.List, ListAsync)
+            .WithName("ListDisputes")
             .WithTags("Disputes")
             .ProducesValidationProblem();
         customerRoutes.MapGet(DisputeRoutes.Detail, GetAsync)
+            .WithName("GetDispute")
             .WithTags("Disputes")
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound);
         customerRoutes.MapPost(DisputeRoutes.Withdraw, WithdrawAsync)
+            .WithName("WithdrawDispute")
             .WithTags("Disputes")
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)

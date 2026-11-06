@@ -35,8 +35,7 @@ run() {
   "$root/scripts/test-lock.sh" run testcontainers "verify-$story" -- \
     copilot -p "$prompt" --model "$1" -s --no-ask-user --add-dir "$(cd "$(dirname "$story_file")" && pwd)" \
       --allow-tool 'shell(dotnet:*)' 'shell(npm:*)' 'shell(npx:*)' 'shell(git diff:*)' 'shell(git log:*)' 'shell(git show:*)' 'shell(ls:*)' 'shell(cat:*)' 'shell(head:*)' 'shell(grep:*)' 'shell(find:*)' 'shell(docker compose config:*)' 'shell(gitleaks:*)' 'shell(scripts/floor-guard.sh)' 'shell(actionlint:*)' 'shell(trivy:*)' 'shell(terraform:*)' \
-        'shell(shellcheck:*)' 'shell(infra/deploy/aws/check-compose.sh)' 'shell(infra/deploy/aws/deploy.test.sh)' \
-        'shell(infra/deploy/aws/rds-init.test.sh)' 'shell(infra/terraform/iam-names.test.sh)' 'read' \
+        'shell(shellcheck:*)' 'read' \
       --deny-tool 'write' 'shell(git commit:*)' 'shell(git push:*)' 'shell(rm:*)' 'shell(terraform apply:*)' 'shell(terraform destroy:*)'
 }
 

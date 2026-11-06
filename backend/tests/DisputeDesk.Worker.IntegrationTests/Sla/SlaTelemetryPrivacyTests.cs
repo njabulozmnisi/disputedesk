@@ -2,9 +2,9 @@ using System.Diagnostics;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Outbox;
 using DisputeDesk.Infrastructure.Persistence;
+using DisputeDesk.Infrastructure.Sla;
 using DisputeDesk.Worker.IntegrationTests.Infrastructure;
 using DisputeDesk.Worker.IntegrationTests.Outbox;
-using DisputeDesk.Worker.Sla;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -27,7 +27,7 @@ namespace DisputeDesk.Worker.IntegrationTests.Sla;
 public class SlaTelemetryPrivacyTests(SlaFixture fixture)
 {
     [Fact]
-    public async Task WorkerHost_SweepWithARefusedSaveAndARefusedLoad_NoLogRecordOrSpanOfAnyCategoryHoldsCustomerData()
+    public async Task WorkerHost_SweepWithARefusedSaveAndARefusedLoad_NoLogRecordSpanOrMeasurementOfAnyCategoryHoldsCustomerData()
     {
         var failLoad = new FailStreamLoad();
         await using SweepRig rig = await SweepRig.CreateAsync(fixture);
@@ -73,6 +73,10 @@ public class SlaTelemetryPrivacyTests(SlaFixture fixture)
         Assert.True(spans.Snapshot().Count(span => span.Source.Name == "Npgsql" && span.Status == ActivityStatusCode.Error) >= 2);
 
         string[] forbidden = [SweepRig.CustomerId, SweepRig.AccountRef, .. transactionIds, "TXN-SLA-", "Shop SLA description", "87.23", "login-sla"];
+        // Every instrument on the meter, heard by the rig's listener whatever the exporter keeps.
+        IReadOnlyList<string> measurementTags = rig.MeasurementTags.Snapshot();
+        Assert.Contains("disputedesk.dispute_actions action=escalate", measurementTags);
+        Assert.All(forbidden, value => Assert.DoesNotContain(measurementTags, tag => tag.Contains(value, StringComparison.Ordinal)));
         List<string> observed = TelemetryValues(logs, spans, metrics);
         Assert.NotEmpty(observed);
         Assert.All(forbidden, value => Assert.DoesNotContain(observed, text => text.Contains(value, StringComparison.Ordinal)));

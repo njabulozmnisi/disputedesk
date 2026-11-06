@@ -6,11 +6,13 @@ using DisputeDesk.Domain;
 using DisputeDesk.Domain.Disputes;
 using DisputeDesk.Infrastructure.Observability;
 using DisputeDesk.Infrastructure.Persistence;
-using DisputeDesk.Infrastructure.Sla;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
-namespace DisputeDesk.Worker.Sla;
+namespace DisputeDesk.Infrastructure.Sla;
 
 /// <summary>
 /// The SLA sweep (AD-18, FR-26). Every 30 seconds it escalates the open disputes whose SLA is due. Each batch is one

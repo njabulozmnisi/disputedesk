@@ -6,7 +6,7 @@
 #                                                                 starts `claude -p --agent $LANE_AGENT` in a tmux
 #                                                                 session (new worktree, or the existing one). Refuses
 #                                                                 when the host has under 15 GB free. With base-ref
-#                                                                 (for example origin/story/7.5) the new worktree starts
+#                                                                 (for example origin/feature/7.5) the new worktree starts
 #                                                                 there, so a lane can stack on an unmerged story; it
 #                                                                 exits 2 when that worktree or branch already exists.
 #   scripts/lane.sh wait <host> <story>                           wait for the lane's exit file; print exit code and status

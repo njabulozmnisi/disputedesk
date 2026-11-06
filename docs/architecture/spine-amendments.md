@@ -11,7 +11,7 @@ Restated on 2026-11-04: the dated clauses below were moved out of the rule text,
 | AD-3 | 2026-10-27 | The gateway's own 429 carries no `traceId`, because nginx has no trace context | standards follow-up (initiative Notes) |
 | AD-3 | 2026-10-28 | The SPA compares the full `type` URI with `===`, replacing routing on the last path segment | story 2.4 |
 | AD-3 | 2026-10-30 | `ErrorKind.RateLimited` (429 `rate-limited`) for the full linking queue | story 6.5 |
-| AD-4 | 2026-11-04 | The `now()` ban names application code and its SQL; AD-22's operator release is the one handwritten statement that uses `now()` (audit DES-16) | simplicity audit |
+| AD-4 | 2026-11-04 | The `now()` ban names application code and its SQL; AD-22's operator release is the one handwritten statement that uses `now()` | the 2026-11-04 restatement |
 | AD-7 | 2026-10-27 | The warning dialog two minutes before the idle limit, renewing through `GET /api/v1/authentication/session` (WCAG 2.2 SC 2.2.1) | story 2.4 |
 | AD-7 | 2026-10-27 | The AWS key ring in SSM Parameter Store, encrypted at rest with KMS | story 7.4 |
 | AD-7 | 2026-10-30 | The cookie is written at sign-in and cleared at sign-out, never renewed, after a request in flight during logout set it again (the logout-cookie race) | the logout-cookie race fix |
@@ -44,7 +44,7 @@ Restated on 2026-11-04: the dated clauses below were moved out of the rule text,
 | AD-17 | 2026-10-29 | At-least-once delivery with consumer deduplication; fencing with Kafka transactions goes to the production path | story 4.1 challenge |
 | AD-17 | 2026-10-30 | Permanent rejections (a named list of Kafka error codes) count attempts; every other non-fatal error is transient | story 4.2 |
 | AD-17 | 2026-11-04 | "3.8 tests that each outbox row's ID is its stored event's ID; 4.1 tests that the published CloudEvent `id` is the outbox row's ID" restated as the tests that exist | stories 3.8, 4.1 |
-| AD-18 | 2026-10-30 | The SLA warning (ad-009) with a 48-hour lead time. Story 3.8 added the `SlaWarningRaised` record and its publish mapping; story 5.3 added `RecordSlaWarning`, its `Apply` case, `SlaWarningRaisedAtUtc`, `IX_Disputes_SlaWarning`, the batch transaction with a savepoint per dispute and the `Worker/Sla/` bypass | stories 3.8, 5.3 |
+| AD-18 | 2026-10-30 | The SLA warning (ad-009) with a 48-hour lead time. Story 3.8 added the `SlaWarningRaised` record and its publish mapping; story 5.3 added `RecordSlaWarning`, its `Apply` case, `SlaWarningRaisedAtUtc`, `IX_Disputes_SlaWarning`, the batch transaction with a savepoint per dispute and the SLA sweep's named bypass | stories 3.8, 5.3 |
 | AD-19 | 2026-10-26 | Wire enums camelCase; the event-versioning research predates this casing decision | initiative Notes |
 | AD-19 | 2026-10-27 | `dataschema` is the committed schema's resolvable URL, replacing tag URIs | standards follow-up (initiative Notes) |
 | AD-19 | 2026-10-30 | Seeded disputes are published at least once like any other event | story 5.4 |
@@ -62,7 +62,7 @@ Restated on 2026-11-04: the dated clauses below were moved out of the rule text,
 | AD-26 | 2026-10-30 | `DataProtection:SsmParameterPath` (story 7.4) and `DataProtection:KmsKeyId` (7.4 pre-build security) | story 7.4 |
 | AD-26 | 2026-10-30 | `openapi.json` declares only a `bearer` scheme, replacing the 2026-10-27 local stand-in decision | stories 5.1, 5.5 |
 | AD-27 | 2026-11-02 | `redpanda-console` as the one opt-in local exception | ad-010 |
-| AD-27 | 2026-11-03 | The SPA built by `frontend/Dockerfile` and copied through a named build context, in place of the `infra/images/gateway/html` placeholder | ad-011 |
+| AD-27 | 2026-11-03 | The SPA built by `frontend/Dockerfile` and copied through a named build context, in place of a placeholder page inside the gateway image | ad-011 |
 | AD-28 | 2026-10-30 | Until the account exists, Terraform is checked only with `fmt`, `validate` and mocked `test` | story 7.5 challenge |
 | AD-28 | 2026-10-30 | Instance-metadata access only for `api` and `otel-collector`; the plain HTTP origin as a shortcut; Mailpit on its own origin, replacing `/mailpit/` on the app host | story 7.4 pre-build security |
 | AD-28 | 2026-10-30 | The identity origin through CloudFront and the `ip-ranges.json` file (story 7.4 refine); the deploy script's atomic `.env` and the workflow's terminal status (story 7.5 refine); images published by story 7.3 | stories 7.3, 7.4, 7.5 |
@@ -74,15 +74,15 @@ Restated on 2026-11-04: the dated clauses below were moved out of the rule text,
 | Consistency Conventions, Timestamps in JSON | 2026-10-28 | RFC 3339 UTC as System.Text.Json writes a UTC `DateTimeOffset`: offset `+00:00`, fractional seconds as written | story 3.1 |
 | Structural Seed, Source tree additions | 2026-10-27 | One top-level folder per stack, with Microsoft's `src/` and `tests/` layout inside `backend/`; a root `src/` and `tests/` layout rejected | repository layout decision |
 
-## Decisions of 2026-11-03 (S0b)
+## Decisions of 2026-11-03 and 2026-11-04
 
 The human's decisions changed or confirmed these rules; unlike the rows above, they are decisions, not restatements.
 
 | AD | Date | What the rule now says because of it | Source |
 | --- | --- | --- | --- |
-| AD-7 | 2026-11-03 | The two key-ring mechanisms are kept: the human answered no to one Postgres key ring in both environments (audit D7, DES-9) | simplicity audit mitigation plan |
-| AD-12 | 2026-11-03 | The count of IP permits a rejected request spends is no longer stated: FR-8 and AD-12 cite only Microsoft Learn's documented chained-limiter behaviour, and the test stays as a regression pin (audit D14, DES-6) | simplicity audit mitigation plan |
-| AD-28 | 2026-11-03 | AWS-only mechanisms stay as built until an apply is possible (audit D11, DES-10); the seven Terraform modules stay, ready for a second environment (audit D8, INF-6) | simplicity audit mitigation plan |
+| AD-7 | 2026-11-03 | The two key-ring mechanisms are kept: the human answered no to one Postgres key ring in both environments | human decision |
+| AD-12 | 2026-11-03 | The count of IP permits a rejected request spends is no longer stated: FR-8 and AD-12 cite only Microsoft Learn's documented chained-limiter behaviour, and the test stays as a regression pin | human decision |
+| AD-28 | 2026-11-03 | AWS-only mechanisms stay as built until an apply is possible; the seven Terraform modules stay, ready for a second environment | human decision |
 | AD-8 | 2026-11-03 | Every route checks in the framework's order, 401, 403, 400, 404, 409, 422, then 400 for a rule that needs the loaded resource, raise included; 403 before 404 still stops ID probing. PRD FR-24 and the initiative's R20 state the same order; `.DisableValidation()`, the body check after the lookup and raise's second order go | human decision |
 | AD-11, AD-30 | 2026-11-03 | The seeder (`Infrastructure/Seeding/Seeder.cs`, that one file) is AD-11's third named bypass: it reads fixture disputes on the migrating context with `IgnoreQueryFilters(["Ownership"])` and an explicit customer predicate, checked by the same architecture test. The second `AppDbContext` per customer and AD-30's two-instance seeding analysis go; AD-30's idempotency cites only EF Core's documented `UseAsyncSeeding` contract. PRD NFR-SEC-6, the initiative's R17 and `conventions/backend.md` name the same three places. Replaces the 2026-10-30 AD-30 row above | human decision |
 | AD-8 | 2026-11-04 | Resolve's `AcceptsMetadata` with no content types is removed: a `text/plain` resolve gets the cookie fallback policy's 401 with no `WWW-Authenticate: Bearer` for a missing, refused or valid token. Replaces the 2026-10-30 row above | human decision |
@@ -106,5 +106,5 @@ The human's decisions changed or confirmed these rules; unlike the rows above, t
 
 - **PRD and code divergences.** Six differences between the PRD and the code merged before epic 2 (the `ErrorKind` set, `provision.sh`'s roles and keys, Scalar behind `IsDevelopment()`, the Worker's health check, the fixtures, the gateway's `limit_req`, HSTS and `form-action`), each fixed in its story. Every story is merged, so the section was deleted.
 - **"This run adds…"** The note listing the columns and tables the spine added to the recommended data model (`LinkingChallenges.OtpSentAtUtc`, `SupersededAtUtc` and a nullable `CustomerId`; `Disputes.Version`; the outbox's `DisputeId`, `DisputeVersion`, `TraceState`, `LastError` and `text` `Payload`; `IdempotencyKeys.LeaseId` and `ResponseLocation`; the audit actor, dispute and trace columns, with `outcome` renamed to `Result`; `Sessions` and `DataProtectionKeys`; `StoredEvents` as the history table; the naming decision above). The ER diagram and AD-22 state the current model.
-- **Story ownership.** AD-1's "the story that first needs each missing rule adds it" (every rule now exists, in `LayerTests` and `OwnershipRulesTests`), AD-25's "once the relay exists" and "once the API exists", and the closing line naming the stories that wrote the production path and settled the SLA lead time.
+- **Story ownership.** AD-1's "the story that first needs each missing rule adds it" (every rule now exists, in `LayerTests` and `OwnershipRulesTests`), AD-25's "once the relay exists" and "once the sign-in endpoints exist", and the closing line naming the stories that wrote the production path and settled the SLA lead time.
 | AD-21 | 2026-11-04 | `GetAccountsAsync` removed from the port and the stub | human decision |

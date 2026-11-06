@@ -1,19 +1,20 @@
 # Runbook
 
 These procedures are for the local Compose stack only. An AWS deployment's database is private and is not reached
-this way ([infra/terraform/README.md](terraform/README.md) covers the AWS environment). Run every command
+this way ([infra/terraform/README.md](../terraform/README.md) covers the AWS environment). Run every command
 from the repo root, with the stack up (`docker compose up --wait`).
 
 ## 1. Release a `Failed` outbox row
 
-The outbox relay sets a row `Failed` after 5 permanent refusals by Kafka (AD-17). The Worker logs
+The outbox relay sets a row `Failed` after 5 permanent refusals by Kafka (AD-17). Locally the relay runs inside the
+Api, which logs
 `Outbox event <event ID> of dispute <dispute ID> is Failed after 5 permanent refusals`, the
 `disputedesk.outbox.failed` metric counts it (Aspire Dashboard, Metrics), and the dispute's later events wait.
 
 This procedure is AD-22's one operator exception to "`OutboxMessages` is updated only by the relay". It never sets a
-row to `Sent` and never deletes a row. The Worker needs no restart: the relay picks the row up on its next loop. It runs
+row to `Sent` and never deletes a row. The Api needs no restart: the relay picks the row up on its next loop. It runs
 as the owner role `disputedesk` and writes no audit record, which is accepted for the local stack; a dedicated operator
-role and an audited release are in [the production path](../docs/production-path.md) (P51).
+role and an audited release are in [the production path](../../docs/production-path.md) (P51).
 
 1. **Find the row and its blocked successors**, with the read-only role:
 
@@ -50,7 +51,7 @@ role and an audited release are in [the production path](../docs/production-path
    - A payload at or near 1,000,000 bytes hits the relay's own client limit (librdkafka's `message.max.bytes`
      default), which no topic change fixes. Do not release it.
 
-   A row whose payload itself is the cause stays `Failed`; it is not released ([production path](../docs/production-path.md),
+   A row whose payload itself is the cause stays `Failed`; it is not released ([production path](../../docs/production-path.md),
    P20).
 
 3. **Release the row**, as the `disputedesk` role, in an interactive session (no password on the command line):
@@ -131,9 +132,9 @@ The stack comes back with fresh credentials and the seed written again, its date
 While Redpanda is down the relay keeps each new event `Pending` and counts no attempt (AD-17). Raising still answers
 201, and `/health/ready` stays healthy, because readiness does not check Kafka (AD-25).
 
-1. **Where it shows.** The Worker logs `Outbox relay cannot reach kafka (…)` and `Outbox relay could not send an event
-   (…); it stays Pending and is retried` (`docker compose logs --no-color worker`); the Aspire Dashboard shows failed
-   `send disputedesk.disputes` spans under the Worker's traces.
+1. **Where it shows.** The Api, which runs the relay locally, logs `Outbox relay cannot reach kafka (…)` and `Outbox
+   relay could not send an event (…); it stays Pending and is retried` (`docker compose logs --no-color api`); the
+   Aspire Dashboard shows failed `send disputedesk.disputes` spans under the Api's traces.
 2. **Count the rows not yet `Sent`** in procedure 1's read-only session (`psql -U qa_readonly`). In a drill, take this
    count before stopping Redpanda as the baseline. `"DisputeId"` of the `Pending` rows names the affected disputes.
 

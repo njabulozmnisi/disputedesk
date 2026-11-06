@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Read-only checks of Zitadel facts that are invisible from outside (infra/tests/smoke.sh covers everything that
-# can be seen through the gateway). Runs in the provisioner image:
-#   docker compose run --rm --no-deps -T --entrypoint bash provision /verify.sh
+# can be seen through the gateway). Runs in the zitadel container, with the provisioner's PROVISION_* settings:
+#   docker compose exec -T zitadel bash /provision/verify.sh
 # Prints one line per check and exits non-zero if any check fails. Never prints or passes secrets as arguments.
 set -euo pipefail
 
-Z="${ZITADEL_URL:?}"; FIXTURES="${FIXTURES_FILE:?}"
-CURL_OPTS=(--max-time 30 ${CURL_CONNECT_TO:+--connect-to "$CURL_CONNECT_TO"})   # every call times out
-CLIENTS=$(cat "${OUT_DIR:?}/zitadel-clients.json")
+Z="${PROVISION_CALL_URL:?}"; FIXTURES="${PROVISION_FIXTURES_FILE:?}"
+CURL_OPTS=(--max-time 30 --connect-to "${PROVISION_CONNECT_TO:?}")   # every call times out
+CLIENTS=$(cat "${PROVISION_OUT_DIR:?}/zitadel-clients.json")
 PROJECT_ID=$(jq -r .Zitadel.ProjectId <<< "$CLIENTS")
 WEB_APP_CLIENT_ID=$(jq -r .Zitadel.WebApp.ClientId <<< "$CLIENTS")
 FAILED=0
@@ -15,7 +15,7 @@ FAILED=0
 umask 077
 AUTH_HEADER=$(mktemp)
 trap 'rm -f "$AUTH_HEADER"' EXIT
-{ printf 'Authorization: Bearer '; tr -d '\n' < "${PAT_FILE:?}"; printf '\n'; } > "$AUTH_HEADER"
+{ printf 'Authorization: Bearer '; tr -d '\n' < "${PROVISION_PAT_FILE:?}"; printf '\n'; } > "$AUTH_HEADER"
 
 api(){ # METHOD PATH [JSON]; the body goes over stdin
   printf '%s' "${3:-}" | curl "${CURL_OPTS[@]}" -sS --fail-with-body -X "$1" "$Z$2" -H @"$AUTH_HEADER" \
@@ -44,7 +44,7 @@ check "web app: post-logout URIs (exact)" '.postLogoutRedirectUris | select(sort
     "http://localhost:5101/", "http://localhost:5101/api/signout-callback-oidc",
     "http://localhost:5102/", "http://localhost:5102/api/signout-callback-oidc"] | sort))' "$web_app"
 check "web app: development mode as configured" \
-  "(.developmentMode // false) | select(tostring == \"${AUTH_DEVELOPMENT_MODE:?}\")" "$web_app"
+  "(.developmentMode // false) | select(tostring == \"${PROVISION_AUTH_DEVELOPMENT_MODE:?}\")" "$web_app"
 
 while read -r login; do
   id=$(jq -r .userId <<< "$login"); username=$(jq -r .username <<< "$login")
@@ -71,7 +71,7 @@ check "smtp: Mailpit active" '[.result[] | select(.state == "EMAIL_PROVIDER_ACTI
 
 # The active policy (not the preview) has the generator's nine fields for the mounted theme file, and the files.
 active=$(api GET /admin/v1/policies/label)
-label=$(jq -c --argjson wanted "$(bash /label-policy.sh /brand/tokens.css)" '{wanted: $wanted, active: .policy}' <<< "$active")
+label=$(jq -c --argjson wanted "$(bash /provision/label-policy.sh /brand/tokens.css)" '{wanted: $wanted, active: .policy}' <<< "$active")
 check "label policy: active, from tokens.css" 'def fields: {primaryColor, backgroundColor, warnColor, fontColor,
     primaryColorDark, backgroundColorDark, warnColorDark, fontColorDark, themeMode} | map_values(. // "" | ascii_downcase);
   select((.active | fields) == (.wanted | fields)

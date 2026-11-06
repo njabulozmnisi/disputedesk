@@ -3,8 +3,8 @@ import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:c
 import { readFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type Browser, type BrowserContext, type Page, type Response } from '@playwright/test';
-import { holdsCode, queryDatabase, telemetryValues, topicRecords, axeTags, origin } from './support';
+import { errors, expect, test, type Browser, type BrowserContext, type Page, type Response } from '@playwright/test';
+import { enterHostedCredentials, holdsCode, queryDatabase, telemetryValues, topicRecords, axeTags, origin } from './support';
 
 // Story 6.4: the linking screens 2a (/link) and 2b (/link/otp) in a real browser, through the real gateway, Api,
 // job, database (qa_readonly), Mailpit (the SMS sink) and the Aspire telemetry API. Customer D is the only customer a
@@ -86,10 +86,7 @@ async function signIn(browser: Browser, login: Login): Promise<{ context: Browse
   const page = await context.newPage();
   page.on('request', (request) => allRequestUrls.push(request.url()));
   await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
+  await enterHostedCredentials(page, login);
   await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   return { context, page };
 }
@@ -114,7 +111,7 @@ async function restartApi(): Promise<void> {
  */
 function expectNoLinkingRequest(page: Page, milliseconds: number): Promise<void> {
   const linkingRequest = page.waitForRequest((request) => new URL(request.url()).pathname.startsWith('/api/v1/linking/'), { timeout: milliseconds });
-  return expect(linkingRequest).rejects.toThrow('Timeout');
+  return expect(linkingRequest).rejects.toThrow(errors.TimeoutError);
 }
 
 // ---- recording the linking calls of one page -------------------------------------------------------------------------------
@@ -446,12 +443,16 @@ test('full queue: the sixth start gets 429 with no Retry-After, "Try again later
   test.skip(queueCapacity === 0, 'needs the Api started with Linking:QueueCapacity=2 (E2E_LINKING_QUEUE_CAPACITY=2, e2e/run-regression.sh)');
   test.setTimeout(300_000);
   await restartApi();
+  const accepted = 4 + queueCapacity;
+  // Every login signs in first, so the starts below follow one another well inside the jobs' 10-second budget: a job
+  // that reaches its budget ends and frees its place in the queue.
+  const signedIn = [];
+  for (let index = 0; index <= accepted; index++) signedIn.push(await signIn(browser, logins[4 + index]));
   const holder = holdCustomerLock();
   try {
-    await expect.poll(() => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and granted and classid = 6005`)) === 1, { message: 'the lock holder', timeout: 40_000 }).toBe(true);
-    const accepted = 4 + queueCapacity;
+    await expect.poll(() => Number(sql(`select count(*) from pg_locks where locktype = 'advisory' and granted and classid = 6005`)), { message: 'the lock holder', timeout: 40_000 }).toBe(1);
     for (let index = 0; index < accepted; index++) {
-      const { context, page } = await signIn(browser, logins[4 + index]);
+      const { context, page } = signedIn[index];
       const token = (await (await context.request.get('/api/v1/antiforgery')).json()).requestToken as string;
       const response = await context.request.post('/api/v1/linking/start', {
         data: JSON.stringify({ idNumber: customerD.idNumber, accountNumber: customerD.accountNumber }),
@@ -460,9 +461,9 @@ test('full queue: the sixth start gets 429 with no Retry-After, "Try again later
       expect(response.status(), `accepted start ${index + 1}`).toBe(202);
       await page.close();
       await context.close();
-      if (index === 3) await expect.poll(() => lockWaiters() === 4, { message: '4 jobs waiting on the lock', timeout: 40_000 }).toBe(true);
+      if (index === 3) await expect.poll(() => lockWaiters(), { message: '4 jobs waiting on the lock', timeout: 40_000 }).toBe(4);
     }
-    const { context, page } = await signIn(browser, logins[4 + accepted]);
+    const { context, page } = signedIn[accepted];
     const calls = recordLinking(page);
     await page.goto('/link');
     await submitDetails(page, customerD.idNumber, customerD.accountNumber);
@@ -474,7 +475,7 @@ test('full queue: the sixth start gets 429 with no Retry-After, "Try again later
     await checkState(page, '2a rate limited without Retry-After (full queue)');
     // the button works again at once: a second press sends a request
     await page.getByRole('button', { name: 'Continue' }).click();
-    await expect.poll(() => calls.length === 2, { message: 'a second start request', timeout: 10_000 }).toBe(true);
+    await expect.poll(() => calls.length, { message: 'a second start request', timeout: 10_000 }).toBe(2);
     await expectNothingKept(page, context, [customerD.idNumber, customerD.accountNumber], 'full queue end');
     await context.close();
   } finally {
@@ -543,17 +544,17 @@ test('login 3: 2a -> 202 -> 2b, two wrong codes, the real code from the SMS sink
   expect(JSON.parse(verifyCalls[2].body!)).toEqual({ code: otpCode });
   await expect(page.getByRole('heading', { level: 1 })).not.toHaveText('Enter your OTP');
   expect(await page.evaluate(() => (window as unknown as { announced: string[] }).announced)).toContain('Your login is linked.');
-  await expect(page.waitForURL((url) => url.pathname !== '/transactions', { timeout: 3000 })).rejects.toThrow('Timeout'); // stays: no bounce back to /link
+  await expect(page.waitForURL((url) => url.pathname !== '/transactions', { timeout: 3000 })).rejects.toThrow(errors.TimeoutError); // stays: no bounce back to /link
   await expect(page).toHaveURL(`${origin}/transactions`);
   await expect.poll(() => transactionCalls.length > 0, { message: 'the transactions request', timeout: 10_000 }).toBe(true);
   expect(transactionCalls.every((status) => status === 200)).toBe(true);
   // history.replace: Back does not return to 2b
-  const backStaysOffOtp = expect(page.waitForURL((url) => url.pathname === '/link/otp', { timeout: 500 })).rejects.toThrow('Timeout');
+  const backStaysOffOtp = expect(page.waitForURL((url) => url.pathname === '/link/otp', { timeout: 500 })).rejects.toThrow(errors.TimeoutError);
   await page.goBack().catch(() => undefined);
   await backStaysOffOtp;
   expect(new URL(page.url()).pathname).not.toBe('/link/otp');
   await page.goto('/link');
-  await expect(page).toHaveURL(`${origin}/transactions`); // SessionGate sends a linked customer away
+  await expect(page).toHaveURL(`${origin}/transactions`); // the `_linked` layout route's `beforeLoad` sends a linked customer away
   expect(calls.filter((call) => call.path === '/api/v1/linking/start')).toHaveLength(1);
   await page.reload();
   await expect(page).toHaveURL(`${origin}/transactions`);

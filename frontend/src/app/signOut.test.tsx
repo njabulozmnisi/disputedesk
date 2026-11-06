@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 
 import {
   getGetSessionQueryKey,
-  getGetApiV1TransactionsInfiniteQueryKey,
+  getListTransactionsInfiniteQueryKey,
 } from '@/api/generated/disputedesk';
 import { server } from '@/test/server';
 import {
@@ -49,7 +49,7 @@ afterEach(() => {
 
 // Criterion 4: sign-out is a form POST carrying a fresh token.
 describe('Sign out', () => {
-  it('fetches a fresh token, then submits a top-level form POST to the sign-out with it', async () => {
+  it('fetches a fresh token, then submits a top-level form POST to the logout endpoint with it', async () => {
     const calls: string[] = [];
     server.events.on('request:start', ({ request }) => {
       calls.push(`${request.method} ${new URL(request.url).pathname}`);
@@ -97,7 +97,7 @@ describe('Sign out', () => {
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
 
     expect(router.state.location.pathname).toBe('/transactions');
-    expect(queryClient.getQueryData(getGetApiV1TransactionsInfiniteQueryKey())).toBeDefined();
+    expect(queryClient.getQueryData(getListTransactionsInfiniteQueryKey())).toBeDefined();
     expect(submitted).toHaveLength(0);
 
     release();

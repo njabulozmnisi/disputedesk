@@ -4,7 +4,7 @@ import { expectProblemShape, ownDisputable, queryDatabase, topicRecords, origin,
 
 // Story 5.2: operations start review, escalate and resolve under the FR-24 table, with a bearer token from
 // scripts/operations-token.sh. Network level with the real Zitadel token, the database through qa_readonly, the events
-// from the disputedesk.disputes topic, and the customer's view through the Api session and the SPA history screen.
+// from the disputedesk.disputes topic, and the customer's view through the session and the SPA history screen.
 // The 403 cases need tokens with other roles: the spec creates throwaway machine users in Zitadel with the stack's
 // admin PAT (read from the bootstrap volume; it never reaches a command line or the evidence). Those users are not
 // mapped to an operations actor, which is itself one of the 403 cases. A transaction can be disputed once, so the spec raises on
@@ -204,7 +204,7 @@ test.beforeAll(async ({ browser }) => {
   contexts.b = await signInContext(browser, 'customer-b');
   contexts.c = await signInContext(browser, 'customer-c');
 
-  const clients = JSON.parse(execFileSync('docker', ['compose', 'run', '--rm', '--no-deps', '-T', '--entrypoint', 'cat', 'provision', '/out/zitadel-clients.json'], { encoding: 'utf8', cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }));
+  const clients = JSON.parse(execFileSync('docker', ['compose', 'exec', '-T', 'zitadel', 'cat', '/provision/out/zitadel-clients.json'], { encoding: 'utf8', cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }));
   const adminPat = execFileSync('docker', ['run', '--rm', '-v', 'disputedesk_zitadel-bootstrap:/b', 'alpine', 'cat', '/b/admin.pat'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   const projectId = clients.Zitadel.ProjectId as string;
   const me = await fetch(`${authOrigin}/auth/v1/users/me`, { headers: { Authorization: `Bearer ${adminPat}` }, signal: AbortSignal.timeout(30_000) });
@@ -229,7 +229,7 @@ test.afterAll(async () => {
   for (const context of Object.values(contexts)) await context.close();
 });
 
-test('the machine users: one holds no role, one only dispute.read, one every role but maps to no actor', () => {
+test('the machine users: one holds no role, one only dispute.read, one every role but is not in AllowedClients', () => {
   const roles = (jwt: string) => Object.entries(decode(jwt)).filter(([key]) => key.endsWith(':roles')).flatMap(([, value]) => Object.keys(value as Json)).sort();
   expect(roles(machine.noRole.token)).toEqual([]);
   expect(roles(machine.readOnly.token)).toEqual(['dispute.read']);

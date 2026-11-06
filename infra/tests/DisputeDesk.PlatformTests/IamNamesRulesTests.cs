@@ -21,7 +21,7 @@ public sealed class IamNamesRulesTests
         },
         ["aws:SourceArn", "aws:RequestTag/${TagKey}", "kms:EncryptionContext:${EncryptionContextKey}"]);
 
-    // ---- criterion 2: the templates
+    // ---- the templates
 
     [Fact]
     public void Read_ValidTemplates_ReadsEachDistinctNameOncePerFile()
@@ -159,7 +159,7 @@ public sealed class IamNamesRulesTests
         Assert.Empty(names.Problems);
     }
 
-    // ---- criterion 2: the HCL text rules
+    // ---- the HCL text rules
 
     [Theory]
     [InlineData("modules/one/main.tf", "  policy = templatefile(\"${path.module}/deploy-policy.json.tftpl\", {")]
@@ -195,7 +195,7 @@ public sealed class IamNamesRulesTests
         Assert.Equal(expected, CheckHcl(file, text));
     }
 
-    // ---- criterion 3: actions
+    // ---- actions
 
     [Theory]
     [InlineData("ssm:SendCommand")]
@@ -226,7 +226,7 @@ public sealed class IamNamesRulesTests
         Assert.Equal([$"action {action} in {File1}: {reason}"], failures);
     }
 
-    // ---- criterion 4: condition keys
+    // ---- condition keys
 
     [Theory]
     [InlineData("aws:SourceArn")]

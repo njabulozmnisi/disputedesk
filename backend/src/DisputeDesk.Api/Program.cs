@@ -1,7 +1,7 @@
 using DisputeDesk.Api;
 using DisputeDesk.Api.ApiReference;
-using DisputeDesk.Api.Authorization;
 using DisputeDesk.Api.Authentication;
+using DisputeDesk.Api.Customers;
 using DisputeDesk.Api.Disputes;
 using DisputeDesk.Api.Errors;
 using DisputeDesk.Api.Health;
@@ -61,8 +61,21 @@ builder.Services.AddOperationsAuthentication();
 builder.Services.AddOperations();
 builder.Services.AddLinkingRoutes();
 builder.Services.AddLinkingEndpoints();
+// Locally the Api also runs the outbox relay and the SLA sweep; in AWS the Worker runs them (AD-27).
+bool relayAndSweepInProcess = builder.Configuration.GetValue<bool>("Worker:InProcess");
+if (relayAndSweepInProcess)
+{
+    builder.Services.AddOutboxRelayAndSlaSweep();
+}
 
 WebApplication app = builder.Build();
+
+// The host starts its hosted services, the relay and the sweep among them, inside RunAsync, so locally the migrations go
+// in first and neither ever runs on a missing schema (AD-22; EF Core, Applying Migrations: apply migrations at runtime).
+if (relayAndSweepInProcess)
+{
+    await app.Services.GetRequiredService<DatabaseMigrator>().MigrateAsync(app.Lifetime.ApplicationStopping);
+}
 
 // First, so everything after it sees the client address, scheme and host the gateway forwarded (AD-23).
 app.UseForwardedHeaders();

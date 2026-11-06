@@ -18,8 +18,8 @@ variable "aws_region" {
   type        = string
 
   validation {
-    condition     = contains(["us-east-1", "us-west-2", "eu-west-1", "eu-central-1"], var.aws_region)
-    error_message = "aws_region must be one of us-east-1, us-west-2, eu-west-1, eu-central-1."
+    condition     = contains(["af-south-1", "us-east-1", "us-west-2", "eu-west-1", "eu-central-1"], var.aws_region)
+    error_message = "aws_region must be one of af-south-1, us-east-1, us-west-2, eu-west-1, eu-central-1."
   }
 }
 

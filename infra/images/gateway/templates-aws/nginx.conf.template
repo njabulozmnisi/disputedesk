@@ -1,13 +1,14 @@
-# DisputeDesk gateway in AWS (AD-23, AD-28): the same edge as infra/images/gateway/templates/nginx.conf.template, behind the
-# three CloudFront distributions.
+# DisputeDesk gateway in AWS (AD-23, AD-28): the same edge as infra/images/gateway/templates/nginx.conf.template,
+# behind the three CloudFront distributions.
 #   app origin       the SPA; /api/, /scalar/ and /openapi/v1.json -> api; no /otlp/ and no /mailpit/ (both 404)
 #   identity origin  Zitadel API and the hosted login (/ui/login); the console answers 404
 #   Mailpit origin   Mailpit's UI and API, behind Mailpit's own basic auth (MP_UI_AUTH)
 #
-# infra/deploy/aws/compose.yml selects this directory with NGINX_ENVSUBST_TEMPLATE_DIR, and the image's entrypoint renders it
-# with envsubst into /etc/nginx, filling in the GATEWAY_* variables (nginx official image, "Using environment variables
-# in nginx configuration"). The Dockerfile copies security-headers.conf.template, scalar-headers.conf.template and
-# identity-headers.conf.template in from infra/images/gateway/templates/, so both gateways send the same app and identity headers.
+# infra/deploy/aws/compose.yml selects this directory with NGINX_ENVSUBST_TEMPLATE_DIR, and the image's entrypoint
+# renders it with envsubst into /etc/nginx, filling in the GATEWAY_* variables (nginx official image, "Using environment
+# variables in nginx configuration"). The Dockerfile copies security-headers.conf.template, scalar-headers.conf.template
+# and identity-headers.conf.template in from infra/images/gateway/templates/, so both gateways send the same app and
+# identity headers.
 #
 # Differences from the local edge:
 #   - Only CloudFront reaches this origin. Every server block answers 403 unless the request carries the origin-verify
@@ -18,9 +19,8 @@
 #     every location that sets no proxy_set_header of its own inherits it; one that sets any inherits none (nginx,
 #     proxy_set_header: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_set_header). Only the Mailpit
 #     location sets its own.
-#   - Upstreams are resolved through Docker's DNS while running (upstream "resolve"), not once at start: provisioning
-#     reaches Zitadel through CloudFront and so through this gateway, which therefore starts before the api and the
-#     login exist.
+#   - Upstreams are resolved through Docker's DNS while running (upstream "resolve"), not once at start, so the gateway
+#     starts as soon as Zitadel is healthy, without waiting for the api or Mailpit.
 worker_processes 1;
 pid /tmp/nginx.pid;
 
@@ -184,8 +184,8 @@ http {
   }
 
   # ---------------------------------------------------------------------------------------------
-  # Identity origin: Zitadel API and the hosted login on one host. Zitadel resolves its instance from the Host, which must be
-  # exactly ExternalDomain (port 443 is implied). No app CSP here: the login sets its own.
+  # Identity origin: Zitadel, which serves its API and hosted login (/ui/login) itself. Zitadel resolves its instance
+  # from the Host, which must be exactly ExternalDomain (port 443 is implied). No app CSP here: Zitadel sets its own.
   # ---------------------------------------------------------------------------------------------
   server {
     listen 8080;
@@ -212,10 +212,9 @@ http {
     # V13.4). The prefix match covers /ui/console, /ui/console/ and everything below.
     location ^~ /ui/console { return 404; }
 
+    location = / { return 302 /ui/login/loginname; }
 
-    location = / { return 302 /ui/login/; }
-
-    # OIDC, REST, Connect (HTTP/1.1) and assets.
+    # OIDC, REST, Connect (HTTP/1.1), the hosted login (/ui/login) and assets.
     location / {
       proxy_pass http://zitadel_api;
       proxy_buffering off;

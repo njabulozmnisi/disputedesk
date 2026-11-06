@@ -3,8 +3,8 @@ const maxReturnUrlLength = 2048;
 
 /**
  * "Sign in again" returns to the route the person was on, except from a raise or dispute detail route: its path
- * holds a transaction or dispute ID, which must not reach the sign-in URL, so it returns to the list (AD-31). The
- * path is never the absolute `href`, which the API refuses. The router matches paths case-insensitively, so this
+ * holds a transaction or dispute ID, which must not reach the login URL, so it returns to the list (AD-31). The
+ * path is never the absolute `href`, which the Api refuses. The router matches paths case-insensitively, so this
  * compare does too. A path the login endpoint would refuse as too long returns to the start page.
  */
 export function sessionEndedUrl(location: { pathname: string; search: string }): string {

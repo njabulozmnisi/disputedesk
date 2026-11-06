@@ -1,9 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { errors, expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { ownDisputable, queryDatabase, axeTags, origin, signInContext } from './support';
 
-// Story 3.7: the Disputes history screen (/disputes) and the shell's skip link, through the real gateway, Api and
+// Story 3.7: the Disputes history screen (/disputes) and the shell's skip link, through the real gateway, API and
 // database, signed in as seeded customer A (B for the cross-customer check). The API can only produce `submitted` and
 // `withdrawn` disputes today (the operations actions are not built), so the outcome badges, an unknown status and the
 // empty, loading and failing states are shown by editing or stubbing the list response in the browser; the screen is real.
@@ -329,7 +329,7 @@ test('criterion 3: Load more by cursor, Loading… not pressable twice, focus on
   await page.keyboard.press('Enter');
   await expect.poll(() => seen.length).toBe(2);
   // The second request is held, so a second press would show up as a third request in this 500 ms window.
-  await expect(page.waitForRequest((request) => new URL(request.url()).pathname === '/api/v1/disputes', { timeout: 500 })).rejects.toThrow('Timeout');
+  await expect(page.waitForRequest((request) => new URL(request.url()).pathname === '/api/v1/disputes', { timeout: 500 })).rejects.toThrow(errors.TimeoutError);
   expect(listRequests).toHaveLength(2);
   expect(seen).toHaveLength(2);
   expect(seen[1].query).toBe(`?cursor=${firstCursor}`); // the cursor comes back unchanged

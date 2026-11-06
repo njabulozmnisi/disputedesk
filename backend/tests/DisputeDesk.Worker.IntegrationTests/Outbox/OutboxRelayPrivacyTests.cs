@@ -51,18 +51,22 @@ public class OutboxRelayPrivacyTests(OutboxFixture outbox)
         RelayClock clock = OutboxFixture.NewClock();
         // A day back, so the marker row is the oldest due row and the one whose send the pause holds.
         DateTimeOffset at = clock.GetUtcNow().AddDays(-1);
-        OutboxMessage raised = await outbox.CommitMarkerDisputeAsync(at);
-        OutboxMessage refused = await outbox.AddOversizedVersionAsync(raised.DisputeId, 2, at, OutboxFixture.MarkerText);
 
         var observed = new List<string>();
         IReadOnlyList<LogRecord> logs;
         IReadOnlyList<Activity> failedSpans;
+        // The relay starts on the running broker, so its start-up topic step is done before the pause, and waits idle.
+        await using RelayHost host = await outbox.StartRelayAsync(clock);
+        await Eventually.UntilAsync(() => clock.RelayWaitsNow, OutboxFixture.WaitLimit);
+        OutboxMessage raised = await outbox.CommitMarkerDisputeAsync(at);
+        OutboxMessage refused = await outbox.AddOversizedVersionAsync(raised.DisputeId, 2, at, OutboxFixture.MarkerText);
         await outbox.PauseBrokerAsync();
         bool paused = true;
         try
         {
-            await using RelayHost host = await outbox.StartRelayAsync(clock);
-            // The marker row's send times out while the broker is paused (10 s); the relay then waits out its backoff.
+            // The relay's next loop takes the marker row, whose send times out while the broker is paused (10 s); the relay
+            // then waits out its backoff.
+            await clock.StepAsync(TimeSpan.FromSeconds(10));
             await Eventually.UntilAsync(() => host.ProducerSpansFor(raised.Id).Any(span => span.Status == ActivityStatusCode.Error), OutboxFixture.WaitLimit);
             await outbox.UnpauseBrokerAsync();
             paused = false;

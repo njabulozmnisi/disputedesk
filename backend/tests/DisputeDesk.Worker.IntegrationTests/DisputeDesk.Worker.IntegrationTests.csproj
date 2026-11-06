@@ -1,9 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\..\src\DisputeDesk.Worker\DisputeDesk.Worker.csproj" />
+    <!-- The Api host runs the relay and the sweep in-process when Worker:InProcess is true (WorkerInProcessTests). -->
+    <ProjectReference Include="..\..\src\DisputeDesk.Api\DisputeDesk.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.Testing" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="OpenTelemetry.Exporter.InMemory" />

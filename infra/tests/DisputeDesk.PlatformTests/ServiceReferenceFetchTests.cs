@@ -53,6 +53,7 @@ public sealed class ServiceReferenceFetchTests
         Assert.Null(handler.Credentials);
         Assert.False(handler.PreAuthenticate);
         Assert.Equal(2, ServiceReference.MaxRetries);
+        Assert.Equal(TimeSpan.FromMinutes(5), ServiceReferenceFixture.Deadline);
     }
 
     [Theory]

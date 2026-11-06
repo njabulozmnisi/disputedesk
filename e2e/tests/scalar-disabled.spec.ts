@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { fixtureLogin, origin } from './support';
+import { enterHostedCredentials, fixtureLogin, origin } from './support';
 
 // Story 5.5 criterion 1, switch off: with Scalar__Enabled=false (docker compose -f docker-compose.yml -f e2e/scalar-off.compose.yml
 // up -d --wait --no-deps api, then run with SCALAR_OFF=1) the Scalar routes and the runtime document are not mapped:
@@ -19,10 +19,7 @@ test('anonymous gets 401 and a signed-in customer gets 404 on every Scalar route
   const page = await context.newPage();
   const login = fixtureLogin('customer-a');
   await page.goto('/api/v1/authentication/login');
-  await page.getByTestId('username-text-input').fill(login.username);
-  await page.getByTestId('username-text-input').press('Enter');
-  await page.getByTestId('password-text-input').fill(login.password, { timeout: 60_000 });
-  await page.getByTestId('password-text-input').press('Enter');
+  await enterHostedCredentials(page, login);
   await page.waitForURL((url) => url.origin === origin, { timeout: 60_000 });
   for (const path of paths) {
     const response = await context.request.get(path, { maxRedirects: 0 });

@@ -487,7 +487,9 @@ describe('dispute status badge on a row', () => {
     renderApp({ path: '/transactions' });
     await screen.findByRole('link', { name: 'Dispute status: Withdrawn' });
 
-    expect(new Set(paths)).toEqual(new Set(['/api/v1/authentication/session', '/api/v1/transactions']));
+    expect(new Set(paths)).toEqual(
+      new Set(['/api/v1/authentication/session', '/api/v1/transactions']),
+    );
   });
 
   // Mockup a.badge:hover: the label underlines on hover, and the link is full-radius so its focus ring matches.
