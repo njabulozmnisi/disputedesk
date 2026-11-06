@@ -1,0 +1,212 @@
+{
+  "fix_round": 1,
+  "status": "built",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/disputedesk/.claude/worktrees/ci-e2e-regression",
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "R33, R35",
+      "test": "scripts/regression-paths.test.sh (scratch-repository cases: each list line, near misses, renames both ways, deletion, branch behind base, exit 2 cases; floor-guard step order)"
+    },
+    {
+      "id": "AC2",
+      "requirement": "R33, AD-32",
+      "test": "scripts/regression-paths.test.sh (job shape, and the decide step run on stub statuses 0, 1, 2, 3, 127, 128 and on push); scripts/ci-gates.test.sh (ci.yml passes ci-gates.sh; e2e-regression failure, cancelled and skipped each fail ci-passed)"
+    },
+    {
+      "id": "AC3",
+      "requirement": "R33",
+      "test": "scripts/regression-paths.test.sh (step ifs, diagnostics, stop step, no continue-on-error, no retries key); scripts/ci-gates.test.sh. The real failing-suite path is not exercised locally"
+    },
+    {
+      "id": "AC4",
+      "requirement": "R33",
+      "test": "NOT PROVED YET: the three real CI runs (this pull request, the supervisor's scratch skip pull request, main after merge). The brief excludes a local suite run"
+    },
+    {
+      "id": "AC5",
+      "requirement": "R39",
+      "test": "scripts/regression-paths.test.sh (comment text). The comment gives the 25 to 35 minute estimate; by the supervisor's decision the wall time AC4's run measures goes in the review record, not in ci.yml"
+    },
+    {
+      "id": "AC6",
+      "requirement": "R39",
+      "test": "scripts/regression-paths.test.sh (AD-32 section and spine-amendments row)"
+    },
+    {
+      "id": "AC7",
+      "requirement": "R33, R35",
+      "test": "DisputeDesk.PlatformTests.ComposeRenderTests.RegressionPathsList_CoversEveryStackInputAndTheJobsOwnFiles"
+    },
+    {
+      "id": "R-M1",
+      "requirement": "R33, R35",
+      "test": "scripts/regression-paths.test.sh (every scripts/*.sh path named under e2e/ is a line of the list); shown failing on scripts/operations-token.sh before the list changed"
+    }
+  ],
+  "smoke": "No API or stack change, so no sign-in smoke applies. Fix round 1: the new check failed on scripts/operations-token.sh before the list changed, then on scripts/test-lock.sh with only that line added, then passed with both lines, on macOS and on Linux in mcr.microsoft.com/dotnet/sdk:10.0.",
+  "standards": [
+    {
+      "mechanism": "git diff --name-only --no-renames -z over a three-dot range",
+      "source": "https://git-scm.com/docs/git-diff"
+    },
+    {
+      "mechanism": "Step outputs through GITHUB_OUTPUT, step-level if, values through env:",
+      "source": "https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax"
+    },
+    {
+      "mechanism": "Expression values passed through env: rather than inline in run:",
+      "source": "https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions"
+    },
+    {
+      "mechanism": "failure() and always() status check functions",
+      "source": "https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#status-check-functions"
+    },
+    {
+      "mechanism": "Compose's rendered model with COMPOSE_PROFILES",
+      "source": "https://docs.docker.com/reference/cli/docker/compose/config/"
+    },
+    {
+      "mechanism": "Custom path script: on.paths leaves the required check pending and a marketplace action is rejected, so no standard mechanism fits",
+      "source": "docs/decisions/ad-012-github-flow-ci.md, Options rejected"
+    },
+    {
+      "mechanism": "JSON string escapes, which scripts/check-infra-paths.sh reads as the end of a path",
+      "source": "https://www.rfc-editor.org/rfc/rfc8259#section-7"
+    },
+    {
+      "mechanism": "git grep over tracked and untracked, not ignored files",
+      "source": "https://git-scm.com/docs/git-grep"
+    }
+  ],
+  "breaks": [
+    {
+      "criterion": "AC1",
+      "why": "a rename out of a matching path is missed",
+      "patch": "diff --git a/scripts/regression-paths.sh b/scripts/regression-paths.sh\n--- a/scripts/regression-paths.sh\n+++ b/scripts/regression-paths.sh\n@@ -16,7 +16,7 @@\n for commit in \"$base\" \"$head\"; do\n   git rev-parse --verify --quiet \"$commit^{commit}\" > /dev/null || { echo \"regression-paths: '$commit' is not a commit\" >&2; exit 2; }\n done\n-changed=$(git diff --name-only --no-renames -z \"$base...$head\" | tr '\\0' '\\n') || { echo \"regression-paths: git diff failed\" >&2; exit 2; }\n+changed=$(git diff --name-only -z \"$base...$head\" | tr '\\0' '\\n') || { echo \"regression-paths: git diff failed\" >&2; exit 2; }\n \n # line_matches <path>: the path matches a line of the list.\n line_matches() {\n",
+      "test_method": "PATH=/tmp/dd-ci-e2e-yq/bin:$PATH scripts/regression-paths.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC1",
+      "why": "two dots count the base's own changes",
+      "patch": "diff --git a/scripts/regression-paths.sh b/scripts/regression-paths.sh\n--- a/scripts/regression-paths.sh\n+++ b/scripts/regression-paths.sh\n@@ -16,7 +16,7 @@\n for commit in \"$base\" \"$head\"; do\n   git rev-parse --verify --quiet \"$commit^{commit}\" > /dev/null || { echo \"regression-paths: '$commit' is not a commit\" >&2; exit 2; }\n done\n-changed=$(git diff --name-only --no-renames -z \"$base...$head\" | tr '\\0' '\\n') || { echo \"regression-paths: git diff failed\" >&2; exit 2; }\n+changed=$(git diff --name-only --no-renames -z \"$base..$head\" | tr '\\0' '\\n') || { echo \"regression-paths: git diff failed\" >&2; exit 2; }\n \n # line_matches <path>: the path matches a line of the list.\n line_matches() {\n",
+      "test_method": "PATH=/tmp/dd-ci-e2e-yq/bin:$PATH scripts/regression-paths.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2",
+      "why": "status 2 no longer fails the step",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -441,7 +441,6 @@\n               ;;\n             *)\n               echo \"::error::scripts/regression-paths.sh failed (exit $status), so the suite's trigger is unknown.\"\n-              exit 1\n               ;;\n           esac\n \n",
+      "test_method": "PATH=/tmp/dd-ci-e2e-yq/bin:$PATH scripts/regression-paths.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC3",
+      "why": "a failing suite no longer fails the job",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -464,6 +464,7 @@\n         working-directory: e2e\n \n       - run: e2e/run-regression.sh\n+        continue-on-error: true\n         if: steps.decide.outputs.run == 'true'\n \n       # error-context.md is Playwright's accessibility snapshot of the page a failed test was on (synthetic data only).\n",
+      "test_method": "PATH=/tmp/dd-ci-e2e-yq/bin:$PATH scripts/regression-paths.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC4",
+      "why": "the real run's diff would have no merge base",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -416,7 +416,6 @@\n       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           persist-credentials: false\n-          fetch-depth: 0 # the path script's three-dot diff needs the merge base\n \n       # The script's status 1 means \"no match\" and anything above it an error, so only 0 and 1 set run; an error must\n       # fail here, never read as \"no match\" and skip the suite.\n",
+      "test_method": "PATH=/tmp/dd-ci-e2e-yq/bin:$PATH scripts/regression-paths.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC5",
+      "why": "the stale e2e comment returns",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -339,7 +339,7 @@\n           echo \"No forbidden terms.\"\n \n   # Story 7.3 (AD-32). The runner's fresh checkout and Docker daemon make the stack fresh, so customer D starts\n-  # unlinked (AD-30). Only the journeys run here; the e2e-regression job runs the regression suite.\n+  # unlinked (AD-30). Only the journeys run here; the regression project is not run in CI.\n   e2e:\n     runs-on: ubuntu-24.04\n     timeout-minutes: 40\n",
+      "test_method": "PATH=/tmp/dd-ci-e2e-yq/bin:$PATH scripts/regression-paths.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC6",
+      "why": "the amendment row is gone",
+      "patch": "diff --git a/docs/architecture/spine-amendments.md b/docs/architecture/spine-amendments.md\n--- a/docs/architecture/spine-amendments.md\n+++ b/docs/architecture/spine-amendments.md\n@@ -106,7 +106,7 @@\n \n | Decision | Date | Change | Source |\n |---|---|---|---|\n-| AD-32 | 2026-11-06 | `e2e-regression` is the one path-scoped suite: the job runs on every pull request and `main` push, runs the regression suite only on a pull request whose changed paths match `scripts/regression-paths.list`, and otherwise passes with a notice (countermeasure A3, approved 2026-11-05); every other check job keeps running in full | [decisions.md](../verification/decisions.md), ci-e2e-regression D2 |\n+| AD-32 | 2026-11-07 | `e2e-regression` is the one path-scoped suite: the job runs on every pull request and `main` push, runs the regression suite only on a pull request whose changed paths match `scripts/regression-paths.list`, and otherwise passes with a notice (countermeasure A3, approved 2026-11-05); every other check job keeps running in full | [decisions.md](../verification/decisions.md), ci-e2e-regression D2 |\n \n ## What else left the spine on 2026-11-04\n \n",
+      "test_method": "PATH=/tmp/dd-ci-e2e-yq/bin:$PATH scripts/regression-paths.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC7",
+      "why": "a mount source is missing from the list",
+      "patch": "diff --git a/scripts/regression-paths.list b/scripts/regression-paths.list\n--- a/scripts/regression-paths.list\n+++ b/scripts/regression-paths.list\n@@ -2,7 +2,6 @@\n frontend/\n infra/images/zitadel/\n infra/images/gateway/\n-infra/images/postgres/\n docker-compose.yml\n e2e/\n .nvmrc\n",
+      "test_method": "DisputeDesk.PlatformTests.ComposeRenderTests.RegressionPathsList_CoversEveryStackInputAndTheJobsOwnFiles",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC7",
+      "why": "one of the job's own files is missing from the list",
+      "patch": "diff --git a/scripts/regression-paths.list b/scripts/regression-paths.list\n--- a/scripts/regression-paths.list\n+++ b/scripts/regression-paths.list\n@@ -5,7 +5,6 @@\n infra/images/postgres/\n docker-compose.yml\n e2e/\n-.nvmrc\n .github/workflows/ci.yml\n .github/actions/install-compose/\n scripts/regression-paths.sh\n",
+      "test_method": "DisputeDesk.PlatformTests.ComposeRenderTests.RegressionPathsList_CoversEveryStackInputAndTheJobsOwnFiles",
+      "expect": "fails"
+    },
+    {
+      "criterion": "check-infra-paths fix",
+      "why": "an escape no longer ends a path, so the n of an escaped newline is read as part of it",
+      "patch": "diff --git a/scripts/check-infra-paths.sh b/scripts/check-infra-paths.sh\n--- a/scripts/check-infra-paths.sh\n+++ b/scripts/check-infra-paths.sh\n@@ -22,6 +22,5 @@\n while IFS=: read -r file path; do\n   [ -n \"$path\" ] || continue\n-  path=${path%%\\\\[A-Za-z]*}            # a JSON or C-style escape (\\n) ends the path\n   path=${path//\\\\/}                    # a regex's escaped dot (main\\.tf) names main.tf\n   path=${path%%[.,-]}                  # a full stop, comma or dash that ends the sentence, not the path\n   checked=${path%%\\**}                 # with a wildcard, the folder before it\n",
+      "test_method": "scripts/check-infra-paths.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "check-infra-paths fix",
+      "why": "any backslash ends a path, so an escaped dot cuts the file name",
+      "patch": "diff --git a/scripts/check-infra-paths.sh b/scripts/check-infra-paths.sh\n--- a/scripts/check-infra-paths.sh\n+++ b/scripts/check-infra-paths.sh\n@@ -22,6 +22,6 @@\n while IFS=: read -r file path; do\n   [ -n \"$path\" ] || continue\n-  path=${path%%\\\\[A-Za-z]*}            # a JSON or C-style escape (\\n) ends the path\n+  path=${path%%\\\\*}                    # any backslash ends the path\n   path=${path//\\\\/}                    # a regex's escaped dot (main\\.tf) names main.tf\n   path=${path%%[.,-]}                  # a full stop, comma or dash that ends the sentence, not the path\n   checked=${path%%\\**}                 # with a wildcard, the folder before it\n",
+      "test_method": "scripts/check-infra-paths.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "R-M1",
+      "why": "the list loses a script the regression project runs, so a change to that script alone skips the suite",
+      "patch": "diff --git a/scripts/regression-paths.list b/scripts/regression-paths.list\n--- a/scripts/regression-paths.list\n+++ b/scripts/regression-paths.list\n@@ -10,5 +10,4 @@\n .github/actions/install-compose/\n scripts/regression-paths.sh\n scripts/regression-paths.list\n-scripts/operations-token.sh\n scripts/test-lock.sh\n",
+      "test_method": "PATH=/tmp/dd-ci-e2e-yq/bin:$PATH scripts/regression-paths.test.sh",
+      "expect": "fails"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/njabulomnisi_Njabulos-MacBook-Pro_2026-11-06_13_47_08.281229.trx",
+      "TestResults/platform-tests.log",
+      "TestResults/summary.txt",
+      "TestResults/check-infra-paths.test.sh.txt",
+      "TestResults/run-breaks.txt",
+      "TestResults/regression-paths.test.sh.txt",
+      "TestResults/ci-gates.test.sh.txt",
+      "TestResults/check-ready.test.sh.txt",
+      "TestResults/deploy-workflow.test.sh.txt",
+      "TestResults/guard.test.sh.txt",
+      "TestResults/main-protection.test.sh.txt",
+      "TestResults/rule-text.test.sh.txt",
+      "TestResults/run-breaks.test.sh.txt",
+      "TestResults/shellcheck.txt",
+      "TestResults/actionlint.txt",
+      "TestResults/floor-guard.txt",
+      "TestResults/secret-scan.txt",
+      "TestResults/check-infra-paths.txt",
+      "TestResults/regression-paths.test.linux.txt"
+    ],
+    "diff_hash": "9af9dbd135e4",
+    "summary": "Fix round 1. PlatformTests 439 of 439 passed under the stack lock; all nine scripts/*.test.sh passed with yq 4.54.1 on PATH, and regression-paths.test.sh also passed on Linux in mcr.microsoft.com/dotnet/sdk:10.0; scripts/check-infra-paths.sh exit 0; shellcheck, actionlint 1.7.12, floor-guard and the secret scan passed; all 12 breaks failed as expected through scripts/run-breaks.sh. Not re-run this round: the forbidden-terms search and check-infra-paths.test.sh on Linux."
+  },
+  "assumptions": [
+    "scripts/ci-gates.test.sh changed although the spec's Touches omits it: it pins ci-passed's needs and the jobs using install-compose, so the new job fails it otherwise. The change adds e2e-regression; no case was removed.",
+    "The script adds -z to the spec's git diff, because git quotes unusual names in plain --name-only output and a quoted name would match nothing and skip the suite. It also rejects an empty SHA, which git would otherwise read as HEAD.",
+    "yq is not installed here. yq 4.54.1 was downloaded from its GitHub release, checked against the release's SHA-256, and kept in /tmp/dd-ci-e2e-yq/bin. The script breaks' test_method puts that directory on PATH; on another machine, install yq v4 and change the prefix. CI's runner has its own yq, whose version was not checked.",
+    "actionlint ran from the local rhysd/actionlint:1.7.12 image, CI's version, over ci.yml, security.yml and deploy.yml.",
+    "scripts/security-local.sh was not run: no Terraform, Dockerfile or Compose file changed.",
+    "Diagnostics limit: run-regression.sh removes each group's stack and Playwright clears test-results on each run, so on an early group's failure the diagnostics step shows only the last group's logs and error-context files. The failing test's own output stays in the step log. Fixing it needs an e2e/ change, outside this role's paths.",
+    "Spec conflict resolved: the supervisor reworded the near-miss example path in docs/backlog/story-ci-e2e-regression.md line 92, and scripts/check-infra-paths.sh no longer reads a JSON escape as part of a path.",
+    "Not built, by the supervisor's decision: --wait-timeout 600 on e2e/run-regression.sh (e2e/ is outside backend-builder's paths). The supervisor files it as a low; until then a stuck start runs to the job's 60-minute timeout.",
+    "scripts/check-infra-paths.sh had no harness, and ShellHarnessTests forbids a shell harness under infra/, so scripts/check-infra-paths.test.sh is new. It needs one new floor-guard step in ci.yml to run in CI, which is beyond the spec's Touches and is not the wall-time edit the supervisor ruled out.",
+    "Fix round 1: scripts/test-lock.sh was added to the list beyond the brief. Without it the check as specified fails, because e2e/playwright.config.ts:3 and e2e/run-regression.sh:3 name it in comments. See conflicts.",
+    "The yq in /tmp/dd-ci-e2e-yq/bin matches the v4.54.1 yq_darwin_arm64 checksum. The Linux binary at /tmp/dd-ci-e2e-yq/linux/yq, left from the first build, matches no entry of the v4.54.1 checksum file, so it was not run; the first build's Linux runs may have used it. This round's Linux run used a fresh yq_linux_arm64 download matching its release checksum (189088da0c64...).",
+    "The check finds only paths written out as scripts/<name>.sh. A path assembled at run time, for example path.join('scripts', name), would not be seen; no such path exists under e2e/ today."
+  ],
+  "open_questions": [],
+  "conflicts": [
+    "Step 2 NOT DONE: the guard denied backend-builder's write to docs/backlog/story-ci-e2e-regression.md although the brief allowed it, and it was not worked around. The supervisor needs to add two rows after the scripts/regression-paths.list row of the trigger table: scripts/operations-token.sh (the job's own files: the regression project runs it for an operations token) and scripts/test-lock.sh (named in e2e/ comments only; listed so the every-script check holds). The spec is in the diff hash, so this edit moves the hash off 9af9dbd135e4 with no change to code or tests.",
+    "scripts/test-lock.sh in the list goes past D1 (every stack input plus the job's own files): the job never runs it, so a change to it alone starts the suite for nothing. It was kept so the check stays 'named anywhere' as the fix list says. The alternative is to reword the two e2e/ comments, or have the check skip comments, and drop the line; that is a decision for the supervisor."
+  ]
+}

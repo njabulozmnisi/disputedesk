@@ -102,6 +102,12 @@ The human's decisions changed or confirmed these rules; unlike the rows above, t
 | AD-32 | 2026-11-05 | A ruleset protects `main`: a pull request, the two gate checks on an up-to-date branch, CodeQL's code-scanning results, no force push or deletion; squash is the only merge method, with auto-merge and branch deletion on merge. The invariant is that pull-request checks test GitHub's merge of the up-to-date branch and `main`'s run builds, scans and publishes the squash commit (ad-012 clauses 2 and 6) | `docs/decisions/ad-012-github-flow-ci.md` |
 | AD-32 | 2026-11-05 | Every check job runs on every pull request and `main` push (the docs-only `changes` skip goes); `ci-passed` and `security-passed` gate jobs report each workflow's result, and a `floor-guard` step fails when a check job is missing from its gate's `needs`; the Compose and Trivy installs are local composite actions (ad-012 clauses 1, 3, 5) | `docs/decisions/ad-012-github-flow-ci.md` |
 
+## Decisions of 2026-11-06
+
+| Decision | Date | Change | Source |
+|---|---|---|---|
+| AD-32 | 2026-11-06 | `e2e-regression` is the one path-scoped suite: the job runs on every pull request and `main` push, runs the regression suite only on a pull request whose changed paths match `scripts/regression-paths.list`, and otherwise passes with a notice (countermeasure A3, approved 2026-11-05); every other check job keeps running in full | [decisions.md](../verification/decisions.md), ci-e2e-regression D2 |
+
 ## What else left the spine on 2026-11-04
 
 - **PRD and code divergences.** Six differences between the PRD and the code merged before epic 2 (the `ErrorKind` set, `provision.sh`'s roles and keys, Scalar behind `IsDevelopment()`, the Worker's health check, the fixtures, the gateway's `limit_req`, HSTS and `form-action`), each fixed in its story. Every story is merged, so the section was deleted.

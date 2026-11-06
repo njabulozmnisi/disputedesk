@@ -21,6 +21,7 @@ mentions=$(git grep --untracked -o -I -E '(^|[^A-Za-z0-9_/.-]|\./)infra/[A-Za-z0
 stale=0
 while IFS=: read -r file path; do
   [ -n "$path" ] || continue
+  path=${path%%\\[A-Za-z]*}            # a JSON or C-style escape (\n) ends the path
   path=${path//\\/}                    # a regex's escaped dot (main\.tf) names main.tf
   path=${path%%[.,-]}                  # a full stop, comma or dash that ends the sentence, not the path
   checked=${path%%\**}                 # with a wildcard, the folder before it

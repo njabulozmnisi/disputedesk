@@ -514,6 +514,55 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
         Assert.True(validate.ExitCode == 0, $"otelcol-contrib validate failed: {validate.Output}{validate.Errors}");
     }
 
+    // ---- ci-e2e-regression criterion 7: the list that starts the regression suite covers every stack input
+
+    [Fact]
+    public async Task RegressionPathsList_CoversEveryStackInputAndTheJobsOwnFiles()
+    {
+        string[] lines = await File.ReadAllLinesAsync(Path.Combine(SourceRoots.Repo, "scripts/regression-paths.list"), TestContext.Current.CancellationToken);
+        var profiles = new Dictionary<string, string> { ["COMPOSE_PROFILES"] = "build,console" };
+        JsonNode model = await ComposeModel.RenderAsync(["docker-compose.yml"], variables: profiles);
+
+        string[] uncovered = [.. StackSources(model).Where(source => !lines.Any(line => LineMatches(line, source)))];
+        string[] jobFiles =
+            ["docker-compose.yml", "e2e/", ".nvmrc", ".github/workflows/ci.yml", ".github/actions/install-compose/", "scripts/regression-paths.sh", "scripts/regression-paths.list"];
+
+        Assert.True(uncovered.Length == 0, $"No line of scripts/regression-paths.list matches: {string.Join(", ", uncovered)}");
+        Assert.Empty(jobFiles.Except(lines, StringComparer.Ordinal));
+    }
+
+    /// <summary>Every build context, path-valued additional context and bind-mount source, relative to the repository root.</summary>
+    private static IEnumerable<string> StackSources(JsonNode model)
+    {
+        foreach ((string _, JsonNode? service) in model["services"]!.AsObject())
+        {
+            if (service!["build"] is { } build)
+            {
+                yield return Path.GetRelativePath(SourceRoots.Repo, build["context"]!.GetValue<string>());
+                foreach ((string _, JsonNode? context) in build["additional_contexts"]?.AsObject() ?? [])
+                {
+                    string value = context!.GetValue<string>();
+                    if (!value.StartsWith("service:", StringComparison.Ordinal))
+                    {
+                        yield return Path.GetRelativePath(SourceRoots.Repo, value);
+                    }
+                }
+            }
+
+            foreach (JsonNode? volume in service["volumes"]?.AsArray() ?? [])
+            {
+                if (volume!["type"]!.GetValue<string>() == "bind")
+                {
+                    yield return Path.GetRelativePath(SourceRoots.Repo, volume["source"]!.GetValue<string>());
+                }
+            }
+        }
+    }
+
+    /// <summary>The list's rule: a line ending in / matches that directory and every path under it, any other line exactly that path.</summary>
+    private static bool LineMatches(string line, string source) =>
+        line.EndsWith('/') ? $"{source}/".StartsWith(line, StringComparison.Ordinal) : source == line;
+
     /// <summary>How often compose.yml references each input, by name.</summary>
     private static Dictionary<string, int> References() =>
         InputReference().Matches(OverrideSource)

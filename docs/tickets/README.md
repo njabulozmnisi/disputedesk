@@ -115,7 +115,7 @@ Build-order constraint (decided 2026-10-30): 7.1 starts once 6.4 and 3.12 have m
 |---|---|---|---|---|
 | feature-ids | [New work is named by a feature slug](../backlog/story-feature-ids.md) | backend | Feature | done |
 | guard-allow-list | Subagents run only a closed list of git and gh forms, per role | backend | High-stakes | planned |
-| ci-e2e-regression | CI runs the e2e regression project on pull requests that can break it | backend | Feature | planned |
+| ci-e2e-regression | [CI runs the e2e regression project on pull requests that can break it](../backlog/story-ci-e2e-regression.md) | backend | Feature | done |
 | guard-main-session | The main session is asked for every deploy path and every command the guard cannot read | backend | High-stakes | planned |
 | agent-isolation | Pipeline agents never change the main checkout | backend | High-stakes | planned |
 | process-checks | The pipeline's handoffs fail fast instead of late | backend | Feature | planned |
