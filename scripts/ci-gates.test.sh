@@ -119,7 +119,7 @@ settings() { # settings <workflow> <gate> <needs as a JSON array>
   [[ $(yq '.jobs[strenv(GATE)].steps[0].run' "$file") != *"\${{"* ]] || fail "$GATE: its script holds \${{ }}"
   echo "ok  $GATE: needs $3, if: always(), timeout 5, no permissions, NEEDS from toJSON(needs)"
 }
-settings "$ci" ci-passed '["backend","frontend","platform","terraform","floor-guard","e2e"]'
+settings "$ci" ci-passed '["backend","frontend","platform","terraform","floor-guard","e2e","e2e-regression"]'
 settings "$security" security-passed '["gitleaks","codeql","vulnerable-packages","trivy"]'
 
 # --- publish keeps its if: and needs ---
@@ -143,7 +143,7 @@ uses_after_checkout() { # uses_after_checkout <workflow> <action path> <the jobs
   done
   echo "ok  $action runs after the checkout in: $want"
 }
-uses_after_checkout "$ci" ./.github/actions/install-compose "backend e2e platform"
+uses_after_checkout "$ci" ./.github/actions/install-compose "backend e2e e2e-regression platform"
 uses_after_checkout "$ci" ./.github/actions/install-trivy "publish"
 uses_after_checkout "$security" ./.github/actions/install-trivy "trivy"
 
@@ -161,11 +161,13 @@ result() { printf '"%s":{"result":"%s","outputs":{}}' "$1" "$2"; }
 with_result() { jq -c --arg job "$2" --arg result "$3" '.[$job].result = $result' <<< "$1"; } # <needs> <job> <result>
 
 ci_gate=$(script "$ci" ci-passed)
-all_success="{$(result backend success),$(result frontend success),$(result platform success),$(result terraform success),$(result floor-guard success),$(result e2e success)}"
+all_success="{$(result backend success),$(result frontend success),$(result platform success),$(result terraform success),$(result floor-guard success),$(result e2e success),$(result e2e-regression success)}"
 expect 0 'Every check job succeeded' "ci-passed: every job succeeded" run_gate "$ci_gate" "$all_success"
-for bad in failure cancelled skipped; do
-  needs=$(with_result "$all_success" e2e "$bad")
-  expect 1 "e2e: $bad" "ci-passed: e2e $bad fails, naming it" run_gate "$ci_gate" "$needs"
+for job in e2e e2e-regression; do
+  for bad in failure cancelled skipped; do
+    needs=$(with_result "$all_success" "$job" "$bad")
+    expect 1 "$job: $bad" "ci-passed: $job $bad fails, naming it" run_gate "$ci_gate" "$needs"
+  done
 done
 two_bad="{$(result backend failure),$(result frontend success),$(result platform cancelled),$(result e2e success)}"
 expect 1 'backend: failure' "ci-passed: two bad jobs, the first named" run_gate "$ci_gate" "$two_bad"

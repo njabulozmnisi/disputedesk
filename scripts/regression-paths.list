@@ -1,0 +1,14 @@
+backend/
+frontend/
+infra/images/zitadel/
+infra/images/gateway/
+infra/images/postgres/
+docker-compose.yml
+e2e/
+.nvmrc
+.github/workflows/ci.yml
+.github/actions/install-compose/
+scripts/regression-paths.sh
+scripts/regression-paths.list
+scripts/operations-token.sh
+scripts/test-lock.sh

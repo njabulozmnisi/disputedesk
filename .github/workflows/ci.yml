@@ -273,6 +273,10 @@ jobs:
       - run: scripts/check-ready.test.sh
       # The guard hook's Bash rules: python3 is preinstalled on the runner image.
       - run: scripts/guard.test.sh
+      # The e2e-regression job: its path script, its steps, its comments and the AD-32 amendment.
+      - run: scripts/regression-paths.test.sh
+      # How the infra path check reads a backslash in a path.
+      - run: scripts/check-infra-paths.test.sh
       # The rule files name work by its feature slug.
       - run: scripts/rule-text.test.sh
 
@@ -337,7 +341,7 @@ jobs:
           echo "No forbidden terms."
 
   # Story 7.3 (AD-32). The runner's fresh checkout and Docker daemon make the stack fresh, so customer D starts
-  # unlinked (AD-30). Only the journeys run here; the regression project is not run in CI.
+  # unlinked (AD-30). Only the journeys run here; the e2e-regression job runs the regression suite.
   e2e:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -395,6 +399,85 @@ jobs:
 
       - name: Stop the stack
         if: always()
+        run: docker compose down -v
+
+  # AD-32's one path-scoped suite. It always runs, and it runs e2e/run-regression.sh only on a pull request that changes
+  # a path in scripts/regression-paths.list (every Compose build or mount source, plus this job's own files); otherwise
+  # it passes with a notice. A step decides, not on.paths, which would leave the required check ci-passed pending
+  # (ad-012, Options rejected). Its own runner and Docker daemon keep its stacks apart from e2e's, so it adds wall time
+  # only to the pull requests it triggers: about 25 to 35 minutes, an estimate until this job's first run measures it.
+  # Playwright retries stay 0: a retry re-sends OTPs to customer D, and each group's D budget (at most 3 an hour,
+  # e2e/run-regression.sh) would then fail the D check.
+  # It is not in publish's needs: on main it only writes the notice.
+  # scalar-disabled.spec.ts is skipped in the suite (it needs SCALAR_OFF=1), so a green check does not cover Scalar's
+  # switch-off; that stays a manual QA step.
+  e2e-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the path script's three-dot diff needs the merge base
+
+      # The script's status 1 means "no match" and anything above it an error, so only 0 and 1 set run; an error must
+      # fail here, never read as "no match" and skip the suite.
+      - name: Decide whether the suite runs
+        id: decide
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ $GITHUB_EVENT_NAME != pull_request ]]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::The regression suite did not run on this $GITHUB_EVENT_NAME: the squash commit's tree is the pull request's tested merge, under the ruleset's up-to-date rule."
+            exit 0
+          fi
+          status=0
+          scripts/regression-paths.sh "$BASE_SHA" "$HEAD_SHA" || status=$?
+          case $status in
+            0) echo "run=true" >> "$GITHUB_OUTPUT" ;;
+            1)
+              echo "run=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::The regression suite did not run: no changed path matches scripts/regression-paths.list."
+              ;;
+            *)
+              echo "::error::scripts/regression-paths.sh failed (exit $status), so the suite's trigger is unknown."
+              exit 1
+              ;;
+          esac
+
+      - uses: ./.github/actions/install-compose
+        if: steps.decide.outputs.run == 'true'
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.decide.outputs.run == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - run: npm ci
+        if: steps.decide.outputs.run == 'true'
+        working-directory: e2e
+
+      - run: npx playwright install --with-deps chromium
+        if: steps.decide.outputs.run == 'true'
+        working-directory: e2e
+
+      - run: e2e/run-regression.sh
+        if: steps.decide.outputs.run == 'true'
+
+      # error-context.md is Playwright's accessibility snapshot of the page a failed test was on (synthetic data only).
+      - name: Stack diagnostics
+        if: failure() && steps.decide.outputs.run == 'true'
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --tail 200
+          find e2e/test-results -name error-context.md -print -exec cat {} \; 2>/dev/null || true
+
+      - name: Stop the stack
+        if: always() && steps.decide.outputs.run == 'true'
         run: docker compose down -v
 
   # Story 7.3 (AD-32): the only job that can write packages, on main only and only after the jobs in its needs pass;
@@ -524,7 +607,7 @@ jobs:
   # cancelled; with !cancelled() it would be skipped then, and a skipped required check counts as passing. The job list
   # lives only in needs: NEEDS is the whole needs context, and floor-guard checks it names every check job.
   ci-passed:
-    needs: [backend, frontend, platform, terraform, floor-guard, e2e]
+    needs: [backend, frontend, platform, terraform, floor-guard, e2e, e2e-regression]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
