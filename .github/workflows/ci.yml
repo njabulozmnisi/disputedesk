@@ -270,8 +270,11 @@ jobs:
       - run: scripts/run-breaks.test.sh
       - run: scripts/deploy-workflow.test.sh
       - run: scripts/main-protection.test.sh
+      - run: scripts/check-ready.test.sh
       # The guard hook's Bash rules: python3 is preinstalled on the runner image.
       - run: scripts/guard.test.sh
+      # The rule files name work by its feature slug.
+      - run: scripts/rule-text.test.sh
 
       - name: Install actionlint
         run: |

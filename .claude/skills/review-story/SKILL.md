@@ -9,11 +9,11 @@ The reviewer changes no code. It writes only its own record in the main checkout
 
 ## Pre-build review
 
-For a Feature or High-stakes story, before it builds: read the story as a design against `docs/architecture/architecture.md` and the code it would touch, with Pass 1 and Pass 2 below and the checklist in `.claude/skills/security-story/SKILL.md`. Tag each point `[story]` (a bound, a missing criterion, a gap against the code; Sofia fixes it) or `[decision]` (it contradicts a PRD requirement or an architecture decision; the human decides, batched per epic). Write `<story>-prebuild-review.md`.
+For a Feature-tier or High-stakes story, before it builds: read the story as a design against `docs/architecture/architecture.md` and the code it would touch, with Pass 1 and Pass 2 below and the checklist in `.claude/skills/security-story/SKILL.md`. Tag each point `[story]` (a bound, a missing criterion, a gap against the code; Sofia fixes it) or `[decision]` (it contradicts a PRD requirement or an architecture decision; the human decides, recorded in `docs/verification/decisions.md`). Write `<id>-prebuild-review.md`.
 
 ## Post-build review
 
-Diff: `git diff main...HEAD` (or `feature/<base>...HEAD` for a stacked story) plus any uncommitted changes in the worktree. Run Pass 1 and Pass 2; on a story below High-stakes, also run the checklist in `.claude/skills/security-story/SKILL.md` (the security agent covers High-stakes). Write `<story>-review.md`.
+Diff: `git diff main...HEAD` (or `feature/<base>...HEAD` for a stacked story) plus any uncommitted changes in the worktree. Run Pass 1 and Pass 2; on a story below High-stakes, also run the checklist in `.claude/skills/security-story/SKILL.md` (the security agent covers High-stakes). Write `<id>-review.md`.
 
 **Severity.** A finding is a correctness or security gap, or a breach of a written rule; style and taste are not findings. High: a criterion unproved or wrong, a security gap, data loss. Medium: a likely defect, a missing boundary test, a home-grown mechanism where a documented standard exists. Low: everything else, simplicity points included unless they hide a defect. Only high and medium open a fix round.
 
@@ -36,7 +36,7 @@ Then the standards check (AGENTS.md, "Use established standards; do not invent m
 
 ## Re-reviews
 
-On a re-review, review only the delta since the approved version and say for each earlier finding whether it is closed; append it to the same record as a dated section. Lows never open a fix round; they go to the epic's lows list.
+On a re-review, review only the delta since the approved version and say for each earlier finding whether it is closed; append it to the same record as a dated section. Lows never open a fix round; they go to `docs/verification/lows.md`.
 
 ## Report
 

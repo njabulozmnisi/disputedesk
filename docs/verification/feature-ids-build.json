@@ -1,0 +1,227 @@
+{
+  "status": "built",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-aa1d8835659493cdd",
+  "base": "f13e521 (origin/main), with the approved rule diff staged and the supervisor's docs patch unstaged; no rule file changed beyond the rule diff",
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "R39",
+      "test": "scripts/rule-text.test.sh (git grep -e 'epic-<epic>' -e '<epic>.<story>' -e '<story>' over the 14 rule files is empty; each rule file exists)"
+    },
+    {
+      "id": "AC2",
+      "requirement": "R35",
+      "test": "scripts/check-ready.test.sh (37 cases: accepts a, a 41-character slug, records and lows; exit 2 for no argument, two arguments, '', Feature-X, 42 characters, records-x, lows-x, 1.2 with its numbered story file present, 1.2.3, -x, --help, 7a, a slug with no spec file, after entries 4, 2.3, 1.2, done-dep, story-Done-dep, story-records-x and story-*, and an unreadable origin; exit 1 and 0 on each side of the three rules; also run in mcr.microsoft.com/dotnet/sdk:10.0)"
+    },
+    {
+      "id": "AC3",
+      "requirement": "R33",
+      "test": "scripts/guard.test.sh (none/deny: feature/guard-allow-list, feature/a, a 41-character slug, feature/records, feature/lows, feature/ci-hardening; deny/deny: feature/Guard, feature/7a, a 42-character slug, feature/a.b-c, feature/x:main, feature/-guard, feature/, feature/records-guard-allow-list, feature/lows-2026-11-06, feature/7.4)"
+    },
+    {
+      "id": "AC4",
+      "requirement": "R39",
+      "test": "scripts/rule-text.test.sh (git grep -i -e 'epic-<epic>' -e \"epic's lows\" -e 'per epic' -e 'every epic' over the rule files is empty; AGENTS.md and docs/process/agentic-sdlc.md name docs/verification/lows.md and docs/verification/decisions.md; AGENTS.md contains '10 open rows')"
+    },
+    {
+      "id": "AC5",
+      "requirement": "R39",
+      "test": "scripts/rule-text.test.sh (the README's Features header row, bmad-agent-po.toml names docs/backlog/story-<id>.md) and python3 .claude/skills/bmad-agent-po/scripts/tickets.py status docs/backlog (exit 0, lists story-feature-ids.md: TestResults/tickets-status.txt). Not met: docs/glossary.md does not define 'feature spec' (see conflicts)"
+    },
+    {
+      "id": "AC6",
+      "requirement": "R39",
+      "test": "scripts/rule-text.test.sh ('<story>' and 'epic-<epic>' are absent from the five skills and four agent files); scripts/lane.sh and scripts/lane-runner.zsh are not in the diff (read from the diff)"
+    }
+  ],
+  "smoke": "scripts/check-ready.sh feature-ids: 'check-ready: feature-ids ready', exit 0 (the worktree has no review file for it); scripts/check-ready.sh 7.12: exit 2 'the ID must be a feature slug'; scripts/check-ready.sh with no argument: exit 2 usage; scripts/check-ready.sh guard-allow-list: exit 2 'no spec file docs/backlog/story-guard-allow-list.md'. The guard's stacked form is proved by scripts/guard.test.sh feeding guard.py hook JSON.",
+  "test_first": "Before the change: scripts/guard.test.sh with the new pattern and main's cases failed 8 of 504 runs (the 8 numbered stacked cases); the updated guard.test.sh against main's guard.py failed 11 of 515 runs; the new check-ready.test.sh against main's check-ready.sh failed at its first case (no argument: exit 1, want 2); on main's tree the rule-text patterns matched 39 placeholder lines, and '10 open rows', the Features header row and the po.toml path were absent.",
+  "standards": [
+    {
+      "mechanism": "Slug and argument bound check in check-ready.sh ([[ =~ ]] with a POSIX extended regex, pattern matching for the reserved prefixes, $# for the argument count)",
+      "source": "https://www.gnu.org/software/bash/manual/bash.html#Conditional-Constructs"
+    },
+    {
+      "mechanism": "after entries split into words without pathname expansion (set -o noglob)",
+      "source": "https://www.gnu.org/software/bash/manual/bash.html#The-Set-Builtin"
+    },
+    {
+      "mechanism": "Dependency pushed check, unchanged (git ls-remote --exit-code with the full ref name)",
+      "source": "https://git-scm.com/docs/git-ls-remote"
+    },
+    {
+      "mechanism": "Feature slug as a branch name component",
+      "source": "https://git-scm.com/docs/git-check-ref-format"
+    },
+    {
+      "mechanism": "Stacked branch pattern in the guard (re.fullmatch with a negative lookahead; written in the rule diff, tested here)",
+      "source": "https://docs.python.org/3/library/re.html"
+    },
+    {
+      "mechanism": "Rule-text assertions over tracked files (git grep, exit 1 meaning no match)",
+      "source": "https://git-scm.com/docs/git-grep"
+    },
+    {
+      "mechanism": "Spec file as a BMAD backlog leaf, read by tickets.py status",
+      "source": ".claude/skills/bmod-method/help/ticketing-and-epics.md; .claude/skills/bmad-agent-po/scripts/tickets.py"
+    }
+  ],
+  "breaks": [
+    {
+      "criterion": "AC1",
+      "why": "AGENTS.md defines <story> as a numbered story ID again",
+      "patch": "diff --git a/AGENTS.md b/AGENTS.md\n--- a/AGENTS.md\n+++ b/AGENTS.md\n@@ -118,7 +118,7 @@\n - **Research.** One agent per question, with a scope and an output file; parallel audits split by file set with one merge owner; no fan-out to more models than the verifier and its backup.\n - **A rule change mid-story** applies from the next story unless the human decides to rework the current one.\n \n-Stories run in the order of [docs/tickets/README.md](docs/tickets/README.md); `<id>` is the feature slug (Ticket numbering). Keep the index current when a story merges or the plan changes.\n+Stories run in the order of [docs/tickets/README.md](docs/tickets/README.md); `<story>` is the story ID `<epic>.<story>` (Ticket numbering). Keep the index current when a story merges or the plan changes.\n \n Merge only when every stage passes and CI and Security are green on the story's pull request (Commits).\n \n",
+      "test_method": "scripts/rule-text.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2",
+      "why": "no argument exits 1 again, as ${1:?} does",
+      "patch": "diff --git a/scripts/check-ready.sh b/scripts/check-ready.sh\n--- a/scripts/check-ready.sh\n+++ b/scripts/check-ready.sh\n@@ -23,8 +23,7 @@\n   [[ \"$1\" =~ ^[a-z][a-z0-9-]{0,40}$ && \"$1\" != records-* && \"$1\" != lows-* ]]\n }\n \n-(($# == 1)) || { echo \"check-ready: usage: scripts/check-ready.sh <id>\" >&2; exit 2; }\n-id=$1\n+id=${1:?usage: scripts/check-ready.sh <id>}\n is_slug \"$id\" || { echo \"check-ready: the ID must be a feature slug, for example guard-allow-list, got '$id'\" >&2; exit 2; }\n \n spec_file=docs/backlog/story-$id.md\n",
+      "test_method": "scripts/check-ready.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2",
+      "why": "a 42-character slug is accepted",
+      "patch": "diff --git a/scripts/check-ready.sh b/scripts/check-ready.sh\n--- a/scripts/check-ready.sh\n+++ b/scripts/check-ready.sh\n@@ -20,7 +20,7 @@\n \n # The feature slug's bounds (AGENTS.md, Ticket numbering).\n is_slug() {\n-  [[ \"$1\" =~ ^[a-z][a-z0-9-]{0,40}$ && \"$1\" != records-* && \"$1\" != lows-* ]]\n+  [[ \"$1\" =~ ^[a-z][a-z0-9-]{0,41}$ && \"$1\" != records-* && \"$1\" != lows-* ]]\n }\n \n (($# == 1)) || { echo \"check-ready: usage: scripts/check-ready.sh <id>\" >&2; exit 2; }\n",
+      "test_method": "scripts/check-ready.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2",
+      "why": "the reserved records- and lows- prefixes are accepted",
+      "patch": "diff --git a/scripts/check-ready.sh b/scripts/check-ready.sh\n--- a/scripts/check-ready.sh\n+++ b/scripts/check-ready.sh\n@@ -20,7 +20,7 @@\n \n # The feature slug's bounds (AGENTS.md, Ticket numbering).\n is_slug() {\n-  [[ \"$1\" =~ ^[a-z][a-z0-9-]{0,40}$ && \"$1\" != records-* && \"$1\" != lows-* ]]\n+  [[ \"$1\" =~ ^[a-z][a-z0-9-]{0,40}$ ]]\n }\n \n (($# == 1)) || { echo \"check-ready: usage: scripts/check-ready.sh <id>\" >&2; exit 2; }\n",
+      "test_method": "scripts/check-ready.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2",
+      "why": "an after entry without the story- prefix is accepted",
+      "patch": "diff --git a/scripts/check-ready.sh b/scripts/check-ready.sh\n--- a/scripts/check-ready.sh\n+++ b/scripts/check-ready.sh\n@@ -59,7 +59,7 @@\n set -o noglob # each after entry is a word, never a file name pattern\n for entry in $(tr -d '[],' <<< \"${after_line#after:}\"); do\n   dependency=${entry#story-}\n-  if [[ \"$entry\" != story-* ]] || ! is_slug \"$dependency\"; then\n+  if ! is_slug \"$dependency\"; then\n     echo \"check-ready: after entry '$entry' in $spec_file must be story-<id>, <id> a feature slug\" >&2\n     exit 2\n   fi\n",
+      "test_method": "scripts/check-ready.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2",
+      "why": "a dependency done in the Features table no longer counts as done",
+      "patch": "diff --git a/scripts/check-ready.sh b/scripts/check-ready.sh\n--- a/scripts/check-ready.sh\n+++ b/scripts/check-ready.sh\n@@ -63,7 +63,6 @@\n     echo \"check-ready: after entry '$entry' in $spec_file must be story-<id>, <id> a feature slug\" >&2\n     exit 2\n   fi\n-  grep -Eq \"^\\| $dependency \\|.*\\| done \\|$\" docs/tickets/README.md && continue\n   # --exit-code: 2 when no such branch exists on origin (git ls-remote); any other failure is tooling. The full ref\n   # name, because a pattern matches any ref ending in it: feature/x would match old/feature/x.\n   status=0\n",
+      "test_method": "scripts/check-ready.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2",
+      "why": "an after entry is expanded as a file name pattern",
+      "patch": "diff --git a/scripts/check-ready.sh b/scripts/check-ready.sh\n--- a/scripts/check-ready.sh\n+++ b/scripts/check-ready.sh\n@@ -56,7 +56,6 @@\n fi\n \n after_line=$(grep -m1 '^after:' <<< \"$front_matter\" || true)\n-set -o noglob # each after entry is a word, never a file name pattern\n for entry in $(tr -d '[],' <<< \"${after_line#after:}\"); do\n   dependency=${entry#story-}\n   if [[ \"$entry\" != story-* ]] || ! is_slug \"$dependency\"; then\n",
+      "test_method": "scripts/check-ready.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC3",
+      "why": "the stacked force push is allowed on feature/records-<id> and feature/lows-<date>",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -90,7 +90,7 @@\n # whole command, and it gets no decision, never \"allow\".\n STACKED_PUSH = [\"push\", \"--force-with-lease\", \"--force-if-includes\", \"origin\"]\n STACKED_PATH = r\"/[A-Za-z0-9._/-]+\"\n-STACKED_BRANCH = r\"feature/(?!records-|lows-)[a-z][a-z0-9-]{0,40}\"\n+STACKED_BRANCH = r\"feature/[a-z][a-z0-9-]{0,40}\"\n # The supervisor commits; pipeline agents never commit, push or merge.\n AGENT_GIT_DENY = (\"commit\", \"push\", \"merge\")\n # The closed list of gh writes that change the flow, the settings or the secrets, by the call's first positional\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC3",
+      "why": "the stacked force push is allowed on a 42-character, dotted or digit-led branch",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -90,7 +90,7 @@\n # whole command, and it gets no decision, never \"allow\".\n STACKED_PUSH = [\"push\", \"--force-with-lease\", \"--force-if-includes\", \"origin\"]\n STACKED_PATH = r\"/[A-Za-z0-9._/-]+\"\n-STACKED_BRANCH = r\"feature/(?!records-|lows-)[a-z][a-z0-9-]{0,40}\"\n+STACKED_BRANCH = r\"feature/(?!records-|lows-)[a-z0-9][a-z0-9.-]{0,41}\"\n # The supervisor commits; pipeline agents never commit, push or merge.\n AGENT_GIT_DENY = (\"commit\", \"push\", \"merge\")\n # The closed list of gh writes that change the flow, the settings or the secrets, by the call's first positional\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC3",
+      "why": "the stacked force push takes only a numbered branch, main's pattern",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -90,7 +90,7 @@\n # whole command, and it gets no decision, never \"allow\".\n STACKED_PUSH = [\"push\", \"--force-with-lease\", \"--force-if-includes\", \"origin\"]\n STACKED_PATH = r\"/[A-Za-z0-9._/-]+\"\n-STACKED_BRANCH = r\"feature/(?!records-|lows-)[a-z][a-z0-9-]{0,40}\"\n+STACKED_BRANCH = r\"feature/[0-9]+\\.[0-9]+[a-z]?\"\n # The supervisor commits; pipeline agents never commit, push or merge.\n AGENT_GIT_DENY = (\"commit\", \"push\", \"merge\")\n # The closed list of gh writes that change the flow, the settings or the secrets, by the call's first positional\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC4",
+      "why": "AGENTS.md no longer writes the lows batch trigger as 10 open rows",
+      "patch": "diff --git a/AGENTS.md b/AGENTS.md\n--- a/AGENTS.md\n+++ b/AGENTS.md\n@@ -139,7 +139,7 @@\n Agents learn only from what is written down where the right agent loads it.\n \n - **After every merge (capture).** Add an Escapes table to `<id>-review.md`: each finding a later stage caught that an earlier stage should have, with the stage that caught it, the stage that should have, a category (spec gap, input boundary, non-standard mechanism, missing test, environment or tooling, flaky, script error, auth) and the countermeasure. Add one metrics row: fix rounds per stage, full-suite runs, wall time per stage, tokens and peak context per agent, disk change.\n-- **Lows batch and retrospective.** When `docs/verification/lows.md` holds 10 open rows or five feature specs have merged since the last batch, whichever comes first, the open lows are fixed in one `feature/lows-<yyyy-mm-dd>` pull request with the retrospective beside it. The retrospective aggregates the escapes and metrics since the last batch, re-runs a simplicity and standards audit over the same six areas (backend, frontend, e2e, infra, scripts and CI, docs) and compares the counts, proposes countermeasures to the human as one batch, and prunes stale skill lines.\n+- **Lows batch and retrospective.** When `docs/verification/lows.md` holds ten open rows or five feature specs have merged since the last batch, whichever comes first, the open lows are fixed in one `feature/lows-<yyyy-mm-dd>` pull request with the retrospective beside it. The retrospective aggregates the escapes and metrics since the last batch, re-runs a simplicity and standards audit over the same six areas (backend, frontend, e2e, infra, scripts and CI, docs) and compares the counts, proposes countermeasures to the human as one batch, and prunes stale skill lines.\n - **Immediately (trigger).** A recurring escape category, a second fix round, a stage failing for tooling (account, lock, disk), a full pipeline re-run, a supervisor context over 200k tokens, or free disk under 15 GB: write a short postmortem and a fix proposal at once.\n - **A repeated mistake becomes a check, not a sentence.** Countermeasures in this order: a deterministic check (guard, analyzer, architecture test, floor-guard, script exit code); one line in the responsible agent's skill, under \"Known pitfalls\", at most about 10 lines, deleted once a check covers it; a field in the story template. Never in AGENTS.md or a tool's instruction file.\n - **Machine hygiene.** Once a story is completely done, remove every worktree and copy it used on both machines (builder and fix-round worktrees, QA, verification and review copies, lane files) and their branches, even when they hold uncommitted copies of the merged change; weekly, or under 15 GB free, prune only DisputeDesk-scoped Docker leftovers (the Docker daemon is shared with other projects).\n",
+      "test_method": "scripts/rule-text.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC4",
+      "why": "agentic-sdlc.md files lows per epic again",
+      "patch": "diff --git a/docs/process/agentic-sdlc.md b/docs/process/agentic-sdlc.md\n--- a/docs/process/agentic-sdlc.md\n+++ b/docs/process/agentic-sdlc.md\n@@ -92,7 +92,7 @@\n \n Pre-build, one reviewer reads each Feature-tier and High-stakes story with the review and security checklists; there is no per-story challenger. The challenger runs only in decision mode, on a new or changed architecture decision, PRD or brief.\n \n-Only high and medium findings send the story to a fix round. Lows go to `docs/verification/lows.md` and are fixed in the lows batch (AGENTS.md, Continuous improvement). After two fix rounds a story that still has a high or medium finding goes to the human.\n+Only high and medium findings send the story to a fix round. Lows go to `docs/verification/epic-<epic>-lows.md` and are fixed in the lows batch (AGENTS.md, Continuous improvement). After two fix rounds a story that still has a high or medium finding goes to the human.\n \n A fix round goes to one fresh builder, whose isolated worktree starts at the base commit, not at the story's uncommitted change. The supervisor runs `scripts/story-patch.sh <story-worktree> <base> <patch>`, which writes the change as one binary patch and fails unless the patch reproduces the worktree; the fix brief starts with `git apply --binary --exclude='docs/*' <patch>`, and the builder's worktree becomes the story worktree.\n \n",
+      "test_method": "scripts/rule-text.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC5",
+      "why": "the Features header row loses its Tier column",
+      "patch": "diff --git a/docs/tickets/README.md b/docs/tickets/README.md\n--- a/docs/tickets/README.md\n+++ b/docs/tickets/README.md\n@@ -111,7 +111,7 @@\n \n ## Features\n \n-| Slug | Title | Owner | Tier | Status |\n+| Slug | Title | Owner | Status |\n |---|---|---|---|---|\n | feature-ids | [New work is named by a feature slug](../backlog/story-feature-ids.md) | backend | Feature | in progress |\n | guard-allow-list | Subagents run only a closed list of git and gh forms, per role | backend | High-stakes | planned |\n",
+      "test_method": "scripts/rule-text.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC5",
+      "why": "the product owner's facts no longer name docs/backlog/story-<id>.md",
+      "patch": "diff --git a/_bmad/custom/bmad-agent-po.toml b/_bmad/custom/bmad-agent-po.toml\n--- a/_bmad/custom/bmad-agent-po.toml\n+++ b/_bmad/custom/bmad-agent-po.toml\n@@ -1,6 +1,6 @@\n [agent]\n persistent_facts = [\"Planning docs live at: docs/product-brief/product-brief.md, docs/prd/prd.md, docs/ux/ (ux.md, DESIGN.md, EXPERIENCE.md), docs/architecture/architecture.md, docs/research/<topic>/<topic>.md, docs/initiative-disputedesk.md, docs/tickets/ and docs/backlog/. Read inputs from these paths when no ticket lists them. Name these exact paths in sources: and companions:.\",\n-  \"New work is a feature spec (AGENTS.md, Ticket numbering): a BMAD backlog story, `docs/backlog/story-<id>.md`, where `<id>` is the feature slug; no epic folder and no number in the name. Its front matter keys are exactly `id` (the backlog's `next_id` from `tickets.py status docs/backlog`), `type: story`, `title`, `sources`, `companions`, `after` (each entry a sibling's stem, `story-<id>`), `refined`, `hitl`, `risk`, and `decisions` only when the pre-build review has a `[decision]` point; no `parent`, `covers`, `tracker_id` or `assignee`. No slug equals another slug followed by `-` and more characters. The numbered epics and stories under docs/tickets/ are done; never renumber or rename them.\",\n+  \"New work is a feature spec (AGENTS.md, Ticket numbering): a BMAD backlog story, `docs/backlog/<id>.md`, where `<id>` is the feature slug; no epic folder and no number in the name. Its front matter keys are exactly `id` (the backlog's `next_id` from `tickets.py status docs/backlog`), `type: story`, `title`, `sources`, `companions`, `after` (each entry a sibling's stem, `story-<id>`), `refined`, `hitl`, `risk`, and `decisions` only when the pre-build review has a `[decision]` point; no `parent`, `covers`, `tracker_id` or `assignee`. No slug equals another slug followed by `-` and more characters. The numbered epics and stories under docs/tickets/ are done; never renumber or rename them.\",\n   \"docs/tickets/README.md is the build-order index a human reads: the done epics and stories with their numbers, then the `## Features` table, header row `| Slug | Title | Owner | Tier | Status |`, one row per feature spec in build order (the bare slug, the title linking the spec, status last; scripts/check-ready.sh reads that row). Update it in the same change whenever a feature spec is added, moved, renamed or dropped.\",\n   \"A story with `[decision]` points carries `decisions: pending` in its front matter; only the supervisor changes it to exactly `decisions: settled`, once the human has answered every point and the answer is recorded (scripts/check-ready.sh reads this field).\"]\n \n",
+      "test_method": "scripts/rule-text.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC6",
+      "why": "build-story takes the numbered story path again",
+      "patch": "diff --git a/.claude/skills/build-story/SKILL.md b/.claude/skills/build-story/SKILL.md\n--- a/.claude/skills/build-story/SKILL.md\n+++ b/.claude/skills/build-story/SKILL.md\n@@ -5,7 +5,7 @@\n \n # Build a story\n \n-The input is a feature spec, `docs/backlog/story-<id>.md` (`<id>` as AGENTS.md, Ticket numbering, defines it), with Given/When/Then criteria tagged to requirement IDs.\n+The input is a story file, `docs/tickets/epic-<epic>-<slug>/tickets/story-<epic>.<story>-<slug>.md` (`<id>` as AGENTS.md, Ticket numbering, defines it), with Given/When/Then criteria tagged to requirement IDs.\n \n 1. **Read first.** The story, the requirements it covers in `docs/initiative-disputedesk.md`, the relevant parts of `docs/architecture/architecture.md`, `docs/glossary.md`, and the code the story touches.\n 2. **Find the standard first.** For each mechanism the story needs (authorization, validation, errors, persistence, seeding, resilience, telemetry, security headers, UI patterns), look up the framework's documented approach on Microsoft Learn or the library's docs, or the industry standard (RFC, OWASP), and use it (AGENTS.md, \"Use established standards; do not invent mechanisms\"). Build a custom mechanism only where no standard exists, and say why in the report. Record each in the report's `standards`.\n",
+      "test_method": "scripts/rule-text.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC6",
+      "why": "an agent brief names <story> again",
+      "patch": "diff --git a/.claude/agents/backend-builder.md b/.claude/agents/backend-builder.md\n--- a/.claude/agents/backend-builder.md\n+++ b/.claude/agents/backend-builder.md\n@@ -17,4 +17,4 @@\n \n The backend builder owns `backend/` and the platform files (`docker-compose.yml`, `infra/`, `.github/`, `scripts/floor-guard.sh`); the guard hook blocks writes anywhere else. Follow AGENTS.md and `docs/conventions/backend.md`; every mechanism uses the framework's documented approach or an established standard (AGENTS.md, \"Use established standards; do not invent mechanisms\"). Run the `build-story` skill for the procedure. Never commit, push or mark a story done: leave the work in the story worktree and report.\n \n-End with the status contract (`built` or `blocked`), including `criteria`, `breaks`, `test_results` and the worktree path, and write it to `docs/verification/<id>-build.json` in the worktree.\n+End with the status contract (`built` or `blocked`), including `criteria`, `breaks`, `test_results` and the worktree path, and write it to `docs/verification/<story>-build.json` in the worktree.\n",
+      "test_method": "scripts/rule-text.test.sh",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2",
+      "why": "the after line is read from the whole spec file, not its front matter",
+      "patch": "--- a/scripts/check-ready.sh\n+++ b/scripts/check-ready.sh\n@@ -55,7 +55,7 @@\n   problems+=(\"[decision] points in ${review_files[*]} are not settled: the spec's front matter has no \\`decisions: settled\\` line\")\n fi\n \n-after_line=$(grep -m1 '^after:' <<< \"$front_matter\" || true)\n+after_line=$(grep -m1 \"^after:\" \"$spec_file\" || true)\n set -o noglob # each after entry is a word, never a file name pattern\n for entry in $(tr -d '[],' <<< \"${after_line#after:}\"); do\n   dependency=${entry#story-}\n",
+      "test_method": "scripts/check-ready.test.sh",
+      "expect": "fails"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/guard.test.txt",
+      "TestResults/check-ready.test.txt",
+      "TestResults/check-ready.test.linux.txt",
+      "TestResults/rule-text.test.txt",
+      "TestResults/ci-gates.test.txt",
+      "TestResults/run-breaks.test.txt",
+      "TestResults/deploy-workflow.test.txt",
+      "TestResults/main-protection.test.txt",
+      "TestResults/shellcheck.txt",
+      "TestResults/shellcheck-files.txt",
+      "TestResults/actionlint.txt",
+      "TestResults/floor-guard.txt",
+      "TestResults/secret-scan.txt",
+      "TestResults/forbidden-terms.txt",
+      "TestResults/markdown-links.txt",
+      "TestResults/tickets-status.txt"
+    ],
+    "diff_hash": "174871d8e989",
+    "summary": "pass: guard.test.sh (518 runs), check-ready.test.sh (macOS bash and Linux SDK container), rule-text.test.sh, run-breaks.test.sh, shellcheck 0.11.0 over CI's 33 scripts (the new ones included), actionlint 1.7.12, floor-guard, secret-scan, forbidden terms, Markdown relative links, tickets.py status. Not run (environment): ci-gates.test.sh, deploy-workflow.test.sh and main-protection.test.sh exit 1 because yq v4 is not installed on this machine; CI's floor-guard runs them with the runner's preinstalled yq.",
+    "breaks_run": "scripts/run-breaks.sh ran all 17 breaks in a throwaway copy: every one failed its test as expected (the 14 non-guard breaks re-run on the final diff)"
+  },
+  "assumptions": [
+    "scripts/rule-text.test.sh is built and added to floor-guard although the brief listed only check-ready.test.sh as new: criteria 1, 4, 5 and 6 and the spec's Verify line require it, and the spec's Boundaries allow two new test steps.",
+    "guard.test.sh: beyond the 8 numbered stacked cases, the deny cases whose branch was valid before and whose refusal comes from something else (HEAD:<branch>, two branches, -C relative or substituted path, a trailing ;, &, ||, newline, redirection or line continuation) now use a slug branch, so they still test that reason rather than the branch shape; feature/7.4xy and feature/records-7.3 deny cases are kept.",
+    "check-ready.sh now reads the after line from the front matter only (it read the first after: line of the whole file); a test covers it.",
+    "An after entry written quoted (after: [\"story-x\"]) exits 2: the spec's Inputs give the bare stem.",
+    "tickets.py is not tracked (BMAD is gitignored and restored by scripts/bmad-install.sh), so the main checkout's installed copy ran against the worktree's docs/backlog.",
+    "The Markdown link check is a Python check of relative links in the 16 changed Markdown files; no link checker is installed or used in CI, and external URLs were not fetched.",
+    "guard.test.sh and rule-text.test.sh ran on macOS only; check-ready.test.sh also ran in the Linux SDK container. CI runs all three on ubuntu-24.04."
+  ],
+  "open_questions": [],
+  "conflicts": [
+    "Criterion 5 says docs/glossary.md defines 'feature spec', but neither the rule diff nor the docs patch changes docs/glossary.md, and the backend builder may not write docs/ outside docs/verification/. That part of criterion 5 is unmet and untested; the supervisor's docs change needs the glossary entry. rule-text.test.sh does not assert it, since the spec's listed assertions do not include it.",
+    "Not a rule file, so left unchanged: scripts/diff-hash.sh:5 still names docs/verification/<story>-build.json in a comment."
+  ]
+}

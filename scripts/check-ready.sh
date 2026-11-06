@@ -1,35 +1,38 @@
 #!/usr/bin/env bash
-# Readiness check before a story is dispatched (AGENTS.md, Definition of ready). Fails when:
-#   1. the story's challenge or pre-build review files (docs/verification/<id>-challenge.md, -prebuild-review.md,
-#      -prebuild-security.md) hold a `[story]` point, and none of them nor the story file has a Sofia disposition:
+# Readiness check before a feature spec is dispatched (AGENTS.md, Definition of ready). Fails when:
+#   1. the feature's challenge or pre-build review files (docs/verification/<id>-challenge.md, -prebuild-review.md,
+#      -prebuild-security.md) hold a `[story]` point, and none of them nor the spec file has a Sofia disposition:
 #      a line starting "Sofia, " (optionally as a list item) or a heading "Sofia's disposition" or "Sofia's refine";
-#   2. they hold a `[decision]` point, and the first `decisions:` line in the story's front matter (between its first
+#   2. they hold a `[decision]` point, and the first `decisions:` line in the spec's front matter (between its first
 #      two `---` lines) is not exactly `decisions: settled`. The supervisor sets that field once the human has answered
-#      every `[decision]` point of the story, citing the decisions record; one field settles them all. The field
-#      records that step, not who decided: the decisions record does;
-#   3. a story in the front matter's `after` list is neither `done` in docs/tickets/README.md nor pushed as
-#      feature/<id> on origin, which a lane can stack on (a bare number names a story of the same epic:
-#      `after: [4, 5.1]` in story 7.12 means 7.4 and 5.1).
+#      every `[decision]` point of the feature in docs/verification/decisions.md; one field settles them all. The
+#      field records that step, not who decided: the decisions record does;
+#   3. a feature in the front matter's `after` list (`after: [story-<id>, ...]`, the sibling spec's file stem) is
+#      neither `done` in the Features table of docs/tickets/README.md nor pushed as feature/<id> on origin, which a
+#      lane can stack on.
 # A point is a line where the tag opens a list item or a table cell, so prose such as "no `[decision]` point" is
 # not counted. No review file is required: each one present is read, and a missing one is skipped, since the
-# challenge and pre-build security files are no longer written for every story.
-# Usage: scripts/check-ready.sh <story-id>    (for example 7.12)
-# Exit codes: 0 ready; 1 not ready; 2 usage, no story file, or git ls-remote failed.
+# challenge and pre-build security files are not written for every feature.
+# Usage: scripts/check-ready.sh <id>    (a feature slug, for example guard-allow-list)
+# Exit codes: 0 ready; 1 not ready; 2 usage, no spec file, an after entry of another shape, or git ls-remote failed.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-story=${1:?usage: scripts/check-ready.sh <story-id>}
-[[ "$story" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "check-ready: story ID must look like 7.12, got '$story'" >&2; exit 2; }
-epic=${story%%.*}
+# The feature slug's bounds (AGENTS.md, Ticket numbering).
+is_slug() {
+  [[ "$1" =~ ^[a-z][a-z0-9-]{0,40}$ && "$1" != records-* && "$1" != lows-* ]]
+}
 
-# The file name prefix is the story ID (docs/tickets/README.md); the dash after it keeps 7.1 from matching 7.12.
-story_files=(docs/tickets/epic-"$epic"-*/tickets/story-"$story"-*.md)
-[[ -f "${story_files[0]}" ]] || { echo "check-ready: no story file for $story under docs/tickets/" >&2; exit 2; }
-story_file=${story_files[0]}
+(($# == 1)) || { echo "check-ready: usage: scripts/check-ready.sh <id>" >&2; exit 2; }
+id=$1
+is_slug "$id" || { echo "check-ready: the ID must be a feature slug, for example guard-allow-list, got '$id'" >&2; exit 2; }
+
+spec_file=docs/backlog/story-$id.md
+[[ -f "$spec_file" ]] || { echo "check-ready: no spec file $spec_file" >&2; exit 2; }
 
 review_files=()
 for kind in challenge prebuild-review prebuild-security; do
-  [[ -f "docs/verification/$story-$kind.md" ]] && review_files+=("docs/verification/$story-$kind.md")
+  [[ -f "docs/verification/$id-$kind.md" ]] && review_files+=("docs/verification/$id-$kind.md")
 done
 
 problems=()
@@ -41,24 +44,28 @@ has_point() { # $1 = story or decision
 }
 
 if has_point story \
-  && ! grep -Eq "^[[:space:]]*([-*][[:space:]]+)?Sofia, |^#+ Sofia's (disposition|refine)" "${review_files[@]}" "$story_file"; then
+  && ! grep -Eq "^[[:space:]]*([-*][[:space:]]+)?Sofia, |^#+ Sofia's (disposition|refine)" "${review_files[@]}" "$spec_file"; then
   problems+=("[story] points in ${review_files[*]} have no Sofia disposition line (\"Sofia, <date>\" or a \"Sofia's disposition\" heading)")
 fi
 
-# The story's front matter: the lines between its first two `---` lines.
-front_matter=$(awk '/^---$/ { if (++fences == 2) exit; next } fences == 1' "$story_file")
+# The spec's front matter: the lines between its first two `---` lines.
+front_matter=$(awk '/^---$/ { if (++fences == 2) exit; next } fences == 1' "$spec_file")
 decisions_line=$(grep -m1 '^decisions:' <<< "$front_matter" || true)
 if has_point decision && [[ "$decisions_line" != "decisions: settled" ]]; then
-  problems+=("[decision] points in ${review_files[*]} are not settled: the story's front matter has no \`decisions: settled\` line")
+  problems+=("[decision] points in ${review_files[*]} are not settled: the spec's front matter has no \`decisions: settled\` line")
 fi
 
-# `after: [4, 5.1]` in the front matter; epic 1's plan files have no `after` line.
-after_line=$(grep -m1 '^after:' "$story_file" || true)
-for dependency in $(tr -d '[],' <<<"${after_line#after:}"); do
-  [[ "$dependency" == *.* ]] || dependency="$epic.$dependency"
-  grep -Eq "^\| ${dependency//./\\.} \|.*\| done \|$" docs/tickets/README.md && continue
+after_line=$(grep -m1 '^after:' <<< "$front_matter" || true)
+set -o noglob # each after entry is a word, never a file name pattern
+for entry in $(tr -d '[],' <<< "${after_line#after:}"); do
+  dependency=${entry#story-}
+  if [[ "$entry" != story-* ]] || ! is_slug "$dependency"; then
+    echo "check-ready: after entry '$entry' in $spec_file must be story-<id>, <id> a feature slug" >&2
+    exit 2
+  fi
+  grep -Eq "^\| $dependency \|.*\| done \|$" docs/tickets/README.md && continue
   # --exit-code: 2 when no such branch exists on origin (git ls-remote); any other failure is tooling. The full ref
-  # name, because a pattern matches any ref ending in it: feature/7.1 would match old/feature/7.1.
+  # name, because a pattern matches any ref ending in it: feature/x would match old/feature/x.
   status=0
   git ls-remote --exit-code --heads origin "refs/heads/feature/$dependency" > /dev/null || status=$?
   ((status == 0)) && continue
@@ -67,8 +74,8 @@ for dependency in $(tr -d '[],' <<<"${after_line#after:}"); do
 done
 
 if ((${#problems[@]} > 0)); then
-  echo "check-ready: $story is not ready ($story_file):" >&2
+  echo "check-ready: $id is not ready ($spec_file):" >&2
   printf '  - %s\n' "${problems[@]}" >&2
   exit 1
 fi
-echo "check-ready: $story ready"
+echo "check-ready: $id ready"
