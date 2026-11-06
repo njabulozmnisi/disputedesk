@@ -259,7 +259,7 @@ Keep it. This is not a finding.
 
 | Finding | Caught by | Should have been caught by | Category | Countermeasure |
 |---|---|---|---|---|
-| The spec named a made-up example path, `infra/images/otel-collector/x`, which the infra path check refuses | builder | product owner | spec gap | `check-infra-paths.sh` runs in floor-guard, and the spec writer runs it on the spec before handing it over |
+| The spec named a made-up example file under the otel-collector image folder, which the infra path check refuses | builder | product owner | spec gap | `check-infra-paths.sh` runs in floor-guard, and the spec writer runs it on the spec before handing it over |
 | `check-infra-paths.sh` read a JSON `\n` escape as part of a path | builder | the script's own tests (it had none) | missing test | `scripts/check-infra-paths.test.sh`, in floor-guard |
 | R-M1: `scripts/operations-token.sh` was missing from the trigger list | reviewer | pre-build review | spec gap | the every-script check in `scripts/regression-paths.test.sh` |
 | The fix builder could not write the spec's trigger table, although its brief allowed it | builder (the guard refused) | supervisor at dispatch | script error | briefs never grant a write path that the guard's ownership table does not hold |
