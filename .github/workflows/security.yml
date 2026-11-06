@@ -5,7 +5,7 @@ name: Security
 on:
   pull_request:
   push:
-    branches: [main, "story/**"]
+    branches: [main]
   # Weekly, so advisories published after a merge still surface when the code has not changed.
   schedule:
     - cron: "17 3 * * 1"

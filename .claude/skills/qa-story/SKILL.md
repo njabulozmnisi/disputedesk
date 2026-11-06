@@ -5,7 +5,7 @@ description: Procedure for data-integrity and data-movement QA of one story on t
 
 # QA a story
 
-QA runs only for a story that changes a user journey, the HTTP surface, data or events, once its high and medium findings are fixed. It runs no ZAP scan: CI's ZAP baseline runs on every push.
+QA runs only for a story that changes a user journey, the HTTP surface, data or events, once its high and medium findings are fixed. It runs no ZAP scan: CI's ZAP baseline runs on every pull request and on main.
 
 1. **Lock.** Everything below runs under `scripts/test-lock.sh run stack qa-<story> -- ...`. One QA run at a time; the stack starts once and is stopped (`docker compose stop`) when the run ends. No manual pass holds the stack.
 2. **Stack.** `docker compose up --wait` in the builder's worktree.

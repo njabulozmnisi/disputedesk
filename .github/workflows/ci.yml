@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, "story/**"]
+    branches: [main]
 
 # Least privilege: every job reads the repo and nothing more.
 permissions:
@@ -262,6 +262,8 @@ jobs:
       - run: scripts/run-breaks.test.sh
       - run: scripts/deploy-workflow.test.sh
       - run: scripts/main-protection.test.sh
+      # The guard hook's Bash rules (story 9.4): python3 is preinstalled on the runner image.
+      - run: scripts/guard.test.sh
 
       - name: Install actionlint
         run: |

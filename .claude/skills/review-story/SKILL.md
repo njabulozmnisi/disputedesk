@@ -13,7 +13,7 @@ For a Feature or High-stakes story, before it builds: read the story as a design
 
 ## Post-build review
 
-Diff: `git diff main...HEAD` (or `story/<base>...HEAD` for a stacked story) plus any uncommitted changes in the worktree. Run Pass 1 and Pass 2; on a story below High-stakes, also run the checklist in `.claude/skills/security-story/SKILL.md` (the security agent covers High-stakes). Write `<story>-review.md`.
+Diff: `git diff main...HEAD` (or `feature/<base>...HEAD` for a stacked story) plus any uncommitted changes in the worktree. Run Pass 1 and Pass 2; on a story below High-stakes, also run the checklist in `.claude/skills/security-story/SKILL.md` (the security agent covers High-stakes). Write `<story>-review.md`.
 
 **Severity.** A finding is a correctness or security gap, or a breach of a written rule; style and taste are not findings. High: a criterion unproved or wrong, a security gap, data loss. Medium: a likely defect, a missing boundary test, a home-grown mechanism where a documented standard exists. Low: everything else, simplicity points included unless they hide a defect. Only high and medium open a fix round.
 

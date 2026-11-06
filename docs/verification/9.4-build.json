@@ -1,0 +1,449 @@
+{
+  "status": "built",
+  "story": "9.4",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a20c6befd71371b77",
+  "base": "2c5d03b38b84a68d2c4a813dacfb0b9fc26472ce (origin/main, detached). Round 3's state is applied as exported (r3export: staged-v4.patch staged, unstaged.patch unstaged, guard.test.sh and 9.4-build.json copied untracked); the test gave 448 of 448 before any change. The guard refused this agent's edit of .claude/hooks/guard.py (backend-builder may not write .claude/), so the v5 guard is the file /private/tmp/claude-501/-Users-njabulomnisi-Projects-Dojo-DisputeDesk/77858989-3f5b-4d04-8184-f4d922dc16d1/scratchpad/lane-9.4/r4/guard.py and this worktree still holds the staged v4 guard. The supervisor applies it with: git apply --index --binary /private/tmp/claude-501/-Users-njabulomnisi-Projects-Dojo-DisputeDesk/77858989-3f5b-4d04-8184-f4d922dc16d1/scratchpad/9.4-rule-delta-v5.patch. The v5 runs (test, Linux test, breaks, diff hash) ran in a throwaway worktree, /private/tmp/claude-501/-Users-njabulomnisi-Projects-Dojo-DisputeDesk/77858989-3f5b-4d04-8184-f4d922dc16d1/scratchpad/lane-9.4/r4/v5tree: this worktree's change plus that patch, guard.py staged; nothing is committed",
+  "changed": [
+    "rule diff v5 (the v4 rule diff with only .claude/hooks/guard.py changed; /private/tmp/claude-501/-Users-njabulomnisi-Projects-Dojo-DisputeDesk/77858989-3f5b-4d04-8184-f4d922dc16d1/scratchpad/9.4-rule-diff-v5.patch; delta since v4: /private/tmp/claude-501/-Users-njabulomnisi-Projects-Dojo-DisputeDesk/77858989-3f5b-4d04-8184-f4d922dc16d1/scratchpad/9.4-rule-delta-v5.patch): .claude/hooks/guard.py, .claude/skills/build-story/SKILL.md, .claude/skills/qa-story/SKILL.md, .claude/skills/review-story/SKILL.md, .claude/skills/verify-story/SKILL.md, AGENTS.md, CLAUDE.md, docs/process/agentic-sdlc.md. In this worktree the v4 guard is still staged (the guard blocked the edit); in the v5 tree the v5 guard is staged",
+    ".github/workflows/ci.yml: push branches [main]; floor-guard runs scripts/guard.test.sh beside the other script tests",
+    ".github/workflows/security.yml: push branches [main] (schedule unchanged)",
+    "scripts/guard.test.sh (new): round 3's 448 runs unchanged, plus 52 guard-cases-v5 check lines (no existing line removed or changed) (the reviewer's E1 to E4, E9, G1, G2, D1, D2, D7 to D11, Y1 to Y6, the verifier's round-3 forms, the other shells and stdin forms, and the must-stay-allowed cases: git log --grep merge, a commit message naming a force push, text fed to grep or cat, redirections of reads): 504 runs with the owner-token variants",
+    "scripts/check-ready.sh: a dependency is available when refs/heads/feature/<dependency> is on origin",
+    "scripts/lane.sh: usage comment's base-ref example is origin/feature/8.7",
+    "scripts/push-and-watch.sh, scripts/merge-story.sh: deleted (no caller left outside the records)"
+  ],
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "R33",
+      "test": "the criterion's git grep (TestResults/9.4-criterion1-grep.txt: exit 1, no match; the untracked guard.test.sh has none either); both workflows' push branches are [main]; actionlint passes (TestResults/9.4-actionlint.txt); check-ready.sh throwaway check (TestResults/9.4-check-ready-smoke.txt: story/99.1 only -> not ready, exit 1; feature/99.1 -> ready, exit 0); breaks b1, b2"
+    },
+    {
+      "id": "AC2",
+      "requirement": "R33",
+      "test": "the approved rule diff's written steps (docs/process/agentic-sdlc.md section 2, AGENTS.md Commits); proved on GitHub only by the supervisor at criterion 8; break b10 pins the armed-merge line"
+    },
+    {
+      "id": "AC3",
+      "requirement": "R33",
+      "test": "the approved rule diff's stacked steps (docs/process/agentic-sdlc.md section 2, AGENTS.md Commits); the Supervisor checks' scratch chain proves it against GitHub; break b11 pins the rebase --onto line; the stacked force form's guard cases are in scripts/guard.test.sh"
+    },
+    {
+      "id": "AC4",
+      "requirement": "R33",
+      "test": "scripts/guard.test.sh (sections 'no decision / denied' and 'denied to both': the continuation, odd-backslash join, cluster, abbreviation, escaped-refspec, quoted-option, quoted-separator, subshell, pipe, wrapper, redirection, comment, wrapper-option (env -u gh git, sudo -u git git), --attr-source and shell-fed-text cases included): 504 of 504 runs as expected on the v5 guard on macOS (TestResults/9.4-guard-test.txt) and on Ubuntu 24.04 in the .NET SDK image (TestResults/9.4-guard-test-linux.txt); against the v4 guard 41 of 504 runs differ (TestResults/9.4-guard-test-against-v4-guard.txt); breaks b3, b4, b5, b13, b14, b20, b22, b24, b26, b27, b28, b29, b30, b31"
+    },
+    {
+      "id": "AC5",
+      "requirement": "R33",
+      "test": "scripts/guard.test.sh (the gh cases, each bare and with the owner-token prefix: repeated and clustered methods, options before the group, DEPLOY_ENABLED in any case and through the REST API, gh's own aliases, reads whose arguments are write words, a command substitution, an unreadable command or a shell reading its standard input naming git or gh, which asks the main session and is denied to a subagent, any other substitution, denied to a subagent, a gh call behind a wrapper option named git, and a redirection between gh's words); breaks b6, b7, b8, b13, b15 to b19, b21, b22, b23, b25 to b30"
+    },
+    {
+      "id": "AC6",
+      "requirement": "R33",
+      "test": "scripts/guard.test.sh itself; ci.yml floor-guard step 'run: scripts/guard.test.sh'; shellcheck 0.11.0 over the 30 scripts CI lints, the new test included (TestResults/9.4-shellcheck.txt, 9.4-shellcheck-files.txt); every guard break (b3 to b8, b13 to b31) names this test; break b9"
+    },
+    {
+      "id": "AC7",
+      "requirement": "R39",
+      "test": "the eight rule files equal the v5 rule diff applied to 2c5d03b (break b12's test_method is the cmp, pointed at 9.4-rule-diff-v5.patch; it passes without the break in run-breaks' copy of the v5 tree); v5 differs from the approved v4 patch only in .claude/hooks/guard.py, by 9.4-rule-delta-v5.patch, the builder's targeted fix of R3-H1 and R3-M1 under the human's approval of 2026-11-06 ('Targeted: high + medium'); the rest of the patch's text is the supervisor's and the human's"
+    },
+    {
+      "id": "AC8",
+      "requirement": "R33",
+      "test": "none by the builder: the merge through 9.4's own pull request and main's runs on the squash commit are the supervisor's (supervisor_checks)"
+    }
+  ],
+  "smoke": "No API, UI or stack change, so no stack smoke check. Run locally with no network and no GitHub call: (1) scripts/guard.test.sh on the v5 guard, 504 of 504 runs as expected, on macOS and in the .NET SDK image under the stack lock; (2) the same test on the v4 guard (this worktree), exit 1 with 41 of 504 runs differing; (3) a strictness comparison of v4 and v5 over every case of the reviewer's round-3 files and guard-cases-v4.jsonl (154 cases, both sessions): v5 is never less strict than v4, and stricter only on the R3-H1 and R3-M1 cases; (4) 40,000 fuzzed commands on v5 (quotes, separators, redirections, shells, here-strings): no exception. Helpers, outside the diff: /private/tmp/claude-501/-Users-njabulomnisi-Projects-Dojo-DisputeDesk/77858989-3f5b-4d04-8184-f4d922dc16d1/scratchpad/lane-9.4/r4/tools/",
+  "standards": [
+    {
+      "mechanism": "Guard as a Claude Code PreToolUse command hook: hook JSON on stdin (tool_name, tool_input.command, agent_type for a subagent), permissionDecision deny or ask, no output for no decision",
+      "source": "https://code.claude.com/docs/en/hooks"
+    },
+    {
+      "mechanism": "Force-push forms the guard denies: -f, --force, --force-with-lease, --force-if-includes, --mirror, + refspec",
+      "source": "https://git-scm.com/docs/git-push"
+    },
+    {
+      "mechanism": "gh api writes: -X/--method, and -f/-F/--raw-field/--input implying POST",
+      "source": "https://cli.github.com/manual/gh_api"
+    },
+    {
+      "mechanism": "Workflow triggers: pull_request plus push filtered to main (on.push.branches)",
+      "source": "https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#onpushbranchestagsbranches-ignoretags-ignore"
+    },
+    {
+      "mechanism": "GitHub flow: every change on a branch, merged through its pull request",
+      "source": "https://docs.github.com/en/get-started/using-github/github-flow"
+    },
+    {
+      "mechanism": "Ref lookup on origin with git ls-remote --exit-code --heads and the full ref name",
+      "source": "https://git-scm.com/docs/git-ls-remote"
+    },
+    {
+      "mechanism": "Hook JSON built with jq --arg (no shell quoting of the command)",
+      "source": "https://jqlang.org/manual/#invoking-jq"
+    },
+    {
+      "mechanism": "Guard cases for bash line continuation: a backslash-newline pair is removed before words are read",
+      "source": "https://www.gnu.org/software/bash/manual/bash.html#Escape-Character"
+    },
+    {
+      "mechanism": "Guard cases for quoted and escaped words: bash removes quotes and backslashes before the command sees its arguments",
+      "source": "https://www.gnu.org/software/bash/manual/bash.html#Quote-Removal"
+    },
+    {
+      "mechanism": "Guard cases for git option abbreviations (an unambiguous long-option prefix is accepted)",
+      "source": "https://git-scm.com/docs/gitcli"
+    },
+    {
+      "mechanism": "Guard cases for command substitution: $( ) and backticks run a command whose output becomes part of a word, so its words are not readable from the text; the guard fails closed on them",
+      "source": "https://www.gnu.org/software/bash/manual/bash.html#Command-Substitution"
+    },
+    {
+      "mechanism": "Guard cases for gh's command aliases (pr new, secret remove, variable remove, pr ls, ...)",
+      "source": "https://cli.github.com/manual/gh_pr_create"
+    },
+    {
+      "mechanism": "The guard reads each simple command as shell words with Python's shlex in POSIX mode (punctuation_chars for ( ) ; & | < > and the newline); forms shlex does not model (ANSI-C or locale quoting, a quoted or escaped lone separator, brace expansion, an unbalanced quote) make the command unreadable, which fails closed when it names git or gh",
+      "source": "https://docs.python.org/3/library/shlex.html"
+    },
+    {
+      "mechanism": "Guard cases for process substitution <( ) and >( ), which runs a command as $( ) does",
+      "source": "https://www.gnu.org/software/bash/manual/bash.html#Process-Substitution"
+    },
+    {
+      "mechanism": "A redirection (its operator, its target word and the file descriptor number before it) is not one of the command's arguments, so the guard drops it before reading the words; >| is a redirection, not a pipe",
+      "source": "https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html#tag_19_07"
+    },
+    {
+      "mechanism": "A shell reads its commands from standard input with -s, or when no operand follows its options (-o and -O take a value), so such a shell fails closed",
+      "source": "https://pubs.opengroup.org/onlinepubs/9799919799/utilities/sh.html"
+    },
+    {
+      "mechanism": "The same for bash: -c reads the command string, -s or no operand reads standard input; --rcfile and --init-file take a value",
+      "source": "https://www.gnu.org/software/bash/manual/bash.html#Invoking-Bash"
+    },
+    {
+      "mechanism": "A pipe connects one command's output to the next command's standard input, so text echoed into a shell is run by it",
+      "source": "https://www.gnu.org/software/bash/manual/bash.html#Pipelines"
+    },
+    {
+      "mechanism": "A here-string (<<<) and a heredoc feed their text to the command's standard input",
+      "source": "https://www.gnu.org/software/bash/manual/bash.html#Here-Strings"
+    },
+    {
+      "mechanism": "`.` and `source` read and run a file's commands, so of /dev/stdin they run standard input",
+      "source": "https://www.gnu.org/software/bash/manual/bash.html#Bourne-Shell-Builtins"
+    },
+    {
+      "mechanism": "git's global option --attr-source <tree-ish> takes the next word as its value",
+      "source": "https://git-scm.com/docs/git#Documentation/git.txt---attr-sourcelttree-ishgt"
+    }
+  ],
+  "breaks": [
+    {
+      "id": "b1",
+      "criterion": "AC1",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -3,7 +3,7 @@\n on:\n   pull_request:\n   push:\n-    branches: [main]\n+    branches: [main, \"story/**\"]\n \n # Least privilege: every job reads the repo and nothing more.\n permissions:\n",
+      "test_method": "! git grep -n -E 'story/\\*\\*|story/<|story/[0-9$]|push-and-watch\\.sh|merge-story\\.sh|ci-changes\\.sh' -- . ':(exclude)docs/verification/' ':(exclude)docs/tickets/' ':(exclude)docs/decisions/'",
+      "expect": "fails"
+    },
+    {
+      "id": "b2",
+      "criterion": "AC1",
+      "patch": "diff --git a/scripts/check-ready.sh b/scripts/check-ready.sh\n--- a/scripts/check-ready.sh\n+++ b/scripts/check-ready.sh\n@@ -60,7 +60,7 @@\n   # --exit-code: 2 when no such branch exists on origin (git ls-remote); any other failure is tooling. The full ref\n   # name, because a pattern matches any ref ending in it: feature/7.1 would match old/feature/7.1.\n   status=0\n-  git ls-remote --exit-code --heads origin \"refs/heads/feature/$dependency\" > /dev/null || status=$?\n+  git ls-remote --exit-code --heads origin \"refs/heads/story/$dependency\" > /dev/null || status=$?\n   ((status == 0)) && continue\n   ((status == 2)) || { echo \"check-ready: git ls-remote origin failed (exit $status)\" >&2; exit 2; }\n   problems+=(\"dependency $dependency is not done in docs/tickets/README.md and feature/$dependency is not on origin\")\n",
+      "test_method": "! git grep -n -E 'story/\\*\\*|story/<|story/[0-9$]|push-and-watch\\.sh|merge-story\\.sh|ci-changes\\.sh' -- . ':(exclude)docs/verification/' ':(exclude)docs/tickets/' ':(exclude)docs/decisions/'",
+      "expect": "fails"
+    },
+    {
+      "id": "b3",
+      "criterion": "AC4",
+      "break": "the stacked force form takes any branch",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -81,7 +81,7 @@\n # whole command, and it gets no decision, never \"allow\".\n STACKED_PUSH = [\"push\", \"--force-with-lease\", \"--force-if-includes\", \"origin\"]\n STACKED_PATH = r\"/[A-Za-z0-9._/-]+\"\n-STACKED_BRANCH = r\"feature/[0-9]+\\.[0-9]+[a-z]?\"\n+STACKED_BRANCH = r\"feature/\\S+\"\n # The supervisor commits; pipeline agents never commit, push or merge.\n AGENT_GIT_DENY = (\"commit\", \"push\", \"merge\")\n # The closed list of gh writes that change the flow, the settings or the secrets, by the call's first positional\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b4",
+      "criterion": "AC4",
+      "break": "only a bare -f counts as a short-option force",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -225,7 +225,7 @@\n     if word.startswith(\"--\"):\n         name = word[2:].split(\"=\")[0]\n         return name != \"\" and any(option.startswith(name) for option in FORCE_OPTIONS)\n-    return word.startswith(\"-\") and \"f\" in word\n+    return word == \"-f\"\n \n \n def is_force_push(words: list[str]) -> bool:\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b5",
+      "criterion": "AC4",
+      "break": "the stacked form matches as a prefix, not the whole command",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -244,7 +244,7 @@\n     words = words[1:]\n     if words[:1] == [\"-C\"] and len(words) > 1 and re.fullmatch(STACKED_PATH, words[1]):\n         words = words[2:]\n-    return len(words) == 5 and words[:4] == STACKED_PUSH and re.fullmatch(STACKED_BRANCH, words[4]) is not None\n+    return len(words) >= 5 and words[:4] == STACKED_PUSH and re.fullmatch(STACKED_BRANCH, words[4]) is not None\n \n \n def gh_positional(arguments: list[str]) -> list[str]:\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b6",
+      "criterion": "AC5",
+      "break": "the gh pr writes leave the closed list",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -87,7 +87,6 @@\n # The closed list of gh writes that change the flow, the settings or the secrets, by the call's first positional\n # words, with gh's own aliases for them (gh help <command>, ALIASES); the supervisor runs them.\n AGENT_GH_DENY = {\n-    \"pr create\", \"pr new\", \"pr edit\", \"pr merge\", \"pr update-branch\", \"pr close\", \"pr reopen\", \"pr ready\",\n     \"repo edit\", \"repo delete\", \"repo rename\", \"repo archive\", \"repo unarchive\", \"repo sync\",\n     \"repo deploy-key add\", \"repo deploy-key delete\",\n     \"secret set\", \"secret delete\", \"secret remove\", \"variable set\", \"variable delete\", \"variable remove\",\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b7",
+      "criterion": "AC5",
+      "break": "a gh api field or --input no longer implies a write",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -277,8 +277,7 @@\n             methods.append(word.partition(\"X\")[2].removeprefix(\"=\") or following)\n     if methods:\n         return any(method.upper() != \"GET\" for method in methods)\n-    return any(word.startswith((\"--field\", \"--raw-field\", \"--input\")) or re.fullmatch(r\"-[A-Za-z]*[fF].*\", word)\n-               for word in arguments)\n+    return False\n \n \n def is_agent_gh_write(arguments: list[str]) -> bool:\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b8",
+      "criterion": "AC5",
+      "break": "gh variable set|delete|remove DEPLOY_ENABLED no longer asks",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -295,9 +295,6 @@\n     reasons = []\n     if words[:2] == [\"workflow\", \"run\"] and \"deploy\" in text.lower():\n         reasons.append(DEPLOY_REASON)\n-    if words[:2] in ([\"variable\", \"set\"], [\"variable\", \"delete\"], [\"variable\", \"remove\"]) \\\n-            and re.search(DEPLOY_ENABLED, text):\n-        reasons.append(DEPLOY_ENABLED_REASON)\n     if words[:1] == [\"api\"] and is_gh_api_write(arguments) and \"actions/variables\" in text \\\n             and re.search(DEPLOY_ENABLED, text):\n         reasons.append(DEPLOY_ENABLED_REASON)\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b9",
+      "criterion": "AC6",
+      "patch": "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -262,8 +262,6 @@\n       - run: scripts/run-breaks.test.sh\n       - run: scripts/deploy-workflow.test.sh\n       - run: scripts/main-protection.test.sh\n-      # The guard hook's Bash rules (story 9.4): python3 is preinstalled on the runner image.\n-      - run: scripts/guard.test.sh\n \n       - name: Install actionlint\n         run: |\n",
+      "test_method": "PATH=/private/tmp/claude-501/-Users-njabulomnisi-Projects-Dojo-DisputeDesk/77858989-3f5b-4d04-8184-f4d922dc16d1/scratchpad/yq:$PATH yq -e '.jobs[\"floor-guard\"].steps[] | select(.run == \"scripts/guard.test.sh\")' .github/workflows/ci.yml",
+      "expect": "fails"
+    },
+    {
+      "id": "b10",
+      "criterion": "AC2",
+      "patch": "diff --git a/docs/process/agentic-sdlc.md b/docs/process/agentic-sdlc.md\n--- a/docs/process/agentic-sdlc.md\n+++ b/docs/process/agentic-sdlc.md\n@@ -106,7 +106,7 @@\n \n 1. pushes the branch, `git push origin feature/<id>`, and opens the pull request, `gh pr create --head feature/<id> --base <base> --title <title> --body <body>`, where `<base>` is `main`, or `feature/<base>` for a stacked story, and `<title>` is the commit-message subject (one line, at most 72 characters);\n 2. waits for the required checks, `gh pr checks <n> --watch --required`;\n-3. arms the merge only when `gh pr view <n> --json baseRefName` reads `main`: `gh pr merge <n> --squash --auto --match-head-commit <sha>`, where `<sha>` is the full 40-character SHA of the commit whose tree the stages checked, or the head `gh pr update-branch` made from it once its checks pass;\n+3. arms the merge only when `gh pr view <n> --json baseRefName` reads `main`: `gh pr merge <n> --squash --auto`, where `<sha>` is the full 40-character SHA of the commit whose tree the stages checked, or the head `gh pr update-branch` made from it once its checks pass;\n 4. before any later push to an armed pull request, runs `gh pr merge <n> --disable-auto`, and re-arms with the new head once its checks pass;\n 5. if the pull request still reads `OPEN` once its checks pass, reads `gh pr view <n> --json mergeStateStatus`: `BEHIND` takes the update below, `BLOCKED` waits, `DIRTY` goes to a builder as a fix round;\n 6. confirms the merge and its squash SHA, `gh pr view <n> --json state,mergeCommit`, then finds main's runs on it, `gh run list --branch main --commit <squash sha> --workflow CI` (and `Security`), and waits for each, `gh run watch <id> --exit-status`.\n",
+      "test_method": "grep -qF -- 'gh pr merge <n> --squash --auto --match-head-commit <sha>' docs/process/agentic-sdlc.md",
+      "expect": "fails"
+    },
+    {
+      "id": "b11",
+      "criterion": "AC3",
+      "patch": "diff --git a/docs/process/agentic-sdlc.md b/docs/process/agentic-sdlc.md\n--- a/docs/process/agentic-sdlc.md\n+++ b/docs/process/agentic-sdlc.md\n@@ -113,7 +113,7 @@\n \n A pull request that is only behind main gets `gh pr merge <n> --disable-auto`, then `gh pr update-branch <n>`, with no force push; the local branch then takes the remote head first (`git fetch` and a fast-forward), and the merge is re-armed with the new head once its checks pass, with no other stage re-run. A `DIRTY` pull request, or a drift check that fails after an update, goes to a builder as a fix round, since the supervisor writes no code.\n \n-A stacked story's pull request has the base `feature/<base>`. When the base's pull request squash-merges, GitHub deletes `feature/<base>` and retargets the stacked pull request to main ([Managing branches within your repository](https://docs.github.com/en/pull-requests/how-tos/commit-changes/managing-branches-within-your-repository), Deleting a branch); the supervisor confirms it with `gh pr view <n> --json baseRefName` (else `gh pr edit <n> --base main`). It takes the base's last head from `gh pr view <base-pr> --json headRefOid`, runs `git fetch origin` and `git rebase --onto origin/main <that sha> feature/<story>` (on a conflict, `git rebase --abort` and a fix round), and pushes with the one force push the guard lets through, `git [-C <path>] push --force-with-lease --force-if-includes origin feature/<story>`, as the whole command. The pull request's checks run again before any merge.\n+A stacked story's pull request has the base `feature/<base>`. When the base's pull request squash-merges, GitHub deletes `feature/<base>` and retargets the stacked pull request to main ([Managing branches within your repository](https://docs.github.com/en/pull-requests/how-tos/commit-changes/managing-branches-within-your-repository), Deleting a branch); the supervisor confirms it with `gh pr view <n> --json baseRefName` (else `gh pr edit <n> --base main`). It takes the base's last head from `gh pr view <base-pr> --json headRefOid`, runs `git fetch origin` and `git rebase origin/main feature/<story>` (on a conflict, `git rebase --abort` and a fix round), and pushes with the one force push the guard lets through, `git [-C <path>] push --force-with-lease --force-if-includes origin feature/<story>`, as the whole command. The pull request's checks run again before any merge.\n \n Pull-request checks test GitHub's merge of the up-to-date branch into main, and main's own run builds, scans and publishes the squash commit (ad-012). Main is never force-pushed, and its ruleset refuses it.\n \n",
+      "test_method": "grep -qF -- 'git rebase --onto origin/main <that sha> feature/<story>' docs/process/agentic-sdlc.md",
+      "expect": "fails"
+    },
+    {
+      "id": "b12",
+      "criterion": "AC7",
+      "patch": "diff --git a/AGENTS.md b/AGENTS.md\n--- a/AGENTS.md\n+++ b/AGENTS.md\n@@ -91,7 +91,7 @@\n - **Branches.** A story is built and committed on `feature/<story>` (`<story>` matching `^[0-9]+\\.[0-9]+[a-z]?$`). Any other change (a records change, a Small fix, a docs-only change) goes on `feature/<slug>` (`<slug>` matching `^[a-z][a-z0-9.-]{0,49}$`, so it never matches a story ID). Both take the same steps and wait for the full checks: every check job, the e2e journeys and the ZAP baseline included, runs on every pull request and on main.\n - **Steps** (the commands are in `docs/process/agentic-sdlc.md`, section 2). Push the branch; open its pull request against main, or against `feature/<base>` for a stacked story, titled with the commit-message subject (one line, at most 72 characters) and with the detail in the body, which becomes the squash commit's message; wait for its required checks. Only once every stage has passed and the base reads main, arm squash auto-merge pinned to the head whose tree the stages checked (`--match-head-commit`); auto-merge never replaces a stage. Before any later push to an armed pull request, disable auto-merge, and re-arm on the new head once its checks pass. Then confirm the merge and its squash commit, and wait for main's CI and Security runs on that commit. Every `gh` write and read-back runs as the repository owner (`GH_TOKEN=\"$(gh auth token --user <owner>)\" gh …`); the token is never printed, logged or written to a file.\n - **What main gets.** Main takes only a squash merge. The pull request's checks test GitHub's merge of the up-to-date branch into main, and main's own run builds, scans and publishes the squash commit (ad-012). A pull request that is only behind main is updated with `gh pr update-branch`, never a force push; one with a conflict, or a drift check that fails after an update, goes to a builder as a fix round, since the supervisor writes no code.\n-- **Stacked stories.** A story that depends on an unmerged story builds on that story's branch, `feature/<base>`, and opens its pull request against it. When the base squash-merges, GitHub deletes `feature/<base>` and retargets the stacked pull request to main; the stacked branch is rebased onto main (`git rebase --onto origin/main <base's last head> feature/<story>`), pushed with the one lease-checked force push, `git [-C <path>] push --force-with-lease --force-if-includes origin feature/<story>`, and its checks run again before any merge. No other force push is made; main is never force-pushed, and the ruleset refuses it.\n+- **Stacked stories.** A story that depends on an unmerged story builds on that story's branch, `feature/<base>`, and opens its pull request against it. When the base squash-merges, GitHub deletes `feature/<base>` and retargets the stacked pull request to main; the stacked branch is rebased onto main (`git rebase --onto origin/main <base's last head> feature/<story>`), pushed with the one lease-checked force push, `git [-C <path>] push --force-with-lease --force-if-includes origin feature/<story>`, and its checks run again before any merge. No other force push is made; main is force-pushed only by the supervisor.\n - **Records.** The records of a merged story (the capture, the epic's lows and decisions, a stage's read-back record, and the story's `docs/tickets/README.md` row set to `done`) ride in one records pull request, `feature/records-<story>`, after its merge.\n \n ## Story flow\n",
+      "test_method": "index=$(mktemp -u) && export GIT_INDEX_FILE=$index && git read-tree 2c5d03b38b84a68d2c4a813dacfb0b9fc26472ce && git apply --cached --binary --exclude='docs/verification/*' /private/tmp/claude-501/-Users-njabulomnisi-Projects-Dojo-DisputeDesk/77858989-3f5b-4d04-8184-f4d922dc16d1/scratchpad/9.4-rule-diff-v5.patch && files=$(git diff --cached --name-only 2c5d03b38b84a68d2c4a813dacfb0b9fc26472ce) && [ -n \"$files\" ] && for file in $files; do git show \":$file\" | cmp -s - \"$file\" || { echo \"differs from the approved patch: $file\"; exit 1; }; done",
+      "expect": "fails"
+    },
+    {
+      "id": "b13",
+      "criterion": "AC4, AC5 (review H1)",
+      "break": "backslash-newline continuations are no longer joined",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -340,7 +340,7 @@\n     check_terms(command)\n     # Bash removes each backslash-newline pair before it reads words (bash manual, Escape Character). Only an\n     # unescaped backslash joins: an odd run of them before the newline.\n-    joined = re.sub(r\"(?<!\\\\)((?:\\\\\\\\)*)\\\\\\n\", r\"\\1\", command)\n+    joined = command\n     readings = [joined]\n     if re.search(COMMENT_CONTINUATION, command):\n         # Whether that backslash joins depends on whether the # starts a comment, so both readings are decided.\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b14",
+      "criterion": "AC4 (review M1)",
+      "break": "--mirror and its abbreviations no longer count as a force",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -85,7 +85,7 @@\n GIT_VALUE_OPTIONS = (\"-C\", \"-c\", \"--git-dir\", \"--work-tree\", \"--namespace\", \"--config-env\", \"--attr-source\")\n # git push forces with a short-option cluster holding f (-f, -uf, -4f), any prefix of these long options (git takes an\n # unambiguous prefix), or a + refspec (git help push).\n-FORCE_OPTIONS = (\"force\", \"force-with-lease\", \"force-if-includes\", \"mirror\")\n+FORCE_OPTIONS = (\"force\", \"force-with-lease\", \"force-if-includes\")\n # The one force push that runs: a stacked story's push after its rebase onto main (AGENTS.md, Commits). It must be the\n # whole command, and it gets no decision, never \"allow\".\n STACKED_PUSH = [\"push\", \"--force-with-lease\", \"--force-if-includes\", \"origin\"]\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b15",
+      "criterion": "AC5 (review M2, verify finding 2)",
+      "break": "gh api reads only the first method",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -276,7 +276,7 @@\n         elif re.fullmatch(r\"-[A-Za-z]*X.*\", word):\n             methods.append(word.partition(\"X\")[2].removeprefix(\"=\") or following)\n     if methods:\n-        return any(method.upper() != \"GET\" for method in methods)\n+        return methods[0].upper() != \"GET\"\n     return any(word.startswith((\"--field\", \"--raw-field\", \"--input\")) or re.fullmatch(r\"-[A-Za-z]*[fF].*\", word)\n                for word in arguments)\n \n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b16",
+      "criterion": "AC5 (review M2)",
+      "break": "gh api reads a method only from a lone -X, not a short-option cluster",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -273,7 +273,7 @@\n             methods.append(following)\n         elif word.startswith(\"--method=\"):\n             methods.append(word.partition(\"=\")[2])\n-        elif re.fullmatch(r\"-[A-Za-z]*X.*\", word):\n+        elif word == \"-X\":\n             methods.append(word.partition(\"X\")[2].removeprefix(\"=\") or following)\n     if methods:\n         return any(method.upper() != \"GET\" for method in methods)\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b17",
+      "criterion": "AC5 (review M3)",
+      "break": "an option before the gh group no longer takes its value, so -R o/r hides pr merge",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -259,7 +259,7 @@\n         if not word.startswith(\"-\"):\n             words.append(word)\n         elif \"=\" not in word and (word.startswith(\"--\") or len(word) == 2):\n-            next(rest, None)\n+            pass\n     return words\n \n \n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b18",
+      "criterion": "AC5 (review M4)",
+      "break": "DEPLOY_ENABLED matches only in upper case",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -53,7 +53,7 @@\n     (r\"/actions/workflows/\\S*deploy\\S*/dispatches|\\bdeploy\\.sh\\b\", DEPLOY_REASON),\n ]\n DEPLOY_ENABLED_REASON = \"DEPLOY_ENABLED switches deploy on merge: requires explicit approval.\"\n-DEPLOY_ENABLED = r\"(?i)\\bDEPLOY_ENABLED\\b\"  # GitHub variable names are case-insensitive\n+DEPLOY_ENABLED = r\"\\bDEPLOY_ENABLED\\b\"  # GitHub variable names are case-insensitive\n \n # Commands are split into words the way a POSIX shell does, with Python's shlex (docs.python.org/3/library/shlex.html):\n # quotes and backslashes are honoured, and ( ) ; & | and a newline end a simple command. A form shlex does not model\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b19",
+      "criterion": "AC5 (review M4)",
+      "break": "a gh api write to the DEPLOY_ENABLED variable no longer asks",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -298,9 +298,6 @@\n     if words[:2] in ([\"variable\", \"set\"], [\"variable\", \"delete\"], [\"variable\", \"remove\"]) \\\n             and re.search(DEPLOY_ENABLED, text):\n         reasons.append(DEPLOY_ENABLED_REASON)\n-    if words[:1] == [\"api\"] and is_gh_api_write(arguments) and \"actions/variables\" in text \\\n-            and re.search(DEPLOY_ENABLED, text):\n-        reasons.append(DEPLOY_ENABLED_REASON)\n     return reasons\n \n \n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b20",
+      "criterion": "AC4 (verify finding 1)",
+      "break": "shlex reads in non-POSIX mode: words keep their quotes and backslashes",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -146,7 +146,7 @@\n \n def shell_tokens(command: str, punctuation: str = \"();<>|&\\n\") -> list[str] | None:\n     \"\"\"The command's words and separators, or None when shlex cannot read it (an unbalanced quote).\"\"\"\n-    lexer = shlex.shlex(command, posix=True, punctuation_chars=punctuation)\n+    lexer = shlex.shlex(command, posix=False, punctuation_chars=punctuation)\n     lexer.whitespace_split = True\n     lexer.whitespace = \" \\t\"  # a newline separates commands; bash reads \\r as part of a word\n     lexer.commenters = \"\"  # shlex starts a comment inside a word, bash only at a word's start: comments stay words\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b21",
+      "criterion": "AC5 (verify finding 3)",
+      "break": "the closed list also matches a write word anywhere in the gh call, as the first build did",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -283,7 +283,8 @@\n \n def is_agent_gh_write(arguments: list[str]) -> bool:\n     words = gh_positional(arguments)\n-    if \" \".join(words[:2]) in AGENT_GH_DENY or \" \".join(words[:3]) in AGENT_GH_DENY:\n+    if \" \".join(words[:2]) in AGENT_GH_DENY or \" \".join(words[:3]) in AGENT_GH_DENY \\\n+            or any(\" \".join(words[:1] + [word]) in AGENT_GH_DENY for word in arguments):\n         return True\n     return words[:1] == [\"api\"] and is_gh_api_write(arguments)\n \n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b22",
+      "criterion": "AC4, AC5 (review R1-H1, rule diff v3)",
+      "break": "a substitution no longer makes the command unreadable, so it is parsed instead of failing closed",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -180,7 +180,7 @@\n     \"\"\"Each simple command's words, whether the command holds a substitution, and whether shlex could read it.\"\"\"\n     bare = outside_single_quotes(command)\n     substitution = re.search(SUBSTITUTION, bare) is not None\n-    readable = not substitution and not re.search(UNREADABLE, command) and not re.search(BRACE_EXPANSION, bare)\n+    readable = not re.search(UNREADABLE, command) and not re.search(BRACE_EXPANSION, bare)\n     tokens = shell_tokens(command) if readable else None\n     readable = tokens is not None\n     if not readable:\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b23",
+      "criterion": "AC5 (review R1-M1, rule diff v3)",
+      "break": "gh's own aliases (pr new, secret remove, variable remove) leave the closed list",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -87,10 +87,10 @@\n # The closed list of gh writes that change the flow, the settings or the secrets, by the call's first positional\n # words, with gh's own aliases for them (gh help <command>, ALIASES); the supervisor runs them.\n AGENT_GH_DENY = {\n-    \"pr create\", \"pr new\", \"pr edit\", \"pr merge\", \"pr update-branch\", \"pr close\", \"pr reopen\", \"pr ready\",\n+    \"pr create\", \"pr edit\", \"pr merge\", \"pr update-branch\", \"pr close\", \"pr reopen\", \"pr ready\",\n     \"repo edit\", \"repo delete\", \"repo rename\", \"repo archive\", \"repo unarchive\", \"repo sync\",\n     \"repo deploy-key add\", \"repo deploy-key delete\",\n-    \"secret set\", \"secret delete\", \"secret remove\", \"variable set\", \"variable delete\", \"variable remove\",\n+    \"secret set\", \"secret delete\", \"variable set\", \"variable delete\",\n     \"alias set\", \"alias import\",\n     \"workflow run\", \"workflow enable\", \"workflow disable\",\n }\n@@ -295,7 +295,7 @@\n     reasons = []\n     if words[:2] == [\"workflow\", \"run\"] and \"deploy\" in text.lower():\n         reasons.append(DEPLOY_REASON)\n-    if words[:2] in ([\"variable\", \"set\"], [\"variable\", \"delete\"], [\"variable\", \"remove\"]) \\\n+    if words[:2] in ([\"variable\", \"set\"], [\"variable\", \"delete\"]) \\\n             and re.search(DEPLOY_ENABLED, text):\n         reasons.append(DEPLOY_ENABLED_REASON)\n     if words[:1] == [\"api\"] and is_gh_api_write(arguments) and \"actions/variables\" in text \\\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b24",
+      "criterion": "AC4, AC5 (review R1-L1, rule diff v3)",
+      "break": "the line-join fix is undone: every backslash-newline pair joins, an escaped backslash's too (v2's form)",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -340,7 +340,7 @@\n     check_terms(command)\n     # Bash removes each backslash-newline pair before it reads words (bash manual, Escape Character). Only an\n     # unescaped backslash joins: an odd run of them before the newline.\n-    joined = re.sub(r\"(?<!\\\\)((?:\\\\\\\\)*)\\\\\\n\", r\"\\1\", command)\n+    joined = command.replace(\"\\\\\\n\", \"\")\n     readings = [joined]\n     if re.search(COMMENT_CONTINUATION, command):\n         # Whether that backslash joins depends on whether the # starts a comment, so both readings are decided.\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b25",
+      "criterion": "AC4, AC5 (rule diff v4, human decision of 2026-11-05)",
+      "break": "a subagent is no longer denied a command substitution in a command naming neither git nor gh",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -314,8 +314,6 @@\n             return \"deny\", reason\n     if any(is_force_push(words) for words in commands) and not stacked:\n         return \"deny\", \"No force pushes; the one exception is a stacked story's lease-checked push (AGENTS.md, Commits).\"\n-    if agent and substitution:\n-        return \"deny\", \"Pipeline agents may not run a command substitution; write the value out instead.\"\n     # The name is looked for with quotes and backslashes removed, as bash passes the words on (g\"h\" reads as gh).\n     if not readable and re.search(GIT_OR_GH, re.sub(r\"[\\\\'\\\"]\", \"\", command)):\n         if agent:\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b26",
+      "criterion": "AC4, AC5 (rule diff v4)",
+      "break": "a quoted lone separator (';') is read as shlex returns it, a separator, instead of making the command unreadable",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -59,7 +59,7 @@\n # quotes and backslashes are honoured, and ( ) ; & | and a newline end a simple command. A form shlex does not model\n # makes the command unreadable: ANSI-C or locale quoting ($'…', $\"…\"), a separator written as a quoted or escaped word,\n # or brace expansion. An unreadable command that names git or gh fails closed.\n-UNREADABLE = r\"\\$['\\\"]|(['\\\"])[();&|<>\\n]+\\1|\\\\[();&|<>]\"\n+UNREADABLE = r\"\\$['\\\"]|\\\\[();&|<>]\"\n BRACE_EXPANSION = r\"\\{[^{}\\s]*(,|\\.\\.)[^{}\\s]*\\}\"\n GIT_OR_GH = r\"\\b(git|gh)\\b\"\n # A command or process substitution runs a command the rules cannot read: it is denied to a pipeline agent, and asks\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b27",
+      "criterion": "AC4, AC5 (rule diff v4)",
+      "break": "an escaped separator (a backslash before ;) is read as shlex returns it, a separator, instead of making the command unreadable",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -59,7 +59,7 @@\n # quotes and backslashes are honoured, and ( ) ; & | and a newline end a simple command. A form shlex does not model\n # makes the command unreadable: ANSI-C or locale quoting ($'…', $\"…\"), a separator written as a quoted or escaped word,\n # or brace expansion. An unreadable command that names git or gh fails closed.\n-UNREADABLE = r\"\\$['\\\"]|(['\\\"])[();&|<>\\n]+\\1|\\\\[();&|<>]\"\n+UNREADABLE = r\"\\$['\\\"]|(['\\\"])[();&|<>\\n]+\\1\"\n BRACE_EXPANSION = r\"\\{[^{}\\s]*(,|\\.\\.)[^{}\\s]*\\}\"\n GIT_OR_GH = r\"\\b(git|gh)\\b\"\n # A command or process substitution runs a command the rules cannot read: it is denied to a pipeline agent, and asks\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b28",
+      "criterion": "AC4, AC5 (review R3-H1, rule diff v5)",
+      "break": "a shell, `.` or `source` reading its commands from standard input no longer fails closed, and the command's words are not read again",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -274,11 +274,6 @@\n         runners = [index for index, token in enumerate(command_tokens) if token.rsplit(\"/\", 1)[-1] in SHELL_RUNNERS]\n         if runners:\n             texts += command_tokens[runners[0] + 1:]\n-    if any(reads_standard_input(words) for words in commands):\n-        # What the shell reads is not among its words, so the command fails closed, and every word of the whole\n-        # command is read again instead: a force push piped or fed into the shell is still seen.\n-        readable = False\n-        texts = [token for token in tokens if not is_separator(token)]\n     for text in texts:\n         if text == command:\n             continue  # the whole command is one word, already read\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b29",
+      "criterion": "AC4, AC5 (review R3-M1, rule diff v5)",
+      "break": "only the first word named git or gh is read as the program (v4's form)",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -250,7 +250,7 @@\n         name = word.rsplit(\"/\", 1)[-1]\n         if name in (\"git\", \"gh\"):\n             found.append((name, words[index:]))\n-    return found\n+    return found[:1]\n \n \n def read_commands(command: str) -> tuple[list[list[str]], bool, bool]:\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b30",
+      "criterion": "AC4, AC5 (review R3-M1 and R3-L1, rule diff v5)",
+      "break": "redirections are no longer dropped: the operator and its target stay among the words, and >| ends a command again",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -172,8 +172,6 @@\n \n def is_separator(token: str) -> bool:\n     \"\"\"An operator that ends a simple command; a redirection such as 2>&1, &>log or >| is part of it.\"\"\"\n-    if re.fullmatch(REDIRECTION, token):\n-        return False\n     is_operator = token != \"\" and all(character in \"();<>|&\\n`\" for character in token)\n     return is_operator and (any(character in \"();|\\n`\" for character in token) or token in (\"&\", \"&&\"))\n \n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    },
+    {
+      "id": "b31",
+      "criterion": "AC4, AC5 (review R3-M1, rule diff v5)",
+      "break": "--attr-source no longer takes the next word as its value",
+      "patch": "diff --git a/.claude/hooks/guard.py b/.claude/hooks/guard.py\n--- a/.claude/hooks/guard.py\n+++ b/.claude/hooks/guard.py\n@@ -82,7 +82,7 @@\n ASSIGNMENT = r\"[A-Za-z_][A-Za-z0-9_]*=.*\"\n \n # git's global options that take the next word as their value (git help git).\n-GIT_VALUE_OPTIONS = (\"-C\", \"-c\", \"--git-dir\", \"--work-tree\", \"--namespace\", \"--config-env\", \"--attr-source\")\n+GIT_VALUE_OPTIONS = (\"-C\", \"-c\", \"--git-dir\", \"--work-tree\", \"--namespace\", \"--config-env\")\n # git push forces with a short-option cluster holding f (-f, -uf, -4f), any prefix of these long options (git takes an\n # unambiguous prefix), or a + refspec (git help push).\n FORCE_OPTIONS = (\"force\", \"force-with-lease\", \"force-if-includes\", \"mirror\")\n",
+      "test_method": "scripts/guard.test.sh",
+      "expect": "fails"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/9.4-guard-test.txt",
+      "TestResults/9.4-guard-test-linux.txt",
+      "TestResults/9.4-guard-test-against-v4-guard.txt",
+      "TestResults/9.4-py-compile.txt",
+      "TestResults/9.4-actionlint.txt",
+      "TestResults/9.4-shellcheck.txt",
+      "TestResults/9.4-shellcheck-files.txt",
+      "TestResults/9.4-floor-guard.txt",
+      "TestResults/9.4-secret-scan.txt",
+      "TestResults/9.4-breaks-run.txt"
+    ],
+    "diff_hash": "9e15d479746b",
+    "diff_hash_command": "scripts/diff-hash.sh /private/tmp/claude-501/-Users-njabulomnisi-Projects-Dojo-DisputeDesk/77858989-3f5b-4d04-8184-f4d922dc16d1/scratchpad/lane-9.4/r4/v5tree HEAD (HEAD = 2c5d03b; the v5 tree is this worktree's change with 9.4-rule-delta-v5.patch applied, so the hash is the one this worktree gives once the supervisor applies the delta; it covers the v5 rule diff, the unstaged work and the untracked scripts/guard.test.sh)",
+    "backend_suite": "not run: no backend, frontend or infra/tests file changes",
+    "tools": "macOS: bash 3.2.57, jq 1.7.1, Python 3.14.7, actionlint 1.7.12, shellcheck 0.11.0, gitleaks. Linux: mcr.microsoft.com/dotnet/sdk:10.0 with apt's python3 and jq, under scripts/test-lock.sh run stack 9.4. py_compile with PYTHONPYCACHEPREFIX outside the tree. Breaks: scripts/run-breaks.sh over the v5 tree with this report (TestResults/9.4-breaks-run.txt)",
+    "not_rerun": "ci-gates, run-breaks, deploy-workflow and main-protection tests, the criterion 1 grep and the check-ready smoke: the scripts and workflows they check are byte-identical to round 3's (only guard.py and guard.test.sh changed), so round 3's results stand; this round's brief names the runs above"
+  },
+  "supervisor_checks": [
+    "Criterion 1 grep, from the worktree root once committed: git grep -n -E 'story/\\*\\*|story/<|story/[0-9$]|push-and-watch\\.sh|merge-story\\.sh|ci-changes\\.sh' -- . ':(exclude)docs/verification/' ':(exclude)docs/tickets/' ':(exclude)docs/decisions/' -> no output, exit 1.",
+    "Guard cases: scripts/guard.test.sh -> 'guard: all 448 runs as expected', exit 0 (floor-guard runs it in CI on the pull request).",
+    "check-ready throwaway copy: TestResults/9.4-check-ready-smoke.sh in this worktree (copies scripts/check-ready.sh into a scratch repository; origin is a local clone; no network) -> not ready with only story/99.1, ready with feature/99.1.",
+    "Rule diff cmp (criterion 7): break b12's test_method run from the worktree root without the break -> exit 0 (all eight files the patch touches equal the approved v4 patch applied to 2c5d03b).",
+    "Scratch chain proving criterion 3 (GitHub writes, the supervisor's only): GH=GH_TOKEN=\"$(gh auth token --user njabulozmnisi)\"; from origin/main create feature/scratch-root, feature/99.1 on it and feature/99.2 on feature/99.1, one commit each, git push origin <each>; $GH gh pr create --head feature/99.1 --base feature/scratch-root (A) and --head feature/99.2 --base feature/99.1 (B); $GH gh pr merge <A> --squash (the ruleset covers only main; delete_branch_on_merge deletes feature/99.1); gh pr view <B> --json baseRefName -> feature/scratch-root (else $GH gh pr edit <B> --base feature/scratch-root); a=$(gh pr view <A> --json headRefOid -q .headRefOid); git fetch origin; git rebase --onto origin/feature/scratch-root \"$a\" feature/99.2 (a conflict: git rebase --abort); then the stacked force form on its own as the whole command, branch feature/99.2 (no prompt in the main session); gh pr checks <B> --watch --required shows a new run; $GH gh pr close <B>; git push origin --delete feature/99.2 feature/scratch-root.",
+    "Criterion 8: ship 9.4 by criterion 2's steps on feature/9.4 (git push origin feature/9.4; $GH gh pr create --head feature/9.4 --base main --title <72-char subject> --body <detail>; gh pr checks <n> --watch --required; gh pr view <n> --json baseRefName reads main; $GH gh pr merge <n> --squash --auto --match-head-commit <40-hex head>; gh pr view <n> --json state,mergeCommit; gh run list --branch main --commit <squash sha> --workflow CI and --workflow Security; gh run watch <id> --exit-status for each). Then the main checkout: git status shows nothing and git rev-parse HEAD equals git rev-parse origin/main.",
+    "After the merge, the next story's push of feature/<id> triggers no push run (push is main only) and its pull request runs CI and Security."
+  ],
+  "assumptions": [
+    "Pipeline agents never commit. In this worktree the v4 rule diff is still staged (the guard refused the edit of .claude/hooks/guard.py) and the builder's work is unstaged. Once the supervisor runs git apply --index --binary 9.4-rule-delta-v5.patch here, the staged diff is the v5 rule diff and the diff hash equals the v5 tree's. The rule diff alone is then 'git diff --cached'; the work alone is 'git diff' plus the untracked scripts/guard.test.sh.",
+    "The delta cases use the test's existing $repo (njabulozmnisi/disputedesk) where the delta file writes o/r, and each gh case also runs with the owner-token prefix, as every gh case in the test does.",
+    "The rule diff touches eight files (criterion 7 names six; the approved patch also changes .claude/skills/build-story/SKILL.md and .claude/skills/verify-story/SKILL.md). Break b12's cmp compares all eight.",
+    "Breaks b10 and b11 (criteria 2 and 3) can only pin the written steps by grep; their real proof is on GitHub: the supervisor's scratch chain and criterion 8.",
+    "Break b9's test needs yq v4; its test_method puts the session scratchpad copy on PATH. Breaks b1, b2 and b12 run git in run-breaks' throwaway copy; none writes to GitHub.",
+    "The CI step relies on python3 3.10+ and jq on the ubuntu-24.04 runner; verified on Ubuntu 24.04.5 in the SDK image with apt's Python 3.12.3, not yet on a GitHub runner.",
+    "The 9 runs v4 changes on purpose (8 check lines; the process-substitution case runs bare and with the owner-token prefix) are moved to the section of their new decision, under a comment naming the human decision of 2026-11-05: gh api ... --input <(cat main.json) -X PUT (none/deny to ask/deny); the four argv-identical stacked or literal cases, the stacked form after two spaces, the stacked form with a quoted branch, an escaped backslash before +feature/9.4, and three backslashes then a newline before --force (deny/deny to none/deny); echo $(date) and the backtick case (none/none to none/deny); echo '$(date)' && git status (ask/deny to none/none). They are the 9 FAIL lines of /private/tmp/claude-501/-Users-njabulomnisi-Projects-Dojo-DisputeDesk/77858989-3f5b-4d04-8184-f4d922dc16d1/scratchpad/v4tools/guard-test-v4.txt, which this round reproduced before the update.",
+    "Cases of guard-cases-v4.jsonl already in the test byte for byte with the same expectations are not written twice: C5, F1 to F6, F8 to F10 and X6; X1 and X12 are two of the 9 updated lines and carry their ids there. A check over the test confirms every other id of the file is tagged on its check line. The file's S1 to S6 reuse the reviewer's S ids; each block of v4 cases is headed 'guard-cases-v4' so the two sets stay apart.",
+    "Breaks b3 to b8 and b13 to b24 are rewritten against the v4 guard.py (the v3 patches no longer apply: the code they changed is gone); each keeps its id and the behaviour it undoes, read through v4's code. b14 now drops --mirror and its prefixes (b4 covers clusters such as -4f); b20 puts shlex in non-POSIX mode, v4's form of 'quotes are no longer removed'; b22 stops a substitution making the command unreadable. b25 (the subagent substitution deny), b26 (the shlex quoted-separator fix: a quoted lone separator, which shlex returns as a bare separator, makes the command unreadable) and b27 (the escaped-separator half of the same rule) are new. Each was pre-checked in a scratch copy (failed as expected) before the run-breaks run.",
+    "The check-ready.sh smoke is not re-run: it builds scratch clones with git outside the worktree, which this agent's isolation refuses, and the script is byte-identical to round 2's; its record is carried with a note.",
+    "Self-check (review-story, security-story) on this round's delta, which is test cases, comments and the report only: no rule file, package, action or mechanism changed by the builder; the test makes no network or GitHub call and never runs the owner-token prefix or any substitution (each command is passed to the guard as JSON text); the secret scan of the whole uncommitted change is clean. The lows of earlier rounds stay as written; they are the supervisor's for the epic's lows.",
+    "Round 4, the brief's decisions: a shell reading standard input is 'unreadable', so it fails closed only when the command names git or gh, as every unreadable command does; text fed to a shell that names neither (`curl … | sh`, an encoded string piped to sh) gets no decision, the same accepted limit as a script file (L1, Y7). Y2 and Y3 follow the brief (ask / deny), not the reviewer's 'none / deny'.",
+    "Round 4: a shell word counts wherever it stands in a simple command, as SHELL_RUNNERS already did, so a word that only names a shell asks the main session and is denied to a subagent when the command also names git or gh: `which bash && git status`, `… | grep -c sh`. These fail closed; a prompt, not a hole.",
+    "Round 4: `.` and `source` count only as the command's own name (after assignments, `builtin` or `command`), so `git add .` and `find . …` are not read as sourcing; their stdin files are /dev/stdin, /dev/fd/0 and /proc/self/fd/0. A process substitution (`source <(…)`) was already a substitution.",
+    "Round 4: ssh with no remote command also runs its standard input on the remote host; it is not among the forms this round names (ssh's options take values in ways the guard does not model), so `echo '…' | ssh m1` is not failed closed. Named for the epic's lows.",
+    "Round 4: shlex keeps no spacing, so a number word just before a redirection is dropped as its file descriptor even when spaced (`echo 2 > x`); marked as a shortcut in the code. The one form this loosens is contrived (`git -C 5 > x push -f`, a directory named 5) and v4 got it wrong too (none / none in both).",
+    "Round 4: the reviewer's D12 (`git push origin feature/9.4 > /tmp/-f`) wants deny / deny; by POSIX 2.7 /tmp/-f is the redirection's target, not a push option, so v5 gives none / deny (as v4 did) and the case is not added.",
+    "Round 4 self-check (review-story, security-story) on guard.py's delta: no package, action or new file; shlex and re are the standard library; the strictness comparison shows no case v4 denied or asked that v5 lets through; the fuzz shows no exception (a crashing hook would let the command run); recursion ends because each word read again is shorter than the command it came from, and a word equal to its command is skipped."
+  ],
+  "open_questions": [],
+  "conflicts": [
+    "Story Supervisor checks vs criterion 5 and the human decision of 2026-11-05: Supervisor checks list 'gh variable set DEPLOY_ENABLED --body true' under 'No decision / denied', but criterion 5's And and docs/verification/epic-9-decisions.md say it asks the main session. The test and the approved guard follow the decision (ask / deny). Sofia should update the Supervisor checks line (review L5)."
+  ],
+  "fix_round": {
+    "round": 4,
+    "exception": "a human-approved targeted round (2026-11-06: 'Targeted: high + medium')",
+    "brief": "fix R3-H1 (text fed to a shell fails closed) and R3-M1 (every git or gh word read as a program, --attr-source takes a value, redirections dropped, which also closes R3-L1); keep v4's removed false denies removed",
+    "guard_blocked": "The guard denied this agent's Edit of .claude/hooks/guard.py; the v5 guard is /private/tmp/claude-501/-Users-njabulomnisi-Projects-Dojo-DisputeDesk/77858989-3f5b-4d04-8184-f4d922dc16d1/scratchpad/lane-9.4/r4/guard.py, not staged in this worktree",
+    "v4_check": "scripts/guard.test.sh fails on the v4 guard: exit 1, 41 of 504 runs differ; passes on v5",
+    "breaks_regenerated": "b14 regenerated against v5 (its context line, GIT_VALUE_OPTIONS, changed); b12's cmp reads 9.4-rule-diff-v5.patch; b28 to b31 are new; every other break applies unchanged",
+    "cases_added": "52 guard-cases-v5 check lines, one block per section: 504 runs in all"
+  }
+}
