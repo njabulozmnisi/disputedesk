@@ -9,11 +9,11 @@
 # The image is pinned by tag and by multi-arch index digest.
 
 FROM nginxinc/nginx-unprivileged:1.31.7-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
-# The newest base still ships brotli-libs, curl/libcurl and libexpat with HIGH CVEs that Alpine 3.24 has fixed, so
-# upgrade just those (Trivy image scan, security.yml). apk needs root; USER 101 below drops it again.
+# The newest base still ships brotli-libs, curl/libcurl, libexpat and zlib with HIGH CVEs that Alpine 3.24 has fixed,
+# so upgrade just those (Trivy image scan, security.yml). apk needs root; USER 101 below drops it again.
 # shortcut: unpinned package upgrade on a pinned base, drop it once a newer base tag ships the fixed packages.
 USER root
-RUN apk upgrade --no-cache brotli-libs curl libcurl libexpat
+RUN apk upgrade --no-cache brotli-libs curl libcurl libexpat zlib
 # The rendered templates are the only configuration: without the image's own nginx.conf, a failed render stops
 # nginx from starting instead of letting it serve without the edge rules.
 RUN rm /etc/nginx/nginx.conf /etc/nginx/conf.d/default.conf
