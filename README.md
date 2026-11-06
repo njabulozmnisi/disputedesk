@@ -1,210 +1,186 @@
 # DisputeDesk
 
-## Overview
+A customer portal for card disputes. A customer signs in, links their login to their bank record, picks a card
+transaction and raises a dispute, then follows it to an outcome. Operations tools act on disputes through the API, an
+SLA sweep escalates disputes left open too long, and every change is published as a dispute event.
 
-DisputeDesk is a customer portal for card disputes. A customer signs in, links their login to their bank record, sees
-their transactions, raises a dispute on a disputable transaction, and follows it through Submitted, Under review,
-Escalated, Resolved or Withdrawn. Operations tools act on disputes through the API, an SLA sweep escalates disputes left
-open too long, and every dispute change is published as a dispute event. It runs locally as one Docker Compose stack
-with synthetic data only.
+Everything runs locally in one Docker Compose stack, with synthetic data only.
 
-## Prerequisites
-
-- Docker running, with Compose v5.6.0 or later (`docker compose version`): the gateway build reads the SPA from a build-only service, which older Compose rejects.
-- Port 8080 free: the gateway's port is fixed. The other host ports can be moved, as [infra/README.md](infra/README.md)
-  says.
-- `curl` and `jq`, for the Operations section.
-- To build and test outside Docker: the .NET SDK from [backend/global.json](backend/global.json) and Node from
-  [.nvmrc](.nvmrc) ([onboarding](docs/onboarding.md)).
-
-## Run
-
-```sh
-docker compose up --wait
+```mermaid
+flowchart LR
+    B[Browser] --> GW[Gateway<br/>nginx: SPA + routing]
+    OPS[Operations tool] --> GW
+    GW --> API[Api<br/>.NET 10]
+    GW --> ID[Zitadel<br/>sign-in]
+    API --> PG[(PostgreSQL)]
+    API --> K[[Redpanda<br/>dispute events]]
+    API --> CB[Core-banking stand-in]
+    API --> MP[Mailpit<br/>emails and OTPs]
+    API -. traces, logs, metrics .-> OT[Aspire dashboard]
 ```
 
-It returns once every service is healthy: migrations applied, Zitadel configured, seed data written. Plain
-`docker compose up` stays in the foreground, so run the later commands in a second terminal.
+The same stack deploys to AWS behind CloudFront ([infra/](infra/README.md)).
 
-## Origins
+## Run it
+
+You need Docker with Compose v5.6.0 or later, and port 8080 free.
+
+```sh
+docker compose up --build --wait     # the first build takes a few minutes; returns when everything is healthy
+```
+
+Open <http://localhost:8080> and sign in as `thandi.nkosi` / `Dev-Only-Pass-A1`.
 
 | What | Where |
 |---|---|
-| The app (SPA and API) | <http://localhost:8080> |
-| Identity (Zitadel sign-in and console) | <http://auth.localhost:8080> |
-| Mailpit (verification emails and linking OTPs) | <http://localhost:8025> |
-| Aspire Dashboard (traces, metrics, logs) | <http://localhost:18888> |
+| The app | <http://localhost:8080> |
+| Sign-in (Zitadel) | <http://auth.localhost:8080> |
+| Mailpit: verification emails and linking OTPs | <http://localhost:8025> |
+| Aspire dashboard: traces, metrics, logs | <http://localhost:18888> |
+| API reference (Scalar) | <http://localhost:8080/scalar/> |
 
-[infra/README.md](infra/README.md) has the rest: host ports for Postgres and Redpanda, the credentials and the
-smoke check.
+The seed's dates are relative to start-up. To start again from the seed, after a day boundary or after running the
+e2e tests, run `docker compose down -v`, which deletes all data, then `up` again.
+
+## Try it
+
+| Customer | Sign in with | What it shows |
+|---|---|---|
+| A | `thandi.nkosi` / `Dev-Only-Pass-A1` | Linked, with a dispute in every status |
+| B | `pieter.vanwyk` / `Dev-Only-Pass-B1` | Linked, with one dispute that A cannot see |
+| C | `ayesha.patel` / `Dev-Only-Pass-C1` | Not linked. Linking is refused because of a recent SIM swap: ID `9202295801081`, account `1000000031` |
+| D | sign up a new login | Not linked and passes every check: ID `8804125123080`, account `1000000041` |
+
+The values are synthetic and dev-only, and the AWS demo uses the same logins. [backend/fixtures/](backend/fixtures/README.md)
+has the full seed.
+
+1. **As A**, raise a dispute on a recent card debit, then withdraw it. Watch the timeline.
+2. **Wait about 5 minutes** after start-up: A's dispute on `TXN-A-0011` is escalated by the SLA sweep.
+3. **As B**, open one of A's dispute links: *not found*.
+4. **As C**, try to link: refused.
+5. **Sign up a new login** and link it to D. The OTP arrives in Mailpit, which stands in for SMS here. A real
+   deployment texts it to the cellphone on the bank's record. In AWS, Mailpit's UI sits behind basic auth
+   ([post-deploy check 3](infra/terraform/README.md#post-deploy-checks)).
+6. **As an operations tool**, run `scripts/operations-token.sh` and paste the token into Scalar's `bearer` scheme. Then call
+   `start-review`, `escalate` and `resolve` on A's Submitted dispute on `TXN-A-0026`:
+
+   | Request | Expect |
+   |---|---|
+   | `GET /api/v1/operations/disputes/{disputeId}` | 200, `submitted` |
+   | `POST …/start-review`, then `…/escalate` | 200, `underReview`, then `escalated` |
+   | `POST …/resolve` with `{"outcome": "upheld", "note": "Refund approved."}` | 200, `resolved` |
+   | The same `resolve` again | 409, `action-not-allowed` |
+
+   The dispute ID is in A's browser URL (`/disputes/<id>`).
+
+## The dispute lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Submitted: raise
+    Submitted --> UnderReview: start review
+    Submitted --> Escalated: escalate
+    UnderReview --> Escalated: escalate
+    UnderReview --> Resolved: resolve
+    Escalated --> Resolved: resolve
+    Submitted --> Withdrawn: withdraw
+    UnderReview --> Withdrawn: withdraw
+    Escalated --> Withdrawn: withdraw
+    Resolved --> [*]
+    Withdrawn --> [*]
+```
+
+- Operations start the review, escalate and resolve; the outcome is Upheld or Rejected.
+- The SLA sweep escalates a dispute still open 10 days after submission.
+- The customer withdraws.
+- Customers see Escalated as *Under review (prioritised)*.
+- Any other action returns 409.
+
+## What's in the repo
+
+| Folder | What |
+|---|---|
+| [`backend/`](backend/README.md) | The .NET 10 Api, Worker, core-banking stand-in, tests and seed data |
+| [`frontend/`](frontend/README.md) | The React single-page app |
+| [`infra/`](infra/README.md) | The gateway and identity images, the AWS environment (Terraform), the deploy, platform tests |
+| `contracts/` | JSON Schemas of the published dispute events |
+| `e2e/` | Playwright journeys and regression specs against the running stack |
+| [`docs/`](docs/README.md) | Brief, PRD, UX, architecture, decisions and how the solution was built |
+| `scripts/` | Developer and pipeline scripts |
+| `.github/` | CI, security and deploy workflows, and the `main` ruleset |
+| `.claude/`, `_bmad/`, `AGENTS.md` | The AI-assisted delivery setup: agents, skills, guard hooks, rules |
+
+> **One repo standing in for three.** `backend/`, `frontend/` and `infra/` are laid out as each team's own repository
+> would be. Each one reads another only through a published contract: the OpenAPI file, the event schemas, the images.
+> In a real organisation they would be three repositories. Here they share one, so a reviewer can clone, run and read
+> the whole solution in one place ([ad-011](docs/decisions/ad-011-team-folders-in-one-repo.md)).
+
+## How it was built
+
+The solution was planned with the BMAD method and built through an agentic SDLC. One supervisor session dispatched each
+story to AI agents, and a human approved every product and architecture decision.
+
+```mermaid
+flowchart LR
+    P[Plan<br/>brief, PRD, UX,<br/>architecture] --> S[Feature spec]
+    S --> BU[Builder<br/>test-first]
+    BU --> RV[Reviewer]
+    BU --> VE[Verifier<br/>other model family]
+    BU --> SE[Security<br/>high-stakes only]
+    RV & VE & SE --> QA[QA on the<br/>running stack]
+    QA --> PR[Pull request<br/>CI + security checks]
+    PR --> M[Squash to main]
+```
+
+Guard hooks, a pre-commit hook and the `main` ruleset enforce the rules, so no change reaches `main` without passing
+its checks. The roles, gates and inspirations are in [docs/](docs/README.md#how-it-was-built).
 
 ## Build and test
 
-These are the build, lint and test commands CI runs ([.github/workflows/ci.yml](.github/workflows/ci.yml)). Start each
-block from the repo root and change into the folder it names.
+Each area's README has its full command list. In short:
 
-Backend, in `backend/`. The backend tests start Postgres through Testcontainers, so Docker must be running.
+| Area | Command |
+|---|---|
+| Backend | `cd backend && dotnet test --solution DisputeDesk.slnx` (needs Docker) |
+| Frontend | `cd frontend && npm ci && npm test` |
+| Platform | `cd infra/tests && dotnet test --project DisputeDesk.PlatformTests` |
+| End to end | `cd e2e && npm ci && npx playwright install chromium && npm run journeys` (on a fresh stack) |
 
-```sh
-dotnet build DisputeDesk.slnx
-dotnet format style DisputeDesk.slnx --verify-no-changes
-dotnet format whitespace DisputeDesk.slnx --verify-no-changes
-dotnet test --solution DisputeDesk.slnx
-```
-
-Platform tests (checks of the provisioning scripts and gateway templates), in `infra/tests/`:
-
-```sh
-dotnet test --project DisputeDesk.PlatformTests
-dotnet format style DisputeDesk.PlatformTests --verify-no-changes
-dotnet format whitespace DisputeDesk.PlatformTests --verify-no-changes
-```
-
-Frontend, in `frontend/`:
-
-```sh
-npm ci
-npm run typecheck
-npm run lint
-npm run format
-npm test
-```
-
-End-to-end, in `e2e/`, with Playwright against the running stack. `npm run journeys` runs the user journeys (which CI
-runs) on a fresh stack you start. `npm test` runs every other spec through `e2e/run-regression.sh`, which starts its
-own fresh stack for each of its seven groups (`docker compose down -v`, then `up --build --wait`) and prints how many
-OTPs each group sent to customer D; it stops the stack at the end.
-
-```sh
-npm ci
-npx playwright install chromium
-docker compose down -v
-docker compose up --build --wait
-npm run journeys
-npm test
-```
-
-On Linux, `npx playwright install --with-deps chromium` also installs the browser's system libraries, as CI does.
-
-## Seed identities
-
-Every value comes from [backend/fixtures/local.json](backend/fixtures/local.json) (FR-29). All data is synthetic, and the passwords are
-dev-only fixture values. Sign in with the username. The ID and account numbers are what linking asks for.
-
-| Customer | Login (username / password) | ID number | Account numbers | What it shows |
-|---|---|---|---|---|
-| A, `CUS-000001` | `thandi.nkosi` / `Dev-Only-Pass-A1` | already linked | already linked | Linked; seeded disputes in every status and outcome |
-| B, `CUS-000002` | `pieter.vanwyk` / `Dev-Only-Pass-B1` | already linked | already linked | Linked; one Submitted dispute, which A gets 404 for |
-| C, `CUS-000003` | `ayesha.patel` / `Dev-Only-Pass-C1` | `9202295801081` | `1000000031` | Not linked; the SIM-swap check fails, so linking is refused |
-| D, `CUS-000004` | none | `8804125123080` | `1000000041`, `1000000042` | Not linked and passes every check: a new sign-up links to D |
-
-To link a new login, sign up at <http://localhost:8080>, then enter D's ID number and one of D's account numbers; the
-OTP arrives in Mailpit.
-
-Mailpit stands in for SMS in this demo: `ISmsSender` writes the OTP there. A real deployment sends the OTP by SMS to the
-cellphone number on the bank's record. In an AWS deployment Mailpit's web UI sits behind basic auth, because it shows
-OTPs ([infra/terraform/README.md](infra/terraform/README.md), post-deploy check 3).
-
-The SLA demo dispute is customer A's on `TXN-A-0011`. It is seeded Under review and falls due 5 minutes after start-up,
-so the SLA sweep escalates it a few minutes after `docker compose up --wait` returns.
-
-The seed's dates are relative to start-up. After a day boundary, or to start again from the seed, reset with
-`docker compose down -v` (it deletes every volume; see the [runbook](infra/deploy/runbook.md)).
-
-An AWS deployment from `infra/terraform/` ([its README](infra/terraform/README.md)) uses the same fixture logins and
-published passwords, and holds only synthetic data.
-
-## Operations
-
-Run these from the repo root.
-
-Operations tools call the operations routes with a bearer token from the OAuth 2.0 client-credentials grant. Here
-Scalar stands in for another team's operations tool (NFR-DOC-4). Scalar holds no credential, and the Api serves it only
-when `Scalar:Enabled` is true, as it is in Compose.
-
-These steps act on customer A's seeded Submitted dispute on `TXN-A-0026`, as a fresh stack holds it. The e2e tests act
-on seeded disputes, so after them reset first (`docker compose down -v`, then `docker compose up --wait`).
-
-1. Find the dispute ID. Seeded IDs are generated at seeding, so either sign in as customer A, open the dispute in the
-   history and copy the GUID from `/disputes/<disputeId>`, or read it with the read-only database role:
-
-   ```sh
-   docker compose exec postgres psql -U qa_readonly -d disputedesk -c "SELECT \"Id\" FROM \"Disputes\" WHERE \"TransactionId\" = 'TXN-A-0026';"
-   ```
-
-2. Get a token. It is printed to the terminal:
-
-   ```sh
-   scripts/operations-token.sh
-   ```
-
-3. Open <http://localhost:8080/scalar/>, paste the token into the `bearer` scheme, and call, in order:
-
-   | Request | Expected |
-   |---|---|
-   | `GET /api/v1/operations/disputes/{disputeId}` | 200, `status` `submitted` |
-   | `POST /api/v1/operations/disputes/{disputeId}/start-review` | 200, `status` `underReview` |
-   | `POST /api/v1/operations/disputes/{disputeId}/escalate` | 200, `status` `escalated` |
-   | `POST /api/v1/operations/disputes/{disputeId}/resolve` with the body below | 200, `status` `resolved` |
-   | The same `resolve` with the same body again | 409, problem `type` ending `action-not-allowed.md` |
-
-   The `resolve` body is JSON, sent with `Content-Type: application/json`; `outcome` is `upheld` or `rejected`, and
-   `note` is 1 to 500 characters:
-
-   ```json
-   {"outcome": "upheld", "note": "Refund approved."}
-   ```
-
-The same calls with `curl`. The first line sets `DISPUTE_ID` with step 1's lookup. Each call gets a fresh token. The
-token is in curl's arguments, visible in `ps`, which is acceptable on a single-user dev machine.
-
-```sh
-DISPUTE_ID=$(docker compose exec -T postgres psql -U qa_readonly -d disputedesk -Atc "SELECT \"Id\" FROM \"Disputes\" WHERE \"TransactionId\" = 'TXN-A-0026';")
-curl -sS -w '\n%{http_code}\n' -H "Authorization: Bearer $(scripts/operations-token.sh)" http://localhost:8080/api/v1/operations/disputes/$DISPUTE_ID
-curl -sS -w '\n%{http_code}\n' -X POST -H "Authorization: Bearer $(scripts/operations-token.sh)" http://localhost:8080/api/v1/operations/disputes/$DISPUTE_ID/start-review
-curl -sS -w '\n%{http_code}\n' -X POST -H "Authorization: Bearer $(scripts/operations-token.sh)" http://localhost:8080/api/v1/operations/disputes/$DISPUTE_ID/escalate
-curl -sS -w '\n%{http_code}\n' -X POST -H "Authorization: Bearer $(scripts/operations-token.sh)" -H 'Content-Type: application/json' -d '{"outcome": "upheld", "note": "Refund approved."}' http://localhost:8080/api/v1/operations/disputes/$DISPUTE_ID/resolve
-curl -sS -w '\n%{http_code}\n' -X POST -H "Authorization: Bearer $(scripts/operations-token.sh)" -H 'Content-Type: application/json' -d '{"outcome": "upheld", "note": "Refund approved."}' http://localhost:8080/api/v1/operations/disputes/$DISPUTE_ID/resolve
-```
-
-## Runbook
-
-[infra/deploy/runbook.md](infra/deploy/runbook.md) has the operator procedures for the local stack: releasing a `Failed` outbox row,
-core banking unavailable, resetting the stack, and a transient Kafka outage.
-
-## Onboarding
-
-[docs/onboarding.md](docs/onboarding.md) has the prerequisites for working on the code, a map of the repo and the
-story flow.
+- CI ([ci.yml](.github/workflows/ci.yml)) runs every check on every pull request.
+- The longer e2e regression suite (`npm test`) runs only when a pull request touches a path in
+  [scripts/regression-paths.list](scripts/regression-paths.list).
 
 ## Simplifications
 
-- **The 90-day window.** A customer may dispute a card transaction for 90 days from the transaction date. The card
-  schemes allow 120 days from their own processing date, so counting from the transaction date is a simplification
-  ([dispute-lifecycle research](docs/research/dispute-lifecycle/dispute-lifecycle.md), recommendation 1).
-- **The SLA is an internal trigger, not a promise.** After 10 calendar days an open dispute is escalated. No South
-  African rule fixes a number of days: the National Financial Ombud Scheme gives banks 21 working days on referral, and
-  the Conduct Standard for Banks asks for a reasonable time
-  ([dispute-lifecycle research](docs/research/dispute-lifecycle/dispute-lifecycle.md), recommendation 2).
-- **The primary scheme rule texts were not read.** The Visa and Mastercard rules are not public; the time limits come
-  from consistent secondary sources
-  ([dispute-lifecycle research](docs/research/dispute-lifecycle/dispute-lifecycle.md), caveat).
-- **Linking rate limits live in memory** in the one Api instance: they reset when the Api restarts and would not add up
-  across several instances (FR-8, NFR-ARC-3).
+- **The 90-day window** counts from the transaction date. The card schemes allow 120 days from their processing date.
+- **The 10-day SLA** is an internal trigger, not a promise to customers. No South African rule fixes a number of days.
+- **The scheme rule texts** (Visa, Mastercard) are not public. The time limits come from consistent secondary sources.
+- **Linking rate limits** live in the memory of the one Api instance.
 
-Everything deferred is in [docs/production-path.md](docs/production-path.md).
+The sources are in the [dispute-lifecycle research](docs/research/dispute-lifecycle/dispute-lifecycle.md). Everything
+deferred is in the [production path](docs/production-path.md).
 
-## Ten-area map
+## Where next
 
-| Quality area | Where it is met |
+| To see | Read |
 |---|---|
-| 5.1 Architecture and scalability | [architecture](docs/architecture/architecture.md), [layer tests](backend/tests/DisputeDesk.ArchitectureTests/LayerTests.cs) |
-| 5.2 Resilience and operational readiness | [outbox relay](backend/src/DisputeDesk.Infrastructure/Outbox/OutboxRelay.cs), [Compose health checks](docker-compose.yml), [runbook](infra/deploy/runbook.md) |
-| 5.3 Data and domain modelling | [ad-009 stored events](docs/decisions/ad-009-stored-events.md), [domain tests](backend/tests/DisputeDesk.Domain.Tests/) |
-| 5.4 API design | [openapi.json](backend/openapi.json), [problem types](docs/problems/) |
-| 5.5 Security (primary) | [ad-007 browser session](docs/decisions/ad-007-browser-session.md), [ad-008 linking](docs/decisions/ad-008-linking.md), [gateway](infra/images/gateway/) |
-| 5.6 Code quality and maintainability | [AGENTS.md](AGENTS.md), [build rules](backend/Directory.Build.props), [ESLint config](frontend/eslint.config.js) |
-| 5.7 Testing | [backend tests](backend/tests/), [e2e journeys](e2e/tests/journeys/) |
-| 5.8 Observability | [telemetry](backend/src/DisputeDesk.Infrastructure/Observability/Telemetry.cs), [architecture AD-20](docs/architecture/architecture.md) |
-| 5.9 Infrastructure and DevOps | [Compose stack](docker-compose.yml), [CI](.github/workflows/ci.yml), [security scans](.github/workflows/security.yml) |
-| 5.10 Documentation and communication | [decision records](docs/decisions/), [production path](docs/production-path.md), [onboarding](docs/onboarding.md) |
+| The design and its decisions | [architecture](docs/architecture/architecture.md), [decision records](docs/decisions/) |
+| Operating the local stack | [runbook](infra/deploy/runbook.md) |
+| Deploying to AWS | [infra/terraform/](infra/terraform/README.md) |
+| Working on the code | [onboarding](docs/onboarding.md), [AGENTS.md](AGENTS.md) |
+| What is deferred, and the accepted risks | [production path](docs/production-path.md) |
+
+### Where each quality area is met
+
+| Quality area | Where |
+|---|---|
+| Architecture and scalability | [architecture](docs/architecture/architecture.md), [layer tests](backend/tests/DisputeDesk.ArchitectureTests/LayerTests.cs) |
+| Resilience and operational readiness | [outbox relay](backend/src/DisputeDesk.Infrastructure/Outbox/OutboxRelay.cs), [Compose health checks](docker-compose.yml), [runbook](infra/deploy/runbook.md) |
+| Data and domain modelling | [ad-009 stored events](docs/decisions/ad-009-stored-events.md), [domain tests](backend/tests/DisputeDesk.Domain.Tests/) |
+| API design | [openapi.json](backend/openapi.json), [problem types](docs/problems/) |
+| Security (primary) | [ad-007 browser session](docs/decisions/ad-007-browser-session.md), [ad-008 linking](docs/decisions/ad-008-linking.md), [gateway](infra/images/gateway/) |
+| Code quality and maintainability | [AGENTS.md](AGENTS.md), [build rules](backend/Directory.Build.props), [ESLint config](frontend/eslint.config.js) |
+| Testing | [backend tests](backend/tests/), [e2e journeys](e2e/tests/journeys/) |
+| Observability | [telemetry](backend/src/DisputeDesk.Infrastructure/Observability/Telemetry.cs), [architecture AD-20](docs/architecture/architecture.md) |
+| Infrastructure and DevOps | [Compose stack](docker-compose.yml), [CI](.github/workflows/ci.yml), [security scans](.github/workflows/security.yml), [Terraform](infra/terraform/) |
+| Documentation and communication | [docs/](docs/README.md), [decision records](docs/decisions/), [production path](docs/production-path.md) |

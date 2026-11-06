@@ -1,6 +1,6 @@
 # Backend conventions
 
-.NET 10, minimal APIs, Clean Architecture with feature folders. Projects: Domain, Application, Infrastructure, Contracts, Api, Worker. Architecture tests enforce the layers and fail the build on a violation.
+.NET 10, minimal APIs, Clean Architecture with feature folders. Projects: Domain, Application, Infrastructure, Contracts, Api, Worker, and the stand-alone CoreBankingStub. Architecture tests enforce the layers and fail the test run on a violation.
 
 ## Design
 
@@ -8,12 +8,12 @@
 - **ORM first.** Raw SQL only with evidence (a measured problem or a feature EF can't express, such as `FOR UPDATE SKIP LOCKED`), in one named method in Infrastructure with the justification in a comment. Use `FromSql` / `ExecuteSql` / `SqlQuery` (interpolated, auto-parameterised); never the `*Raw` variants with concatenated input. No repository layer for it.
 - **Money is `decimal` with an ISO currency code,** never a float.
 - **Enum casing.** C# enum members are PascalCase. API JSON and event payloads use camelCase values through one converter factory creating `CamelCaseNameOnlyEnumConverter<TEnum>` (AD-5), which reads a JSON request body's enum only from its exact camelCase name and refuses a number, a list or any other casing; URL segments and problem `type` slugs are kebab-case.
-- **Results for expected failures, exceptions for the unexpected.** The hand-written `Result`/`Error` type in Domain. 400 for malformed input (built-in minimal API validation), 404 for not found or owned by another customer, 409 for an action not allowed in the current status, 422 for a well-formed request that breaks a business rule; the built-in exception handler (`UseExceptionHandler` with an `IExceptionHandler`) returns a clean 500 ProblemDetails without a stack trace.
+- **Results for expected failures, exceptions for the unexpected.** The hand-written `Result`/`Error` type in Domain. 400 for malformed input (built-in minimal API validation), 403 for a known caller who may not act, 404 for not found or owned by another customer, 409 for an action not allowed in the current status or a conflict such as an already-disputed transaction, 422 for a well-formed request that breaks a business rule, 429 when rate-limited and 503 when core banking is unavailable; the built-in exception handler (`UseExceptionHandler` with an `IExceptionHandler`) returns a clean 500 ProblemDetails without a stack trace.
 - **Methods returning `Task`/`ValueTask` end in `Async`** (test methods exempt).
 - **One top-level type per file.**
 - **No `using` alias directives.** An alias gives a type a second name, so the ban stays. The enums identical on the wire exist once, in Domain, and Contracts uses them (AD-1, AD-14a), so their names are written unqualified through their namespace's `using`. Only where a Contracts type and a Domain type still share a name does a file import one side and write the other qualified from the `DisputeDesk` root. An architecture test fails on any `using X = ...;`.
 - **SOLID and patterns with judgement.** No factories DI already provides. (Framework-first and the allowed interfaces are in AGENTS.md.)
-- **Actions are actor-agnostic.** A status change is a named action (`start-review`, `escalate`, `resolve`, `withdraw`) authorised by one policy per action. Who acted is recorded for audit, never used to decide.
+- **Actions are actor-agnostic.** A status change is a named action (`start-review`, `escalate`, `resolve`, `withdraw`) authorised by a policy: the operations actions each have their own (`dispute.startReview`, `dispute.escalate`, `dispute.resolve`), and `withdraw` takes the linked-customer policy of the customer routes. Who acted is recorded for audit, never used to decide.
 
 ## Data integrity
 
