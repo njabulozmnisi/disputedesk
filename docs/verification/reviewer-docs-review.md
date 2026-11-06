@@ -56,3 +56,18 @@ columns, types and foreign keys, the agent models, the CI job list and the versi
 - Forbidden terms and secret scan: not run (`scripts/secret-scan.sh`, `.claude/forbidden-terms.local`).
 - Neutral voice and glossary terms: the files were read but not swept systematically against `docs/glossary.md`.
 - Unrelated to this docs diff, raised for the supervisor: `Program.cs:75` runs migrations only when `Worker:InProcess` is true, but `infra/deploy/aws/compose.yml` says "the Api applies the migrations" in AWS, where `InProcess` is unset. Not investigated.
+
+## Escapes
+
+| Finding | Caught by | Should have been | Category | Countermeasure |
+|---|---|---|---|---|
+| `frontend/README.md` failed Prettier (`npm run format`) | CI (`frontend`) | supervisor (local check before push) | environment or tooling | before pushing a docs change, run the format check of every area it touches |
+| Two sequence diagrams in `docs/process/agentic-sdlc.md` never rendered (`;` in a message) | reviewer (mermaid-cli) | the stage that added each diagram | missing test | proposed for the retrospective: a floor-guard step that renders every mermaid block |
+| Backend README drafts stated six wrong facts (layer test scope, seeder rules, readers) | backend builder | supervisor (draft author) | spec gap | drafts of area docs go to that area's builder for a fact check, as here |
+| `RateLimitOptionsTests.ApiStart_OutOfBounds_StopsTheApiWithAnErrorNamingTheKey` failed on main's run of `607e69d` (`ObjectDisposedException` instead of the validation error) after passing on the pull request; a re-run passed | main CI | the story that added the test (6.3) | flaky | Small fix: reproduce, then fix the start-up error path |
+
+## Metrics
+
+| Fix rounds | Full-suite runs | Wall time | Disk change |
+|---|---|---|---|
+| 1 (review findings) plus 1 CI format fix | 0 local; 2 PR runs, 1 main run plus 1 re-run | audits 5 min each (3 in parallel), drafting about 60 min, builders 1 to 6 min, reviewer 7 min, PR checks 27 min per run | none; three builder worktrees removed |
