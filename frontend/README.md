@@ -18,7 +18,7 @@ flowchart LR
 
 - Each page belongs to one sign-in state: anonymous, unlinked or linked. Opening another state's page redirects to the
   user's own home page.
-- `/signed-out?reason=expired` explains an ended session. Any other path shows *not found*.
+- `/signed-out?reason=expired` explains an ended session. Any other path shows _not found_.
 
 ## Commands
 
@@ -61,6 +61,7 @@ docker build --build-arg BROWSER_TELEMETRY=off -t disputedesk-spa frontend   # n
 ## Files that identity provisioning reads
 
 Zitadel provisioning mounts four files from `src/theme/` to brand the sign-in page:
+
 - `tokens.css`
 - `fonts/nunito-sans-latin-400-normal.woff2`
 - `wordmark.png`
