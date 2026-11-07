@@ -1,0 +1,52 @@
+{
+  "status": "built",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a7c9bca6b94fec13b",
+  "base": "e29eb81ea21b54444c9a775da42c11f6d0453b08",
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "ec2-zone-b: the dev instance's public subnet is in the second of the two zones (af-south-1b), because c7i-flex.large has no capacity in af-south-1a",
+      "test": "infra/terraform/envs/dev/tests/compute.tftest.hcl, run network_has_a_public_subnet_with_an_internet_gateway_and_no_nat, assert aws_subnet.public.availability_zone == \"eu-west-1b\" (the second name of the mocked aws_availability_zones data)"
+    },
+    {
+      "id": "AC2",
+      "requirement": "ec2-zone-b: the private subnets stay in both zones for the RDS subnet group",
+      "test": "infra/terraform/envs/dev/tests/compute.tftest.hcl, run network_has_a_public_subnet_with_an_internet_gateway_and_no_nat, existing assert: two private subnets in two different zones (unchanged, still passes)"
+    }
+  ],
+  "smoke": "No smoke check against AWS: the brief forbids terraform apply and any aws command. Test first: the new assertion failed before the change (actual \"eu-west-1a\", expected \"eu-west-1b\"; 3 passed, 1 failed in compute.tftest.hcl). After the change, as CI's terraform job: terraform fmt -check -recursive -diff infra/terraform (exit 0); for bootstrap and envs/dev: init -backend=false -input=false -lockfile=readonly, validate (valid), test (bootstrap 9 passed, dev 53 passed). Both CI grep steps found nothing. scripts/check-infra-paths.sh, scripts/floor-guard.sh, scripts/secret-scan.sh and scripts/security-local.sh (Trivy fs and config, network/main.tf clean) all exit 0. The break was applied in place, made the assertion fail (3 passed, 1 failed), and was reverted; the diff hash is unchanged from the full run.",
+  "standards": [
+    {
+      "mechanism": "Subnet placement by aws_subnet.availability_zone from the aws_availability_zones data source",
+      "source": "https://registry.terraform.io/providers/hashicorp/aws/6.71.0/docs/resources/subnet"
+    },
+    {
+      "mechanism": "Mocked-provider plan assertion (mock_provider, mock_data defaults, run with command = plan)",
+      "source": "https://developer.hashicorp.com/terraform/language/tests/mocking"
+    }
+  ],
+  "breaks": [
+    {
+      "patch": "--- a/infra/terraform/modules/network/main.tf\n+++ b/infra/terraform/modules/network/main.tf\n@@ -36,7 +36,7 @@ resource \"aws_internet_gateway\" \"this\" {\n resource \"aws_subnet\" \"public\" {\n   vpc_id            = aws_vpc.this.id\n   cidr_block        = \"10.20.0.0/24\"\n-  availability_zone = local.zones[1]\n+  availability_zone = local.zones[0]\n \n   tags = { Name = \"${var.name}-public\" }\n }\n",
+      "test_method": "terraform -chdir=infra/terraform/envs/dev init -backend=false -input=false -lockfile=readonly && terraform -chdir=infra/terraform/envs/dev test -filter=tests/compute.tftest.hcl",
+      "expect": "fails"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/ec2-zone-b-terraform-test-dev.txt",
+      "TestResults/ec2-zone-b-terraform-test-bootstrap.txt"
+    ],
+    "diff_hash": "97e9b80c681f"
+  },
+  "assumptions": [
+    "Terraform 1.15.3 ran locally; CI pins 1.17.1. infra/terraform/README.md and required_version (~> 1.11) accept both.",
+    "The test asserts the literal \"eu-west-1b\", the second name of the mocked zone list, so it checks the outcome rather than repeating the index expression.",
+    "The locals comment said the first zone was the instance's; it now says the instance's subnet is in the second. No other line changed besides the index and the new comment on aws_subnet.public.",
+    "infra/terraform/README.md names no zone for the instance, so it is unchanged.",
+    "On the next apply, changing availability_zone replaces aws_subnet.public (the argument forces a new resource), and with it the instance (subnet_id forces a new resource) and the route-table association; the Elastic IP is kept and re-associated. Anything on the instance's root volume is lost. Not planned against real state here (no aws calls), so the exact plan is unverified: run terraform plan in envs/dev before apply and read the replacements.",
+    "c7i-flex.large in the second zone is confirmed only for af-south-1 (from the brief). For the other four allowed regions (us-east-1, us-west-2, eu-west-1, eu-central-1) it is unverified; zone names also map to different physical zones per account."
+  ],
+  "open_questions": [],
+  "conflicts": []
+}

@@ -73,6 +73,11 @@ run "network_has_a_public_subnet_with_an_internet_gateway_and_no_nat" {
     condition     = length(aws_subnet.private) == 2 && aws_subnet.private[0].availability_zone != aws_subnet.private[1].availability_zone
     error_message = "There are not two private subnets in two zones for the RDS subnet group."
   }
+
+  assert {
+    condition     = aws_subnet.public.availability_zone == "eu-west-1b"
+    error_message = "The public subnet, and so the instance, is not in the second available zone."
+  }
 }
 
 run "compute_is_one_imdsv2_instance_open_only_to_cloudfront_on_port_80" {
