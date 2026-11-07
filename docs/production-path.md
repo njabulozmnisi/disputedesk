@@ -210,7 +210,7 @@ Since story 7.12 every origin's access log records the method, path and protocol
 
 ### P44. Gateway container hardening
 
-`/etc/nginx` is writable by the nginx user, because `nginx-unprivileged` renders its templates there at start; production runs the gateway with a read-only root filesystem and a tmpfs render directory (story 2.5 security F4; CIS Docker 5.12). `infra/images/gateway/Dockerfile` runs an unpinned `apk upgrade` of brotli-libs, curl and libcurl (a `// shortcut:`), because the pinned base lags the Alpine fixes; drop it when a newer pinned base ships them, and consider removing curl (unused at runtime) or the `-alpine-slim` variant (story 2.5 review L1). *Why it waits:* the gateway already runs non-root from a pinned image (AD-27).
+`/etc/nginx` is writable by the nginx user, because `nginx-unprivileged` renders its templates there at start; production runs the gateway with a read-only root filesystem and a tmpfs render directory (story 2.5 security F4; CIS Docker 5.12). `infra/images/gateway/Dockerfile` runs an unpinned `apk upgrade` of brotli-libs, curl, libcurl, libexpat, musl, musl-utils and zlib (a `# shortcut:`), because the pinned base lags the Alpine fixes; drop it when a newer pinned base ships them, and consider removing curl (unused at runtime) or the `-alpine-slim` variant (story 2.5 review L1). *Why it waits:* the gateway already runs non-root from a pinned image (AD-27).
 
 ### P49. SLA sweep failures
 
