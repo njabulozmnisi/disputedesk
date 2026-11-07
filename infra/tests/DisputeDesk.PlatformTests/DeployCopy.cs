@@ -169,7 +169,7 @@ internal sealed partial class DeployCopy : IDisposable
     /// <summary>The database init's docker arguments, as deploy.sh builds them.</summary>
     public string[] InitCall() =>
     [
-        "run", "--rm", .. ConnectionArguments(), "-e", "POSTGRES_USER", "-e", "PGOPTIONS", "-e", "APP_DB_PASSWORD", "-e", "ZITADEL_DB_PASSWORD",
+        "run", "--rm", .. ConnectionArguments(), "-e", "POSTGRES_USER", "-e", "APP_DB_PASSWORD", "-e", "ZITADEL_DB_PASSWORD",
         "-e", "QA_DB_PASSWORD", "-v", $"{Repo}/infra/images/postgres/10-roles-and-databases.sh:/init/10-roles-and-databases.sh:ro", PostgresImage,
         "sh", "/init/10-roles-and-databases.sh",
     ];

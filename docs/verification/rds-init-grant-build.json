@@ -1,0 +1,82 @@
+{
+  "status": "built",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a8073d506f8eedb16",
+  "criteria": [
+    {
+      "id": "C1",
+      "requirement": "AD-28 (story 7.5 criterion 6, story 7.17); defect: deploy.yml run 42382797135, RDS PostgreSQL 18.3 'must be able to SET ROLE \"disputedesk\"'",
+      "test": "DisputeDesk.PlatformTests.DatabaseInitTests.FirstThenLaterDeploy_CreatesTheRolesAndDatabasesOnceOverVerifyFull: the init, run by deploy.sh with no createrole_self_grant, as a CREATEROLE CREATEDB non-superuser master holding no SET option on the roles it creates, creates both databases with the right owners and ACLs and prints no WARNING. Before the fix it failed with 'ERROR:  must be able to SET ROLE \"disputedesk\"'."
+    },
+    {
+      "id": "C2",
+      "requirement": "Least privilege for the master's grant (brief step 2)",
+      "test": "DisputeDesk.PlatformTests.DatabaseInitTests.FirstThenLaterDeploy_CreatesTheRolesAndDatabasesOnceOverVerifyFull: after the init, dbmaster holds SET on exactly disputedesk and zitadel, with INHERIT (pg_auth_members)."
+    },
+    {
+      "id": "C3",
+      "requirement": "Brief step 3: deploy.sh no longer passes PGOPTIONS",
+      "test": "DisputeDesk.PlatformTests.DeployScriptTests.FirstDeploy_PassesEveryDatabaseValueToTheContainersByNameOnly: the init's docker run carries no -e PGOPTIONS (DeployCopy.InitCall) and its environment holds no PGOPTIONS. Failed against the unchanged deploy.sh (stub: unexpected call ... -e PGOPTIONS ...)."
+    },
+    {
+      "id": "C4",
+      "requirement": "Brief step 5: the local Compose init (superuser, docker-entrypoint-initdb.d) still works",
+      "test": "Smoke: docker compose down -v && docker compose up --build --wait under the stack lock; every service healthy; see smoke."
+    }
+  ],
+  "smoke": "Under scripts/test-lock.sh run stack rds-init-grant: docker compose down -v, then docker compose up --build --wait (exit 0, all 9 services healthy, with DISPUTEDESK_OTLP_HTTP_PORT=14318 because a host process, 'Code H' pid 6438, listens on 127.0.0.1:4318; the first attempt failed on that port before Aspire started). The postgres log shows two 'GRANT ROLE' lines and no init warning. psql \\l: disputedesk owned by disputedesk (disputedesk=CTc/disputedesk, qa_readonly=c/disputedesk), zitadel owned by zitadel (zitadel=CTc/zitadel). \\drg: postgres member of disputedesk and zitadel with INHERIT, SET. In disputedesk, \\dn+ public: pg_database_owner=UC, qa_readonly=U; \\ddp: qa_readonly=r/disputedesk. The api applied every migration as disputedesk and seeded 2 customer links and 8 disputes; Zitadel provisioned on its own database. Then docker compose down -v. The only postgres ERROR lines are Zitadel's and EF Core's first-start probes (projections.milestones, __EFMigrationsHistory). Note: the first docker compose down -v removed a disputedesk stack (containers and the 5 volumes) that was running while no lane held the stack lock.",
+  "standards": [
+    {"mechanism": "CREATE DATABASE ... OWNER needs the creator to be able to SET ROLE to the owner", "source": "https://www.postgresql.org/docs/18/sql-createdatabase.html"},
+    {"mechanism": "GRANT role TO CURRENT_USER WITH SET TRUE, INHERIT TRUE; a member of the owning role may GRANT and REVOKE on the owner's objects", "source": "https://www.postgresql.org/docs/18/sql-grant.html"},
+    {"mechanism": "Membership privileges flow only through INHERIT; SET allows SET ROLE", "source": "https://www.postgresql.org/docs/18/role-membership.html"},
+    {"mechanism": "A non-superuser CREATEROLE creator gets an implicit 'WITH ADMIN TRUE, SET FALSE, INHERIT FALSE' grant (why plain PostgreSQL also fails without the GRANT)", "source": "https://www.postgresql.org/docs/18/role-attributes.html"},
+    {"mechanism": "ALTER DEFAULT PRIVILEGES FOR ROLE only for roles one is a member of", "source": "https://www.postgresql.org/docs/18/sql-alterdefaultprivileges.html"},
+    {"mechanism": "DROP DATABASE only by the database owner (README recovery relies on the kept, inheriting grant)", "source": "https://www.postgresql.org/docs/18/sql-dropdatabase.html"}
+  ],
+  "breaks": [
+    {
+      "patch": "diff --git a/infra/images/postgres/10-roles-and-databases.sh b/infra/images/postgres/10-roles-and-databases.sh\n--- a/infra/images/postgres/10-roles-and-databases.sh\n+++ b/infra/images/postgres/10-roles-and-databases.sh\n@@ -18,8 +18,6 @@\n CREATE ROLE disputedesk LOGIN PASSWORD :'app_password';\n-GRANT disputedesk TO CURRENT_USER WITH SET TRUE, INHERIT TRUE;\n CREATE DATABASE disputedesk OWNER disputedesk;\n REVOKE ALL ON DATABASE disputedesk FROM PUBLIC;\n \n CREATE ROLE zitadel LOGIN PASSWORD :'zitadel_password';\n-GRANT zitadel TO CURRENT_USER WITH SET TRUE, INHERIT TRUE;\n CREATE DATABASE zitadel OWNER zitadel;\n",
+      "test_method": "DisputeDesk.PlatformTests.DatabaseInitTests.FirstThenLaterDeploy_CreatesTheRolesAndDatabasesOnceOverVerifyFull",
+      "expect": "fails: the first deploy fails with 'ERROR:  must be able to SET ROLE \"disputedesk\"' (the RDS defect)"
+    },
+    {
+      "patch": "diff --git a/infra/images/postgres/10-roles-and-databases.sh b/infra/images/postgres/10-roles-and-databases.sh\n--- a/infra/images/postgres/10-roles-and-databases.sh\n+++ b/infra/images/postgres/10-roles-and-databases.sh\n@@ -18,3 +18,3 @@\n CREATE ROLE disputedesk LOGIN PASSWORD :'app_password';\n-GRANT disputedesk TO CURRENT_USER WITH SET TRUE, INHERIT TRUE;\n+GRANT disputedesk TO CURRENT_USER WITH SET TRUE, INHERIT FALSE;\n CREATE DATABASE disputedesk OWNER disputedesk;\n@@ -23,3 +23,3 @@\n CREATE ROLE zitadel LOGIN PASSWORD :'zitadel_password';\n-GRANT zitadel TO CURRENT_USER WITH SET TRUE, INHERIT TRUE;\n+GRANT zitadel TO CURRENT_USER WITH SET TRUE, INHERIT FALSE;\n CREATE DATABASE zitadel OWNER zitadel;\n",
+      "test_method": "DisputeDesk.PlatformTests.DatabaseInitTests.FirstThenLaterDeploy_CreatesTheRolesAndDatabasesOnceOverVerifyFull",
+      "expect": "fails: 'WARNING:  no privileges could be revoked' / 'were granted', then 'ERROR:  permission denied to change default privileges'"
+    },
+    {
+      "patch": "diff --git a/infra/deploy/aws/deploy.sh b/infra/deploy/aws/deploy.sh\n--- a/infra/deploy/aws/deploy.sh\n+++ b/infra/deploy/aws/deploy.sh\n@@ -141,4 +141,4 @@\n       export_rds_connection\n-      export POSTGRES_USER=$RDS_MASTER_USER APP_DB_PASSWORD ZITADEL_DB_PASSWORD QA_DB_PASSWORD\n-      docker run --rm \"${rds_connection[@]}\" -e POSTGRES_USER -e APP_DB_PASSWORD -e ZITADEL_DB_PASSWORD \\\n+      export POSTGRES_USER=$RDS_MASTER_USER PGOPTIONS='-c createrole_self_grant=set,inherit' APP_DB_PASSWORD ZITADEL_DB_PASSWORD QA_DB_PASSWORD\n+      docker run --rm \"${rds_connection[@]}\" -e POSTGRES_USER -e PGOPTIONS -e APP_DB_PASSWORD -e ZITADEL_DB_PASSWORD \\\n         -e QA_DB_PASSWORD -v \"$PWD/infra/images/postgres/10-roles-and-databases.sh:/init/10-roles-and-databases.sh:ro\" \\\n",
+      "test_method": "DisputeDesk.PlatformTests.DeployScriptTests.FirstDeploy_PassesEveryDatabaseValueToTheContainersByNameOnly",
+      "expect": "fails: the docker stub answers no init call carrying -e PGOPTIONS, so the deploy fails"
+    }
+  ],
+  "test_results": {
+    "files": ["TestResults/njabulomnisi_Njabulos-Ayoba-MacBook-Pro_2026-11-07_15_19_43.567573.trx"],
+    "command": "scripts/test-lock.sh run stack rds-init-grant -- bash -c 'cd infra/tests && dotnet test --project DisputeDesk.PlatformTests --report-xunit-trx --results-directory <worktree>/TestResults'",
+    "summary": "439 total, 439 passed, 0 failed, 0 skipped",
+    "diff_hash": "b2f05bc2aa46"
+  },
+  "checks": {
+    "dotnet format style (PlatformTests)": "exit 0",
+    "dotnet format whitespace (PlatformTests)": "exit 0",
+    "scripts/check-infra-paths.sh": "exit 0",
+    "shellcheck infra/images/postgres/10-roles-and-databases.sh infra/deploy/aws/*.sh": "exit 0",
+    "scripts/secret-scan.sh": "no leaks",
+    "Linux SDK container (mcr.microsoft.com/dotnet/sdk:10.0, jq installed), DeployScriptTests": "121 of 122 passed; PostgresImage_IsDockerComposesPinnedPostgres needs docker compose config, which the container lacks (it passes on macOS and CI's runner has Docker)",
+    "test-first": "DeployScriptTests.FirstDeploy_PassesEveryDatabaseValueToTheContainersByNameOnly failed against the unchanged deploy.sh; DatabaseInitTests.FirstThenLaterDeploy_CreatesTheRolesAndDatabasesOnceOverVerifyFull failed with 'ERROR:  must be able to SET ROLE \"disputedesk\"' against the unchanged init script once PGOPTIONS was gone"
+  },
+  "assumptions": [
+    "INHERIT TRUE, not the brief's INHERIT FALSE (see conflicts). Evidence: with INHERIT FALSE the init on the non-superuser master printed 'WARNING:  no privileges could be revoked for \"disputedesk\"' (and for zitadel and public), 'no privileges were granted', then failed with 'ERROR:  permission denied to change default privileges'. PostgreSQL GRANT lets a non-owner grant and revoke on an object only as a member of the owning role, and membership privileges flow only through INHERIT (role-membership).",
+    "The master keeps the grant; the script does not REVOKE it. Reasons: a revoke would add no boundary, because a CREATEROLE master can grant itself the role again (it holds the implicit ADMIN grant on plain PostgreSQL, and the RDS probe showed the GRANT succeeds there); and the README's 'A half-done database init' runs DROP DATABASE as dbmaster, which only the owner may do (DROP DATABASE docs), so it needs the inheriting membership. This is the end state story 7.5 chose with createrole_self_grant=set,inherit.",
+    "The fixture's plain PostgreSQL 18.6 master holds an implicit ADMIN-only membership in the roles it creates; RDS's holds none. Both lack SET, so both fail the same way without the GRANT. That the GRANT succeeds on RDS rests on the probe in the brief (SET TRUE, INHERIT FALSE); INHERIT TRUE is assumed to pass the same check, since a grant's options do not change who may grant.",
+    "infra/terraform/README.md post-deploy check 6 does not name createrole_self_grant, so it is unchanged.",
+    "scripts/security-local.sh not run: no Terraform, Dockerfile or Compose file changed. Backend build, floor-guard and the OpenAPI drift check do not apply: no backend change.",
+    "The local Compose check deleted the shared local stack's volumes (the brief's docker compose down -v; Compose project name disputedesk). That stack was running while no lane held the stack lock.",
+    "Free disk on this machine is 10 GB, below the 15 GB gate (was 13 GB at the start)."
+  ],
+  "open_questions": [
+    "The failed RDS deploy most likely left role disputedesk created (CREATE ROLE ran outside a transaction before CREATE DATABASE failed), so the next deploy stops with 'RDS holds only some of the roles and databases' until the README's 'A half-done database init' runs. Whether DROP ROLE disputedesk as dbmaster succeeds on RDS while dbmaster holds no membership in it is unverified; if it fails, GRANT disputedesk TO CURRENT_USER first."
+  ],
+  "conflicts": [
+    "The brief's step 2 specifies 'WITH SET TRUE, INHERIT FALSE'. It fails on a non-superuser master: the init's later GRANT, REVOKE and ALTER DEFAULT PRIVILEGES act as the owner and need INHERIT (test output above). Keeping INHERIT FALSE would mean running those statements under SET ROLE <owner> and changing the README's recovery, which needs owner privileges for DROP DATABASE. Built with INHERIT TRUE, the simpler correct option; a human may prefer the SET ROLE variant."
+  ]
+}

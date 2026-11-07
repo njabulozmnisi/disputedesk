@@ -43,7 +43,7 @@ public sealed class DatabaseInitFixture : IAsyncLifetime
 
     /// <summary>
     /// dbmaster's rolsuper, rolreplication, rolbypassrls, rolcreatedb, rolcreaterole and role membership count, read once
-    /// before any test runs the init, which makes dbmaster a member of the roles it creates (createrole_self_grant).
+    /// before any test runs the init, which grants dbmaster the owner roles it creates.
     /// </summary>
     public string MasterShape { get; private set; } = "";
 
@@ -123,6 +123,8 @@ public sealed class DatabaseInitFixture : IAsyncLifetime
                 """);
         await WaitUntilReadyAsync();
 
+        // Like RDS's master, dbmaster gets no SET option on the roles it creates (PostgreSQL 16+ gives it ADMIN only;
+        // RDS gives it no membership), so the init must grant itself SET before CREATE DATABASE ... OWNER.
         ProcessResult master = await Processes.RunAsync(
             "docker", ["exec", "-i", "-e", "RDS_MASTER_PASSWORD", "-u", "postgres", Server, "psql", "-v", "ON_ERROR_STOP=1", "-q", "-d", "postgres"],
             new Dictionary<string, string>(Processes.BaseEnvironment()) { ["RDS_MASTER_PASSWORD"] = DeployCopy.MasterPassword },
