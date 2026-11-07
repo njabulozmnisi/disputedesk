@@ -12,7 +12,7 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  # Two zones: the instance's and a second one for the RDS subnet group.
+  # Two zones for the RDS subnet group; the instance's subnet is in the second.
   zones = slice(data.aws_availability_zones.available.names, 0, 2)
 }
 
@@ -31,10 +31,12 @@ resource "aws_internet_gateway" "this" {
   tags = { Name = var.name }
 }
 
+# The instance sits in this subnet, in the second zone: in af-south-1 the first zone has no c7i-flex.large capacity
+# (InsufficientInstanceCapacity).
 resource "aws_subnet" "public" {
   vpc_id            = aws_vpc.this.id
   cidr_block        = "10.20.0.0/24"
-  availability_zone = local.zones[0]
+  availability_zone = local.zones[1]
 
   tags = { Name = "${var.name}-public" }
 }
