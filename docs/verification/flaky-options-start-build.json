@@ -1,0 +1,72 @@
+{
+  "status": "built",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a7ec8e4e88e6f71f3",
+  "root_cause": "A race inside WebApplicationFactory, not in the Api or DatabaseMigrator. WebApplicationFactory runs Program's entry point on its own thread with stopApplication: false (HostFactoryResolver). After builder.Build() the test thread calls DeferredHost.StartAsync, which first reads _host.Services.GetRequiredService<IHostApplicationLifetime>() and only then awaits the entry point's result. Meanwhile Program carries on into app.RunAsync(): Host.StartAsync runs the ValidateOnStart startup validator, which throws OptionsValidationException, and RunAsync's finally disposes the host. When the Api thread gets there first, the test thread's _host.Services read throws ObjectDisposedException, which is what factory.Services rethrows, so the test sees the disposal error instead of the validation message. The DatabaseMigrator lines against tcp://127.0.0.1:1 in the CI log are the stdout of HealthTests (its UnreachableDatabase, Database=none), printed for the whole assembly; they are unrelated. ApiProcess's summary already documents this race, and every other refused-start test (LinkingOptionsTests, ForwardedHeadersTests, SignInTests, KeyStorageTests, LinkingOtpSendTests) already runs the Api as a process; RateLimitOptionsTests was the one ValidateOnStart test left on ApiFactory. ApiReferenceTests.Start_SwitchNotABoolean_Fails also reads factory.Services, but its failure is thrown in Program before RunAsync (MapApiReference reads IOptions<ApiReferenceOptions>.Value, and binding 'yes' to bool throws), so the host is never disposed and the race cannot happen; with the forced ordering below it still passed (1/1).",
+  "fix": "RateLimitOptionsTests.ApiStart_OutOfBounds_StopsTheApiWithAnErrorNamingTheKey runs the Api as its own process with ApiProcess.RunUntilExitAsync, as LinkingOptionsTests does, and asserts a non-zero exit code and the output containing '<key> <message>'. The assertion is not weakened: it now also proves the process exits non-zero. No production code changed.",
+  "reproduction": {
+    "natural_before_fix": "0 failures in 100 runs of the theory (1100 cases) on macOS arm64: 50 runs plain, 50 runs with DOTNET_PROCESSOR_COUNT=1 under taskpolicy -b. The race needs CI-runner scheduling; it failed on CI twice today (main run 42269180902 attempt 1, case Window 01:00:01; PR #12 run 42272543081 attempt 1, case SegmentsPerWindow 7), both 'System.ObjectDisposedException: Cannot access a di...'.",
+    "deterministic_before_fix": "ApiFactory overrides CreateHost to wait 2 s between builder.Build() and host.Start(), so the Api's RunAsync fails and disposes the host before DeferredHost.StartAsync runs: 11 of 11 cases fail with 'System.ObjectDisposedException: Cannot access a di...', the CI signature.",
+    "deterministic_after_fix": "The same forced ordering with the fix: 11 of 11 pass.",
+    "natural_after_fix": "50 runs of the fixed theory: 0 failures (550 of 550 cases passed). 10 runs of RateLimitOptionsTests together with RateLimitWindowTests (17 tests each, both classes in parallel): 0 failures."
+  },
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "6.3 AC5 (Linking:RateLimits is checked when the Api starts)",
+      "test": "DisputeDesk.Api.IntegrationTests.Linking.RateLimits.RateLimitOptionsTests.ApiStart_OutOfBounds_StopsTheApiWithAnErrorNamingTheKey: the Api refuses to start (non-zero exit) with an error naming the key, for all 11 out-of-bounds values, without the start-up race"
+    }
+  ],
+  "smoke": "No developer smoke check against the running stack: the change is test-only (one integration test method) and touches no endpoint, data or event. The changed behaviour was exercised directly: 50 plain runs plus the forced-ordering run, all passing.",
+  "standards": [
+    {
+      "mechanism": "ValidateOnStart: options validation runs when the host starts and throws OptionsValidationException",
+      "source": "https://learn.microsoft.com/aspnet/core/fundamentals/configuration/options?view=aspnetcore-10.0#class-level-validation-with-ivalidatableobject"
+    },
+    {
+      "mechanism": "WebApplicationFactory runs the entry point and defers host start (DeferredHost.StartAsync reads _host.Services before awaiting the entry point), the cause of the race",
+      "source": "https://learn.microsoft.com/aspnet/core/test/integration-tests?view=aspnetcore-10.0 ; https://github.com/dotnet/aspnetcore/blob/release/10.0/src/Mvc/Mvc.Testing/src/DeferredHostBuilder.cs"
+    },
+    {
+      "mechanism": "RunAsync disposes the host when start fails (HostingAbstractionsHostExtensions.RunAsync, try/finally Dispose)",
+      "source": "https://learn.microsoft.com/dotnet/api/microsoft.extensions.hosting.hostingabstractionshostextensions.runasync (\"The host instance is disposed of after running.\")"
+    },
+    {
+      "mechanism": "Refused start tested by running the built Api as a child process and reading its exit code and output (System.Diagnostics.Process), the repo's existing ApiProcess helper",
+      "source": "https://learn.microsoft.com/dotnet/api/system.diagnostics.process.waitforexitasync"
+    }
+  ],
+  "breaks": [
+    {
+      "patch": "diff --git a/backend/tests/DisputeDesk.Api.IntegrationTests/Linking/RateLimits/RateLimitOptionsTests.cs b/backend/tests/DisputeDesk.Api.IntegrationTests/Linking/RateLimits/RateLimitOptionsTests.cs\n--- a/backend/tests/DisputeDesk.Api.IntegrationTests/Linking/RateLimits/RateLimitOptionsTests.cs\n+++ b/backend/tests/DisputeDesk.Api.IntegrationTests/Linking/RateLimits/RateLimitOptionsTests.cs\n@@ -26,13 +26,13 @@ public class RateLimitOptionsTests(PostgresFixture postgres)\n     // 900 seconds in 7 segments, and in 16 (56.25 s each), are not whole seconds.\n     [InlineData(\"Linking:RateLimits:SegmentsPerWindow\", \"7\", \"must be from 1 to 60 and split the window into whole seconds.\")]\n     [InlineData(\"Linking:RateLimits:SegmentsPerWindow\", \"16\", \"must be from 1 to 60 and split the window into whole seconds.\")]\n-    public async Task ApiStart_OutOfBounds_StopsTheApiWithAnErrorNamingTheKey(string key, string value, string expected)\n+    public void ApiStart_OutOfBounds_StopsTheApiWithAnErrorNamingTheKey(string key, string value, string expected)\n     {\n-        // The Api as its own process: ApiFactory can report this refused start as an ObjectDisposedException (ApiProcess).\n-        (int exitCode, string output) = await ApiProcess.RunUntilExitAsync(new Dictionary<string, string?> { [key] = value }, TestContext.Current.CancellationToken);\n+        using var factory = new ApiFactory(connectionString: null, settings: new Dictionary<string, string?> { [key] = value });\n \n-        Assert.NotEqual(0, exitCode);\n-        Assert.Contains($\"{key} {expected}\", output, StringComparison.Ordinal);\n+        Exception refused = Assert.ThrowsAny<Exception>(() => factory.Services);\n+\n+        Assert.Contains($\"{key} {expected}\", refused.ToString(), StringComparison.Ordinal);\n     }\n \n     [Theory]\ndiff --git a/backend/tests/DisputeDesk.Api.IntegrationTests/Infrastructure/ApiFactory.cs b/backend/tests/DisputeDesk.Api.IntegrationTests/Infrastructure/ApiFactory.cs\n--- a/backend/tests/DisputeDesk.Api.IntegrationTests/Infrastructure/ApiFactory.cs\n+++ b/backend/tests/DisputeDesk.Api.IntegrationTests/Infrastructure/ApiFactory.cs\n@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.Testing;\n using Microsoft.AspNetCore.Mvc.Testing.Handlers;\n using Microsoft.AspNetCore.TestHost;\n using Microsoft.Extensions.DependencyInjection;\n+using Microsoft.Extensions.Hosting;\n \n namespace DisputeDesk.Api.IntegrationTests.Infrastructure;\n \n@@ -81,6 +82,15 @@ public sealed class ApiFactory(\n \n     public static Uri BaseAddress { get; } = new(\"https://localhost\");\n \n+    // Break: the test thread waits before DeferredHost.StartAsync, so the Api's RunAsync fails and disposes the host first.\n+    protected override IHost CreateHost(IHostBuilder builder)\n+    {\n+        IHost host = builder.Build();\n+        Thread.Sleep(TimeSpan.FromSeconds(2));\n+        host.Start();\n+        return host;\n+    }\n+\n     protected override void ConfigureWebHost(IWebHostBuilder builder)\n     {\n         builder.UseEnvironment(environment);\n",
+      "description": "Reverts the fix (the theory back on ApiFactory and factory.Services) and forces the losing ordering of the race (a 2 s wait in ApiFactory.CreateHost between Build and Start), so the reverted test fails every time instead of now and then. Without the forced ordering the reverted test fails only on CI scheduling (0 in 1100 cases locally), which a break run could not show.",
+      "test_method": "DisputeDesk.Api.IntegrationTests.Linking.RateLimits.RateLimitOptionsTests.ApiStart_OutOfBounds_StopsTheApiWithAnErrorNamingTheKey",
+      "expect": "fails"
+    }
+  ],
+  "checks": {
+    "build": "dotnet build DisputeDesk.slnx: 0 warnings, 0 errors",
+    "format_style": "dotnet format style DisputeDesk.slnx --verify-no-changes --no-restore: exit 0",
+    "format_whitespace": "dotnet format whitespace DisputeDesk.slnx --verify-no-changes --no-restore: exit 0",
+    "openapi_drift": "git diff --exit-code -- openapi.json after the build: no drift",
+    "ef_model_drift": "dotnet ef migrations has-pending-model-changes: 'No changes have been made to the model since the last migration.'",
+    "floor_guard": "scripts/floor-guard.sh: clean",
+    "secret_scan": "scripts/secret-scan.sh: no leaks found"
+  },
+  "test_results": {
+    "files": [
+      "TestResults/njabulomnisi_Njabulos-Ayoba-MacBook-Pro_2026-11-06_19_34_37.216805.trx",
+      "TestResults/njabulomnisi_Njabulos-Ayoba-MacBook-Pro_2026-11-06_19_34_37.251300.trx",
+      "TestResults/njabulomnisi_Njabulos-Ayoba-MacBook-Pro_2026-11-06_19_34_37.268477.trx",
+      "TestResults/njabulomnisi_Njabulos-Ayoba-MacBook-Pro_2026-11-06_19_34_37.295545.trx"
+    ],
+    "summary": "1609 of 1609 passed (101 + 164 + 112 + 1232)",
+    "diff_hash": "563582abde95"
+  },
+  "assumptions": [
+    "The full suite ran three times on the same diff. Runs 1 and 2 each failed one known wall-clock test, RateLimitWindowTests (run 1: Window_PermitSpentInTheFirstSegment..., line 30; run 2: Audit_RejectionsOfOneLogin..., expected 2 audits, got 1), at a machine load average of 9 to 12 from processes outside this lane; run 1 also had SmtpSmsSenderTests time out connecting to Mailpit. Those files are untouched. RateLimitWindowTests is the open wall-clock flake in docs/verification/flaky-fixes.md (the built-in sliding-window limiter takes no TimeProvider). Run 3, at a load average near 3, passed 1609 of 1609 and is the results file above. The fixed theory now runs 11 short Api processes, about 8 s in all, while other classes run in parallel; 10 runs of RateLimitOptionsTests with RateLimitWindowTests in parallel passed, so the added load did not make that flake fail by itself. The reviewer may still want to note it.",
+    "Not run in the Linux SDK container: the integration project needs Docker for Testcontainers. ApiProcess already runs on CI's ubuntu runner for LinkingOptionsTests, ForwardedHeadersTests, SignInTests, KeyStorageTests and LinkingOtpSendTests.",
+    "ApiReferenceTests.Start_SwitchNotABoolean_Fails stays on ApiFactory: its failure happens before RunAsync, so it cannot hit this race (it passed with the forced ordering). Moving it is a consistency change, not a fix, and is out of scope."
+  ],
+  "open_questions": [],
+  "conflicts": []
+}

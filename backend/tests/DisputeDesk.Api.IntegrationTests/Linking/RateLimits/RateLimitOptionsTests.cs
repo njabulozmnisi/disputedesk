@@ -26,13 +26,13 @@ public class RateLimitOptionsTests(PostgresFixture postgres)
     // 900 seconds in 7 segments, and in 16 (56.25 s each), are not whole seconds.
     [InlineData("Linking:RateLimits:SegmentsPerWindow", "7", "must be from 1 to 60 and split the window into whole seconds.")]
     [InlineData("Linking:RateLimits:SegmentsPerWindow", "16", "must be from 1 to 60 and split the window into whole seconds.")]
-    public void ApiStart_OutOfBounds_StopsTheApiWithAnErrorNamingTheKey(string key, string value, string expected)
+    public async Task ApiStart_OutOfBounds_StopsTheApiWithAnErrorNamingTheKey(string key, string value, string expected)
     {
-        using var factory = new ApiFactory(connectionString: null, settings: new Dictionary<string, string?> { [key] = value });
+        // The Api as its own process: ApiFactory can report this refused start as an ObjectDisposedException (ApiProcess).
+        (int exitCode, string output) = await ApiProcess.RunUntilExitAsync(new Dictionary<string, string?> { [key] = value }, TestContext.Current.CancellationToken);
 
-        Exception refused = Assert.ThrowsAny<Exception>(() => factory.Services);
-
-        Assert.Contains($"{key} {expected}", refused.ToString(), StringComparison.Ordinal);
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains($"{key} {expected}", output, StringComparison.Ordinal);
     }
 
     [Theory]

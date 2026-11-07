@@ -120,7 +120,8 @@ test.describe.serial('withdraw an own open dispute', () => {
 
     const outbox = queryRows<any>(`select "Id", "EventType", "DisputeVersion", "Status", "TraceParent", "Payload" from "OutboxMessages" where "DisputeId" = '${main.id}' and "DisputeVersion" = 2`);
     expect(outbox).toHaveLength(1);
-    expect(outbox[0]).toMatchObject({ Id: events[1].Id, EventType: 'disputedesk.dispute.status-changed.v1', Status: 'Pending' });
+    // The relay runs in the Api, so the row may already be Sent.
+    expect(outbox[0]).toMatchObject({ Id: events[1].Id, EventType: 'disputedesk.dispute.status-changed.v1', Status: expect.stringMatching(/^(Pending|Sent)$/) });
     const payload = JSON.parse(outbox[0].Payload);
     expect(payload).toMatchObject({ specversion: '1.0', type: 'disputedesk.dispute.status-changed.v1', id: events[1].Id, subject: main.id });
     expect(payload.data).toEqual({ disputeId: main.id, fromStatus: 'submitted', toStatus: 'withdrawn', action: 'withdraw', actorType: 'customer', occurredAt: payload.data.occurredAt, disputeVersion: 2 });
