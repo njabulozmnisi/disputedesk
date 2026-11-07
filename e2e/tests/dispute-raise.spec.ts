@@ -6,7 +6,7 @@ import { gatewayContentSecurityPolicy, ownDisputable, problemTypeBase, queryData
 // database and Zitadel, signed in as seeded customer A (B owns the 404 case). The database is read through qa_readonly.
 // Refusals come from the real API by forging the one POST in flight (another transaction, another customer's row, a
 // key already used); only the cases the API cannot be made to produce (an in-progress key, a 503, a 500, a 400) are
-// stubbed, and each test says so. The events hop is the outbox row, Pending when read (outbox-relay.spec.ts reads the topic).
+// stubbed, and each test says so. The events hop is the outbox row, Pending or already Sent by the relay when read (outbox-relay.spec.ts reads the topic).
 // A transaction is disputed once: a run raises on four of customer A's reserved transactions (support.ts), all among the
 // newest 20 rows because the Dispute links are clicked in the SPA.
 
@@ -246,7 +246,9 @@ test('criteria 1, 4, 5, 7: raise Unrecognised with a note: one key, antiforgery,
   expect(count('StoredEvents')).toBe(eventsBefore + 1);
   expect(count('OutboxMessages')).toBe(outboxBefore + 1);
   const stored = queryDatabase(`select d."Status", d."Reason", d."Note", d."TransactionId", d."DisputedAmount"::text, e."EventType", e."Version", e."ActorType", o."EventType", o."Status", o."Id" = e."Id" from "Disputes" d join "StoredEvents" e on e."DisputeId" = d."Id" join "OutboxMessages" o on o."DisputeId" = d."Id" where d."Id" = '${dispute.disputeId}'`);
-  expect(stored).toBe(`Submitted|Unrecognised|qa 3.6 raise|${row.transactionId}|${row.amount.amount}|DisputeRaised|1|Customer|disputedesk.dispute.raised.v1|Pending|t`);
+  // The relay runs in the Api, so the outbox row may already be Sent; every other column is exact.
+  const storedWith = (outboxStatus: string) => `Submitted|Unrecognised|qa 3.6 raise|${row.transactionId}|${row.amount.amount}|DisputeRaised|1|Customer|disputedesk.dispute.raised.v1|${outboxStatus}|t`;
+  expect([storedWith('Pending'), storedWith('Sent')]).toContain(stored);
   expect(consoleErrors).toEqual([]);
   await page.close();
 });
