@@ -91,7 +91,7 @@ public sealed class DeployScriptTests
     public async Task FirstDeploy_PassesEveryDatabaseValueToTheContainersByNameOnly()
     {
         // docker hands each -e NAME the value in its own environment: the count sees only the master's connection, the
-        // init adds POSTGRES_USER, PGOPTIONS and the three role passwords; verify-full as dbmaster both times.
+        // init adds POSTGRES_USER and the three role passwords, and no PGOPTIONS; verify-full as dbmaster both times.
         using var deploy = new DeployCopy();
         Dictionary<string, string> testValues = AwsInputs.TestValues();
         var connection = new Dictionary<string, string>
@@ -111,7 +111,6 @@ public sealed class DeployScriptTests
         var init = new Dictionary<string, string>(connection)
         {
             ["POSTGRES_USER"] = "dbmaster",
-            ["PGOPTIONS"] = "-c createrole_self_grant=set,inherit",
             ["QA_DB_PASSWORD"] = DeployCopy.QaPassword,
             ["APP_DB_PASSWORD"] = testValues["APP_DB_PASSWORD"],
             ["ZITADEL_DB_PASSWORD"] = testValues["ZITADEL_DB_PASSWORD"],

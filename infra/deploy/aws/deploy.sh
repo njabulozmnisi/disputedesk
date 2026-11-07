@@ -134,14 +134,13 @@ roles_and_databases=$(
 
 case $roles_and_databases in
   "0 0")
-    # First deploy. RDS's master is not a superuser, so it may create a database owned by a role it created only once
-    # it holds that role's SET option (PostgreSQL, createrole_self_grant).
+    # First deploy. RDS's master is not a superuser and gets no membership in the roles it creates, so the init grants
+    # it each owner role WITH SET before CREATE DATABASE ... OWNER, which needs it (PostgreSQL, CREATE DATABASE).
     step "creating the database roles and databases"
     (
       export_rds_connection
-      export POSTGRES_USER=$RDS_MASTER_USER PGOPTIONS='-c createrole_self_grant=set,inherit' APP_DB_PASSWORD \
-        ZITADEL_DB_PASSWORD QA_DB_PASSWORD
-      docker run --rm "${rds_connection[@]}" -e POSTGRES_USER -e PGOPTIONS -e APP_DB_PASSWORD -e ZITADEL_DB_PASSWORD \
+      export POSTGRES_USER=$RDS_MASTER_USER APP_DB_PASSWORD ZITADEL_DB_PASSWORD QA_DB_PASSWORD
+      docker run --rm "${rds_connection[@]}" -e POSTGRES_USER -e APP_DB_PASSWORD -e ZITADEL_DB_PASSWORD \
         -e QA_DB_PASSWORD -v "$PWD/infra/images/postgres/10-roles-and-databases.sh:/init/10-roles-and-databases.sh:ro" \
         "$POSTGRES_IMAGE" sh /init/10-roles-and-databases.sh
     ) || fail "the database init failed; see 'A half-done database init' in infra/terraform/README.md"

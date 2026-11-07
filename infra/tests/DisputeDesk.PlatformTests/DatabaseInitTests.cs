@@ -92,6 +92,12 @@ public sealed class DatabaseInitTests(DatabaseInitFixture database) : IClassFixt
         Assert.Equal("disputedesk disputedesk\nzitadel zitadel", await database.SqlAsync("postgres", """
             SELECT datname || ' ' || pg_get_userbyid(datdba) FROM pg_database WHERE datname IN ('disputedesk', 'zitadel') ORDER BY datname
             """));
+        // The init's own GRANT gives dbmaster SET on both owners, which CREATE DATABASE ... OWNER needs, and INHERIT,
+        // which granting and revoking on their databases and schema as the owner needs.
+        Assert.Equal("disputedesk|t\nzitadel|t", await database.SqlAsync("postgres", """
+            SELECT r.rolname, m.inherit_option FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid
+            WHERE m.member = 'dbmaster'::regrole AND m.set_option ORDER BY r.rolname
+            """));
         Assert.Equal("{default_transaction_read_only=on}", await database.SqlAsync("postgres", "SELECT rolconfig FROM pg_roles WHERE rolname = 'qa_readonly'"));
         // CONNECT for qa_readonly on disputedesk and zitadel, and for zitadel on disputedesk.
         Assert.Equal("t|f|f", await database.SqlAsync("postgres", """

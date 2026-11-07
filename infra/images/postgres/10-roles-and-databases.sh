@@ -12,11 +12,16 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<'SQL'
 \getenv app_password APP_DB_PASSWORD
 \getenv zitadel_password ZITADEL_DB_PASSWORD
 \getenv qa_password QA_DB_PASSWORD
+-- A master that is not a superuser (RDS's) holds no SET option on the roles it creates. It needs SET to create a
+-- database owned by the role, and INHERIT to grant and revoke on that database and its schema as the owner
+-- (PostgreSQL, CREATE DATABASE and GRANT), so it grants itself both. A superuser needs neither; the grant is harmless.
 CREATE ROLE disputedesk LOGIN PASSWORD :'app_password';
+GRANT disputedesk TO CURRENT_USER WITH SET TRUE, INHERIT TRUE;
 CREATE DATABASE disputedesk OWNER disputedesk;
 REVOKE ALL ON DATABASE disputedesk FROM PUBLIC;
 
 CREATE ROLE zitadel LOGIN PASSWORD :'zitadel_password';
+GRANT zitadel TO CURRENT_USER WITH SET TRUE, INHERIT TRUE;
 CREATE DATABASE zitadel OWNER zitadel;
 REVOKE ALL ON DATABASE zitadel FROM PUBLIC;
 
