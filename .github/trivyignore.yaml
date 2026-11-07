@@ -11,6 +11,15 @@ vulnerabilities:
       service, fixed in go-jose 4.1.6; Zitadel v4.20.1 still pins 4.1.4). Likely reachable: Zitadel parses JOSE
       objects from callers (signed tokens and client assertions). Accepted until a Zitadel release ships the fixed
       go-jose; docs/production-path.md records it. Human decision 2026-11-05.
+  - id: CVE-2026-78661
+    paths:
+      - "app/zitadel"
+    expired_at: 2027-02-05
+    statement: >-
+      golang.org/x/net v0.61.0, compiled into the pinned Zitadel v4.20.0 binary of the disputedesk-zitadel image
+      (denial of service in x/net/html, fixed in 0.62.0; Zitadel v4.20.1 and its main branch still pin 0.61.0).
+      Accepted until a Zitadel release ships the fixed x/net; docs/production-path.md P78 records it. Human decision
+      2026-11-07.
 misconfigurations:
   - id: AWS-0011
     paths:
