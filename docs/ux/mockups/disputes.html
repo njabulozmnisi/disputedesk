@@ -9,51 +9,33 @@
 </head>
 <body>
 <header class="topbar"><div class="topbar__in">
-  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="brand" href="transactions.html">DisputeDesk<span class="brand__dot" aria-hidden="true"></span></a>
   <nav class="topnav" aria-label="Main"><a href="transactions.html">Transactions</a><a href="disputes.html" aria-current="page">Disputes</a></nav>
   <a class="signout" href="start.html">Sign out</a>
 </div></header>
-<p class="mock-note">Mockup: the amount is the disputed amount (the difference for Wrong amount). Works while the core-banking source is down. <a href="index.html">All screens</a></p>
+<p class="mock-note">Mockup: each row is one link. The amount is the disputed amount (the difference for Wrong amount). Works while the core-banking source is down. <a href="index.html">All screens</a></p>
 <main class="wrap">
-<div class="stack"><h1 class="title">Disputes</h1><p class="lede">Every dispute you've raised, newest first.</p></div>
-<h2 class="list-heading">Open</h2>
+<div class="page-head"><h1 class="title">Disputes</h1><p class="lede">Every dispute you've raised, newest first.</p></div>
+<section class="stack-sm" aria-labelledby="open-h"><h2 class="heading" id="open-h">Open</h2>
 <ul class="list panel">
-<li class="row">
-  <div class="row__main"><p class="row__title"><a href="dispute-submitted.html">ZXP*GLOBALSVCS 0800</a></p><p class="caption">Unrecognised, raised 26 Oct 2026</p></div>
-  <div class="row__side"><span class="amount">R849.00</span><span class="badge badge--submitted"><span class="sr-only">Status: </span>Submitted</span></div>
-</li>
-<li class="row">
-  <div class="row__main"><p class="row__title"><a href="dispute-under-review.html">Lekker Eats, Durban</a></p><p class="caption">Duplicate charge, raised 21 Oct 2026</p></div>
-  <div class="row__side"><span class="amount">R312.50</span><span class="badge badge--review"><span class="sr-only">Status: </span>Under review</span></div>
-</li>
-<li class="row">
-  <div class="row__main"><p class="row__title"><a href="dispute-prioritised.html">Online Gadgets ZA</a></p><p class="caption">Not received, raised 12 Oct 2026</p></div>
-  <div class="row__side"><span class="amount">R4&#8239;299.00</span><span class="badge badge--priority"><span class="sr-only">Status: </span>Under review (prioritised)</span></div>
-</li>
-</ul>
-<h2 class="list-heading">Closed</h2>
+<li><a class="drow" href="dispute-submitted.html"><span class="drow__main"><span class="drow__title">ZXP*GLOBALSVCS 0800</span><span class="caption">Unrecognised, raised 26 Oct 2026</span></span><span class="amount">R849.00</span><span class="drow__status"><span class="badge badge--submitted"><span class="sr-only">Status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>Submitted</span></span><span class="drow__chevron"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></span></a></li>
+<li><a class="drow" href="dispute-under-review.html"><span class="drow__main"><span class="drow__title">Lekker Eats, Durban</span><span class="caption">Duplicate charge, raised 21 Oct 2026</span></span><span class="amount">R312.50</span><span class="drow__status"><span class="badge badge--review"><span class="sr-only">Status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Under review</span></span><span class="drow__chevron"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></span></a></li>
+<li><a class="drow" href="dispute-prioritised.html"><span class="drow__main"><span class="drow__title">Online Gadgets ZA</span><span class="caption">Not received, raised 12 Oct 2026</span></span><span class="amount">R4 299.00</span><span class="drow__status"><span class="badge badge--priority"><span class="sr-only">Status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/><path d="M11 14V8M8.5 10.5 11 8l2.5 2.5"/></svg>Under review (prioritised)</span></span><span class="drow__chevron"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></span></a></li>
+</ul></section>
+<section class="stack-sm" aria-labelledby="closed-h"><h2 class="heading" id="closed-h">Closed</h2>
 <ul class="list panel">
-<li class="row">
-  <div class="row__main"><p class="row__title"><a href="dispute-upheld.html">Ocean Gym Club</a></p><p class="caption">Cancelled subscription, raised 2 Oct 2026</p></div>
-  <div class="row__side"><span class="amount">R499.00</span><span class="badge badge--upheld"><span class="sr-only">Status: </span>Resolved · Upheld</span></div>
-</li>
-<li class="row">
-  <div class="row__main"><p class="row__title"><a href="dispute-rejected.html">Karoo Fuel Stop, Pinetown</a></p><p class="caption">Wrong amount, raised 16 Sep 2026</p></div>
-  <div class="row__side"><span class="amount">R500.00</span><span class="badge badge--rejected"><span class="sr-only">Status: </span>Resolved · Rejected</span></div>
-</li>
-<li class="row">
-  <div class="row__main"><p class="row__title"><a href="dispute-withdrawn.html">TechNova Online</a></p><p class="caption">Not received, raised 5 Sep 2026</p></div>
-  <div class="row__side"><span class="amount">R1&#8239;899.00</span><span class="badge badge--withdrawn"><span class="sr-only">Status: </span>Withdrawn</span></div>
-</li>
-</ul>
+<li><a class="drow" href="dispute-upheld.html"><span class="drow__main"><span class="drow__title">Ocean Gym Club</span><span class="caption">Cancelled subscription, raised 2 Oct 2026</span></span><span class="amount">R499.00</span><span class="drow__status"><span class="badge badge--upheld"><span class="sr-only">Status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Resolved · Upheld</span></span><span class="drow__chevron"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></span></a></li>
+<li><a class="drow" href="dispute-rejected.html"><span class="drow__main"><span class="drow__title">Karoo Fuel Stop, Pinetown</span><span class="caption">Wrong amount, raised 16 Sep 2026</span></span><span class="amount">R500.00</span><span class="drow__status"><span class="badge badge--rejected"><span class="sr-only">Status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>Resolved · Rejected</span></span><span class="drow__chevron"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></span></a></li>
+<li><a class="drow" href="dispute-withdrawn.html"><span class="drow__main"><span class="drow__title">TechNova Online</span><span class="caption">Not received, raised 5 Sep 2026</span></span><span class="amount">R1 899.00</span><span class="drow__status"><span class="badge badge--withdrawn"><span class="sr-only">Status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Withdrawn</span></span><span class="drow__chevron"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></span></a></li>
+</ul></section>
 </main>
 <footer class="footer"><div class="footer__in">
   <p>Demo data only. Every name, number and amount shown here is made up.</p>
   <p>Your details are used only to show your transactions and handle your disputes.</p>
 </div></footer>
 <nav class="tabbar" aria-label="Main (phone)">
-  <a href="transactions.html"><span aria-hidden="true">☰</span>Transactions</a>
-  <a href="disputes.html" aria-current="page"><span aria-hidden="true">⚑</span>Disputes</a>
+  <a href="transactions.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Transactions</a>
+  <a href="disputes.html" aria-current="page"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>Disputes</a>
 </nav>
 </body>
 </html>

@@ -9,14 +9,14 @@
 </head>
 <body>
 <header class="topbar"><div class="topbar__in">
-  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="brand" href="transactions.html">DisputeDesk<span class="brand__dot" aria-hidden="true"></span></a>
   <nav class="topnav" aria-label="Main"><a href="transactions.html" aria-current="page">Transactions</a><a href="disputes.html">Disputes</a></nav>
   <a class="signout" href="start.html">Sign out</a>
 </div></header>
 <p class="mock-note">Mockup: 409 on submit, for example from a stale tab (UJ-5e). <a href="index.html">All screens</a></p>
-<main class="wrap wrap--form stack-lg">
-<div><a class="back" href="transactions.html">Back to transactions</a><h1 class="title">Review your dispute</h1></div>
-<div class="notice notice--danger" role="alert"><strong>This transaction already has a dispute.</strong><span>You can only dispute a transaction once.</span></div>
+<main class="wrap wrap--form">
+<div class="page-head"><a class="back" href="transactions.html">Back to transactions</a><h1 class="title">Review your dispute</h1></div>
+<div class="notice notice--danger" role="alert"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg><div class="notice__body"><p><strong>This transaction already has a dispute.</strong></p><p>You can only dispute a transaction once.</p></div></div>
 <div class="actions"><a class="btn btn--primary btn--block" href="dispute-rejected.html">View dispute</a><a class="btn btn--secondary btn--block" href="transactions.html">Back to transactions</a></div>
 </main>
 <footer class="footer"><div class="footer__in">
@@ -24,8 +24,8 @@
   <p>Your details are used only to show your transactions and handle your disputes.</p>
 </div></footer>
 <nav class="tabbar" aria-label="Main (phone)">
-  <a href="transactions.html" aria-current="page"><span aria-hidden="true">☰</span>Transactions</a>
-  <a href="disputes.html"><span aria-hidden="true">⚑</span>Disputes</a>
+  <a href="transactions.html" aria-current="page"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Transactions</a>
+  <a href="disputes.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>Disputes</a>
 </nav>
 </body>
 </html>
