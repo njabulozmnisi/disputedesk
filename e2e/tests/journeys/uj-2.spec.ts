@@ -84,7 +84,8 @@ test('UJ-2: A withdraws the Under review dispute on TXN-A-0022', async () => {
   const last = page.getByRole('region', { name: 'Timeline' }).getByRole('listitem').last();
   await expect(last).toContainText('Withdrawn');
   await expect(last).toContainText(`“${note}”`);
-  await expect(last).toContainText('You ·');
+  await expect(last.locator('span', { hasText: /^You$/ })).toHaveCount(1);
+  await expect(last).not.toContainText('·');
   await expectAccessibleAtBothWidths(page, 'Withdrawn detail');
 
   // Database: one version up, one new stored event holding the note, one new outbox row with the same Id.

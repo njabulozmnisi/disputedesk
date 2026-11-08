@@ -72,6 +72,23 @@ describe('routing by authorisation state', () => {
     expect(router.state.location.pathname).toBe('/');
   });
 
+  // ui-detail-start criterion 8: the assurance line under the two buttons, with a decorative Lock.
+  it('shows the assurance caption with a decorative Lock under the start buttons', async () => {
+    signInAs('anonymous');
+    renderApp({ path: '/' });
+    await screen.findByRole('heading', { level: 1, name: startHeading });
+
+    const caption = screen.getByText(
+      "You'll confirm it's you with your ID number, account number and a one-time code.",
+    );
+    expect(caption).toHaveClass('text-caption');
+    expectDecorativeIcon(caption.querySelector('svg.lucide-lock'));
+    const createLogin = screen.getByRole('link', { name: 'Create a login' });
+    expect(
+      createLogin.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it('has no accessibility violations on the start page', async () => {
     signInAs('anonymous');
     renderApp({ path: '/' });

@@ -111,7 +111,8 @@ test('UJ-1: sign up, link to D, raise on TXN-D-0030, sign out, traced to the dat
   await expect(timeline.getByRole('listitem')).toHaveCount(1);
   await expect(timeline.getByRole('listitem')).toContainText('Submitted');
   await expect(timeline.locator('time')).toHaveText(/ SAST$/);
-  await expect(timeline.getByRole('listitem')).toContainText('You ·');
+  await expect(timeline.getByRole('listitem').locator('span', { hasText: /^You$/ })).toHaveCount(1);
+  await expect(timeline.getByRole('listitem')).not.toContainText('·');
   await expectAccessibleAtBothWidths(page, 'dispute detail');
 
   // ---- database (criterion 3), scoped to the dispute ID ----------------------------------------------------------------------------
