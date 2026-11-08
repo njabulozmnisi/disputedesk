@@ -1,5 +1,8 @@
 import { useState, type ReactNode } from 'react';
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+
 const copiedConfirmationMs = 2000;
 
 type ProblemNoticeProps = {
@@ -13,7 +16,10 @@ type ProblemNoticeProps = {
   action?: ReactNode;
 };
 
-/** EXPERIENCE.md, Component Patterns: a danger-tone notice with the reference and a Copy button. */
+/**
+ * EXPERIENCE.md, Component Patterns: a danger `Alert` with the reference on its own row, after a faint hairline,
+ * with a Copy button.
+ */
 export function ProblemNotice({ message, nextStep, traceId, action }: ProblemNoticeProps) {
   const [copied, setCopied] = useState(false);
 
@@ -31,27 +37,32 @@ export function ProblemNotice({ message, nextStep, traceId, action }: ProblemNot
   }
 
   return (
-    <div
-      role="alert"
-      className="grid gap-2 rounded-md bg-status-danger-bg p-4 text-status-danger-fg"
-    >
-      <strong className="font-strong">{message}</strong>
-      {nextStep ? <span>{nextStep}</span> : null}
-      {traceId ? (
-        <p className="text-caption">
-          If this keeps happening, contact the bank and quote this reference:
-          <br />
-          <span className="font-mono text-label break-all">{traceId}</span>
-          <button
-            type="button"
-            className="ml-2 cursor-pointer rounded-full border-[1.5px] border-current px-3 py-1 text-caption font-strong"
-            onClick={() => void copyReference()}
-          >
-            {copied ? 'Copied' : 'Copy'}
-          </button>
-        </p>
-      ) : null}
-      {action ? <div>{action}</div> : null}
-    </div>
+    <Alert tone="danger">
+      <AlertTitle>{message}</AlertTitle>
+      <AlertDescription>
+        {nextStep ? <p>{nextStep}</p> : null}
+        {traceId ? (
+          <>
+            <p className="text-caption">
+              If this keeps happening, contact the bank and quote this reference.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 justify-self-stretch border-t border-current/20 pt-3">
+              <span className="text-caption font-strong">Reference</span>
+              <span className="font-mono text-label wrap-anywhere">{traceId}</span>
+              <Button
+                type="button"
+                variant="secondary"
+                size="compact"
+                className="text-label"
+                onClick={() => void copyReference()}
+              >
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+            </div>
+          </>
+        ) : null}
+        {action ? <div className="mt-2">{action}</div> : null}
+      </AlertDescription>
+    </Alert>
   );
 }

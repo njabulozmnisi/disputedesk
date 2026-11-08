@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router';
+import { List } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
 import { useListTransactionsInfinite } from '@/api/generated/disputedesk';
@@ -6,6 +7,7 @@ import type { TransactionResponse } from '@/api/generated/model';
 import { useAnnounce } from '@/app/LiveRegion';
 import { usePageHeading } from '@/app/usePageHeading';
 import { Page } from '@/components/Page';
+import { StateSurface } from '@/components/StateSurface';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { formatDay } from './format';
@@ -108,13 +110,17 @@ export function TransactionsScreen() {
       ) : null}
 
       {query.data && rows.length === 0 ? (
-        <div className="grid gap-3 rounded-lg border border-border bg-card px-6 py-8">
-          <h2 className="text-subheading font-strong">No transactions in the last 90 days.</h2>
+        <StateSurface
+          icon={List}
+          heading={
+            <h2 className="text-subheading font-strong">No transactions in the last 90 days.</h2>
+          }
+        >
           <p className="max-w-[68ch] text-muted-foreground">
             Card and account transactions appear here once they reach your account. Disputes you
             raised earlier are still in <Link to="/disputes">Disputes</Link>.
           </p>
-        </div>
+        </StateSurface>
       ) : null}
 
       {rows.length > 0 ? (

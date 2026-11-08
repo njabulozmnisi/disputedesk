@@ -10,6 +10,7 @@ import { usePageHeading } from '@/app/usePageHeading';
 import { ErrorSummary } from '@/components/ErrorSummary';
 import { Page } from '@/components/Page';
 import { ProblemNotice } from '@/components/ProblemNotice';
+import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -100,7 +101,11 @@ export function DetailsScreen() {
       {summaryRequests > 0 && summaryItems.length > 0 ? (
         <ErrorSummary items={summaryItems} requests={summaryRequests} />
       ) : null}
-      {rateLimit.message ? <ProblemNotice message={rateLimit.message} /> : null}
+      {rateLimit.message ? (
+        <Alert tone="rate-limited">
+          <AlertTitle>{rateLimit.message}</AlertTitle>
+        </Alert>
+      ) : null}
       {failure ? (
         <ProblemNotice
           message="Something went wrong on our side. Try again."
