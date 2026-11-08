@@ -1,10 +1,8 @@
 # The AWS dev environment
 
-**Status:**
-- Steps 1–3 are done, except step 1.4: CloudFront verification is still open.
-- Step 4's first apply created the network, instance and database. The three CloudFront distributions wait on account
-  verification (step 1.4).
-- Steps 5–8 and the post-deploy checks have not been run yet, so the application has never been deployed.
+**Status:** steps 1–8 are done. The first deploy ran on 2026-11-07, and the post-deploy checks pass, except check 7's
+reboot step, which has not run yet.
+Continuous deploy (`DEPLOY_ENABLED`) is off, so every deploy is dispatched by hand and approved.
 
 There is one environment (AD-28):
 - one EC2 instance runs the same Compose stack as local, plus `infra/deploy/aws/compose.yml`;
@@ -187,7 +185,7 @@ Data Protection keys under `/disputedesk-dataprotection/dev`, which the deploy n
 ## 6. The budget alert
 
 AWS Budgets emails the step 4 address at 80 % of the actual monthly cost and 100 % of the forecast, credits excluded.
-Check the budget, and accept the confirmation email if one arrives:
+It sends nothing until a threshold is crossed, so expect no email at setup. Check the budget instead:
 
 ```sh
 aws budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" \
@@ -299,7 +297,8 @@ Run them after the first deploy, and after any change to the Terraform or the AW
 
 1. Sign in at `https://<APP_HOST>` as a fixture customer and raise a dispute.
 2. Within an hour, the dispute shows up in X-Ray, CloudWatch metrics (namespace `DisputeDesk`) and the
-   `/disputedesk-dev/otel` logs. Each command prints at least one line:
+   `/disputedesk-dev/otel` logs. X-Ray's trace list indexes only a sample of spans, about 1 % by default, so look in
+   `aws/spans` (CloudWatch, Transaction Search), which holds every span. Each command prints at least one line:
 
    ```sh
    since=$(( ($(date +%s) - 3600) * 1000 ))

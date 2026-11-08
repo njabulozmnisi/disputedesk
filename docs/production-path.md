@@ -134,9 +134,9 @@ Locally, `/otlp/` is an anonymous write path: any client can post forged spans u
 
 Containers run an init process as PID 1 (Compose `init: true`), because the kernel drops signals PID 1 has no handler for, so a .NET process that fails to start would spin instead of exiting (pid_namespaces(7)). Any deployment outside Compose needs the same: ECS `linuxParameters.initProcessEnabled`, or an init in the image (start-up exit fix, 2026-10-30). *Why it waits:* v1 deploys only through Compose (AD-27, AD-28).
 
-### P46. AWS dev environment, not yet deployed
+### P46. AWS dev environment, a demo deployment
 
-The AWS dev environment is checked with `terraform fmt`, `validate` and plans against mocked providers (AD-28; story 7.5 refine). The account now exists and a first apply created the network, instance and database; the CloudFront distributions wait on account verification, and the application has never been deployed. Before any real use, finish `infra/terraform/README.md`'s apply, deploy and post-deploy checks (the prefix-list quota among them), and move the origin-verify value, which Terraform state holds, to a write-only argument or ephemeral resource; the RDS master password already uses write-only arguments. *Why it waits:* CloudFront account verification.
+The AWS dev environment is checked with `terraform fmt`, `validate` and plans against mocked providers (AD-28; story 7.5 refine). It was first deployed on 2026-11-07, and `infra/terraform/README.md`'s post-deploy checks pass. It holds only synthetic data. Before any real use, move the origin-verify value, which Terraform state holds, to a write-only argument or ephemeral resource; the RDS master password already uses write-only arguments. *Why it waits:* the environment carries only synthetic data, on a dedicated account.
 
 ### P47. CloudFront caching for static assets
 
