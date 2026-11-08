@@ -102,7 +102,7 @@ On a transaction row the badge for a resolved dispute reads plain **Resolved**; 
 
 | Where | Copy |
 |---|---|
-| Transactions lede | "Your card and account transactions from the last 90 days, newest first." |
+| Transactions lede | "Your card and account transactions, newest first. You can dispute those from the last 90 days." |
 | Transactions column header (from 768px, `aria-hidden`) | "Transaction", "Amount", "Dispute" |
 | Step indicator | "Link your login, step 1 of 2" / "Link your login, step 2 of 2" / "Step 1 of 2: reason and note" / "Step 2 of 2: review and submit" |
 | OTP help | "The code expires 5 minutes after we send it. You can paste it, or let your phone fill it in." |
@@ -134,7 +134,7 @@ Behavioural rules. Visual specs are in DESIGN.md, *Components*.
 | Review card | 4b | Reads back transaction, reason, note, disputed amount. "Change" returns to 4a with values kept. No re-entry of anything already given. |
 | Submit dispute | 4b | See *Idempotent submit* below. |
 | Status badge | Rows, detail header | Text is the customer-facing status. On a transaction row it links to the dispute. |
-| Timeline | 6 | Oldest first, as the API returns it. Each entry: status line, actor label "You" or "The bank", time in SAST, customer-visible note if any. Ordered list semantics. |
+| Timeline | 6 | Oldest first, as the API returns it. Each entry: status label (the badge text, PRD FR-17), the copy-deck timeline line beside it, actor label "You" or "The bank", time in SAST, customer-visible note if any. Ordered list semantics. |
 | Withdraw | 6 | Shown only for Submitted, Under review, Under review (prioritised). Secondary button opens an `AlertDialog`: optional note (500), "Withdraw dispute" (destructive) and "Keep dispute". On success: dialog closes, "Dispute withdrawn" is announced through the live region, focus moves to the `h1`, timeline gains the entry. |
 | Problem notice | Any error | Plain sentence, next step, then a row with "Reference", the {traceId} and Copy (44px). Copy confirms with "Copied" for 2 seconds. |
 | OTP input | 2b | One input, six visual cells. Accepts paste and the platform's one-time-code autofill. The Verify button submits; there is no auto-submit (WCAG 2.2 SC 3.2.2), so a mistyped digit never spends one of the 3 attempts. |

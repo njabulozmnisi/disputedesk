@@ -63,7 +63,7 @@ The cobalt dot moves after the name, like a full stop: 8px, `primary`, baseline-
 - Regenerate `wordmark.png` and `wordmark-dark.png` to match (story 2.6 names them), then re-run the label-policy provisioning.
 
 ### 3.2 Transactions list (`/transactions`)
-- Lede: "Your card and account transactions from the last 90 days, newest first."
+- Lede: "Your card and account transactions, newest first. You can dispute those from the last 90 days."
 - One panel. From 768px it opens with a column header row (Transaction, Amount, Dispute), which is `aria-hidden` because each row already reads in full.
 - Day headings become bands inside the panel: `background` fill, 14/700 `muted-foreground`, hairlines above and below.
 - From 768px every row is a three-column grid: `minmax(0,1fr) var(--amount-col) var(--action-col)`, with 24px column gap. The amount is right-aligned and tabular. The action column is left-aligned.
@@ -112,7 +112,7 @@ The cobalt dot moves after the name, like a full stop: 8px, `primary`, baseline-
 - The summary card stays the only elevated object. The timeline now sits on a flat surface (`card`, hairline, `rounded.lg`) with "Timeline" as its h2. For open disputes, "We'll update the timeline as your dispute moves." sits inside it, below a hairline.
 - New summary row **Disputed on** (for example "26 Oct 2026"). Take it from the detail response's `createdAt`, the moment the dispute was submitted (decided 8 Nov 2026: the contract guarantees it, while the timeline's order is a mapping convention); no new API field is needed.
 - Withdraw (open disputes only) moves to the card's foot, after a hairline, with this sentence above it: "Changed your mind? You can withdraw while the dispute is open. You can't dispute this transaction again after you withdraw."
-- Upheld and rejected timeline lines use only the copy-deck sentence: "The bank agreed with you." and "The bank didn't uphold your dispute." No badge text in the line.
+- Every timeline entry keeps its status as the customer sees it (PRD FR-17). On the upheld and rejected lines the copy-deck sentence sits beside that status: "The bank agreed with you." and "The bank didn't uphold your dispute." (decided 8 Nov 2026).
 - Rejected: the guidance becomes its own flat surface below the timeline. Heading "If you disagree with this outcome", then two numbered steps: "You can complain to the bank first." and "If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers."
 - The just-submitted banner is a success notice with `CircleCheck`.
 - Below 1024px everything stacks: card, then timeline, then guidance.
