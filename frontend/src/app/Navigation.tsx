@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router';
+import { Flag, List } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -7,7 +8,10 @@ import { cn } from '@/lib/utils';
 const linkBase =
   'items-center rounded-full font-strong text-muted-foreground no-underline aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground';
 
-const topLinkClass = cn(linkBase, 'inline-flex min-h-10 px-4 py-2 hover:text-foreground');
+const topLinkClass = cn(
+  linkBase,
+  'inline-flex min-h-(--tap-target) px-4 py-2 hover:text-foreground',
+);
 const tabLinkClass = cn(linkBase, 'flex min-h-12 flex-1 justify-center gap-2 px-3 text-label');
 
 export function TopNav() {
@@ -30,11 +34,11 @@ export function TabBar() {
       className="fixed inset-x-4 bottom-4 z-10 flex gap-1 rounded-full border border-border bg-card p-1 shadow-overlay md:hidden"
     >
       <Link to="/transactions" className={tabLinkClass}>
-        <span aria-hidden="true">☰</span>
+        <List className="size-4" />
         Transactions
       </Link>
       <Link to="/disputes" className={tabLinkClass}>
-        <span aria-hidden="true">⚑</span>
+        <Flag className="size-4" />
         Disputes
       </Link>
     </nav>

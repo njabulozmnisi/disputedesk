@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
 import type { TransactionResponse } from '@/api/generated/model';
+import { expectDecorativeIcon } from '@/test/icons';
 import { server } from '@/test/server';
 import {
   failWith,
@@ -355,6 +356,20 @@ describe('disputability', () => {
     expect(within(row).getByText(hint)).toBeInTheDocument();
     expect(within(row).queryByRole('link')).not.toBeInTheDocument();
   });
+
+  it('draws the hint with a decorative 14px Lucide info icon', async () => {
+    serveTransactions([
+      makeRow({
+        description: 'Why not',
+        disputable: false,
+        notDisputableReason: 'outsideWindow',
+      }),
+    ]);
+    renderApp({ path: '/transactions' });
+
+    const row = (await screen.findByText('Why not')).closest('li') as HTMLElement;
+    expectDecorativeIcon(row.querySelector('svg.lucide-info'), 'size-3.5');
+  });
 });
 
 const disputeId = '3f2b8c1e-7d4a-4e5b-9a60-1c2d3e4f5a6b';
@@ -395,7 +410,7 @@ describe('dispute status badge on a row', () => {
       expect(
         within(row).queryByText(/Not a card transaction|Contact the bank|Not disputable/),
       ).toBeNull();
-      expect(within(row).queryByText('ⓘ', { exact: false })).not.toBeInTheDocument();
+      expect(row.querySelector('svg.lucide-info')).not.toBeInTheDocument();
     },
   );
 
@@ -406,7 +421,7 @@ describe('dispute status badge on a row', () => {
     const link = await screen.findByRole('link', {
       name: 'Dispute status: Under review (prioritised)',
     });
-    expect(link.querySelector('[aria-hidden="true"]')).toHaveTextContent('▲');
+    expectDecorativeIcon(link.querySelector('svg.lucide-search-priority'));
     expect(screen.queryByText(new RegExp(disputeId))).not.toBeInTheDocument();
     expect(link).not.toHaveAccessibleName(expect.stringContaining(disputeId));
   });
@@ -721,8 +736,8 @@ describe('keyboard', () => {
       'a:Dispute this transaction',
       'a:Dispute this transaction',
       'button:Load more',
-      'a:☰Transactions',
-      'a:⚑Disputes',
+      'a:Transactions',
+      'a:Disputes',
     ]);
   });
 });

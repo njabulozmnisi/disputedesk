@@ -1,3 +1,7 @@
+import { render } from '@testing-library/react';
+import { createElement } from 'react';
+import { Check, Flag, Search, Send, Undo2, X } from 'lucide-react';
+
 import { CustomerStatus, type Outcome } from '@/api/generated/model';
 
 import { describeCustomerStatus } from './customerStatus';
@@ -5,13 +9,30 @@ import { describeCustomerStatus } from './customerStatus';
 // Criterion 1: one mapping, from DESIGN.md's status tone table.
 describe('describeCustomerStatus', () => {
   it.each([
-    ['submitted', 'Submitted', 'info', '➚', 'open'],
-    ['underReview', 'Under review', 'info', '◔', 'open'],
-    ['underReviewPrioritised', 'Under review (prioritised)', 'priority', '▲', 'open'],
-    ['resolved', 'Resolved', 'neutral', '⚑', 'closed'],
-    ['withdrawn', 'Withdrawn', 'neutral', '↩', 'closed'],
+    ['submitted', 'Submitted', 'info', Send, 'open'],
+    ['underReview', 'Under review', 'info', Search, 'open'],
+    ['resolved', 'Resolved', 'neutral', Flag, 'closed'],
+    ['withdrawn', 'Withdrawn', 'neutral', Undo2, 'closed'],
   ] as const)('maps %s to its label, tone, icon and group', (status, label, tone, icon, group) => {
     expect(describeCustomerStatus(status)).toEqual({ label, tone, icon, group });
+  });
+
+  // Lucide has no search-with-arrow icon: the prioritised badge uses the custom SearchPriority (the lens plus the arrow).
+  it('maps underReviewPrioritised to the custom SearchPriority icon', () => {
+    const description = describeCustomerStatus('underReviewPrioritised');
+    const Icon = description?.icon ?? 'span';
+
+    expect(description).toMatchObject({
+      label: 'Under review (prioritised)',
+      tone: 'priority',
+      group: 'open',
+    });
+    expect(Icon).not.toBe('span');
+    expect(Icon).not.toBe(Search);
+    const { container } = render(createElement(Icon));
+    expect(container.querySelector('svg.lucide-search-priority')).toBeInTheDocument();
+    expect(container.querySelector('circle[cx="11"][cy="11"][r="8"]')).toBeInTheDocument();
+    expect(container.querySelector('path[d="M11 14V8M8.5 10.5 11 8l2.5 2.5"]')).toBeInTheDocument();
   });
 
   // Story 3.7 criterion 2: the outcome only changes a resolved dispute.
@@ -19,13 +40,13 @@ describe('describeCustomerStatus', () => {
     expect(describeCustomerStatus('resolved', 'upheld')).toEqual({
       label: 'Resolved · Upheld',
       tone: 'success',
-      icon: '✓',
+      icon: Check,
       group: 'closed',
     });
     expect(describeCustomerStatus('resolved', 'rejected')).toEqual({
       label: 'Resolved · Rejected',
       tone: 'danger',
-      icon: '✕',
+      icon: X,
       group: 'closed',
     });
   });
