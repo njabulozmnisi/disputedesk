@@ -160,6 +160,9 @@ describe('public routes render for any state', () => {
         await screen.findByRole('heading', { level: 1, name: "You've been signed out" }),
       ).toBeInTheDocument();
       expect(screen.getByText("Anything you hadn't submitted wasn't saved.")).toBeInTheDocument();
+      // Criterion 5: one state surface with the Clock tile, holding the one action.
+      const surface = screen.getByRole('link', { name: 'Sign in again' }).closest('section');
+      expectDecorativeIcon(surface?.querySelector('svg.lucide-clock'), 'size-6');
       expect(router.state.location.pathname).toBe('/signed-out');
     },
   );
@@ -184,9 +187,10 @@ describe('public routes render for any state', () => {
     signInAs(state);
     const { router } = renderApp({ path: '/no/such/page' });
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: notFoundHeading }),
-    ).toBeInTheDocument();
+    const heading = await screen.findByRole('heading', { level: 1, name: notFoundHeading });
+    expect(heading).toBeInTheDocument();
+    // Criterion 5: one state surface with the Search tile, holding the one action.
+    expectDecorativeIcon(heading.closest('section')?.querySelector('svg.lucide-search'), 'size-6');
     expect(router.state.location.pathname).toBe('/no/such/page');
   });
 

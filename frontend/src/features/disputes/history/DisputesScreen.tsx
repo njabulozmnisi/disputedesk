@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router';
+import { Flag } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 
 import { useListDisputesInfinite } from '@/api/generated/disputedesk';
@@ -8,6 +9,7 @@ import { useAnnounce } from '@/app/LiveRegion';
 import { usePageHeading } from '@/app/usePageHeading';
 import { Page } from '@/components/Page';
 import { ProblemNotice } from '@/components/ProblemNotice';
+import { StateSurface } from '@/components/StateSurface';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadMoreButton } from '@/features/transactions/LoadMoreButton';
@@ -147,20 +149,24 @@ export function DisputesScreen() {
       ) : null}
 
       {query.data && listed.length === 0 && !query.hasNextPage ? (
-        <div className="grid gap-3 rounded-lg border border-border bg-card px-6 py-8">
-          <h2 className="text-subheading font-strong">
-            You haven&apos;t disputed any transactions.
-          </h2>
+        <StateSurface
+          icon={Flag}
+          heading={
+            <h2 className="text-subheading font-strong">
+              You haven&apos;t disputed any transactions.
+            </h2>
+          }
+        >
           <p className="max-w-[68ch] text-muted-foreground">
             If something on your account looks wrong, find it in your transactions and choose
             Dispute. It will show here with its status.
           </p>
-          <div>
+          <div className="mt-3">
             <Button asChild variant="secondary">
               <Link to="/transactions">Go to transactions</Link>
             </Button>
           </div>
-        </div>
+        </StateSurface>
       ) : null}
 
       {renderSection('Open', open)}

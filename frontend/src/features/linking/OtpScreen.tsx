@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link } from '@tanstack/react-router';
+import { Lock } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
@@ -11,6 +12,8 @@ import { usePageHeading } from '@/app/usePageHeading';
 import { ErrorSummary } from '@/components/ErrorSummary';
 import { Page } from '@/components/Page';
 import { ProblemNotice } from '@/components/ProblemNotice';
+import { StateSurface } from '@/components/StateSurface';
+import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -32,20 +35,26 @@ function LockedState() {
   const headingRef = usePageHeading("We can't link you online");
   return (
     <Page width="form">
-      <h1
-        ref={headingRef}
-        tabIndex={-1}
-        className="text-title font-title tracking-title wrap-break-word text-heading"
+      <StateSurface
+        icon={Lock}
+        heading={
+          <h1
+            ref={headingRef}
+            tabIndex={-1}
+            className="text-title font-title tracking-title wrap-break-word text-heading"
+          >
+            We can&apos;t link you online
+          </h1>
+        }
       >
-        We can&apos;t link you online
-      </h1>
-      <p>Please contact the bank.</p>
-      <p>If you think you mistyped your details or the code, you can start again.</p>
-      <div>
-        <Button asChild variant="secondary">
-          <Link to="/link">Start again</Link>
-        </Button>
-      </div>
+        <p>Please contact the bank.</p>
+        <p>If you think you mistyped your details or the code, you can start again.</p>
+        <div className="mt-3">
+          <Button asChild variant="secondary">
+            <Link to="/link">Start again</Link>
+          </Button>
+        </div>
+      </StateSurface>
       <ContactHelp />
     </Page>
   );
@@ -148,7 +157,11 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
           requests={summaryRequests}
         />
       ) : null}
-      {rateLimit.message ? <ProblemNotice message={rateLimit.message} /> : null}
+      {rateLimit.message ? (
+        <Alert tone="rate-limited">
+          <AlertTitle>{rateLimit.message}</AlertTitle>
+        </Alert>
+      ) : null}
       {failure ? (
         <ProblemNotice
           message="Something went wrong on our side. Try again."

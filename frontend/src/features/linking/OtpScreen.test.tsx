@@ -4,6 +4,7 @@ import { HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
 import { getGetSessionQueryKey } from '@/api/generated/disputedesk';
+import { expectDecorativeIcon } from '@/test/icons';
 import { server } from '@/test/server';
 import {
   noContent,
@@ -291,6 +292,13 @@ describe('screen 2b, wrong codes and the lockout', () => {
     });
     expect(heading).toHaveFocus();
     expect(document.title).toBe("We can't link you online · DisputeDesk");
+    // Criterion 5: the lock tile is inside the surface; the help line stays after it, outside.
+    const surface = heading.closest('section');
+    expectDecorativeIcon(surface?.querySelector('svg.lucide-lock'), 'size-6');
+    expect(surface).toContainElement(screen.getByRole('link', { name: 'Start again' }));
+    const help = screen.getByText("Can't link online? Contact the bank.");
+    expect(surface).not.toContainElement(help);
+    expect(surface?.nextElementSibling).toBe(help);
     expect(screen.getByText('Please contact the bank.')).toBeInTheDocument();
     expect(
       screen.getByText('If you think you mistyped your details or the code, you can start again.'),
@@ -442,9 +450,10 @@ describe('screen 2b, rate limited', () => {
 
     await verify(user);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Too many attempts. Try again in 2 minutes.',
-    );
+    const notice = await screen.findByRole('alert');
+    expect(notice).toHaveTextContent('Too many attempts. Try again in 2 minutes.');
+    expectDecorativeIcon(notice.querySelector('svg.lucide-clock'));
+    expect(notice.querySelector('svg.lucide-triangle-alert')).not.toBeInTheDocument();
     expect(verifyButton()).toHaveAttribute('aria-disabled', 'true');
     expect(verifyButton()).toHaveFocus();
     expect(codeField()).toHaveValue('481516');
