@@ -1,0 +1,251 @@
+{
+  "status": "built",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a1758a16625231b46",
+  "base": "Branch feature/ui-notices-states at 2f897c37b3b58b11119c6126123213f98defeb43 plus the uncommitted ui-tokens-icons patch (ui-tokens-icons-r3-fixed.patch, applied with --exclude docs/* and e2e/*), then this story after its fix round 1 (ui-notices-states-only-r1.patch). Nothing is committed: the story's change is the files in story_files.",
+  "rebase_note": "rebased on ui-tokens-icons fix round 3, no code change",
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "HANDOFF 3.7; DESIGN Notices, Shapes; EXPERIENCE Accessibility Floor",
+      "test": "frontend/src/components/ui/alert.test.tsx (Alert: one case per tone for icon and role or its absence, icon first, no line clamp, description not muted, status tokens with rounded-md and p-4 and no border or text-sm or font-medium, caller role wins)"
+    },
+    {
+      "id": "AC2",
+      "requirement": "HANDOFF 3.7; EXPERIENCE Problem notice",
+      "test": "frontend/src/components/ProblemNotice.test.tsx (danger alert with icon, sentence, next step and reference sentence; reference row with label, mono trace ID, Copy, hairline and justify-self-stretch; Copy is the shared Button with min-h-(--tap-target); no row, sentence or hairline without a traceId; action after the row and after the next step; Copy writes the trace ID and says Copied for exactly 2 seconds; stays Copy when the write fails)"
+    },
+    {
+      "id": "AC3",
+      "requirement": "HANDOFF 3.7; WCAG 2.2 SC 3.3.1",
+      "test": "frontend/src/components/ErrorSummary.test.tsx (danger icon; group named by aria-labelledby, focused, tabindex -1, inner alert, h2 title, field links; one alert role only) and frontend/src/components/ui/field.test.tsx (14px TriangleAlert first, id and role passed through); the existing getByRole('group', { name: 'Check the details below' }) tests in DisputeDetailScreen, RaiseScreen, DetailsScreen and OtpScreen tests pass unchanged"
+    },
+    {
+      "id": "AC4",
+      "requirement": "HANDOFF 2, 3.7; EXPERIENCE State Patterns, Rate limited",
+      "test": "frontend/src/features/linking/DetailsScreen.test.tsx 'says the wait in minutes, blocks the button for the exact seconds, then works again' and frontend/src/features/linking/OtpScreen.test.tsx 'says the wait, keeps the code, blocks Verify for the exact seconds, then works again' (lucide-clock icon, no TriangleAlert, role alert, same waitCopy sentence, no reference sentence)"
+    },
+    {
+      "id": "AC5",
+      "requirement": "HANDOFF 3.8; DESIGN State surface; WCAG 2.2 SC 1.3.1, 2.4.3",
+      "test": "frontend/src/components/StateSurface.test.tsx (caller's h1 or h2, hidden 48px tile with 24px icon before the heading, plain wrapper without an icon, heading element kept when the icon appears and goes); screen tests: routing.test.tsx (signed out Clock, not found Search), OtpScreen.test.tsx locked (Lock tile inside, ContactHelp after the surface), TransactionsScreen.test.tsx empty (List, no button), DisputesScreen.test.tsx empty (Flag, action inside), DisputeDetailScreen.test.tsx 'keeps one h1 element from failure to not found, and draws not found as a state surface'; the existing detail focus tests (Try again answered 404, the not-found cases) pass unchanged"
+    },
+    {
+      "id": "AC6",
+      "requirement": "HANDOFF 3.4; DESIGN Step indicator; WCAG 2.2 SC 1.1.1",
+      "test": "frontend/src/components/StepProgress.test.tsx (muted 14/700 label; step 1 one primary and one border; step 2 two primary; bar aria-hidden)"
+    }
+  ],
+  "story_files": {
+    "new": [
+      "frontend/src/components/ui/alert.tsx",
+      "frontend/src/components/ui/alert.test.tsx",
+      "frontend/src/components/ui/field.test.tsx",
+      "frontend/src/components/ProblemNotice.test.tsx",
+      "frontend/src/components/ErrorSummary.test.tsx",
+      "frontend/src/components/StateSurface.tsx",
+      "frontend/src/components/StateSurface.test.tsx",
+      "frontend/src/components/StepProgress.tsx",
+      "frontend/src/components/StepProgress.test.tsx"
+    ],
+    "changed": [
+      "frontend/src/components/ProblemNotice.tsx",
+      "frontend/src/components/ErrorSummary.tsx",
+      "frontend/src/components/ui/field.tsx",
+      "frontend/src/pages/SignedOutPage.tsx",
+      "frontend/src/pages/NotFoundPage.tsx",
+      "frontend/src/features/linking/OtpScreen.tsx",
+      "frontend/src/features/linking/DetailsScreen.tsx",
+      "frontend/src/features/transactions/TransactionsScreen.tsx",
+      "frontend/src/features/disputes/history/DisputesScreen.tsx",
+      "frontend/src/features/disputes/detail/DisputeDetailScreen.tsx",
+      "frontend/src/app/routing.test.tsx",
+      "frontend/src/features/linking/OtpScreen.test.tsx",
+      "frontend/src/features/linking/DetailsScreen.test.tsx",
+      "frontend/src/features/transactions/TransactionsScreen.test.tsx",
+      "frontend/src/features/disputes/history/DisputesScreen.test.tsx",
+      "frontend/src/features/disputes/detail/DisputeDetailScreen.test.tsx"
+    ]
+  },
+  "shadcn_cli": {
+    "version_run": "shadcn@4.23.0 (npm dist-tag latest on 2026-11-08, modified 2026-10-27)",
+    "result": "Run in a scratch copy of frontend/ (not the worktree): `npx shadcn@4.23.0 add alert --yes` added \"cn\": \"^0.5.2\" to package.json and wrote `import { cn } from \"cn\"`. Per the spec the output was discarded and alert.tsx was built from the docs' Manual installation with cn from @/lib/utils. package.json and package-lock.json are untouched by this story."
+  },
+  "smoke": "Real-API smoke NOT run (stack lock not taken; no container started). Real-browser check without the API: npm run build, vite preview --port 4173 (stopped afterwards), throwaway headless Chromium (Playwright from the main checkout's e2e/node_modules) with /api/v1 answered by page.route. Transactions load answers 503 with a 55-character traceId. 1280px: alert 224 to 1056, description 268 to 1040, Reference row 268 to 1040 (772px), row border-top 1px, Copy 44px tall, no horizontal scroll. 360px: row 60 to 328 (268px), Copy 44px, no horizontal scroll. 320px: axe-core with tags wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa found 0 violations; no horizontal scroll; Tab order: Skip to main content, DisputeDesk, Sign out, Copy, Try again, View disputes, Transactions, Disputes; every stop has a 3px solid focus outline and is at least 44px tall. Screenshots (scratchpad hairline/): ref-1280.png read; ref-360.png, ref-320.png written. The computed Copy border is 1px at device pixel ratio 1 (Button's 1.5px border is floored by the browser, as for every Button). QA still owns the stack run and the mockup comparison.",
+  "standards": [
+    {
+      "mechanism": "shadcn/ui Alert, Manual installation (component copied, cn from @/lib/utils, cva already a dependency)",
+      "source": "https://ui.shadcn.com/docs/components/alert"
+    },
+    {
+      "mechanism": "role=alert only on error tones (danger, rate limited); success, info and neutral static; one live region for async results",
+      "source": "https://www.w3.org/WAI/ARIA/apg/patterns/alert/"
+    },
+    {
+      "mechanism": "Notice title wraps, no line clamp (reflow)",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/reflow"
+    },
+    {
+      "mechanism": "GOV.UK error summary: focused group named by its h2, inner alert, links to fields",
+      "source": "https://design-system.service.gov.uk/components/error-summary/"
+    },
+    {
+      "mechanism": "Field error leads with an icon and keeps its text (error identification)",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/error-identification"
+    },
+    {
+      "mechanism": "Clipboard API writeText for Copy, unchanged behaviour",
+      "source": "https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText"
+    },
+    {
+      "mechanism": "44px target for the Copy pill via the --tap-target token",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced"
+    },
+    {
+      "mechanism": "StateSurface renders the caller's heading, one h1 at one place in the tree; decorative tile icon aria-hidden",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/info-and-relationships"
+    },
+    {
+      "mechanism": "StepProgress: text label with a decorative aria-hidden bar",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-content"
+    },
+    {
+      "mechanism": "Tailwind v4 opacity modifier on currentColor (border-current/20) for the 20% hairline, no inline style",
+      "source": "https://tailwindcss.com/docs/border-color"
+    },
+    {
+      "mechanism": "Copy pill is the shared shadcn Button (the design system component), not a second hand-styled button",
+      "source": "https://ui.shadcn.com/docs/components/button"
+    },
+    {
+      "mechanism": "CSS Grid alignment: justify-self: stretch on a grid item overrides the container's justify-items",
+      "source": "https://developer.mozilla.org/en-US/docs/Web/CSS/justify-self"
+    }
+  ],
+  "breaks": [
+    {
+      "criterion": "AC1",
+      "patch": "--- a/frontend/src/components/ui/alert.tsx\n+++ b/frontend/src/components/ui/alert.tsx\n@@ -48,7 +48,7 @@\n   return (\n     <div\n       data-slot=\"alert\"\n-      role={announcedTones.includes(tone) ? 'alert' : undefined}\n+      role=\"alert\"\n       className={cn(alertVariants({ tone }), className)}\n       {...props}\n     >\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/components/ui/alert.test.tsx -t \"the info tone shows\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC3",
+      "patch": "--- a/frontend/src/components/ErrorSummary.tsx\n+++ b/frontend/src/components/ErrorSummary.tsx\n@@ -33,7 +33,6 @@\n     <Alert\n       ref={summaryRef}\n       tone=\"danger\"\n-      role=\"group\"\n       aria-labelledby=\"error-summary-title\"\n       tabIndex={-1}\n     >\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/components/ErrorSummary.test.tsx -t \"keeps its focused group\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC3",
+      "patch": "--- a/frontend/src/components/ui/field.tsx\n+++ b/frontend/src/components/ui/field.tsx\n@@ -58,7 +58,6 @@\n       className={cn('flex items-start gap-1.5 text-label font-label text-destructive', className)}\n       {...props}\n     >\n-      <TriangleAlert aria-hidden=\"true\" className=\"mt-0.5 size-3.5 shrink-0\" />\n       {children}\n     </p>\n   );\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/components/ui/field.test.tsx -t \"leads with a 14px TriangleAlert\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC4",
+      "patch": "--- a/frontend/src/features/linking/DetailsScreen.tsx\n+++ b/frontend/src/features/linking/DetailsScreen.tsx\n@@ -102,7 +102,7 @@\n         <ErrorSummary items={summaryItems} requests={summaryRequests} />\n       ) : null}\n       {rateLimit.message ? (\n-        <Alert tone=\"rate-limited\">\n+        <Alert tone=\"danger\">\n           <AlertTitle>{rateLimit.message}</AlertTitle>\n         </Alert>\n       ) : null}\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/DetailsScreen.test.tsx -t \"says the wait in minutes, blocks the button\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC5",
+      "patch": "--- a/frontend/src/components/StateSurface.tsx\n+++ b/frontend/src/components/StateSurface.tsx\n@@ -32,7 +32,6 @@\n     >\n       {Icon ? (\n         <div\n-          aria-hidden=\"true\"\n           className=\"mb-1 grid size-12 place-items-center rounded-full bg-muted text-heading\"\n         >\n           <Icon className=\"size-6\" />\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/components/StateSurface.test.tsx -t \"puts a hidden 24px icon\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC5",
+      "patch": "--- a/frontend/src/features/disputes/detail/DisputeDetailScreen.tsx\n+++ b/frontend/src/features/disputes/detail/DisputeDetailScreen.tsx\n@@ -260,6 +260,7 @@\n         {/* One StateSurface in every state, so the h1 is one element at one place in the tree and keeps focus. Only not\n             found is drawn as a state surface (it gets an icon); the other states style the section as before. */}\n         <StateSurface\n+          key={String(isNotFound)}\n           icon={isNotFound ? Search : undefined}\n           className={sectionClass}\n           heading={\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/detail/DisputeDetailScreen.test.tsx -t \"keeps one h1 element from failure to not found\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC5",
+      "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -54,8 +54,8 @@\n             <Link to=\"/link\">Start again</Link>\n           </Button>\n         </div>\n+        <ContactHelp />\n       </StateSurface>\n-      <ContactHelp />\n     </Page>\n   );\n }\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"shows the tries left, empties the input and focuses it, then locks after the third\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC6",
+      "patch": "--- a/frontend/src/components/StepProgress.tsx\n+++ b/frontend/src/components/StepProgress.tsx\n@@ -10,7 +10,7 @@\n       <p className=\"text-label font-strong text-muted-foreground\">{label}</p>\n       <div aria-hidden=\"true\" className=\"grid grid-cols-2 gap-1\">\n         <span className=\"h-1 rounded-full bg-primary\" />\n-        <span className={cn('h-1 rounded-full', step === 2 ? 'bg-primary' : 'bg-border')} />\n+        <span className={cn('h-1 rounded-full', 'bg-border')} />\n       </div>\n     </div>\n   );\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/components/StepProgress.test.tsx -t \"colours both segments primary at step 2\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2",
+      "patch": "--- a/frontend/src/components/ProblemNotice.tsx\n+++ b/frontend/src/components/ProblemNotice.tsx\n@@ -53,7 +53,7 @@\n                 type=\"button\"\n                 variant=\"secondary\"\n                 size=\"compact\"\n-                className=\"text-label\"\n+                className=\"min-h-0 text-label\"\n                 onClick={() => void copyReference()}\n               >\n                 {copied ? 'Copied' : 'Copy'}\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/components/ProblemNotice.test.tsx -t \"makes the Copy button at least the 44px tap target\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2, fix round 1 medium 1 (the reference row stretches so the hairline crosses the notice)",
+      "patch": "--- a/frontend/src/components/ProblemNotice.tsx\n+++ b/frontend/src/components/ProblemNotice.tsx\n@@ -46,7 +46,7 @@\n             <p className=\"text-caption\">\n               If this keeps happening, contact the bank and quote this reference.\n             </p>\n-            <div className=\"mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 justify-self-stretch border-t border-current/20 pt-3\">\n+            <div className=\"mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-current/20 pt-3\">\n               <span className=\"text-caption font-strong\">Reference</span>\n               <span className=\"font-mono text-label wrap-anywhere\">{traceId}</span>\n               <Button\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/components/ProblemNotice.test.tsx -t \"puts the label, the trace ID in mono and the Copy button on one row after a hairline\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2, fix round 1 medium 2 (the Copy pill is the shared Button, no raw border-[1.5px])",
+      "patch": "--- a/frontend/src/components/ProblemNotice.tsx\n+++ b/frontend/src/components/ProblemNotice.tsx\n@@ -49,15 +49,13 @@\n             <div className=\"mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 justify-self-stretch border-t border-current/20 pt-3\">\n               <span className=\"text-caption font-strong\">Reference</span>\n               <span className=\"font-mono text-label wrap-anywhere\">{traceId}</span>\n-              <Button\n+              <button\n                 type=\"button\"\n-                variant=\"secondary\"\n-                size=\"compact\"\n-                className=\"text-label\"\n+                className=\"min-h-(--tap-target) cursor-pointer rounded-full border-[1.5px] border-current px-4 text-label font-strong\"\n                 onClick={() => void copyReference()}\n               >\n                 {copied ? 'Copied' : 'Copy'}\n-              </Button>\n+              </button>\n             </div>\n           </>\n         ) : null}\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/components/ProblemNotice.test.tsx -t \"builds the Copy pill from the shared Button\"",
+      "expect": "fails"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/ui-notices-states-vitest-junit.xml"
+    ],
+    "summary": "Vitest 5.0.5: 39 files, 715 tests passed, 0 failed, one full run on the rebased tree. Also green on the same tree: npm ci, npm run typecheck, lint, format (prettier --check), build; scripts/secret-scan.sh no leaks.",
+    "diff_hash": "30641e03c25e",
+    "diff_hash_how": "scripts/diff-hash.sh . 2f897c37b3b58b11119c6126123213f98defeb43. Because the ui-tokens-icons base is uncommitted, the hash covers that base patch (r3-fixed, excluding docs/* and e2e/*) plus this story after fix round 1. TestResults/ and this file are excluded by the script."
+  },
+  "e2e_for_qa": {
+    "must_change": "None found by reading. Every e2e selector for these screens uses role, name or text that the change keeps: getByRole('group', { name: 'Check the details below' }) and its inner alert, getByRole('alert') with the problem sentence, traceId or 'Too many attempts...' text, the h1 names (\"You've been signed out\", \"We can't link you online\", \"We can't find that dispute\"), the h2 empty-state headings, and `main` innerText checks that already include only the same words. QA must still run them, since e2e cannot run in this worktree.",
+    "most_exposed": [
+      "linking-screens.spec.ts:373, :415, :470 (rate-limit alert now the rate-limited Alert: still role=alert, same sentence, and now has an icon and no reference text) and :349-355 (locked state h1 focus, `main` innerText has no tries-left text)",
+      "linking-rate-limits.spec.ts (every 'Too many attempts' assertion on both screens)",
+      "spa-transactions.spec.ts:385-390 (sign-out failed ProblemNotice: action button now inside the Alert after the next step), :524 (empty state text), :546-556 (503 notice with traceId, 320px no-horizontal-scroll check on the new reference row)",
+      "dispute-raise.spec.ts:404-455 and :522 (ProblemNotice alerts; `page.getByRole('alert')` strict mode needs exactly one alert on the page)",
+      "dispute-detail.spec.ts:158 (not-found title) and :504, :572 (focused error summary text contains the title)",
+      "spa-disputes-history.spec.ts:412 (disputes empty state now inside the state surface)",
+      "spa-session-end.spec.ts:88-163, sign-in-and-out-audit.spec.ts, journeys/uj-1.spec.ts:54 and :167, journeys/uj-5a.spec.ts:43, spa-dispute-status-badges.spec.ts:117 and :253",
+      "The Copy control is now a Button (data-slot=button): getByRole('button', { name: 'Copy' }) still matches; its height is 44px."
+    ],
+    "axe": "New or moved surfaces to check with axe at 360 and 1280px, light and dark: the problem notice reference row, the state surface tile, the error summary (group with an Alert look), the rate-limited Alert."
+  },
+  "assumptions": [
+    "The CLI step ran in a scratch copy, not the worktree, because the base patch is uncommitted and discarding CLI output with git would have discarded the base too. The result matched the pre-build review: the CLI adds the `cn` package and imports it, so the Manual install fallback was used.",
+    "Alert takes a required `tone` prop (danger, rate-limited, info, success, neutral) and renders the tone's icon itself, so callers never pass an icon. The registry's `variant` (default, destructive) is gone. success, info and neutral are tested but have no caller yet: ui-raise-review and ui-detail-start use them.",
+    "ErrorSummary's root is `<Alert tone=\"danger\" role=\"group\" ...>`: it reuses the Alert's look and icon and overrides the role (the registry's props spread lets a caller's role win). The old 1.5px destructive border is dropped, since DESIGN says notices have no border.",
+    "StateSurface's `icon` is optional on purpose: the detail screen renders every state through one StateSurface so the h1 never remounts, and gives an icon only for not found. Without an icon it draws no tile and no surface classes, and `className` styles the section (failure message and loaded card as before). Failure state is not drawn as a state surface: the spec lists only not found for the detail screen.",
+    "The action in a state surface is wrapped by each caller in `<div className=\"mt-3\">` (4 callers) to match the mockup's 12px extra margin (signed out, not found, locked, disputes empty; the detail screen's NotFoundCard does the same). That is plain duplication of one class; a StateSurface `action` slot is the upgrade, not added because the detail screen passes each state's card as children.",
+    "The rate-limited Alert shows waitCopy's sentence as AlertTitle (bold), as the old ProblemNotice showed it in <strong>.",
+    "The two-commit split in the spec (presentation, then test updates) is for the supervisor: nothing is committed and the unit-test updates are in the same working tree. Test-only files: every *.test.tsx in story_files; the production files are the rest.",
+    "The base ui-tokens-icons patch could not be committed locally (guard refuses commits), so diff-hash covers base plus story; see test_results.diff_hash_how.",
+    "Mockup drift left as the spec says (16px notice icons, waitCopy single sentence).",
+    "Not run: e2e (QA's), the real-API smoke (stack lock held), npm audit (no package change).",
+    "The Copy pill uses the Button secondary variant (cobalt outline on the card colour) at size compact. The mockup draws a transparent pill with a currentColor outline, which would need colour overrides on every state; the shared variant keeps the design system's outline and makes the pill a normal action on the notice. If QA wants the currentColor look, it is a className override on this one Button.",
+    "The Button's border-[1.5px] is the design system's existing outline; the diff adds no raw px value to a component.",
+    "The base ui-tokens-icons change is still uncommitted, so diff-hash covers base plus story plus fix round.",
+    "The guard allows writes only under frontend/ and docs/verification/, so the throwaway browser and break-runner scripts were written under frontend/ and deleted before the final run; the screenshots are in the session scratchpad.",
+    "Not run: e2e (QA's), the real-API smoke, npm audit (no package change).",
+    "Rebase run: only the diff hash, results file, worktree and notes changed. Criteria, smoke and standards are carried from the previous record, whose story code is unchanged; the real-browser smoke was not repeated."
+  ],
+  "open_questions": [],
+  "conflicts": [],
+  "round": "fix round 1, rebased on ui-tokens-icons fix round 3 (no code change)",
+  "fix_round_1": [
+    {
+      "finding": "medium 1: the Reference row hairline stopped at the Copy pill (grid item of AlertDescription with justify-items-start)",
+      "fix": "frontend/src/components/ProblemNotice.tsx: the row has justify-self-stretch. ProblemNotice.test.tsx asserts the class; the break removes it.",
+      "real_browser": "Throwaway headless Chromium against vite preview, /api/v1 stubbed with page.route (transactions 503 with a 55-character traceId). At 1280px the row is 772px wide and spans the description (x 268 to 1040); with the class removed it measured 614px. At 360px the row spans the description (268px). The Copy pill is 44px tall at both widths. Script deleted afterwards."
+    },
+    {
+      "finding": "medium 2: the Copy pill added a raw border-[1.5px] in a component",
+      "fix": "frontend/src/components/ProblemNotice.tsx: the pill is the shared Button (variant secondary, size compact: min-h-(--tap-target), rounded-full, the design system outline) with text-label. The diff adds no raw px value. ProblemNotice.test.tsx asserts data-slot=button; the Copied for 2s and keeps-Copy-on-failure tests are unchanged and pass."
+    },
+    {
+      "finding": "low: breaks keyed test, run-breaks.sh reads test_method",
+      "fix": "Every break in this record is keyed test_method with a runnable shell command."
+    }
+  ],
+  "breaks_verified": "Rebase run: scripts/run-breaks.sh on this worktree and this file exited 0. All 11 breaks apply, their test passes without the break and fails with it (11 x failed as expected)."
+}
