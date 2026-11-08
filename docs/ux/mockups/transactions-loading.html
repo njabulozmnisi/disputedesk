@@ -9,22 +9,25 @@
 </head>
 <body>
 <header class="topbar"><div class="topbar__in">
-  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="brand" href="transactions.html">DisputeDesk<span class="brand__dot" aria-hidden="true"></span></a>
   <nav class="topnav" aria-label="Main"><a href="transactions.html" aria-current="page">Transactions</a><a href="disputes.html">Disputes</a></nav>
   <a class="signout" href="start.html">Sign out</a>
 </div></header>
-<p class="mock-note">Mockup: first load. <a href="index.html">All screens</a></p>
+<p class="mock-note">Mockup: first load. Skeleton rows copy the real layout: day bands and three columns. <a href="index.html">All screens</a></p>
 <main class="wrap">
-<div class="stack"><h1 class="title">Transactions</h1><p class="lede">Your card and account transactions, newest first.</p></div>
-<div class="panel ledger" aria-busy="true" aria-label="Loading transactions"><div class="skel-row"><div><div class="skeleton" style="width:60%"></div><div class="skeleton" style="width:40%"></div></div><div class="skeleton" style="width:72px"></div></div><div class="skel-row"><div><div class="skeleton" style="width:60%"></div><div class="skeleton" style="width:40%"></div></div><div class="skeleton" style="width:72px"></div></div><div class="skel-row"><div><div class="skeleton" style="width:60%"></div><div class="skeleton" style="width:40%"></div></div><div class="skeleton" style="width:72px"></div></div><div class="skel-row"><div><div class="skeleton" style="width:60%"></div><div class="skeleton" style="width:40%"></div></div><div class="skeleton" style="width:72px"></div></div><div class="skel-row"><div><div class="skeleton" style="width:60%"></div><div class="skeleton" style="width:40%"></div></div><div class="skeleton" style="width:72px"></div></div></div>
+<div class="page-head"><h1 class="title">Transactions</h1><p class="lede">Your card and account transactions from the last 90 days, newest first.</p></div>
+<div class="panel" aria-busy="true" aria-label="Loading transactions">
+<div class="ledger__head" aria-hidden="true"><span>Transaction</span><span>Amount</span><span>Dispute</span></div>
+<div class="day"><span class="skeleton" style="width:88px;height:12px"></span></div><div class="row"><div class="row__main" style="display:grid;gap:var(--space-2)"><span class="skeleton" style="width:55%"></span><span class="skeleton" style="width:35%;height:10px"></span></div><span class="skeleton amount" style="width:72px;justify-self:end"></span><span class="skeleton row__action" style="width:64px"></span></div><div class="row"><div class="row__main" style="display:grid;gap:var(--space-2)"><span class="skeleton" style="width:45%"></span><span class="skeleton" style="width:35%;height:10px"></span></div><span class="skeleton amount" style="width:64px;justify-self:end"></span><span class="skeleton row__action" style="width:64px"></span></div><div class="day"><span class="skeleton" style="width:88px;height:12px"></span></div><div class="row"><div class="row__main" style="display:grid;gap:var(--space-2)"><span class="skeleton" style="width:60%"></span><span class="skeleton" style="width:35%;height:10px"></span></div><span class="skeleton amount" style="width:80px;justify-self:end"></span><span class="skeleton row__action" style="width:96px"></span></div><div class="row"><div class="row__main" style="display:grid;gap:var(--space-2)"><span class="skeleton" style="width:40%"></span><span class="skeleton" style="width:35%;height:10px"></span></div><span class="skeleton amount" style="width:64px;justify-self:end"></span><span class="skeleton row__action" style="width:64px"></span></div><div class="row"><div class="row__main" style="display:grid;gap:var(--space-2)"><span class="skeleton" style="width:50%"></span><span class="skeleton" style="width:35%;height:10px"></span></div><span class="skeleton amount" style="width:72px;justify-self:end"></span><span class="skeleton row__action" style="width:120px"></span></div>
+</div>
 </main>
 <footer class="footer"><div class="footer__in">
   <p>Demo data only. Every name, number and amount shown here is made up.</p>
   <p>Your details are used only to show your transactions and handle your disputes.</p>
 </div></footer>
 <nav class="tabbar" aria-label="Main (phone)">
-  <a href="transactions.html" aria-current="page"><span aria-hidden="true">☰</span>Transactions</a>
-  <a href="disputes.html"><span aria-hidden="true">⚑</span>Disputes</a>
+  <a href="transactions.html" aria-current="page"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Transactions</a>
+  <a href="disputes.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>Disputes</a>
 </nav>
 </body>
 </html>

@@ -9,7 +9,7 @@
 </head>
 <body>
 <header class="topbar"><div class="topbar__in topbar__in--wide">
-  <a class="brand" href="start.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="brand" href="start.html">DisputeDesk<span class="brand__dot" aria-hidden="true"></span></a>
   <a class="btn btn--secondary btn--compact topbar__end" href="sign-in.html">Sign in</a>
 </div></header>
 <p class="mock-note">Mockup: signed-out start page. The status card is a sample of the real dispute detail, built from the same tokens. <a href="index.html">All screens</a></p>
@@ -22,11 +22,12 @@
       <a class="btn btn--primary" href="sign-in.html">Sign in</a>
       <a class="btn btn--secondary" href="sign-up.html">Create a login</a>
     </div>
+    <p class="assurance"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>You'll confirm it's you with your ID number, account number and a one-time code.</p>
   </div>
   <figure class="hero__stage">
     <div class="status-card" aria-hidden="true">
       <div><p class="row__title">ZXP*GLOBALSVCS 0800</p><p class="caption">Unrecognised, card ending 3456</p></div>
-      <div class="status-card__amount"><p class="amount amount--hero">R849.00</p><span class="badge badge--review">Under review</span></div>
+      <div class="status-card__amount"><p class="amount amount--hero">R849.00</p><span class="badge badge--review"><span class="sr-only"></span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Under review</span></div>
       <ol class="timeline">
         <li><p class="step">Submitted</p><p class="meta"><span class="actor">You</span>26 Oct 2026, 09:14 SAST</p></li>
         <li class="is-current"><p class="step">Under review</p><p class="meta"><span class="actor">The bank</span>26 Oct 2026, 11:02 SAST</p></li>
@@ -51,5 +52,6 @@
   <p>Demo data only. Every name, number and amount shown here is made up.</p>
   <p>Your details are used only to show your transactions and handle your disputes.</p>
 </div></footer>
+
 </body>
 </html>

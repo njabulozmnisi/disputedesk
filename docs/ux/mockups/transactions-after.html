@@ -9,100 +9,101 @@
 </head>
 <body>
 <header class="topbar"><div class="topbar__in">
-  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="brand" href="transactions.html">DisputeDesk<span class="brand__dot" aria-hidden="true"></span></a>
   <nav class="topnav" aria-label="Main"><a href="transactions.html" aria-current="page">Transactions</a><a href="disputes.html">Disputes</a></nav>
   <a class="signout" href="start.html">Sign out</a>
 </div></header>
-<p class="mock-note">Mockup: after UJ-1: the R849.00 row now shows Submitted. The linked toast is shown here as a banner. <a href="index.html">All screens</a></p>
+<p class="mock-note">Mockup: after UJ-1: the R849.00 row now shows Submitted. The live-region announcement is drawn here as a banner. <a href="index.html">All screens</a></p>
 <main class="wrap">
-<div class="notice notice--success" role="status" style="margin-bottom:var(--space-4)"><strong>Your login is linked.</strong></div>
-<div class="stack"><h1 class="title">Transactions</h1><p class="lede">Your card and account transactions, newest first.</p></div>
-<div class="panel ledger">
+<div class="notice notice--success" role="status"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><div class="notice__body"><p><strong>Your login is linked.</strong></p></div></div>
+<div class="page-head"><h1 class="title">Transactions</h1><p class="lede">Your card and account transactions from the last 90 days, newest first.</p></div>
+<div class="panel">
+<div class="ledger__head" aria-hidden="true"><span>Transaction</span><span>Amount</span><span>Dispute</span></div>
 <h2 class="day">Mon 26 Oct</h2>
 <ul class="list">
 <li class="row">
-  <div class="row__main"><p class="row__title">Karoo Fuel Stop, Pinetown</p><p class="caption">Card 492345•• •••• 3456</p><p><span class="hint">Pending. You can dispute it once it has settled.</span></p></div>
-  <div class="row__side"><span class="amount" aria-label="R650.00 out">R650.00</span></div>
+  <div class="row__main"><p class="row__title">Karoo Fuel Stop, Pinetown</p><p class="caption">Card 492345•• •••• 3456</p><p class="hint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>Pending. You can dispute it once it has settled.</p></div>
+  <span class="amount" aria-label="R650.00 out">R650.00</span>
 </li>
 <li class="row">
   <div class="row__main"><p class="row__title">ZXP*GLOBALSVCS 0800</p><p class="caption">Card 492345•• •••• 3456</p></div>
-  <div class="row__side"><span class="amount" aria-label="R849.00 out">R849.00</span><a class="badge badge--submitted" href="dispute-submitted.html"><span class="sr-only">Dispute status: </span>Submitted</a></div>
+  <span class="amount" aria-label="R849.00 out">R849.00</span><a class="badge badge--submitted row__action row__action--badge" href="dispute-submitted.html"><span class="sr-only">Dispute status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>Submitted</a>
 </li>
 </ul>
 <h2 class="day">Sun 25 Oct</h2>
 <ul class="list">
 <li class="row">
   <div class="row__main"><p class="row__title">Lekker Eats, Durban</p><p class="caption">Card 492345•• •••• 3456</p></div>
-  <div class="row__side"><span class="amount" aria-label="R187.40 out">R187.40</span><a class="link-action" href="dispute-new.html">Dispute<span class="sr-only"> this transaction</span></a></div>
+  <span class="amount" aria-label="R187.40 out">R187.40</span><a class="dispute-link row__action" href="dispute-new.html">Dispute<span class="sr-only"> Lekker Eats, Durban</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
 </li>
 <li class="row">
-  <div class="row__main"><p class="row__title">Salary: Ridgeview Primary</p><p class="caption">Account •••• 4821</p><p><span class="hint">Money in. Not disputable.</span></p></div>
-  <div class="row__side"><span class="amount" aria-label="R18&#8239;450.00 in">+R18&#8239;450.00</span></div>
+  <div class="row__main"><p class="row__title">Salary: Ridgeview Primary</p><p class="caption">Account •••• 4821</p><p class="hint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>Money in. Not disputable.</p></div>
+  <span class="amount" aria-label="R18 450.00 in">+R18 450.00</span>
 </li>
 </ul>
 <h2 class="day">Sat 24 Oct</h2>
 <ul class="list">
 <li class="row">
-  <div class="row__main"><p class="row__title">Transfer to Savings •••• 7710</p><p class="caption">Account •••• 4821</p><p><span class="hint">Transfer between your accounts. Not disputable.</span></p></div>
-  <div class="row__side"><span class="amount" aria-label="R2&#8239;000.00 out">R2&#8239;000.00</span></div>
+  <div class="row__main"><p class="row__title">Transfer to Savings •••• 7710</p><p class="caption">Account •••• 4821</p><p class="hint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>Transfer between your accounts. Not disputable.</p></div>
+  <span class="amount" aria-label="R2 000.00 out">R2 000.00</span>
 </li>
 <li class="row">
   <div class="row__main"><p class="row__title">Mzansi Streaming</p><p class="caption">Card 492345•• •••• 3456</p></div>
-  <div class="row__side"><span class="amount" aria-label="R199.00 out">R199.00</span><a class="link-action" href="dispute-new.html">Dispute<span class="sr-only"> this transaction</span></a></div>
+  <span class="amount" aria-label="R199.00 out">R199.00</span><a class="dispute-link row__action" href="dispute-new.html">Dispute<span class="sr-only"> Mzansi Streaming</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
 </li>
 </ul>
 <h2 class="day">Wed 21 Oct</h2>
 <ul class="list">
 <li class="row">
   <div class="row__main"><p class="row__title">Lekker Eats, Durban</p><p class="caption">Card 492345•• •••• 3456</p></div>
-  <div class="row__side"><span class="amount" aria-label="R312.50 out">R312.50</span><a class="badge badge--review" href="dispute-under-review.html"><span class="sr-only">Dispute status: </span>Under review</a></div>
+  <span class="amount" aria-label="R312.50 out">R312.50</span><a class="badge badge--review row__action row__action--badge" href="dispute-under-review.html"><span class="sr-only">Dispute status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Under review</a>
 </li>
 </ul>
 <h2 class="day">Mon 12 Oct</h2>
 <ul class="list">
 <li class="row">
   <div class="row__main"><p class="row__title">Online Gadgets ZA</p><p class="caption">Card 492345•• •••• 3456</p></div>
-  <div class="row__side"><span class="amount" aria-label="R4&#8239;299.00 out">R4&#8239;299.00</span><a class="badge badge--priority" href="dispute-prioritised.html"><span class="sr-only">Dispute status: </span>Under review (prioritised)</a></div>
+  <span class="amount" aria-label="R4 299.00 out">R4 299.00</span><a class="badge badge--priority row__action row__action--badge" href="dispute-prioritised.html"><span class="sr-only">Dispute status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/><path d="M11 14V8M8.5 10.5 11 8l2.5 2.5"/></svg>Under review (prioritised)</a>
 </li>
 </ul>
 <h2 class="day">Thu 1 Oct</h2>
 <ul class="list">
 <li class="row">
   <div class="row__main"><p class="row__title">Ocean Gym Club</p><p class="caption">Card 492345•• •••• 3456</p></div>
-  <div class="row__side"><span class="amount" aria-label="R499.00 out">R499.00</span><a class="badge badge--upheld" href="dispute-upheld.html"><span class="sr-only">Dispute status: </span>Resolved · Upheld</a></div>
+  <span class="amount" aria-label="R499.00 out">R499.00</span><a class="badge badge--resolved row__action row__action--badge" href="dispute-upheld.html"><span class="sr-only">Dispute status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>Resolved</a>
 </li>
 </ul>
 <h2 class="day">Tue 15 Sep</h2>
 <ul class="list">
 <li class="row">
   <div class="row__main"><p class="row__title">Karoo Fuel Stop, Pinetown</p><p class="caption">Card 492345•• •••• 3456</p></div>
-  <div class="row__side"><span class="amount" aria-label="R1&#8239;150.00 out">R1&#8239;150.00</span><a class="badge badge--rejected" href="dispute-rejected.html"><span class="sr-only">Dispute status: </span>Resolved · Rejected</a></div>
+  <span class="amount" aria-label="R1 150.00 out">R1 150.00</span><a class="badge badge--resolved row__action row__action--badge" href="dispute-rejected.html"><span class="sr-only">Dispute status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>Resolved</a>
 </li>
 </ul>
 <h2 class="day">Fri 4 Sep</h2>
 <ul class="list">
 <li class="row">
   <div class="row__main"><p class="row__title">TechNova Online</p><p class="caption">Card 492345•• •••• 3456</p></div>
-  <div class="row__side"><span class="amount" aria-label="R1&#8239;899.00 out">R1&#8239;899.00</span><a class="badge badge--withdrawn" href="dispute-withdrawn.html"><span class="sr-only">Dispute status: </span>Withdrawn</a></div>
+  <span class="amount" aria-label="R1 899.00 out">R1 899.00</span><a class="badge badge--withdrawn row__action row__action--badge" href="dispute-withdrawn.html"><span class="sr-only">Dispute status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Withdrawn</a>
 </li>
 </ul>
 <h2 class="day">Mon 20 Jul</h2>
 <ul class="list">
 <li class="row">
-  <div class="row__main"><p class="row__title">Umhlanga Pharmacy</p><p class="caption">Card 492345•• •••• 3456</p><p><span class="hint">Older than 90 days. Contact the bank about this transaction.</span></p></div>
-  <div class="row__side"><span class="amount" aria-label="R342.15 out">R342.15</span></div>
+  <div class="row__main"><p class="row__title">Umhlanga Pharmacy</p><p class="caption">Card 492345•• •••• 3456</p><p class="hint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>Older than 90 days. Contact the bank about this transaction.</p></div>
+  <span class="amount" aria-label="R342.15 out">R342.15</span>
 </li>
 </ul>
 </div>
-<div class="more"><a class="btn btn--secondary" href="transactions.html">Load more</a></div>
+<a class="btn btn--secondary more" href="transactions-after.html">Load more</a>
 </main>
 <footer class="footer"><div class="footer__in">
   <p>Demo data only. Every name, number and amount shown here is made up.</p>
   <p>Your details are used only to show your transactions and handle your disputes.</p>
 </div></footer>
 <nav class="tabbar" aria-label="Main (phone)">
-  <a href="transactions.html" aria-current="page"><span aria-hidden="true">☰</span>Transactions</a>
-  <a href="disputes.html"><span aria-hidden="true">⚑</span>Disputes</a>
+  <a href="transactions.html" aria-current="page"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Transactions</a>
+  <a href="disputes.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>Disputes</a>
 </nav>
 </body>
 </html>

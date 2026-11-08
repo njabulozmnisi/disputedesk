@@ -9,23 +9,26 @@
 </head>
 <body>
 <header class="topbar"><div class="topbar__in">
-  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="brand" href="transactions.html">DisputeDesk<span class="brand__dot" aria-hidden="true"></span></a>
   <nav class="topnav" aria-label="Main"><a href="transactions.html" aria-current="page">Transactions</a><a href="disputes.html">Disputes</a></nav>
   <a class="signout" href="start.html">Sign out</a>
 </div></header>
-<p class="mock-note">Mockup: empty list. <a href="index.html">All screens</a></p>
-<main class="wrap stack-lg">
-<div class="stack"><h1 class="title">Transactions</h1><p class="lede">Your card and account transactions, newest first.</p></div>
-<div class="empty"><h2 class="subheading">No transactions in the last 90 days.</h2>
-<p class="lede">Card and account transactions appear here once they reach your account. Disputes you raised earlier are still in <a href="disputes.html">Disputes</a>.</p></div>
+<p class="mock-note">Mockup: empty list. No button. <a href="index.html">All screens</a></p>
+<main class="wrap">
+<div class="page-head"><h1 class="title">Transactions</h1><p class="lede">Your card and account transactions from the last 90 days, newest first.</p></div>
+<div class="state">
+<span class="state__icon" aria-hidden="true"><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
+<h2 class="subheading">No transactions in the last 90 days.</h2>
+<p class="lede">Card and account transactions appear here once they reach your account. Disputes you raised earlier are still in <a href="disputes.html">Disputes</a>.</p>
+</div>
 </main>
 <footer class="footer"><div class="footer__in">
   <p>Demo data only. Every name, number and amount shown here is made up.</p>
   <p>Your details are used only to show your transactions and handle your disputes.</p>
 </div></footer>
 <nav class="tabbar" aria-label="Main (phone)">
-  <a href="transactions.html" aria-current="page"><span aria-hidden="true">☰</span>Transactions</a>
-  <a href="disputes.html"><span aria-hidden="true">⚑</span>Disputes</a>
+  <a href="transactions.html" aria-current="page"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Transactions</a>
+  <a href="disputes.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>Disputes</a>
 </nav>
 </body>
 </html>

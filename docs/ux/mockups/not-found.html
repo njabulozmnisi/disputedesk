@@ -3,29 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Not found · DisputeDesk</title>
+<title>Dispute not found · DisputeDesk</title>
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <header class="topbar"><div class="topbar__in">
-  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="brand" href="transactions.html">DisputeDesk<span class="brand__dot" aria-hidden="true"></span></a>
   <nav class="topnav" aria-label="Main"><a href="transactions.html">Transactions</a><a href="disputes.html" aria-current="page">Disputes</a></nav>
   <a class="signout" href="start.html">Sign out</a>
 </div></header>
 <p class="mock-note">Mockup: identical for an unknown ID and another customer's dispute (UJ-5a). <a href="index.html">All screens</a></p>
-<main class="wrap wrap--form stack-lg">
-<div class="stack"><h1 class="title">We can't find that dispute</h1>
-<p class="lede">Check the link, or find it in your disputes.</p></div>
-<div class="actions"><a class="btn btn--primary btn--block" href="disputes.html">Go to your disputes</a></div>
+<main class="wrap wrap--form">
+<div class="state">
+<span class="state__icon" aria-hidden="true"><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+<h1 class="title">We can't find that dispute</h1>
+<p class="lede">Check the link, or find it in your disputes.</p>
+<a class="btn btn--primary" href="disputes.html">Go to your disputes</a>
+</div>
 </main>
 <footer class="footer"><div class="footer__in">
   <p>Demo data only. Every name, number and amount shown here is made up.</p>
   <p>Your details are used only to show your transactions and handle your disputes.</p>
 </div></footer>
 <nav class="tabbar" aria-label="Main (phone)">
-  <a href="transactions.html"><span aria-hidden="true">☰</span>Transactions</a>
-  <a href="disputes.html" aria-current="page"><span aria-hidden="true">⚑</span>Disputes</a>
+  <a href="transactions.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Transactions</a>
+  <a href="disputes.html" aria-current="page"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>Disputes</a>
 </nav>
 </body>
 </html>
