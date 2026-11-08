@@ -96,8 +96,8 @@ sequenceDiagram
     GA->>SSM: poll until Success
 ```
 
-- Deploys run from `main` only. A deploy on every merge stays switched off until the repository variable
-  `DEPLOY_ENABLED` is `true`; a hand-dispatched deploy (`deploy.yml`) works either way.
+- Deploys run from `main` only, and only by hand. A person dispatches `deploy.yml` with a commit SHA, and the `dev`
+  environment's required reviewer approves it. A merge never deploys.
 - Images come from GHCR, pinned by digest.
 - Only the api and the collector can reach instance metadata.
 
