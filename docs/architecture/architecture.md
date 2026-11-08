@@ -289,6 +289,21 @@ Only these arrows are allowed. The architecture tests enforce the graph: `LayerT
 - **Details:**
   - **Rows.** Tests check that each outbox row's ID is its stored event's ID, and that the published CloudEvent `id` is the outbox row's ID.
   - **Leadership.** The relay is a hosted service in Infrastructure, run by the Api locally and by the Worker in AWS (AD-27). It holds `pg_try_advisory_lock` on one fixed key and does every outbox read and update on that same connection. A session-level advisory lock lasts as long as its connection, so before each batch the relay checks that connection with a cheap query. On error it disposes the connection and stops producing. A test terminates the lock connection and checks for handover.
+  - **Polling.** After a batch that sent rows the relay loops at once; after an empty batch it waits 10 seconds (`IdleWait` in `OutboxRelay.cs`). An event therefore leaves 0 to 10 seconds after its commit, about 5 on average; the first dispute raised in AWS left after 2.8 seconds.
+    - **Why 10 seconds.**
+      - No requirement bounds the delay. The customer has the API's answer before the event leaves, and events feed only systems downstream.
+      - Every poll is a query on the lock connection and a traced span. A shorter wait costs database load and, in AWS, CloudWatch ingestion paid from the free plan's credits.
+      - The relay's heartbeat health check fails after 30 seconds without a loop, so the wait must stay well under 30.
+    - **Ways to send sooner, and what each costs:**
+
+      | Option | Delay | Cost |
+      |---|---|---|
+      | A shorter `IdleWait` (1 second) | at most 1 s | A one-line change, but ten times the polls and spans |
+      | PostgreSQL `LISTEN`/`NOTIFY` | milliseconds | Each write sends `NOTIFY` in its AD-14 transaction (delivered only on commit). The relay waits for it on the lock connection with Npgsql's `WaitAsync`, and keeps the 10-second poll as a fallback for a notification missed while it was down. More code and one more statement per write, no extra polling |
+      | Change data capture (Debezium on the write-ahead log) | under a second | Rejected below: another service and its memory on the 4 GiB instance |
+      | Publishing inside the request | none | Rejected below: a dual write that can publish an event for a rolled-back change |
+
+      `LISTEN`/`NOTIFY` is the first choice if a requirement ever bounds the delay (PostgreSQL documentation, *NOTIFY*; Npgsql documentation, *Notifications*).
   - **Order.** There is no global position and no order across disputes (ad-009; cross-dispute options are deferred to `docs/production-path.md`). A `Failed` or not-yet-due head row means that dispute is skipped. Every stored event has an outbox row, so a dispute's outbox rows have no version gaps.
   - **Delivery guarantee.** The advisory lock cannot fence a Kafka send already in flight when a leader loses its connection, so across a leader handover an earlier event of a dispute can arrive late or twice; consumer deduplication handles it. Fencing with Kafka transactions (KIP-98, a fixed `transactional.id`) is the stronger option, in `docs/production-path.md`.
   - **Seeded rows.** Seeded disputes have outbox rows like any other (AD-30), so relay tests set up their own rows and never assume an empty outbox.
