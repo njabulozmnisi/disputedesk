@@ -9,25 +9,24 @@
 </head>
 <body>
 <header class="topbar"><div class="topbar__in">
-  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="brand" href="transactions.html">DisputeDesk<span class="brand__dot" aria-hidden="true"></span></a>
   <nav class="topnav" aria-label="Main"><a href="transactions.html" aria-current="page">Transactions</a><a href="disputes.html">Disputes</a></nav>
   <a class="signout" href="start.html">Sign out</a>
 </div></header>
 <p class="mock-note">Mockup: one Idempotency-Key is created when this screen opens and reused on every retry of this draft. <a href="index.html">All screens</a></p>
-<main class="wrap wrap--form stack-lg">
-<div><a class="back" href="dispute-new.html">Back</a><h1 class="title">Review your dispute</h1></div>
-<div class="surface summary-card stack">
-<div><p class="caption">You're disputing</p><p class="amount amount--hero">R849.00</p></div>
-<dl class="summary">
-<dt>Transaction</dt><dd>ZXP*GLOBALSVCS 0800</dd>
-<dt>Date</dt><dd>Mon 26 Oct 2026</dd>
-<dt>Card</dt><dd>492345•• •••• 3456</dd>
-<dt>Reason</dt><dd>Unrecognised</dd>
-<dt>Note</dt><dd>I've never bought from this merchant.</dd>
+<main class="wrap wrap--form">
+<div class="page-head"><a class="back" href="dispute-new.html">Back</a><div class="progress"><p class="progress__label">Step 2 of 2: review and submit</p><div class="progress__bar" aria-hidden="true"><span class="is-done"></span><span class="is-done"></span></div></div><h1 class="title">Review your dispute</h1></div>
+<section class="surface surface--tight" aria-label="Your dispute">
+<div class="readback-head"><div><p class="caption">You're disputing</p><p class="amount amount--hero">R849.00</p></div><a class="change-link" href="dispute-new.html">Change<span class="sr-only"> your dispute</span></a></div>
+<dl class="readback">
+<div><dt>Transaction</dt><dd><strong>ZXP*GLOBALSVCS 0800</strong></dd></div>
+<div><dt>Date</dt><dd>Mon 26 Oct 2026</dd></div>
+<div><dt>Card</dt><dd>492345•• •••• 3456</dd></div>
+<div><dt>Reason</dt><dd>Unrecognised</dd></div>
+<div><dt>Note</dt><dd>I've never bought from this merchant.</dd></div>
 </dl>
-<a href="dispute-new.html" class="link-action">Change</a>
-</div>
-<p class="caption">You can dispute a transaction only once. You can withdraw the dispute while it is open.</p>
+</section>
+<div class="notice notice--neutral"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><div class="notice__body"><p>You can dispute a transaction only once. You can withdraw the dispute while it is open.</p></div></div>
 <div class="actions"><a class="btn btn--primary btn--block" href="dispute-submitted.html">Submit dispute</a><a class="btn btn--secondary btn--block" href="transactions.html">Cancel</a></div>
 </main>
 <footer class="footer"><div class="footer__in">
@@ -35,8 +34,8 @@
   <p>Your details are used only to show your transactions and handle your disputes.</p>
 </div></footer>
 <nav class="tabbar" aria-label="Main (phone)">
-  <a href="transactions.html" aria-current="page"><span aria-hidden="true">☰</span>Transactions</a>
-  <a href="disputes.html"><span aria-hidden="true">⚑</span>Disputes</a>
+  <a href="transactions.html" aria-current="page"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Transactions</a>
+  <a href="disputes.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>Disputes</a>
 </nav>
 </body>
 </html>

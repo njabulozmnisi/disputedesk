@@ -2,7 +2,7 @@
 
 **Status:** steps 1–8 are done. The first deploy ran on 2026-11-07, and the post-deploy checks pass, except check 7's
 reboot step, which has not run yet.
-Continuous deploy (`DEPLOY_ENABLED`) is off, so every deploy is dispatched by hand and approved.
+Every deploy is dispatched by hand and approved. A merge to `main` publishes images but never deploys them.
 
 There is one environment (AD-28):
 - one EC2 instance runs the same Compose stack as local, plus `infra/deploy/aws/compose.yml`;
@@ -16,7 +16,7 @@ There is one environment (AD-28):
 flowchart LR
     S1[1 Account<br/>+ CloudFront verified] --> S2[2 Admin sign-in] --> S3[3 State bucket] --> S4[4 terraform apply]
     S4 --> S5[5 Secrets] --> S6[6 Budget alert] --> S7[7 Public images] --> S8[8 dev environment,<br/>variables, first deploy]
-    S8 --> C[Post-deploy checks] --> ON[DEPLOY_ENABLED=true]
+    S8 --> C[Post-deploy checks]
 ```
 
 | Folder | What |
@@ -212,12 +212,14 @@ A private image fails a deploy in one of two places:
 
 ## 8. The environment, the repository variables and the first deploy
 
-Create the GitHub environment `dev` before any workflow names it, allowing only `main`. A run that names a missing
-environment would create it with no protection.
+Create the GitHub environment `dev` before any workflow names it, allowing only `main`, with the owner as its required
+reviewer, so every deploy waits for approval. A run that names a missing environment would create it with no
+protection. `<owner-id>` is the owner's numeric ID, which the subject check below also prints.
 
 ```sh
 gh api --method PUT repos/<owner>/<name>/environments/dev \
-  -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'
+  -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true' \
+  -F 'reviewers[][type]=User' -F 'reviewers[][id]=<owner-id>'
 gh api --method POST repos/<owner>/<name>/environments/dev/deployment-branch-policies -f name=main -f type=branch
 ```
 
@@ -249,14 +251,10 @@ gh run watch "$(gh run list --workflow deploy.yml --limit 1 --json databaseId --
 ```
 
 - The commit must be on `main`, and its five images must be published.
+- The job waits until the `dev` environment's required reviewer approves it.
 - The job fails, printing the deploy script's standard error, unless the command ends `Success`.
 
-Once the first deploy and the post-deploy checks pass, switch continuous deploy on. Until then, CI's
-`deploy-switched-off` job prints the image digests and sends nothing.
-
-```sh
-gh variable set DEPLOY_ENABLED --body true
-```
+Every later deploy is the same dispatch, with the SHA to deploy.
 
 ## A half-done database init
 
@@ -357,18 +355,14 @@ Run them after the first deploy, and after any change to the Terraform or the AW
 
 ## Rollback
 
-Switch continuous deploy off, then dispatch an earlier `main` SHA whose images are still in GHCR. Switch it back on
-once the fix is on `main`:
+Dispatch an earlier `main` SHA whose images are still in GHCR:
 
 ```sh
-gh variable set DEPLOY_ENABLED --body false
 gh workflow run deploy.yml --ref main -f sha=<the earlier SHA>
-# once the fix is on main:
-gh variable set DEPLOY_ENABLED --body true
 ```
 
-A revert on `main` also works, and deploys like any other change. Migrations are not rolled back, so a rollback past one
-relies on it staying compatible with the earlier code.
+A revert on `main` also works: once its images are published, dispatch the revert's SHA. Migrations are not rolled
+back, so a rollback past one relies on it staying compatible with the earlier code.
 
 ## Destroy
 

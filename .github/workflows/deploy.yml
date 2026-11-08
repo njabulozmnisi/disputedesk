@@ -1,36 +1,10 @@
 name: Deploy (dev)
 
-# Deploys a commit of main to the AWS dev environment (story 7.5, AD-28). CI calls it after publish on main when the
-# repository variable DEPLOY_ENABLED is true, with publish's five image references (ad-012 clause 4); rollback is a
-# manual dispatch with an earlier SHA, whose references it resolves from GHCR. infra/terraform/README.md sets the four
-# repository variables from Terraform's outputs.
+# Deploys a commit of main to the AWS dev environment (story 7.5, AD-28). Only a person starts it: a hand dispatch of a
+# main commit SHA, whose five published images it resolves from GHCR. The job then waits for the dev environment's
+# required reviewer to approve it. Nothing deploys on merge, and rollback is a dispatch with an earlier SHA.
+# infra/terraform/README.md sets the four repository variables from Terraform's outputs.
 on:
-  workflow_call:
-    inputs:
-      sha:
-        description: The full 40-character commit SHA on main to deploy.
-        required: true
-        type: string
-      api:
-        description: publish's api image by digest.
-        required: true
-        type: string
-      worker:
-        description: publish's worker image by digest.
-        required: true
-        type: string
-      gateway:
-        description: publish's gateway image by digest.
-        required: true
-        type: string
-      core-banking:
-        description: publish's core-banking image by digest.
-        required: true
-        type: string
-      zitadel:
-        description: publish's zitadel image by digest.
-        required: true
-        type: string
   workflow_dispatch:
     inputs:
       sha:
@@ -45,12 +19,10 @@ jobs:
   deploy:
     # The role's trust policy accepts only the subject of a job in the environment dev, which only main may deploy to
     # (GitHub, "OpenID Connect reference", filtering for a specific environment; infra/terraform/README.md, step 8).
-    # The environment is set here, on the called job: a job that calls a reusable workflow cannot set one (GitHub,
-    # "Reuse workflows"). The main guard keeps a dispatch from another branch from even asking for the environment.
+    # The main guard keeps a dispatch from another branch from even asking for the environment.
     if: github.ref == 'refs/heads/main'
     environment: dev
-    # Two deploys never interleave on the one instance, whether called by CI or dispatched for rollback; a second one
-    # waits for the first to finish. The group is held only here, not by the caller, so the two never share it.
+    # Two deploys never interleave on the one instance; a second one waits for the first to finish.
     # shortcut: one pending deploy per group; use queue: max once the actionlint pin accepts it
     concurrency:
       group: deploy-dev
@@ -73,38 +45,12 @@ jobs:
             exit 1
           fi
 
-      # Called by CI (a called workflow sees the caller's event, push; GitHub, "Reusing workflow configurations", github
-      # context): each of publish's references must be its own image by digest, the shape the SSM document's
-      # allowedPattern also enforces, or the step fails before any AWS step.
-      # Dispatched: anonymous lookups, with no docker login: a package that is still private fails here, before
-      # anything is sent (docker buildx imagetools inspect). Each image must be the one story 7.3 published for this
-      # SHA: tag sha- plus the first 12 characters, and its revision label the full SHA.
-      # Both paths write the same five outputs.
-      - name: Check or resolve the five image references
+      # Anonymous lookups, with no docker login: a package that is still private fails here, before anything is sent
+      # (docker buildx imagetools inspect). Each image must be the one story 7.3 published for this SHA: tag sha- plus
+      # the first 12 characters, and its revision label the full SHA.
+      - name: Resolve the five image references
         id: images
-        env:
-          EVENT: ${{ github.event_name }}
-          API: ${{ inputs.api }}
-          WORKER: ${{ inputs.worker }}
-          GATEWAY: ${{ inputs.gateway }}
-          CORE_BANKING: ${{ inputs.core-banking }}
-          ZITADEL: ${{ inputs.zitadel }}
         run: |
-          if [[ $EVENT != workflow_dispatch ]]; then
-            for pair in "api=$API" "worker=$WORKER" "gateway=$GATEWAY" "core-banking=$CORE_BANKING" "zitadel=$ZITADEL"; do
-              name=${pair%%=*}
-              reference=${pair#*=}
-              pattern="^ghcr\.io/njabulozmnisi/disputedesk-$name@sha256:[0-9a-f]{64}$"
-              if [[ ! $reference =~ $pattern ]]; then
-                echo "::error::$name must be ghcr.io/njabulozmnisi/disputedesk-$name@sha256: and 64 lower-case hex characters."
-                exit 1
-              fi
-              echo "$name=$reference" >> "$GITHUB_OUTPUT"
-              echo "ok  $reference"
-            done
-            exit 0
-          fi
-
           for name in api worker gateway core-banking zitadel; do
             image="ghcr.io/njabulozmnisi/disputedesk-$name"
             digest=$(docker buildx imagetools inspect "$image:sha-${SHA::12}" --format '{{json .Manifest}}' | jq -r .digest)
