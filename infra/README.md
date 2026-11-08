@@ -51,8 +51,8 @@ scripts/test-lock.sh run stack <owner> -- infra/tests/smoke.sh   # black-box che
 ## Deployed on AWS
 
 One EC2 instance runs the same Compose stack. It sits behind CloudFront, with PostgreSQL on RDS. The environment is
-partly applied: the CloudFront distributions wait on AWS account verification, and the application has not been
-deployed yet ([terraform/README.md](terraform/README.md)).
+live: it was first deployed on 2026-11-07, and the post-deploy checks pass
+([terraform/README.md](terraform/README.md#post-deploy-checks)).
 
 ```mermaid
 flowchart LR
