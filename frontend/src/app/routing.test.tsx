@@ -4,6 +4,7 @@ import { axe } from 'vitest-axe';
 
 import { getGetSessionQueryKey } from '@/api/generated/disputedesk';
 import type { SessionResponse, SessionState } from '@/api/generated/model';
+import { expectDecorativeIcon } from '@/test/icons';
 import { server } from '@/test/server';
 import {
   disputeGuid,
@@ -30,6 +31,34 @@ beforeEach(() => {
 function clickIsHandledByRouter(link: HTMLElement): boolean {
   return !fireEvent.click(link);
 }
+
+// HANDOFF 3.1: the wordmark's dot follows the name like a full stop, and the home link is a 44px target.
+describe('the header wordmark', () => {
+  it('puts the aria-hidden dot after the name, inside the home link', async () => {
+    signInAs('anonymous');
+    renderApp({ path: '/' });
+
+    const home = await screen.findByRole('link', { name: 'DisputeDesk' });
+    const wordmark = home.firstElementChild;
+    const dot = wordmark?.lastElementChild;
+    expect(home.children).toHaveLength(1);
+    expect(wordmark?.firstChild).toHaveTextContent('DisputeDesk');
+    expect(wordmark?.lastChild).toBe(dot);
+    expect(dot).toHaveAttribute('aria-hidden', 'true');
+    expect(dot).toHaveClass('size-2');
+    expect(home).toHaveClass('min-h-(--tap-target)');
+  });
+
+  it('gives the top navigation links the 44px target', async () => {
+    signInAs('linked');
+    renderApp({ path: '/transactions' });
+
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    for (const link of within(nav).getAllByRole('link')) {
+      expect(link).toHaveClass('min-h-(--tap-target)');
+    }
+  });
+});
 
 // Criterion 2: routing by authorisation state.
 describe('routing by authorisation state', () => {
@@ -333,6 +362,18 @@ describe('the disputes route', () => {
     );
   });
 
+  it('draws the phone tab bar with decorative Lucide icons and the top navigation with text only', async () => {
+    signInAs('linked');
+    renderApp({ path: '/transactions' });
+
+    const tabs = await screen.findByRole('navigation', { name: 'Main (phone)' });
+    const transactionsTab = within(tabs).getByRole('link', { name: 'Transactions' });
+    const disputesTab = within(tabs).getByRole('link', { name: 'Disputes' });
+    expectDecorativeIcon(transactionsTab.querySelector('svg.lucide-list'));
+    expectDecorativeIcon(disputesTab.querySelector('svg.lucide-flag'));
+    expect(screen.getByRole('navigation', { name: 'Main' }).querySelector('svg')).toBeNull();
+  });
+
   it.each(['Main', 'Main (phone)'])(
     'takes the %s navigation to Disputes without a document load',
     async (name) => {
@@ -611,7 +652,7 @@ describe('the shell', () => {
 
 // Story 3.7 criterion 6: the skip link.
 describe('the skip link', () => {
-  it('is the first thing Tab reaches on the first load, before the header', async () => {
+  it('is the first thing Tab reaches on the first load, before the home link', async () => {
     signInAs('linked');
     const { user } = renderApp({ path: '/transactions' });
     await screen.findByRole('heading', { level: 1, name: 'Transactions' });
@@ -620,9 +661,8 @@ describe('the skip link', () => {
 
     const skipLink = screen.getByRole('link', { name: 'Skip to main content' });
     expect(skipLink).toHaveFocus();
-    expect(screen.getByRole('banner').compareDocumentPosition(skipLink)).toBe(
-      Node.DOCUMENT_POSITION_PRECEDING,
-    );
+    const home = screen.getByRole('link', { name: 'DisputeDesk' });
+    expect(home.compareDocumentPosition(skipLink)).toBe(Node.DOCUMENT_POSITION_PRECEDING);
   });
 
   it('is the first thing Tab reaches on the first load even when effects run twice (StrictMode)', async () => {
@@ -666,6 +706,25 @@ describe('the skip link', () => {
 
     const skipLink = screen.getByRole('link', { name: 'Skip to main content' });
     expect(skipLink).toHaveClass('sr-only', 'focus:not-sr-only');
+  });
+
+  // WCAG 2.2 SC 2.5.8, 2.5.2, 3.2.1: focused, it floats out of the flow over the home link, so nothing moves and a click
+  // made while it is focused lands, and it covers the home link fully. With no offsets, an absolute child of the header's
+  // flex container sits where it would as the only item: at the container's padding edge, centred like the home link.
+  // Both are as tall as --tap-target. jsdom has no layout, so the test pins the classes the geometry rests on.
+  it('floats over the home link when focused: same container, same tap-target height, no offsets', async () => {
+    signInAs('linked');
+    renderApp({ path: '/transactions' });
+    await screen.findByRole('heading', { level: 1, name: 'Transactions' });
+
+    const skipLink = screen.getByRole('link', { name: 'Skip to main content' });
+    const home = screen.getByRole('link', { name: 'DisputeDesk' });
+    expect(skipLink.parentElement).toBe(home.parentElement);
+    expect(skipLink).toHaveClass('focus:absolute', 'focus:min-h-(--tap-target)');
+    expect(home).toHaveClass('min-h-(--tap-target)');
+    const offsetClass =
+      /(^|:)(-?(top|right|bottom|left|inset|inset-x|inset-y|start|end)-|-?m[trblxy]?-)/;
+    expect([...skipLink.classList].filter((name) => offsetClass.test(name))).toEqual([]);
   });
 
   it.each(['Enter', 'click'])(

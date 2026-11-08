@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router';
+import { Info } from 'lucide-react';
 import type { Ref } from 'react';
 
 import type { TransactionResponse } from '@/api/generated/model';
@@ -61,8 +62,8 @@ export function TransactionRow({
         <p className="font-strong wrap-break-word">{row.description}</p>
         <MaskedNumber row={row} />
         {hint ? (
-          <p className="text-caption text-status-neutral-fg">
-            <span aria-hidden="true">ⓘ </span>
+          <p className="flex items-start gap-1.5 text-caption text-status-neutral-fg">
+            <Info className="mt-0.5 size-3.5 shrink-0" />
             {hint}
           </p>
         ) : null}

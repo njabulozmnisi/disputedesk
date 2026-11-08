@@ -113,6 +113,8 @@
   --form-max: 560px;
   --page-max: 1120px; /* start page only: two-column hero */
   --row-min: 64px; /* list rows */
+  --amount-col: 9rem; /* list grid: the amount column, from 768px */
+  --action-col: 14rem; /* list grid: the Dispute link and badge column, from 768px */
 
   /* Radius */
   /* Radius follows hierarchy: rows none, list panels and fields md, cards and form surfaces lg, controls full. */

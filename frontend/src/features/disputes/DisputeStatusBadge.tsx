@@ -12,9 +12,11 @@ export function DisputeStatusBadge({
 }: {
   statusDescription: StatusDescription;
 }) {
+  const Icon = statusDescription.icon;
+
   return (
     <Badge tone={statusDescription.tone}>
-      <span aria-hidden="true">{statusDescription.icon}</span>
+      <Icon className="size-4" />
       <span className="group-hover:underline">
         <span className="sr-only">Dispute status:</span> {statusDescription.label}
       </span>

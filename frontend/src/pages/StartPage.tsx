@@ -1,3 +1,5 @@
+import { Search } from 'lucide-react';
+
 import { usePageHeading } from '@/app/usePageHeading';
 import { Button } from '@/components/ui/button';
 
@@ -31,7 +33,7 @@ function SampleDispute() {
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <p className="text-amount-hero font-title text-heading tabular-nums">R849.00</p>
         <span className="inline-flex items-center gap-1 rounded-full bg-status-info-bg px-2.5 py-0.5 text-label font-strong text-status-info-fg">
-          <span aria-hidden="true">◔</span>
+          <Search className="size-4" />
           Under review
         </span>
       </div>
