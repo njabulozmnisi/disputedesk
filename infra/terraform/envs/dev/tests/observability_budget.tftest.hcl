@@ -77,15 +77,25 @@ run "criterion_7_one_monthly_cost_budget_without_credits" {
 
   assert {
     condition = (
-      length(aws_budgets_budget.monthly.notification) == 2 &&
-      length([for alert in aws_budgets_budget.monthly.notification : alert if
-        alert.notification_type == "ACTUAL" && alert.comparison_operator == "GREATER_THAN" && alert.threshold == 80 &&
-      alert.threshold_type == "PERCENTAGE" && toset(alert.subscriber_email_addresses) == toset(["budget@example.com"])]) == 1 &&
-      length([for alert in aws_budgets_budget.monthly.notification : alert if
-        alert.notification_type == "FORECASTED" && alert.comparison_operator == "GREATER_THAN" && alert.threshold == 100 &&
-      alert.threshold_type == "PERCENTAGE" && toset(alert.subscriber_email_addresses) == toset(["budget@example.com"])]) == 1
+      length(aws_budgets_budget.monthly.notification) == 4 &&
+      alltrue([for alert in aws_budgets_budget.monthly.notification :
+        alert.comparison_operator == "GREATER_THAN" && alert.threshold_type == "PERCENTAGE" &&
+      toset(alert.subscriber_email_addresses) == toset(["budget@example.com"])])
     )
-    error_message = "The budget does not email an alert at 80 % actual and 100 % forecasted."
+    error_message = "The budget does not have four percentage alerts, each emailing the one address."
+  }
+
+  assert {
+    condition = (
+      length([for alert in aws_budgets_budget.monthly.notification : alert if alert.notification_type == "ACTUAL"]) == 3 &&
+      toset([for alert in aws_budgets_budget.monthly.notification : alert.threshold if alert.notification_type == "ACTUAL"]) == toset([25, 50, 80])
+    )
+    error_message = "The actual-spend alerts are not exactly 25 %, 50 % and 80 %."
+  }
+
+  assert {
+    condition     = [for alert in aws_budgets_budget.monthly.notification : alert.threshold if alert.notification_type == "FORECASTED"] == [100]
+    error_message = "The forecast alert is not exactly one at 100 %."
   }
 }
 
