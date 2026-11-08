@@ -308,7 +308,7 @@ test('criteria 2, 3: wrong amount: bounds in integer cents, live difference, str
   expect(await bodyText(page)).toContain("You're disputing R0.01");
 
   // Change keeps the values; continuing unchanged keeps the key; the single submit sends the amount as a string.
-  await page.getByRole('link', { name: 'Change' }).click();
+  await page.getByRole('link', { name: 'Change your dispute', exact: true }).click();
   await expect(page.getByLabel('Expected amount')).toHaveValue(` ${oneCentBelow} `); // kept as typed
   await expect(page.getByRole('radio', { name: 'Wrong amount', exact: true })).toBeChecked();
   await continueToReview(page);
@@ -383,7 +383,7 @@ test('criteria 5, 6: one key per draft across every attempt and in-progress rese
   ]);
   const transactionId = await draftUnrecognised(page, 'qa 3.6 retries');
   const submit = submitButton(page);
-  const change = page.getByRole('link', { name: 'Change' });
+  const change = page.getByRole('link', { name: 'Change your dispute', exact: true });
   const cancel = page.getByRole('link', { name: 'Cancel' });
 
   await submit.click();
@@ -447,13 +447,13 @@ test('criterion 5: Change then Continue unchanged keeps the key, a different req
   await draftUnrecognised(page, 'first');
   await submitButton(page).click();
   await expect(page.getByRole('alert')).toContainText("We can't check this transaction with the bank right now.");
-  await page.getByRole('link', { name: 'Change' }).click();
+  await page.getByRole('link', { name: 'Change your dispute', exact: true }).click();
   await continueToReview(page);
   await submitButton(page).click();
   await expect.poll(() => attempts.length).toBe(2);
   expect(attempts[1].key).toBe(attempts[0].key);
   await expect(page.getByRole('alert')).toBeVisible();
-  await page.getByRole('link', { name: 'Change' }).click();
+  await page.getByRole('link', { name: 'Change your dispute', exact: true }).click();
   await page.getByLabel('Note (optional)').fill('second');
   await continueToReview(page);
   await submitButton(page).click();
@@ -732,7 +732,7 @@ test('story 3.11 criteria 1-5: one trace from dispute.raise.submit to the API PO
   await page.getByLabel('Note (optional)').fill('qa 3.11 trace note');
   await continueToReview(page);
   // Back to 4a and on to 4b again: moving inside the flow records no second open span.
-  await page.getByRole('link', { name: 'Change' }).click();
+  await page.getByRole('link', { name: 'Change your dispute', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Dispute this transaction' })).toBeVisible();
   await continueToReview(page);
   const created = page.waitForResponse((response) => new URL(response.url()).pathname === disputesPath && response.request().method() === 'POST');

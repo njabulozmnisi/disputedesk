@@ -62,19 +62,20 @@ describe('the review screen', () => {
     await user.paste('  never bought this  ');
     await continueToReview(user);
 
-    const summary = screen.getByRole('main');
+    const summary = screen.getByRole('region', { name: 'Your dispute' });
     expect(within(summary).getByText("You're disputing")).toBeInTheDocument();
     expect(within(summary).getByText('R769.00')).toBeInTheDocument();
     expect(within(summary).getByText('ZXP*GLOBALSVCS 0800')).toBeInTheDocument();
     expect(within(summary).getByText('Mon 26 Oct 2026')).toBeInTheDocument();
-    expect(within(summary).getByText('Card 492345•• •••• 3456')).toBeInTheDocument();
+    expect(within(summary).getByText('Card')).toBeInTheDocument();
+    expect(within(summary).getByText('492345•• •••• 3456')).toBeInTheDocument();
     expect(within(summary).getAllByText(/Card/)).toHaveLength(1);
     expect(within(summary).getByText('Wrong amount')).toBeInTheDocument();
     expect(within(summary).getByText('never bought this')).toBeInTheDocument();
 
     expect(await axe(document.body)).toHaveNoViolations();
 
-    await user.click(screen.getByRole('link', { name: 'Change' }));
+    await user.click(screen.getByRole('link', { name: 'Change your dispute' }));
 
     await screen.findByRole('heading', { level: 1, name: 'Dispute this transaction' });
     expect(screen.getByRole('radio', { name: 'Wrong amount' })).toBeChecked();
@@ -125,7 +126,7 @@ describe('the review screen', () => {
     await user.click(submit());
     await screen.findByText(/We couldn't confirm your dispute was received/);
 
-    await user.click(screen.getByRole('link', { name: 'Change' }));
+    await user.click(screen.getByRole('link', { name: 'Change your dispute' }));
     await continueToReview(user);
     await user.click(submit());
     await waitFor(() => {
@@ -135,7 +136,7 @@ describe('the review screen', () => {
       requests[0]?.headers.get('Idempotency-Key'),
     );
 
-    await user.click(screen.getByRole('link', { name: 'Change' }));
+    await user.click(screen.getByRole('link', { name: 'Change your dispute' }));
     await user.click(screen.getByLabelText('Note (optional)'));
     await user.paste('now with a note');
     await continueToReview(user);
@@ -206,7 +207,7 @@ describe('the review screen', () => {
     await user.click(submit());
     await screen.findByRole('button', { name: 'Submitting…' });
 
-    for (const name of ['Change', 'Cancel']) {
+    for (const name of ['Change your dispute', 'Cancel']) {
       const link = screen.getByRole('link', { name });
       expect(link).toHaveAttribute('aria-disabled', 'true');
       expect(link).toHaveClass('aria-disabled:opacity-70', 'aria-disabled:cursor-progress');
@@ -216,7 +217,9 @@ describe('the review screen', () => {
 
     release();
     await screen.findByRole('button', { name: 'Try again' });
-    expect(screen.getByRole('link', { name: 'Change' })).not.toHaveAttribute('aria-disabled');
+    expect(screen.getByRole('link', { name: 'Change your dispute' })).not.toHaveAttribute(
+      'aria-disabled',
+    );
     await user.click(screen.getByRole('link', { name: 'Cancel' }));
     expect(router.state.location.pathname).toBe('/transactions');
   });
@@ -632,5 +635,174 @@ describe('a refused submit', () => {
     expect(replace).toHaveBeenCalledWith(
       `/signed-out?reason=expired&returnUrl=${encodeURIComponent('/transactions')}`,
     );
+  });
+});
+
+// Criteria 1 and 4 to 7 of ui-raise-review: the step, the one surface, Change, Cancel and the static notice.
+describe('the review screen drawn to the mockup', () => {
+  const stepLabel = 'Step 2 of 2: review and submit';
+  const refusals: [string, () => Response][] = [
+    ['404 not-found', () => problemResponse('not-found', 404)],
+    [
+      '409 already-disputed',
+      () => problemResponse('already-disputed', 409, 'trace-1', { disputeId: 'D-9' }),
+    ],
+    [
+      '422 not-disputable',
+      () => problemResponse('not-disputable', 422, 'trace-1', { reason: 'notEligible' }),
+    ],
+    ['422 idempotency-mismatch', () => problemResponse('idempotency-mismatch', 422)],
+  ];
+  const retryableFailures: [string, () => Response][] = [
+    ['a network failure', () => HttpResponse.error()],
+    ['a 503', () => problemResponse('core-banking-unavailable', 503)],
+    ['a 504', () => problemResponse('internal', 504)],
+  ];
+
+  it('shows the step above the h1 while the review card shows', async () => {
+    await openReviewScreen();
+
+    const step = screen.getByText(stepLabel);
+    const heading = screen.getByRole('heading', { level: 1, name: 'Review your dispute' });
+    expect(step.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it.each(refusals)('shows no step after %s, which ends the draft', async (_name, respond) => {
+    recordRaiseRequests(respond);
+    const { user } = await openReviewScreen();
+
+    await user.click(submit());
+
+    await screen.findByRole('alert');
+    expect(screen.queryByText(/Step \d of 2/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Your dispute' })).not.toBeInTheDocument();
+  });
+
+  it.each(retryableFailures)('keeps the step and the card after %s', async (_name, respond) => {
+    recordRaiseRequests(respond);
+    const { user } = await openReviewScreen();
+
+    await user.click(submit());
+
+    await screen.findByRole('alert');
+    expect(screen.getByText(stepLabel)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Your dispute' })).toBeInTheDocument();
+    expect(tryAgain()).toBeInTheDocument();
+  });
+
+  it('is one flat surface: the hero amount, Change and the read-back sit in the named section', async () => {
+    await openReviewScreen();
+
+    const surface = screen.getByRole('region', { name: 'Your dispute' });
+    expect(surface.tagName).toBe('SECTION');
+    expect(surface).toHaveClass('bg-card', 'border', 'border-border', 'rounded-lg');
+    expect(within(surface).getByText('R849.00')).toBeInTheDocument();
+    expect(within(surface).getByRole('link', { name: 'Change your dispute' })).toBeInTheDocument();
+    expect(surface.querySelector('dl')).not.toBeNull();
+  });
+
+  it('reads the dl in a label column of 9rem, capped at 40% so text scaling keeps room for the value, with hairlines between rows', async () => {
+    await openReviewScreen();
+
+    const rows = Array.from(
+      screen.getByRole('region', { name: 'Your dispute' }).querySelectorAll('dl > div'),
+    );
+    expect(rows.map((row) => row.querySelector('dt')?.textContent)).toEqual([
+      'Transaction',
+      'Date',
+      'Card',
+      'Reason',
+    ]);
+    for (const row of rows) {
+      expect(row).toHaveClass(
+        'grid',
+        'grid-cols-[minmax(0,min(var(--label-col),40%))_minmax(0,1fr)]',
+        'border-t',
+        'border-border',
+      );
+      expect(row.querySelector('dt')).toHaveClass('wrap-anywhere');
+      expect(row.querySelector('dd')).toHaveClass('wrap-anywhere');
+    }
+  });
+
+  it('gives an account transaction an Account row after Date', async () => {
+    const { user } = await openRaiseScreen([makeRow({ maskedCard: null })]);
+    await chooseReason(user, 'Unrecognised');
+    await continueToReview(user);
+
+    const surface = screen.getByRole('region', { name: 'Your dispute' });
+    const labels = Array.from(surface.querySelectorAll('dt')).map((term) => term.textContent);
+    expect(labels).toEqual(['Transaction', 'Date', 'Account', 'Reason']);
+    expect(within(surface).getByText('•••• 4821').closest('dd')).not.toBeNull();
+    expect(within(surface).queryByText('Card')).not.toBeInTheDocument();
+  });
+
+  it('reads the masked number to a screen reader as its short form, hiding the printed one', async () => {
+    await openReviewScreen();
+
+    const surface = screen.getByRole('region', { name: 'Your dispute' });
+    expect(within(surface).getByText('492345•• •••• 3456')).toHaveAttribute('aria-hidden', 'true');
+    expect(within(surface).getByText('card ending 3456')).toHaveClass('sr-only');
+  });
+
+  it('reads an account number as "account ending", hiding the printed one', async () => {
+    const { user } = await openRaiseScreen([makeRow({ maskedCard: null })]);
+    await chooseReason(user, 'Unrecognised');
+    await continueToReview(user);
+
+    const surface = screen.getByRole('region', { name: 'Your dispute' });
+    expect(within(surface).getByText('•••• 4821')).toHaveAttribute('aria-hidden', 'true');
+    expect(within(surface).getByText('account ending 4821')).toHaveClass('sr-only');
+  });
+
+  it('names Change from its content: visible "Change", an sr-only suffix, no aria-label, 44px tall', async () => {
+    await openReviewScreen();
+
+    const change = screen.getByRole('link', { name: 'Change your dispute' });
+    expect(change).not.toHaveAttribute('aria-label');
+    expect(change).toHaveTextContent('Change your dispute');
+    expect(within(change).getByText('your dispute')).toHaveClass('sr-only');
+    expect(change.firstChild?.textContent?.trim()).toBe('Change');
+    expect(change).toHaveClass('min-h-(--tap-target)');
+  });
+
+  it('draws the only-once sentence as a static neutral notice: no alert, status or live region', async () => {
+    await openReviewScreen();
+
+    const sentence = screen.getByText(
+      'You can dispute a transaction only once. You can withdraw the dispute while it is open.',
+    );
+    const notice = sentence.closest('[data-slot="alert"]');
+    expect(notice).not.toBeNull();
+    expect(notice).not.toHaveAttribute('role');
+    expect(notice).not.toHaveAttribute('aria-live');
+    expect(notice?.querySelector('[role],[aria-live]')).toBeNull();
+    expect(notice?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(notice?.closest('[role="alert"],[role="status"],[aria-live]')).toBeNull();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('leaves exactly one alert after a 503: the problem notice', async () => {
+    recordRaiseRequests(() => problemResponse('core-banking-unavailable', 503));
+    const { user } = await openReviewScreen();
+
+    await user.click(submit());
+
+    await screen.findByRole('alert');
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      "We can't check this transaction with the bank right now. Try again.",
+    );
+  });
+
+  it('puts Submit first and draws Cancel as the secondary pill, both full width below 768px', async () => {
+    await openReviewScreen();
+
+    const cancel = screen.getByRole('link', { name: 'Cancel' });
+    expect(cancel).toHaveAttribute('href', '/transactions');
+    expect(cancel).toHaveAttribute('data-slot', 'button');
+    expect(cancel).toHaveClass('rounded-full', 'min-h-12', 'border-primary', 'w-full', 'md:w-auto');
+    expect(submit()).toHaveClass('w-full', 'md:w-auto');
+    expect(submit().nextElementSibling).toBe(cancel);
   });
 });
