@@ -328,7 +328,7 @@ test.describe('linked customer A', () => {
     // 'Dispute this transaction' is on the page only while customer A has a disputable row among the first 20; the suite's
     // earlier specs raise disputes on A's 20 disputable transactions, so a full run can leave none.
     const disputeLinkExpected = (await page.getByRole('link', { name: 'Dispute this transaction' }).count()) > 0;
-    expect(visited).toEqual(expect.arrayContaining(['Skip to main content', 'DisputeDesk', 'Sign out', 'Load more', '☰ Transactions', '⚑ Disputes']));
+    expect(visited).toEqual(expect.arrayContaining(['Skip to main content', 'DisputeDesk', 'Sign out', 'Load more', 'Transactions', 'Disputes']));
     if (disputeLinkExpected) expect(visited).toContain('Dispute this transaction');
   });
 

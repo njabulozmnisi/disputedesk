@@ -279,8 +279,8 @@ test('criterion 2: outcome badges, and an unknown status or outcome (response ed
   expect(text).not.toMatch(/escalated|something-new|partially/i);
   expect(open[1].text).toMatch(/Raised \d/);
   // Tone and icon: success and danger tones carry a check and a cross, on the existing status tokens.
-  const upheld = page.getByRole('link', { name: /Resolved · Upheld/ }).locator('span').filter({ hasText: '✓' }).first();
-  const rejected = page.getByRole('link', { name: /Resolved · Rejected/ }).locator('span').filter({ hasText: '✕' }).first();
+  const upheld = page.getByRole('link', { name: /Resolved · Upheld/ }).locator('svg.lucide-check').first();
+  const rejected = page.getByRole('link', { name: /Resolved · Rejected/ }).locator('svg.lucide-x').first();
   await expect(upheld).toBeVisible();
   await expect(rejected).toBeVisible();
   expect(await axeViolations(page), 'axe with outcome badges').toEqual([]);
