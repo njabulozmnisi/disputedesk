@@ -9,26 +9,27 @@
 </head>
 <body>
 <header class="topbar"><div class="topbar__in">
-  <a class="brand" href="link.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="brand" href="link.html">DisputeDesk<span class="brand__dot" aria-hidden="true"></span></a>
   <a class="signout" href="start.html">Sign out</a>
 </div></header>
 <p class="mock-note">Mockup: identical for a wrong code, an expired code, and a login with no active challenge. Nothing reveals which. <a href="index.html">All screens</a></p>
-<main class="wrap wrap--form stack-lg">
-<div class="stack"><h1 class="title">Enter your OTP</h1>
-<p class="notice notice--info">If these details match our records, we've sent a code to the cellphone number we hold for you.</p></div>
-<div class="notice notice--danger" role="alert"><strong>That code didn't work.</strong><span>You have 2 tries left.</span></div>
-<form class="surface stack" action="transactions.html">
+<main class="wrap wrap--form">
+<div class="page-head"><div class="progress"><p class="progress__label">Link your login, step 2 of 2</p><div class="progress__bar" aria-hidden="true"><span class="is-done"></span><span class="is-done"></span></div></div><h1 class="title">Enter your OTP</h1></div>
+<div class="notice notice--info"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><div class="notice__body"><p>If these details match our records, we've sent a code to the cellphone number we hold for you.</p></div></div>
+<form class="surface" action="transactions.html">
+<div class="notice notice--danger" role="alert"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg><div class="notice__body"><p><strong>That code didn't work.</strong></p><p>You have 2 tries left.</p></div></div>
 <div class="field"><label for="otp">6-digit one-time code</label>
-<div class="otp" aria-hidden="true"><span class="is-active"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span></div>
-<input class="sr-only" id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
-<p class="help">The code expires 5 minutes after we send it.</p></div>
+<div class="otp" aria-hidden="true"><span class="is-active"></span><span></span><span></span><span></span><span></span><span></span></div>
+<input class="sr-only" id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-describedby="otp-h">
+<p class="help" id="otp-h">The code expires 5 minutes after we send it. You can paste it, or let your phone fill it in.</p></div>
 <button class="btn btn--primary btn--block" type="submit">Verify</button>
 </form>
-<p class="caption">Didn't get a code? <a href="link.html">Start again</a>. Can't link online? Contact the bank.</p>
+<section class="help-block" aria-labelledby="help-h"><h2 class="minor-heading" id="help-h">Need help?</h2><p>Didn't get a code? <a href="link.html">Start again</a>.</p><p>Can't link online? Contact the bank.</p></section>
 </main>
 <footer class="footer"><div class="footer__in">
   <p>Demo data only. Every name, number and amount shown here is made up.</p>
   <p>Your details are used only to show your transactions and handle your disputes.</p>
 </div></footer>
+
 </body>
 </html>
