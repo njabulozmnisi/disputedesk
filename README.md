@@ -90,6 +90,12 @@ has the full seed.
 
 One environment, `dev`, runs the same Compose stack in af-south-1 (Cape Town) and stays within the AWS free tier.
 
+| Open | URL |
+|---|---|
+| The app | <https://d8189wokwcff7.cloudfront.net> (sign in with the [Try it](#try-it) logins) |
+| API reference (Scalar) | <https://d8189wokwcff7.cloudfront.net/scalar/> |
+| Mailpit (OTPs and emails) | <https://d3qqsd2cm8xthz.cloudfront.net>, behind basic auth; its password stays in SSM, so step 5 of *Try it* works only locally |
+
 | Part | What |
 |---|---|
 | Entry | Three CloudFront distributions (app, sign-in, Mailpit) are the only way in. Plain HTTP is redirected or refused |
@@ -97,7 +103,7 @@ One environment, `dev`, runs the same Compose stack in af-south-1 (Cape Town) an
 | Data | RDS PostgreSQL 18 on db.t4g.micro, in private subnets, with TLS required |
 | Secrets | SSM Parameter Store, encrypted with KMS |
 | Observability | An OpenTelemetry Collector sends traces to X-Ray (Transaction Search), and logs and metrics to CloudWatch |
-| Cost | A monthly budget emails at 80 % of actual spend or 100 % of forecast spend |
+| Cost | A monthly budget emails at 25 %, 50 % and 80 % of actual spend, and at 100 % of forecast spend |
 | Deploys | By hand. Dispatch `deploy.yml` with a commit on `main`, and GitHub waits for the owner's approval. The deploy then runs through OIDC and SSM Run Command |
 
 - **The layout:** [infra/README.md, Deployed on AWS](infra/README.md#deployed-on-aws) has the architecture diagram
@@ -106,6 +112,22 @@ One environment, `dev`, runs the same Compose stack in af-south-1 (Cape Town) an
   checks, rollback and destroy.
 - **Why it is shaped this way:** [AD-28](docs/architecture/architecture.md#ad-28---aws-dev-environment-adopted) and the
   [deployment view](docs/architecture/architecture.md#deployment-view-aws-dev).
+
+### What public traffic costs
+
+The environment runs in a dedicated AWS account on the [AWS Free plan](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html).
+Usage is paid from the plan's credits, and a Free plan account is never billed: when the credits run out, AWS closes
+the account rather than charging it.
+
+- **Fixed costs** do not grow with traffic: the instance, the database, the public IPv4 address and the KMS key.
+- **Traffic costs** grow with every request, because each one is logged and traced. CloudWatch Logs ingests the logs,
+  spans and metrics, and CloudFront serves requests beyond its always-free monthly allowance.
+- **Flooding the URLs** could therefore spend credits faster. It could not create a bill; at worst the account closes
+  early and the demo goes offline.
+- **What limits it:**
+  - the gateway's limit of 10 requests a second per client address;
+  - CloudFront being the only way in;
+  - the budget alerts above, which arrive well before the credits run out.
 
 ## The dispute lifecycle
 
