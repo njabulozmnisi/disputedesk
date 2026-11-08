@@ -29,7 +29,7 @@ flowchart LR
 | `modules/edge` | The three CloudFront distributions and the origin-verify value |
 | `modules/deploy-role` | GitHub's OIDC provider, the deploy role (trusted only for the `dev` environment, which only `main` may use), and its Run Command document |
 | `modules/observability` | The collector's log group, and X-Ray Transaction Search |
-| `modules/budget` | The monthly cost budget and its two email alerts |
+| `modules/budget` | The monthly cost budget and its four email alerts |
 
 - Every IAM policy is a `<name>.json.tftpl` file beside its `main.tf`.
 - `IamNamesTests` in `infra/tests` checks every action in those files against AWS's public service reference.
@@ -184,8 +184,8 @@ Data Protection keys under `/disputedesk-dataprotection/dev`, which the deploy n
 
 ## 6. The budget alert
 
-AWS Budgets emails the step 4 address at 80 % of the actual monthly cost and 100 % of the forecast, credits excluded.
-It sends nothing until a threshold is crossed, so expect no email at setup. Check the budget instead:
+AWS Budgets emails the step 4 address at 25 %, 50 % and 80 % of the actual monthly cost and at 100 % of the forecast,
+credits excluded. It sends nothing until a threshold is crossed, so expect no email at setup. Check the budget instead:
 
 ```sh
 aws budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" \
@@ -342,7 +342,8 @@ Run them after the first deploy, and after any change to the Terraform or the AW
      --query Quota.Value --output text
    ```
 
-10. The budget email arrives once a threshold is crossed. Until then, check the recipient as in step 6.
+10. The budget email arrives once the actual cost crosses 25 %, 50 % or 80 % of the budget, or the forecast crosses
+    100 %. Until then, check the recipient as in step 6.
 11. Plain HTTP is refused on the APIs and the identity host, and redirected for the app's pages. The first three print
     `403` with no `Location`, and the last two print `301` to `https://`:
 
