@@ -1,0 +1,163 @@
+{
+  "status": "built",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-ae1ed41bc1abcb91e",
+  "branch": "feature/ui-tokens-icons",
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "NFR-CODE-4",
+      "test": "frontend/src/theme/theme.test.ts > the theme file > declares the list columns"
+    },
+    {
+      "id": "AC2",
+      "requirement": "NFR-CODE-5",
+      "test": "frontend/src/packagePins.test.ts > package.json > pins every dependency to an exact version; lists lucide-react once, as a runtime dependency"
+    },
+    {
+      "id": "AC3",
+      "requirement": "FR-12, FR-16, FR-17",
+      "test": "frontend/src/features/disputes/customerStatus.test.ts > describeCustomerStatus > maps %s to its label, tone, icon and group; maps underReviewPrioritised to the custom SearchPriority icon; shows a resolved dispute by its outcome"
+    },
+    {
+      "id": "AC4",
+      "requirement": "WCAG 2.2 SC 1.1.1, SC 1.4.1",
+      "test": "routing.test.tsx > draws the phone tab bar with decorative Lucide icons and the top navigation with text only (the top navigation holds no svg: getByRole navigation Main, querySelector svg is null); TransactionsScreen.test.tsx > draws the hint with a decorative 14px Lucide info icon; TransactionsScreen.test.tsx > hides the icon from the accessible name and keeps the dispute id out of the text (badge); pages/StartPage.test.tsx > the start page > draws the sample badge with a decorative Lucide search icon; TransactionsScreen.test.tsx > keyboard > reaches every control by Tab in reading order"
+    },
+    {
+      "id": "AC5",
+      "requirement": "WCAG 2.2 SC 2.5.3, SC 2.5.5",
+      "test": "routing.test.tsx > the header wordmark > puts the aria-hidden dot after the name, inside the home link; gives the top navigation links the 44px target"
+    },
+    {
+      "id": "AC6",
+      "requirement": "HANDOFF 5",
+      "test": "frontend/src/theme/theme.test.ts > the theme file > has no text-glyph icon"
+    },
+    {
+      "id": "AC7",
+      "requirement": "WCAG 2.2 SC 2.4.1, 2.5.2, 2.5.8, 3.2.1",
+      "test": "routing.test.tsx > the skip link > floats over the home link when focused: same container, same tap-target height, no offsets; is the first thing Tab reaches on the first load, before the home link; is hidden until it has focus; moves focus to main by script on Enter and click"
+    }
+  ],
+  "smoke": "Fix round 3: vite build and vite preview on port 4399; a throwaway headless Chromium script (Playwright and @axe-core/playwright from the main checkout e2e/node_modules, /api stubbed with page.route, deleted afterwards) at 320, 360 and 1280px for the anonymous, unlinked and linked session states: Tab once, read the skip link and home link boxes, the h1, header, main and home link boxes before and after focus, elementFromPoint over a 5x5 grid on the home link, axe-core (wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa), then a mouse click on another control while the skip link still had focus. Result, all nine runs: skip link focused; skip link box x16 y10 181.5x44 at 320 and 360px, x104 y10 at 1280px on the start page (anonymous), x224 y10 at 1280px unlinked, x224 y12 at 1280px linked (the header is 68px tall there because of the top navigation); the home link box is identical in x and y, 128.9x44, so the skip link box contains the home link box (same top, same left, same height, 52.6px wider); every sample point on the home link hits the skip link; the h1, header, main and home link boxes are identical before and after focus (nothing moved); no horizontal overflow; axe reports 0 violations; the click lands: anonymous Sign in (x219 y10 85x44 at 320px) went to /api/v1/authentication/login, linked Disputes (tab bar at 320 and 360px, top navigation at 1280px) went /transactions to /disputes, unlinked Sign out (a button; the unlinked screen has no other link) sent one logout request. Not run: the real API, the Compose stack, the e2e linking-screens, linking-queue and journeys projects (QA re-runs them); e2e/ unchanged this round.",
+  "standards": [
+    {
+      "mechanism": "Theme variables as CSS custom properties in the theme file (--amount-col, --action-col, no @theme mapping)",
+      "source": "https://tailwindcss.com/docs/theme"
+    },
+    {
+      "mechanism": "lucide-react pinned exactly with npm install --save-exact",
+      "source": "https://docs.npmjs.com/cli/commands/npm-install"
+    },
+    {
+      "mechanism": "Lucide React icon components, aria-hidden by default, currentColor, stroke-width 2",
+      "source": "https://lucide.dev/guide/react/advanced/accessibility"
+    },
+    {
+      "mechanism": "One custom icon (SearchPriority) with createLucideIcon(name, iconNode), typed as LucideIcon",
+      "source": "https://lucide.dev/guide/react/advanced/typescript"
+    },
+    {
+      "mechanism": "Decorative images hidden from assistive technology; text carries the meaning and the accessible names are unchanged",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-content"
+    },
+    {
+      "mechanism": "Inline flex with baseline alignment for the wordmark dot; 44px target token on the home and top-nav links",
+      "source": "https://tailwindcss.com/docs/align-items"
+    },
+    {
+      "mechanism": "Target size through the existing --tap-target token",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced"
+    },
+    {
+      "mechanism": "Skip link first in tab order, hidden until focus, then absolutely positioned (out of the flow, so no layout shift and a click made while it is focused lands); no offsets, so it takes the static position of an absolute child of the header flex container (CSS Flexbox 4.1) and aligns with the home link; min-h-(--tap-target) like the home link, no raw px",
+      "source": "https://www.w3.org/WAI/WCAG22/Techniques/general/G1 (G1, SC 2.4.1); https://www.w3.org/TR/css-flexbox-1/#abspos-items (absolutely positioned flex children); https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum (SC 2.5.8); https://www.w3.org/WAI/WCAG22/Understanding/pointer-cancellation (SC 2.5.2); https://www.w3.org/WAI/WCAG22/Understanding/on-focus (SC 3.2.1)"
+    }
+  ],
+  "breaks": [
+    {
+      "patch": "diff --git a/frontend/src/theme/tokens.css b/frontend/src/theme/tokens.css\n--- a/frontend/src/theme/tokens.css\n+++ b/frontend/src/theme/tokens.css\n@@ -113,7 +113,6 @@\n   --form-max: 560px;\n   --page-max: 1120px; /* start page only: two-column hero */\n   --row-min: 64px; /* list rows */\n-  --amount-col: 9rem; /* list grid: the amount column, from 768px */\n   --action-col: 14rem; /* list grid: the Dispute link and badge column, from 768px */\n \n   /* Radius */\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/theme/theme.test.ts -t \"declares the list columns\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "diff --git a/frontend/package.json b/frontend/package.json\n--- a/frontend/package.json\n+++ b/frontend/package.json\n@@ -25,7 +25,7 @@\n     \"@tanstack/react-router\": \"1.170.46\",\n     \"class-variance-authority\": \"0.7.1\",\n     \"clsx\": \"2.1.1\",\n-    \"lucide-react\": \"1.70.0\",\n+    \"lucide-react\": \"^1.70.0\",\n     \"radix-ui\": \"1.8.1\",\n     \"react\": \"19.3.1\",\n     \"react-dom\": \"19.3.1\",\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/packagePins.test.ts -t \"pins every dependency to an exact version\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "diff --git a/frontend/src/features/disputes/customerStatus.ts b/frontend/src/features/disputes/customerStatus.ts\n--- a/frontend/src/features/disputes/customerStatus.ts\n+++ b/frontend/src/features/disputes/customerStatus.ts\n@@ -63,7 +63,7 @@\n ): StatusDescription | undefined {\n   switch (status) {\n     case 'submitted':\n-      return { label: 'Submitted', tone: 'info', icon: Send, group: 'open' };\n+      return { label: 'Submitted', tone: 'info', icon: Search, group: 'open' };\n     case 'underReview':\n       return { label: 'Under review', tone: 'info', icon: Search, group: 'open' };\n     case 'underReviewPrioritised':\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/customerStatus.test.ts -t \"maps submitted to its label, tone, icon and group\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "diff --git a/frontend/src/features/disputes/customerStatus.ts b/frontend/src/features/disputes/customerStatus.ts\n--- a/frontend/src/features/disputes/customerStatus.ts\n+++ b/frontend/src/features/disputes/customerStatus.ts\n@@ -70,7 +70,7 @@\n       return {\n         label: 'Under review (prioritised)',\n         tone: 'priority',\n-        icon: SearchPriority,\n+        icon: Search,\n         group: 'open',\n       };\n     case 'resolved':\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/customerStatus.test.ts -t \"maps underReviewPrioritised to the custom SearchPriority icon\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "diff --git a/frontend/src/app/Navigation.tsx b/frontend/src/app/Navigation.tsx\n--- a/frontend/src/app/Navigation.tsx\n+++ b/frontend/src/app/Navigation.tsx\n@@ -34,7 +34,7 @@\n       className=\"fixed inset-x-4 bottom-4 z-10 flex gap-1 rounded-full border border-border bg-card p-1 shadow-overlay md:hidden\"\n     >\n       <Link to=\"/transactions\" className={tabLinkClass}>\n-        <List className=\"size-4\" />\n+        <List />\n         Transactions\n       </Link>\n       <Link to=\"/disputes\" className={tabLinkClass}>\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/app/routing.test.tsx -t \"draws the phone tab bar with decorative Lucide icons and the top navigation with text only\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "diff --git a/frontend/src/features/disputes/DisputeStatusBadge.tsx b/frontend/src/features/disputes/DisputeStatusBadge.tsx\n--- a/frontend/src/features/disputes/DisputeStatusBadge.tsx\n+++ b/frontend/src/features/disputes/DisputeStatusBadge.tsx\n@@ -16,7 +16,7 @@\n \n   return (\n     <Badge tone={statusDescription.tone}>\n-      <Icon className=\"size-4\" />\n+      <Icon />\n       <span className=\"group-hover:underline\">\n         <span className=\"sr-only\">Dispute status:</span> {statusDescription.label}\n       </span>\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"hides the icon from the accessible name and keeps the dispute id out of the text\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "diff --git a/frontend/src/app/Header.tsx b/frontend/src/app/Header.tsx\n--- a/frontend/src/app/Header.tsx\n+++ b/frontend/src/app/Header.tsx\n@@ -33,7 +33,7 @@\n           {/* The dot follows the name like a full stop; ml-0.5 (2px) is DESIGN.md's one exception to the 4-based spacing. */}\n           <span className=\"inline-flex items-baseline\">\n             DisputeDesk\n-            <span aria-hidden=\"true\" className=\"ml-0.5 size-2 shrink-0 rounded-full bg-primary\" />\n+            <span aria-hidden=\"true\" className=\"ml-0.5 size-3 shrink-0 rounded-full bg-primary\" />\n           </span>\n         </Link>\n         {state === 'linked' ? <TopNav /> : null}\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/app/routing.test.tsx -t \"puts the aria-hidden dot after the name, inside the home link\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "diff --git a/frontend/src/pages/StartPage.tsx b/frontend/src/pages/StartPage.tsx\n--- a/frontend/src/pages/StartPage.tsx\n+++ b/frontend/src/pages/StartPage.tsx\n@@ -1,4 +1,6 @@\n import { Search } from 'lucide-react';\n+\n+// \u279a\n \n import { usePageHeading } from '@/app/usePageHeading';\n import { Button } from '@/components/ui/button';\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/theme/theme.test.ts -t \"has no text-glyph icon\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "diff --git a/frontend/src/app/Navigation.tsx b/frontend/src/app/Navigation.tsx\n--- a/frontend/src/app/Navigation.tsx\n+++ b/frontend/src/app/Navigation.tsx\n@@ -18,6 +18,7 @@\n   return (\n     <nav aria-label=\"Main\" className=\"hidden gap-1 rounded-full bg-muted p-1 md:flex\">\n       <Link to=\"/transactions\" className={topLinkClass}>\n+        <List className=\"size-4\" />\n         Transactions\n       </Link>\n       <Link to=\"/disputes\" className={topLinkClass}>\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/app/routing.test.tsx -t \"draws the phone tab bar with decorative Lucide icons and the top navigation with text only\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "diff --git a/frontend/src/app/Header.tsx b/frontend/src/app/Header.tsx\n--- a/frontend/src/app/Header.tsx\n+++ b/frontend/src/app/Header.tsx\n@@ -36,7 +36,7 @@\n           script, with no hash navigation for the router to see. */}\n         <a\n           href=\"#main\"\n-          className=\"sr-only focus:not-sr-only focus:absolute focus:z-20 focus:inline-flex focus:min-h-(--tap-target) focus:items-center focus:rounded-full focus:bg-card focus:px-4 focus:shadow-overlay\"\n+          className=\"sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-20 focus:rounded-full focus:bg-card focus:px-4 focus:py-2 focus:shadow-overlay\"\n           onClick={(event) => {\n             event.preventDefault();\n             onSkipToMain();\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/app/routing.test.tsx -t \"floats over the home link when focused: same container, same tap-target height, no offsets\"",
+      "expect": "fails"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/frontend-junit.xml"
+    ],
+    "diff_hash": "d4ad4fb4eb25",
+    "summary": "Vitest, 33 files, 677 tests, all passed (one full run, JUnit); npm ci, typecheck, lint, format, build and scripts/secret-scan.sh (no leaks) also pass. All 10 breaks applied one at a time with git apply, each run showed 1 failed, each reverted with git apply -R; diff hash unchanged afterwards."
+  },
+  "assumptions": [
+    "Commits not made: AGENTS.md and the builder rules say never commit, and the guard forbids it. The change is left uncommitted in the worktree. Commit 2 (assertion updates to existing tests) is frontend/src/features/disputes/customerStatus.test.ts in full, plus three hunks of frontend/src/features/transactions/TransactionsScreen.test.tsx (old lines 398, 409 and 724-725); everything else is commit 1. Fix round 1 changes only frontend/src/app/routing.test.tsx (commit 1).",
+    "A test the spec does not name was added for criterion 2, frontend/src/packagePins.test.ts, so the pin has a failing-test break (every dependency matches an exact x.y.z). It passes for all existing dependencies.",
+    "Shared test helper frontend/src/test/icons.ts (expectDecorativeIcon) holds the four attribute assertions used by three test files (routing.test.tsx, TransactionsScreen.test.tsx, StartPage.test.tsx).",
+    "The badge test is the TransactionsScreen line-409 test, as the spec says; no separate DisputeStatusBadge test.",
+    "Icons rely on Lucide's documented default aria-hidden=true (no explicit prop); the tests assert the attribute on every surface.",
+    "lucide-react 1.70.0 verified 2026-11-08 on npm: latest dist-tag, published 2026-11-06 (two days old), maintainer ericfennis, repository github.com/lucide-icons/lucide, ISC licence, 130,919,011 downloads in the week 2026-11-01 to 2026-11-07, peer dependency react ^16.5.1 to ^19 satisfied by 19.3.1, no install scripts. Only lucide-react was added to package.json and package-lock.json.",
+    "The hint row uses a flex paragraph (gap-1.5, icon mt-0.5 shrink-0) so a wrapped hint keeps the icon on its first line; the mockup's docs/ux/mockups/app.css (.hint: gap 6px, .icon 14px with margin-top 1px, in the DisputeDesk-ux-docs checkout) gives the 6px gap and 1px offset, and mt-0.5 (2px) is the nearest theme-scale utility. QA to check against the mockup.",
+    "npm run build prints Vite's existing chunk-size warning; not compared with main.",
+    "Fix round 1 (review medium, routing.test.tsx): the top-navigation check is now getByRole(navigation, Main).querySelector(svg) toBeNull(), because an svg has no implicit role in @testing-library/dom 10.4.2 and the old queryByRole(img) could never fail. Break 9 puts a Lucide List icon in a TopNav link; verified: the test passes without it and fails with it.",
+    "QA's two e2e edits (e2e/tests/spa-disputes-history.spec.ts, e2e/tests/spa-transactions.spec.ts) are in the working tree unchanged; e2e/ was not edited in this round.",
+    "Fix round 3 (QA F4, medium): the skip link moved from RootLayout into Header, as the first child of the header's inner flex container, and Header takes a new onSkipToMain prop (RootLayout passes () => mainRef.current?.focus()). Reason: with no offsets, an absolutely positioned child of a flex container sits at the container's padding edge and centred on the cross axis (CSS Flexbox 4.1), exactly where the home link is, on every page width of the container (start page 1120px, other pages 1072px) and whatever the header's height, with no left/top utilities that could drift from the header's px-4 md:px-6 or min-h-16. It cost one deviation from the earlier test: 'before the header' became 'before the home link', because the skip link is now inside the banner landmark; it is still the first focusable element of the page (the first-Tab tests, the StrictMode tests and e2e spa-transactions 'visited' order are unchanged).",
+    "The skip link is at least as tall as the home link only while both use min-h-(--tap-target) and the home link is one line; the unit test pins both classes and the shared parent. It is 52.6px wider than the home link (the text 'Skip to main content' plus px-4 against the wordmark).",
+    "The unit test checks classes and the shared parent (jsdom has no layout), and that the skip link has no offset, inset or margin utility; the real geometry, hit test, no-shift check, pointer click and axe were confirmed in headless Chromium (smoke).",
+    "The unlinked screen has no link other than the skip link and home link, so the pointer check there presses the Sign out button and sees the logout request; the linked and anonymous states press links.",
+    "Each break's test_method is a shell command (cd frontend && npm ci --silent && npx vitest run <file> -t \"<name>\"), because the throwaway copy has no node_modules. Round 2's skip-link break (RootLayout.tsx) is replaced by break 10, which puts the old floating geometry (focus:top-2 focus:left-2, no tap-target height) back on the skip link in Header.tsx. Verified in this worktree: each of the 10 breaks applies, and its test fails with it (1 failed each) and passes without it (the full run).",
+    "QA's two e2e edits (e2e/tests/spa-disputes-history.spec.ts, e2e/tests/spa-transactions.spec.ts) are in the working tree unchanged; e2e/ was not edited in this round.",
+    "The throwaway scripts (browser check, break runner, this record writer) were deleted from frontend/ before the diff hash was taken; vite preview was stopped."
+  ],
+  "e2e_lines_for_qa": [
+    "e2e/tests/spa-disputes-history.spec.ts:282 and 283: .locator('span').filter({ hasText: '\u2713' }) and ({ hasText: '\u2715' }); the badge icon is now an svg (svg.lucide-check, svg.lucide-x), no text",
+    "e2e/tests/spa-transactions.spec.ts:331: '\u2630 Transactions' and '\u2691 Disputes' become 'Transactions' and 'Disputes'",
+    "The glyph grep over e2e/ finds only these three lines in the specs listed"
+  ],
+  "open_questions": [],
+  "conflicts": [],
+  "fix_round": 3
+}
