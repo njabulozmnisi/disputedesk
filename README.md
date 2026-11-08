@@ -19,7 +19,7 @@ flowchart LR
     API -. traces, logs, metrics .-> OT[Aspire dashboard]
 ```
 
-The same stack deploys to AWS behind CloudFront ([infra/](infra/README.md)).
+The same stack also runs on AWS behind CloudFront ([Deployed on AWS](#deployed-on-aws)).
 
 ## Tech stack
 
@@ -85,6 +85,27 @@ has the full seed.
    | The same `resolve` again | 409, `action-not-allowed` |
 
    The dispute ID is in A's browser URL (`/disputes/<id>`).
+
+## Deployed on AWS
+
+One environment, `dev`, runs the same Compose stack in af-south-1 (Cape Town) and stays within the AWS free tier.
+
+| Part | What |
+|---|---|
+| Entry | Three CloudFront distributions (app, sign-in, Mailpit) are the only way in. Plain HTTP is redirected or refused |
+| Compute | One EC2 c7i-flex.large runs the Compose stack. It has no SSH and accepts traffic only from CloudFront |
+| Data | RDS PostgreSQL 18 on db.t4g.micro, in private subnets, with TLS required |
+| Secrets | SSM Parameter Store, encrypted with KMS |
+| Observability | An OpenTelemetry Collector sends traces to X-Ray (Transaction Search), and logs and metrics to CloudWatch |
+| Cost | A monthly budget emails at 80 % of actual spend or 100 % of forecast spend |
+| Deploys | By hand. Dispatch `deploy.yml` with a commit on `main`, and GitHub waits for the owner's approval. The deploy then runs through OIDC and SSM Run Command |
+
+- **The layout:** [infra/README.md, Deployed on AWS](infra/README.md#deployed-on-aws) has the architecture diagram
+  and the deploy sequence.
+- **Running it:** [infra/terraform/README.md](infra/terraform/README.md) covers standing it up, the post-deploy
+  checks, rollback and destroy.
+- **Why it is shaped this way:** [AD-28](docs/architecture/architecture.md#ad-28---aws-dev-environment-adopted) and the
+  [deployment view](docs/architecture/architecture.md#deployment-view-aws-dev).
 
 ## The dispute lifecycle
 
