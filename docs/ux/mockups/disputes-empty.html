@@ -9,24 +9,27 @@
 </head>
 <body>
 <header class="topbar"><div class="topbar__in">
-  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="brand" href="transactions.html">DisputeDesk<span class="brand__dot" aria-hidden="true"></span></a>
   <nav class="topnav" aria-label="Main"><a href="transactions.html">Transactions</a><a href="disputes.html" aria-current="page">Disputes</a></nav>
   <a class="signout" href="start.html">Sign out</a>
 </div></header>
 <p class="mock-note">Mockup: no disputes yet. <a href="index.html">All screens</a></p>
-<main class="wrap stack-lg">
-<div class="stack"><h1 class="title">Disputes</h1></div>
-<div class="empty"><h2 class="subheading">You haven't disputed any transactions.</h2>
+<main class="wrap">
+<div class="page-head"><h1 class="title">Disputes</h1><p class="lede">Every dispute you've raised, newest first.</p></div>
+<div class="state">
+<span class="state__icon" aria-hidden="true"><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg></span>
+<h2 class="subheading">You haven't disputed any transactions.</h2>
 <p class="lede">If something on your account looks wrong, find it in your transactions and choose Dispute. It will show here with its status.</p>
-<div class="actions"><a class="btn btn--secondary" href="transactions.html">Go to transactions</a></div></div>
+<a class="btn btn--secondary" href="transactions.html">Go to transactions</a>
+</div>
 </main>
 <footer class="footer"><div class="footer__in">
   <p>Demo data only. Every name, number and amount shown here is made up.</p>
   <p>Your details are used only to show your transactions and handle your disputes.</p>
 </div></footer>
 <nav class="tabbar" aria-label="Main (phone)">
-  <a href="transactions.html"><span aria-hidden="true">☰</span>Transactions</a>
-  <a href="disputes.html" aria-current="page"><span aria-hidden="true">⚑</span>Disputes</a>
+  <a href="transactions.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Transactions</a>
+  <a href="disputes.html" aria-current="page"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>Disputes</a>
 </nav>
 </body>
 </html>

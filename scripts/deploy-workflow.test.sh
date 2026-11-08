@@ -2,11 +2,10 @@
 # Proves the deploy wiring (ad-012 clause 4) on the workflow files, with no network and no AWS call:
 # - publish's build step writes the five image references to GITHUB_OUTPUT and the job declares them as outputs; a
 #   reference that is not ghcr.io/njabulozmnisi/disputedesk-<name>@sha256:<64 hex> fails the step;
-# - deploy.yml runs on workflow_call with six required string inputs and on workflow_dispatch with sha; its one job is
-#   in the environment dev, in the concurrency group deploy-dev, on main only; its SHA check and its images step, on
-#   both paths, write the same five outputs and fail on a value out of bounds;
-# - CI's deploy calls deploy.yml only when DEPLOY_ENABLED is true, and deploy-switched-off prints the five references
-#   with the notice otherwise, failing when one is empty.
+# - deploy.yml runs only on workflow_dispatch, with sha; its one job is in the environment dev, in the concurrency group
+#   deploy-dev, on main only; its SHA check fails on a value out of bounds, and its images step resolves the five
+#   references from GHCR and fails on an image built from another commit;
+# - no CI job calls deploy.yml: every deploy is dispatched by hand.
 # Each run: step is read from its workflow and run as GitHub runs a step with no shell: (bash -e {0}; Workflow syntax,
 # defaults.run.shell), with --noprofile --norc to keep this machine's bash start-up files out, and docker and trivy
 # stubbed.
@@ -96,9 +95,7 @@ unset STUB_API_DIGEST
 unset GITHUB_SHA GITHUB_REPOSITORY
 
 # --- deploy.yml's triggers and its one job ---
-same "$(yq -o=json -I=0 '.on.workflow_call.inputs | map_values([.required, .type])' "$deploy")" \
-  '{"sha":[true,"string"],"api":[true,"string"],"worker":[true,"string"],"gateway":[true,"string"],"core-banking":[true,"string"],"zitadel":[true,"string"]}' \
-  "deploy.yml: workflow_call takes six required strings"
+same "$(yq '.on | keys | join(" ")' "$deploy")" workflow_dispatch "deploy.yml: workflow_dispatch is the only trigger"
 same "$(yq -o=json -I=0 '.on.workflow_dispatch.inputs | map_values([.required, .type])' "$deploy")" \
   '{"sha":[true,"string"]}' "deploy.yml: workflow_dispatch takes sha alone"
 same "$(yq 'has("concurrency")' "$deploy")" false "deploy.yml: no workflow-level concurrency"
@@ -118,10 +115,6 @@ same "$(yq '[.jobs.deploy.steps[] | .id // .uses // ""] | join(" ")' "$deploy" |
 same "$(yq -o=json -I=0 '.jobs.deploy.steps[] | select(.name == "Run the deploy document and wait for its result") | .env | del(.INSTANCE_ID, .DOCUMENT_NAME)' "$deploy")" \
   '{"API_IMAGE":"${{ steps.images.outputs.api }}","WORKER_IMAGE":"${{ steps.images.outputs.worker }}","GATEWAY_IMAGE":"${{ steps.images.outputs.gateway }}","CORE_BANKING_IMAGE":"${{ steps.images.outputs.core-banking }}","ZITADEL_IMAGE":"${{ steps.images.outputs.zitadel }}"}' \
   "deploy.yml: the deploy step reads the images step's outputs"
-# shellcheck disable=SC2016 # the expressions are GitHub's, not the shell's
-same "$(yq -o=json -I=0 '.jobs.deploy.steps[] | select(.id == "images") | .env' "$deploy")" \
-  '{"EVENT":"${{ github.event_name }}","API":"${{ inputs.api }}","WORKER":"${{ inputs.worker }}","GATEWAY":"${{ inputs.gateway }}","CORE_BANKING":"${{ inputs.core-banking }}","ZITADEL":"${{ inputs.zitadel }}"}' \
-  "deploy.yml: the images step reads the event and the five inputs through env"
 
 check_sha=$(step "$deploy" deploy "Check the SHA" check-sha.sh)
 expect 0 '' "deploy.yml: a 40-character lower-case SHA passes" env SHA=$sha bash --noprofile --norc -e "$check_sha"
@@ -130,45 +123,17 @@ for bad in "${sha::39}" "${sha}0" "$(tr a-f A-F <<< "$sha")" ""; do
 done
 
 images=$(step "$deploy" deploy images images.sh)
-# called <api> [worker]: runs the images step as a call from CI, with the other references valid.
-called() {
-  EVENT=push SHA=$sha API=$1 WORKER=${2:-$(reference worker 1)} GATEWAY=$(reference gateway 2) \
-    CORE_BANKING=$(reference core-banking 3) ZITADEL=$(reference zitadel 4) run_step "$images"
-}
-expect 0 '' "deploy.yml call: five valid references pass" called "$(reference api 0)"
-same "$(cat "$GITHUB_OUTPUT")" "$expected_outputs" "deploy.yml call: writes the five references to GITHUB_OUTPUT"
-for bad in "ghcr.io/njabulozmnisi/disputedesk-api:sha-${sha::12}" "$(reference worker 0)" \
-  "ghcr.io/njabulozmnisi/disputedesk-api@sha256:$(printf '%064d' 0 | tr 0 A)" \
-  "ghcr.io/njabulozmnisi/disputedesk-api@sha256:$(printf '%063d' 0)" \
-  "ghcr.io/njabulozmnisi/disputedesk-api@sha256:$(printf '%065d' 0)" "$(reference api 0) " ""; do
-  expect 1 '::error::' "deploy.yml call: api '$bad' fails" called "$bad"
-done
-expect 1 '::error::' "deploy.yml call: an api reference given as worker fails" called "$(reference api 0)" "$(reference api 0)"
-
-# dispatched: runs the images step as a manual dispatch, with no image inputs.
-dispatched() { EVENT=workflow_dispatch SHA=$sha run_step "$images"; }
+# dispatched: runs the images step as a hand dispatch.
+dispatched() { SHA=$sha run_step "$images"; }
 expect 0 '' "deploy.yml dispatch: resolves the five digests from GHCR" dispatched
-same "$(cat "$GITHUB_OUTPUT")" "$expected_outputs" "deploy.yml dispatch: writes the same five outputs"
+same "$(cat "$GITHUB_OUTPUT")" "$expected_outputs" "deploy.yml dispatch: writes the five outputs"
 export STUB_REVISION="f${sha:1}"
 expect 1 "not $sha" "deploy.yml dispatch: an image built from another commit fails" dispatched
 unset STUB_REVISION
 
-# --- CI's two deploy jobs ---
-same "$(yq '.jobs.deploy.uses' "$ci")" ./.github/workflows/deploy.yml "ci.yml deploy: calls deploy.yml"
-same "$(yq -o=json -I=0 '[.jobs.deploy.needs, .jobs["deploy-switched-off"].needs]' "$ci")" '["publish","publish"]' \
-  "ci.yml: both deploy jobs need publish"
-same "$(yq '.jobs.deploy.if' "$ci")" "vars.DEPLOY_ENABLED == 'true'" "ci.yml deploy: only when DEPLOY_ENABLED is true"
-same "$(yq '.jobs["deploy-switched-off"].if' "$ci")" "vars.DEPLOY_ENABLED != 'true'" \
-  "ci.yml deploy-switched-off: only when DEPLOY_ENABLED is not true"
-same "$(yq -o=json -I=0 '.jobs.deploy.permissions' "$ci")" '{"id-token":"write","contents":"read"}' \
-  "ci.yml deploy: grants id-token: write and contents: read"
-# shellcheck disable=SC2016 # the expressions are GitHub's, not the shell's
-same "$(yq -o=json -I=0 '.jobs.deploy.with' "$ci")" \
-  '{"sha":"${{ github.sha }}","api":"${{ needs.publish.outputs.api }}","worker":"${{ needs.publish.outputs.worker }}","gateway":"${{ needs.publish.outputs.gateway }}","core-banking":"${{ needs.publish.outputs.core-banking }}","zitadel":"${{ needs.publish.outputs.zitadel }}"}' \
-  "ci.yml deploy: passes the SHA and publish's five outputs"
-same "$(yq '.jobs["deploy-switched-off"].timeout-minutes' "$ci")" 5 "ci.yml deploy-switched-off: timeout 5"
-same "$(yq '.jobs["deploy-switched-off"] | has("permissions")' "$ci")" false \
-  "ci.yml deploy-switched-off: only the workflow's contents: read"
+# --- CI never deploys: no job calls deploy.yml ---
+same "$(yq '.jobs | to_entries | .[] | select(.value.uses // "" | test("deploy\.ya?ml")) | .key' "$ci")" "" \
+  "ci.yml: no job uses deploy.yml"
 same "$(yq -o=json -I=0 '.permissions' "$ci")" '{"contents":"read"}' "ci.yml: the workflow's permissions are contents: read"
 
 # --- every workflow: only the deploy path can ask for an AWS token or run in an environment ---
@@ -188,8 +153,7 @@ environment_jobs() {
   done | sed "s|^$1/||" | xargs
 }
 workflows="$root/.github/workflows"
-same "$(id_token_holders "$workflows")" "ci.yml:deploy deploy.yml:deploy" \
-  "every workflow: only CI's deploy and the job it calls hold id-token: write"
+same "$(id_token_holders "$workflows")" "deploy.yml:deploy" "every workflow: only deploy.yml's job holds id-token: write"
 same "$(environment_jobs "$workflows")" "deploy.yml:deploy" "every workflow: only deploy.yml's job names an environment"
 
 mkdir "$scratch/other"
@@ -198,23 +162,5 @@ printf 'on: push\njobs:\n  a:\n    permissions:\n      id-token: write\n    envi
 printf 'on: push\njobs:\n  b:\n    permissions:\n      id-token: write\n    environment: dev\n' > "$scratch/other/long.yaml"
 same "$(id_token_holders "$scratch/other")" "job.yml:a top.yml long.yaml:b" "every workflow: a new holder is named, at either level, in either extension"
 same "$(environment_jobs "$scratch/other")" "job.yml:a long.yaml:b" "every workflow: an environment in the name: form is named, in either extension"
-
-switched_off=$(step "$ci" deploy-switched-off "Show the five image references; send nothing" switched-off.sh)
-# shellcheck disable=SC2016 # the expressions are GitHub's, not the shell's
-same "$(yq -o=json -I=0 '.jobs["deploy-switched-off"].steps[0].env' "$ci")" \
-  '{"API":"${{ needs.publish.outputs.api }}","WORKER":"${{ needs.publish.outputs.worker }}","GATEWAY":"${{ needs.publish.outputs.gateway }}","CORE_BANKING":"${{ needs.publish.outputs.core-banking }}","ZITADEL":"${{ needs.publish.outputs.zitadel }}"}' \
-  "ci.yml deploy-switched-off: reads publish's five outputs through env"
-off() { # off <api>: runs deploy-switched-off's step with the other references set
-  API=$1 WORKER=$(reference worker 1) GATEWAY=$(reference gateway 2) CORE_BANKING=$(reference core-banking 3) \
-    ZITADEL=$(reference zitadel 4) bash --noprofile --norc -e "$switched_off"
-}
-expect 0 '::notice::Deploy is switched off: the repository variable DEPLOY_ENABLED is not true, so nothing was sent to AWS\.' \
-  "deploy-switched-off: writes the notice" off "$(reference api 0)"
-output=$(off "$(reference api 0)")
-for i in "${!names[@]}"; do
-  grep -qF "$(reference "${names[$i]}" "$i")" <<< "$output" || fail "deploy-switched-off: ${names[$i]}'s reference not printed"
-done
-echo "ok  deploy-switched-off: prints the five references"
-expect 1 '::error::publish gave no api' "deploy-switched-off: an empty output fails" off ""
 
 echo "deploy-workflow: all cases pass"

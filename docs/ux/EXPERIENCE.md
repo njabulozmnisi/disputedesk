@@ -1,7 +1,7 @@
 ---
 name: DisputeDesk
 status: approved
-updated: 2026-10-26
+updated: 2026-11-08
 sources:
   - ../initiative-disputedesk.md
   - ../prd/prd.md
@@ -98,6 +98,21 @@ On a transaction row the badge for a resolved dispute reads plain **Resolved**; 
 | Transfer between own accounts | "Transfer between your accounts. Not disputable." |
 | Settled debit that is not a card transaction (fee, payment to someone else) | "Not a card transaction. Contact the bank about this transaction." |
 
+**Screen copy added in the 8 Nov 2026 design pass**:
+
+| Where | Copy |
+|---|---|
+| Transactions lede | "Your card and account transactions, newest first. You can dispute those from the last 90 days." |
+| Transactions column header (from 768px, `aria-hidden`) | "Transaction", "Amount", "Dispute" |
+| Step indicator | "Link your login, step 1 of 2" / "Link your login, step 2 of 2" / "Step 1 of 2: reason and note" / "Step 2 of 2: review and submit" |
+| OTP help | "The code expires 5 minutes after we send it. You can paste it, or let your phone fill it in." |
+| Linking help block | "Need help?", then "Didn't get a code? Start again." (OTP screens only), then "Can't link online? Contact the bank." |
+| Detail summary | "Disputed on" (date of the dispute's `createdAt`) |
+| Detail, open dispute, above Withdraw | "Changed your mind? You can withdraw while the dispute is open. You can't dispute this transaction again after you withdraw." |
+| Problem notice | "If this keeps happening, contact the bank and quote this reference." then "Reference" |
+| Start page, under the buttons | "You'll confirm it's you with your ID number, account number and a one-time code." |
+| Rejected guidance | heading "If you disagree with this outcome", then steps "You can complain to the bank first." and "If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers." |
+
 **Sign-out failed** (problem notice over the current screen, or inside the inactivity warning when sign-out was pressed there): message "We couldn't finish signing you out.", next step "Try again.", and a "Sign out" button that tries again.
 
 **After a Rejected outcome** (static, FR-17): "If you disagree with this outcome, you can complain to the bank first. If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers." [ASSUMPTION: no bank complaint contact details or ombud contact details are shown; static text only.]
@@ -108,7 +123,10 @@ Behavioural rules. Visual specs are in DESIGN.md, *Components*.
 
 | Component | Where | Behaviour |
 |---|---|---|
-| Transaction row | Transactions | Not a link as a whole. Its single action is the trailing control: "Dispute" (to 4a), the status badge (to 6), or nothing for not-disputable rows. The hint is plain text, read with the row. |
+| Transaction row | Transactions | Not a link as a whole. Its single action is the trailing control: "Dispute" (to 4a; accessible name "Dispute {merchant}"), the status badge (to 6), or nothing for not-disputable rows. The hint is plain text, read with the row. The column header row is `aria-hidden`. |
+| Dispute row | Disputes | The whole row is one link to 6: one tab stop, named by merchant, reason, date, amount and status. |
+| Step indicator | 2a, 2b, 4a, 4b | The text label is the accessible step; the bar is `aria-hidden`. Not shown on the 409 and 422 result screens. |
+| Help block | 2a, 2b, lockout, rate limited | Same position and wording on every linking state (WCAG 2.2 SC 3.2.6 consistent help). |
 | Load more | Transactions, Disputes | Button below the list, fetches the next keyset page (20). Disappears when there is no next cursor. After loading, focus moves to the first new row (`tabindex="-1"`), so focus is never lost when the button goes (WCAG 2.2 SC 2.4.3); new rows are announced ("20 more transactions loaded"). No infinite scroll. |
 | Reason card group | 4a | Radix `RadioGroup`: one tab stop, arrow keys move. Selecting Wrong amount reveals the Expected amount field directly below the group; selecting any other reason hides it and clears its value. |
 | Note field | 4a, withdraw dialog | Optional. Live count "312 / 1,000" (500 for withdraw), counted after trimming, announced politely only at 90% of the limit and at the limit. Input past the limit is allowed and shown as a field error on Continue (GOV.UK Design System character count), so a paste is never cut silently. |
@@ -116,9 +134,9 @@ Behavioural rules. Visual specs are in DESIGN.md, *Components*.
 | Review card | 4b | Reads back transaction, reason, note, disputed amount. "Change" returns to 4a with values kept. No re-entry of anything already given. |
 | Submit dispute | 4b | See *Idempotent submit* below. |
 | Status badge | Rows, detail header | Text is the customer-facing status. On a transaction row it links to the dispute. |
-| Timeline | 6 | Oldest first, as the API returns it. Each entry: status line, actor label "You" or "The bank", time in SAST, customer-visible note if any. Ordered list semantics. |
+| Timeline | 6 | Oldest first, as the API returns it. Each entry: status label (the badge text, PRD FR-17), the copy-deck timeline line beside it, actor label "You" or "The bank", time in SAST, customer-visible note if any. Ordered list semantics. |
 | Withdraw | 6 | Shown only for Submitted, Under review, Under review (prioritised). Secondary button opens an `AlertDialog`: optional note (500), "Withdraw dispute" (destructive) and "Keep dispute". On success: dialog closes, "Dispute withdrawn" is announced through the live region, focus moves to the `h1`, timeline gains the entry. |
-| Problem notice | Any error | Plain sentence, next step, and "Reference: {traceId}" with Copy. Copy confirms with "Copied" for 2 seconds. |
+| Problem notice | Any error | Plain sentence, next step, then a row with "Reference", the {traceId} and Copy (44px). Copy confirms with "Copied" for 2 seconds. |
 | OTP input | 2b | One input, six visual cells. Accepts paste and the platform's one-time-code autofill. The Verify button submits; there is no auto-submit (WCAG 2.2 SC 3.2.2), so a mistyped digit never spends one of the 3 attempts. |
 
 ## State Patterns

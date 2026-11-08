@@ -108,6 +108,12 @@ The human's decisions changed or confirmed these rules; unlike the rows above, t
 |---|---|---|---|
 | AD-32 | 2026-11-06 | `e2e-regression` is the one path-scoped suite: the job runs on every pull request and `main` push, runs the regression suite only on a pull request whose changed paths match `scripts/regression-paths.list`, and otherwise passes with a notice (countermeasure A3, approved 2026-11-05); every other check job keeps running in full | [decisions.md](../verification/decisions.md), ci-e2e-regression D2 |
 
+## Decisions of 2026-11-08
+
+| Decision | Date | Change | Source |
+|---|---|---|---|
+| AD-28 | 2026-11-08 | Deploy on merge and `DEPLOY_ENABLED` are removed: `deploy.yml` is only dispatched by hand, with a commit SHA on `main`, and the `dev` environment's required reviewer approves each deploy (continuous delivery). Rollback is a dispatch with an earlier SHA | human decision; ad-012 clause 4 |
+
 ## What else left the spine on 2026-11-04
 
 - **PRD and code divergences.** Six differences between the PRD and the code merged before epic 2 (the `ErrorKind` set, `provision.sh`'s roles and keys, Scalar behind `IsDevelopment()`, the Worker's health check, the fixtures, the gateway's `limit_req`, HSTS and `form-action`), each fixed in its story. Every story is merged, so the section was deleted.

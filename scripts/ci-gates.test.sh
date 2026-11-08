@@ -100,7 +100,7 @@ expect 0 'needs every check job' "a gate's needs given as one job name, not a li
 ci="$root/.github/workflows/ci.yml"
 security="$root/.github/workflows/security.yml"
 expect 0 'needs every check job' "ci.yml: ci-passed needs every check job" \
-  "$gates" "$ci" ci-passed publish deploy deploy-switched-off
+  "$gates" "$ci" ci-passed publish
 expect 0 'needs every check job' "security.yml: security-passed needs every check job" \
   "$gates" "$security" security-passed
 

@@ -9,33 +9,29 @@
 </head>
 <body>
 <header class="topbar"><div class="topbar__in">
-  <a class="brand" href="transactions.html"><span class="brand__mark" aria-hidden="true"></span>DisputeDesk</a>
+  <a class="brand" href="transactions.html">DisputeDesk<span class="brand__dot" aria-hidden="true"></span></a>
   <nav class="topnav" aria-label="Main"><a href="transactions.html">Transactions</a><a href="disputes.html" aria-current="page">Disputes</a></nav>
   <a class="signout" href="start.html">Sign out</a>
 </div></header>
-<p class="mock-note">Mockup: guidance after a Rejected outcome is static text. Wrong amount shows transaction and expected amounts. <a href="index.html">All screens</a></p>
-<main class="wrap stack-lg">
-<div><a class="back" href="disputes.html">Back to disputes</a></div>
-
-<div class="split stack-lg">
-<section class="card summary-card stack" aria-labelledby="h1">
-<h1 class="title" id="h1">Karoo Fuel Stop, Pinetown</h1>
-<div><span class="badge badge--rejected"><span class="sr-only">Status: </span>Resolved · Rejected</span></div>
-<div><p class="caption">Disputed amount</p><p class="amount amount--hero">R500.00</p></div>
-<p class="caption"><span aria-hidden="true">Card 492345•• •••• 3456</span><span class="sr-only">card ending 3456</span></p>
-<dl class="summary">
-<dt>Reason</dt><dd>Wrong amount</dd>
-<dt>Transaction amount</dt><dd class="amount">R1&#8239;150.00</dd><dt>Expected amount</dt><dd class="amount">R650.00</dd><dt>Transaction date</dt><dd>Tue 15 Sep 2026</dd>
-</dl>
+<p class="mock-note">Mockup: guidance after a Rejected outcome is static text, shown as two numbered steps. Wrong amount shows transaction and expected amounts. <a href="index.html">All screens</a></p>
+<main class="wrap">
+<a class="back" href="disputes.html">Back to disputes</a>
+<div class="split">
+<section class="card" aria-labelledby="h1">
+<div class="badge-row"><h1 class="title" id="h1">Karoo Fuel Stop, Pinetown</h1><span class="badge badge--rejected"><span class="sr-only">Status: </span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>Resolved · Rejected</span></div>
+<div><p class="caption">Disputed amount</p><p class="amount amount--hero">R500.00</p><p class="caption"><span aria-hidden="true">Card 492345•• •••• 3456</span><span class="sr-only">card ending 3456</span></p></div>
+<dl class="summary"><dt>Reason</dt><dd>Wrong amount</dd><dt>Transaction amount</dt><dd class="amount">R1 150.00</dd><dt>Expected amount</dt><dd class="amount">R650.00</dd><dt>Transaction date</dt><dd>Tue 15 Sep 2026</dd><dt>Disputed on</dt><dd>16 Sep 2026</dd></dl>
 
 </section>
-<section class="stack" aria-labelledby="tl">
+<div class="stack">
+<section class="surface surface--tight" aria-labelledby="tl">
 <h2 class="heading" id="tl">Timeline</h2>
-<ol class="timeline"><li><p class="step">You submitted this dispute.</p><p class="meta"><span class="actor">You</span><time datetime="2026-09-16T10:40:00Z">16 Sep 2026, 12:40 SAST</time></p><p class="quote">“The pump showed R650.00.”</p></li><li><p class="step">The bank started reviewing your dispute.</p><p class="meta"><span class="actor">The bank</span><time datetime="2026-09-17T07:00:00Z">17 Sep 2026, 09:00 SAST</time></p></li><li><p class="step">Resolved · Rejected. The bank didn't uphold your dispute.</p><p class="meta"><span class="actor">The bank</span><time datetime="2026-09-24T12:15:00Z">24 Sep 2026, 14:15 SAST</time></p><p class="quote">“The merchant sent a signed slip for R1&#8239;150.00, so we can't reverse the difference.”</p></li></ol>
-<div class="surface stack"><h3 class="heading">If you disagree with this outcome</h3>
-<p>You can complain to the bank first. If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers.</p></div>
+<ol class="timeline"><li><p class="step">You submitted this dispute.</p><p class="meta"><span class="actor">You</span><time datetime="2026-09-16T10:40:00Z">16 Sep 2026, 12:40 SAST</time></p><p class="quote">“The pump showed R650.00.”</p></li><li><p class="step">The bank started reviewing your dispute.</p><p class="meta"><span class="actor">The bank</span><time datetime="2026-09-17T07:00:00Z">17 Sep 2026, 09:00 SAST</time></p></li><li><p class="step">The bank didn't uphold your dispute.</p><p class="meta"><span class="actor">The bank</span><time datetime="2026-09-24T12:15:00Z">24 Sep 2026, 14:15 SAST</time></p><p class="quote">“The merchant sent a signed slip for R1 150.00, so we can't reverse the difference.”</p></li></ol>
 
 </section>
+<section class="surface surface--tight" aria-labelledby="next-h"><h2 class="subheading" id="next-h">If you disagree with this outcome</h2>
+<ol class="next-steps"><li><p>You can complain to the bank first.</p></li><li><p>If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers.</p></li></ol></section>
+</div>
 </div>
 </main>
 <footer class="footer"><div class="footer__in">
@@ -43,8 +39,8 @@
   <p>Your details are used only to show your transactions and handle your disputes.</p>
 </div></footer>
 <nav class="tabbar" aria-label="Main (phone)">
-  <a href="transactions.html"><span aria-hidden="true">☰</span>Transactions</a>
-  <a href="disputes.html" aria-current="page"><span aria-hidden="true">⚑</span>Disputes</a>
+  <a href="transactions.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Transactions</a>
+  <a href="disputes.html" aria-current="page"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>Disputes</a>
 </nav>
 </body>
 </html>
