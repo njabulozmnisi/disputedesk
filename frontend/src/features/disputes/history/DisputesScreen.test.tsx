@@ -3,6 +3,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
 import type { CustomerStatus, DisputeSummaryResponse, Reason } from '@/api/generated/model';
+import { expectDecorativeIcon } from '@/test/icons';
 import { server } from '@/test/server';
 import {
   makeSummary,
@@ -377,6 +378,9 @@ describe('states', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 2, name: 'Open' })).not.toBeInTheDocument();
+    // Criterion 5: one state surface with the Flag tile, holding the one action.
+    const surface = screen.getByRole('link', { name: 'Go to transactions' }).closest('section');
+    expectDecorativeIcon(surface?.querySelector('svg.lucide-flag'), 'size-6');
     expect(await axe(document.body)).toHaveNoViolations();
 
     await user.click(screen.getByRole('link', { name: 'Go to transactions' }));

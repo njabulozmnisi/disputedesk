@@ -5,6 +5,7 @@ import { axe } from 'vitest-axe';
 
 import { getGetSessionQueryKey } from '@/api/generated/disputedesk';
 import { problemType } from '@/api/problems';
+import { expectDecorativeIcon } from '@/test/icons';
 import {
   accepted,
   problemResponse,
@@ -331,6 +332,9 @@ describe('screen 2a, rate limited', () => {
 
     const notice = await screen.findByRole('alert');
     expect(notice).toHaveTextContent('Too many attempts. Try again in 2 minutes.');
+    expectDecorativeIcon(notice.querySelector('svg.lucide-clock'));
+    expect(notice.querySelector('svg.lucide-triangle-alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/quote this reference/)).not.toBeInTheDocument();
     expect(continueButton()).toHaveAttribute('aria-disabled', 'true');
     expect(continueButton()).toHaveFocus();
     expect(idField()).not.toBeDisabled();

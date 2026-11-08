@@ -588,6 +588,13 @@ describe('loading, empty and error states', () => {
     ).toBeInTheDocument();
     const link = within(screen.getByRole('main')).getByRole('link', { name: 'Disputes' });
     expect(link).toHaveAttribute('href', '/disputes');
+    // Criterion 5: one state surface with the List tile, and no button.
+    const surface = link.closest('section');
+    expectDecorativeIcon(surface?.querySelector('svg.lucide-list'), 'size-6');
+    expect(surface).toContainElement(
+      screen.getByRole('heading', { level: 2, name: 'No transactions in the last 90 days.' }),
+    );
+    expect(surface?.querySelector('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 
     // The router takes the click over (`preventDefault`), so the browser makes no document request.
