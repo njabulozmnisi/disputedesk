@@ -57,3 +57,10 @@ column marks a finding with no feature record of its own.
 | deploy-recreate-on-config | deploy-recreate-on-config-verify.md | The guard reads any path containing "deploy" as a deploy, so the verifier could not run ShellCheck on `infra/deploy/aws/deploy.sh`; CI runs it. | |
 | rds-init-grant | rds-init-grant-review.md | L1: the test fixture's plain PostgreSQL master holds an implicit ADMIN membership that RDS's master lacks (`DatabaseInitFixture.cs:126-127`). | |
 | rds-init-grant | rds-init-grant-review.md | L2: the recovery steps for a half-done init (`infra/terraform/README.md:263-292`); see the record. | |
+| ui-raise-review | ui-raise-review-review.md | `ReviewScreen.tsx:203`, `:221`: the head row uses `items-start` where the mockup aligns to the end, and the Transaction value is not bold as the mockup draws it. | |
+| carried | ui-raise-review-review.md, ui-detail-start-review.md | The theme has a font size and a colour both named `heading`; Tailwind builds `.text-heading` as colour only, so the 24px size never applies (start page "How it works", every `AlertDialogTitle`). Rename the size (keep the colour), then restore it in `lib/utils.ts`'s font-size list. | |
+| ui-raise-review | ui-raise-review-review.md | Criterion 5 still says `9rem` "at every width"; the code caps it at 40% of the row. Amend criterion 5 and add `label-col: 9rem` to DESIGN.md's spacing tokens. | |
+| carried | ui-raise-review-qa.md | After an invalid expected amount is corrected, Continue needs a second click: the onBlur revalidation removes the error and Continue moves 28px between pointer down and up. | |
+| carried | ui-raise-review-qa.md | `aria-disabled:opacity-70` on Change, Cancel and Button differs from DESIGN's Button. | |
+| carried | ui-raise-review-qa.md | At 320px and 200% text the 2rem hero amount widens the review card slightly. | |
+| carried | ui-raise-review-qa.md | `e2e/run-regression.sh` fails every group with only a docker error when port 4318 is taken; check the port first. | |
