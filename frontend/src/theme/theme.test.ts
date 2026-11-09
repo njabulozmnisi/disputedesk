@@ -53,6 +53,7 @@ describe('the theme file', () => {
     const tokens = appSourceFiles(['.css']).find(({ path }) => path === 'theme/tokens.css');
 
     expect(tokens?.text).toMatch(/^\s*--amount-col: 9rem;/m);
+    expect(tokens?.text).toMatch(/^\s*--label-col: 9rem;/m);
     expect(tokens?.text).toMatch(/^\s*--action-col: 14rem;/m);
   });
 
