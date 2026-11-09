@@ -517,8 +517,9 @@ describe('the raise form drawn to the mockup', () => {
   });
 });
 
-// Boundaries, CSP: the gateway sends `script-src 'self'; style-src 'self'`, so the app's markup has no inline script, no
-// <style> element and no `style` attribute. (Radix sets a few styles through the CSSOM, which the policy allows.)
+// Boundaries, CSP: the gateway sends `script-src 'self'; style-src 'self' 'sha256-<empty string>'`, so the app's markup
+// has no inline script, no <style> element and no `style` attribute. (Radix and input-otp set styles through the CSSOM,
+// which the policy allows; the hash admits only input-otp's empty <style> element.)
 describe('content security policy', () => {
   it.each([
     ['a style attribute', /\bstyle=\{/],

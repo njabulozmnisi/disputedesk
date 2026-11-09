@@ -152,7 +152,7 @@ test('the detail answers 200 from the stored snapshot while core banking is down
 // ---------------------------------------------------------------------------------------------------------------------
 
 const screenshotDir = process.env.QA_SCREENSHOT_DIR;
-const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
+const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'sha256-47DEQpj8HBSa\+\/TImW\+5JCeuQeRkm5NMpJWZG3hSuFU=''\./;
 // The browser logs every 4xx and 5xx response; the spec provokes those on purpose and asserts them as responses.
 const refusedOnPurpose = /^Failed to load resource: the server responded with a status of (404|409|500)/;
 const notFoundTitle = "We can't find that dispute";

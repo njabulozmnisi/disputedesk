@@ -3,7 +3,9 @@
 # so nginx.conf includes this file in the server block and again in every block that adds a header of its own.
 # form-action allows the identity origin because the sign-in redirect chain ends there. base-uri 'none': the SPA has no
 # base element, so none may be injected (CSP Level 3; ASVS 5.0 V3.4.3).
-add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' ${GATEWAY_AUTH_ORIGIN}" always;
+# style-src's one hash is the SHA-256 of the empty string (CSP Level 3 hash-source): it admits only an empty style
+# element, the one input-otp appends and fills through the CSSOM, so no inline CSS text gets through (ui-linking).
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' ${GATEWAY_AUTH_ORIGIN}" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "DENY" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;

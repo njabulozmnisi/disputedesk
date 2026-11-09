@@ -24,7 +24,7 @@ type ApiRow = {
 type ApiPage = { items: ApiRow[]; nextCursor: string | null };
 
 /** The one console error accepted by decision (story 2.5 criterion 7): Radix's scroll-lock <style> under style-src 'self'. */
-const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
+const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'sha256-47DEQpj8HBSa\+\/TImW\+5JCeuQeRkm5NMpJWZG3hSuFU=''\./;
 
 const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -222,12 +222,12 @@ test.describe('linked customer A', () => {
     expect(headings[0]).toBe(expectedDay(body.items[0].transactionDate));
     expect(new Set(headings.map((heading) => heading)).size).toBe(headings.length);
 
-    // Row rule (stories 3.6, 3.10): a "Dispute this transaction" link exactly when disputable; a "Dispute status: ..."
+    // Row rule (stories 3.6, 3.10): a "Dispute {merchant}" link exactly when disputable; a "Dispute status: ..."
     // link exactly when disputeId is set, to /disputes/<encoded id>; no hint on alreadyDisputed rows (hint phrases only).
     const hintPhrases = /Pending\. |Money in\. |Transfer between|Not a card transaction|Older than 90 days|Not disputable|Contact the bank/;
     for (const [index, row] of body.items.entries()) {
       const li = rows.nth(index);
-      await expect(li.getByRole('link', { name: 'Dispute this transaction' }), `${row.transactionId} dispute control`).toHaveCount(row.disputable ? 1 : 0);
+      await expect(li.getByRole('link', { name: `Dispute ${row.description}`, exact: true }), `${row.transactionId} dispute control`).toHaveCount(row.disputable ? 1 : 0);
       const statusLinks = li.getByRole('link', { name: /^Dispute status: / });
       await expect(statusLinks, `${row.transactionId} status badge`).toHaveCount(row.disputeId ? 1 : 0);
       if (row.disputeId) {
@@ -325,11 +325,11 @@ test.describe('linked customer A', () => {
     expect(problems).toEqual([]);
     // Every control was reached, including the ones at the foot of the page next to the tab bar.
     expect(visited.slice(0, 2)).toEqual(['Skip to main content', 'DisputeDesk']);
-    // 'Dispute this transaction' is on the page only while customer A has a disputable row among the first 20; the suite's
+    // A "Dispute {merchant}" link is on the page only while customer A has a disputable row among the first 20; the suite's
     // earlier specs raise disputes on A's 20 disputable transactions, so a full run can leave none.
-    const disputeLinkExpected = (await page.getByRole('link', { name: 'Dispute this transaction' }).count()) > 0;
+    const disputeLinkExpected = (await page.getByRole('link', { name: /^Dispute (?!status: )/ }).count()) > 0;
     expect(visited).toEqual(expect.arrayContaining(['Skip to main content', 'DisputeDesk', 'Sign out', 'Load more', 'Transactions', 'Disputes']));
-    if (disputeLinkExpected) expect(visited).toContain('Dispute this transaction');
+    if (disputeLinkExpected) expect(visited.some((name) => /^Dispute (?!status: )/.test(name)), 'a Dispute link was reached by Tab').toBe(true);
   });
 
   test('sign-out: top-level form POST with a fresh token, Zitadel end-session, back to / anonymous, session gone', async ({ browser }) => {

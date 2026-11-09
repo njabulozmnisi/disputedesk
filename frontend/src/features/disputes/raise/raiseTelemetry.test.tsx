@@ -264,7 +264,7 @@ describe('the open span', () => {
     await user.click(screen.getByRole('link', { name: 'Cancel' }));
     await screen.findByRole('heading', { level: 1, name: 'Transactions' });
 
-    await user.click(await screen.findByRole('link', { name: 'Dispute this transaction' }));
+    await user.click(await screen.findByRole('link', { name: 'Dispute ZXP*GLOBALSVCS 0800' }));
 
     await screen.findByRole('heading', { level: 1, name: 'Dispute this transaction' });
     expect(openSpans()).toHaveLength(2);
@@ -403,7 +403,7 @@ describe('the exported spans', () => {
     serveTransactions([seedRow()]);
     serveDispute(makeDispute({ disputeId: guid }));
     const app = renderApp({ path: '/transactions', strictMode: true });
-    await app.user.click(await screen.findByRole('link', { name: 'Dispute this transaction' }));
+    await app.user.click(await screen.findByRole('link', { name: 'Dispute SEEDSHOP 4417' }));
     await fillAndSubmit(app.user);
     await waitFor(() => {
       expect(app.router.state.location.pathname).toBe(`/disputes/${guid}`);
@@ -425,7 +425,7 @@ describe('the exported spans', () => {
     serveTransactions([seedRow()]);
     serveDispute(makeDispute({ disputeId: guid }));
     const app = renderApp({ path: '/transactions', strictMode: true });
-    await app.user.click(await screen.findByRole('link', { name: 'Dispute this transaction' }));
+    await app.user.click(await screen.findByRole('link', { name: 'Dispute SEEDSHOP 4417' }));
     await fillAndSubmit(app.user);
     await screen.findByText(/trace-seed-3J6P/);
     await fetchCursorAndDispute();

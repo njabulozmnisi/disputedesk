@@ -1,4 +1,11 @@
-import { codeFrom, linkingMessages, otpSchema, startSchema } from './linkSchema';
+import {
+  codeFrom,
+  isOverlongCode,
+  linkingMessages,
+  otpSchema,
+  startSchema,
+  transformPastedCode,
+} from './linkSchema';
 
 // 12 digits plus a Luhn check digit (ISO/IEC 7812-1, Annex B).
 const validId = '8001015009087';
@@ -67,4 +74,54 @@ describe('the code', () => {
   it('sends the code with spaces removed and leading zeros kept', () => {
     expect(codeFrom('000 123')).toBe('000123');
   });
+});
+
+// Criterion 3: a pasted code longer than 6 digits is refused, never truncated (decision 2026-11-08). One condition
+// feeds both the transformer and the onPaste handler, so the two cannot disagree.
+describe('a pasted code', () => {
+  it.each([
+    '4815167',
+    '4815 1678',
+    ' 4 8 1 5 1 6 7 ',
+    '0000000000000000',
+    '4815167\n',
+    '4815167\r\n',
+    '4815167\t',
+    '481516 7',
+    '4815167a',
+    '481-5167',
+  ])('is over-long when %j holds more than 6 digits, whatever else it holds', (pasted) => {
+    expect(isOverlongCode(pasted)).toBe(true);
+  });
+
+  it.each([
+    '',
+    '481516',
+    '481 516',
+    '48151',
+    '48151a',
+    '481516a',
+    '481516\n',
+    'Your code is 481516',
+    '١٢٣٤٥٦٧',
+  ])('is not over-long when it is %j', (pasted) => {
+    expect(isOverlongCode(pasted)).toBe(false);
+  });
+
+  it.each([
+    ['481516', '481516'],
+    ['481 516', '481516'],
+    ['48151a', '48151a'],
+    ['Your code is 481516', 'Yourcodeis481516'],
+  ])('passes %j on with its spaces removed as %j', (pasted, transformed) => {
+    expect(transformPastedCode(pasted)).toBe(transformed);
+  });
+
+  it.each(['4815167', '4815 1678', '4815167\n', '4815167a'])(
+    'turns %j into one space, which the digits-only pattern refuses',
+    (pasted) => {
+      expect(transformPastedCode(pasted)).toBe(' ');
+      expect(/^\d+$/.test(transformPastedCode(pasted))).toBe(false);
+    },
+  );
 });

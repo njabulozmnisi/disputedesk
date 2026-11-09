@@ -3,8 +3,8 @@ import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:c
 import { readFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { errors, expect, test, type Browser, type BrowserContext, type Page, type Response } from '@playwright/test';
-import { enterHostedCredentials, holdsCode, queryDatabase, telemetryValues, topicRecords, axeTags, origin } from './support';
+import { errors, expect, test, type Browser, type BrowserContext, type Locator, type Page, type Response } from '@playwright/test';
+import { enterHostedCredentials, gatewayContentSecurityPolicy, holdsCode, problemTypeBase, queryDatabase, telemetryValues, topicRecords, axeTags, origin } from './support';
 
 // Story 6.4: the linking screens 2a (/link) and 2b (/link/otp) in a real browser, through the real gateway, Api,
 // job, database (qa_readonly), Mailpit (the SMS sink) and the Aspire telemetry API. Customer D is the only customer a
@@ -195,11 +195,13 @@ async function checkState(page: Page, label: string) {
   expect(axe1280.violations.map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join('; ')}`), `${label}: axe 1280`).toEqual([]);
   const h1 = await page.getByRole('heading', { level: 1 }).count();
   expect(h1, `${label}: one h1`).toBe(1);
+  await expectHelpBlock(page, label);
 
   const expectedStops = await page.locator('main a[href], main button, main input, main [tabindex="0"], header a, header button').evaluateAll(
+    // A disabled control is not reachable by Tab, so it counts only while it is enabled.
     (elements) => elements.filter((element) => {
       const style = getComputedStyle(element);
-      return style.visibility !== 'hidden' && style.display !== 'none';
+      return style.visibility !== 'hidden' && style.display !== 'none' && !(element as HTMLButtonElement | HTMLInputElement).disabled;
     }).length);
   const visited: string[] = [];
   const invisibleFocus: string[] = [];
@@ -210,7 +212,13 @@ async function checkState(page: Page, label: string) {
       const element = document.activeElement as HTMLElement | null;
       if (!element || element === document.body) return null;
       const style = getComputedStyle(element);
-      const visible = (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') || style.boxShadow !== 'none';
+      // input-otp sets outline 0 and no box-shadow on its real input; the focus indicator is the active cell's 2px ring
+      // border and 4px halo, so for the code input the check is on that cell.
+      const cell = element.getAttribute('data-input-otp') === 'true' ? document.querySelector('[data-slot="input-otp-slot"][data-active="true"]') : null;
+      const target = cell ? getComputedStyle(cell) : style;
+      const visible = cell
+        ? parseFloat(target.borderTopWidth) >= 2 && target.boxShadow !== 'none'
+        : (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') || style.boxShadow !== 'none';
       const name = element.getAttribute('aria-label') ?? (element.id ? document.querySelector(`label[for="${element.id}"]`)?.textContent : null) ?? element.textContent ?? element.tagName;
       return { name: `${element.tagName.toLowerCase()}:${(name ?? '').trim().slice(0, 40)}`, visible };
     });
@@ -220,7 +228,7 @@ async function checkState(page: Page, label: string) {
     if (!stop.visible) invisibleFocus.push(stop.name);
   }
   expect(invisibleFocus, `${label}: a focused control with no visible focus indicator`).toEqual([]);
-  const controls = await page.locator('main a[href], main button, main input').count();
+  const controls = await page.locator('main a[href], main button:not(:disabled), main input:not(:disabled)').count();
   expect(visited.length, `${label}: keyboard reaches every control (${visited.join(' > ')})`).toBeGreaterThanOrEqual(controls);
 
   await page.setViewportSize({ width: 320, height: 800 });
@@ -230,6 +238,39 @@ async function checkState(page: Page, label: string) {
   expect(axe320.violations.map((violation) => violation.id), `${label}: axe 320`).toEqual([]);
   await page.setViewportSize({ width: 1280, height: 800 });
   note(`${label}: axe clean at 1280 and 320, no horizontal scroll at 320, keyboard order [${visited.join(' > ')}]`);
+}
+
+/** A real paste event with text/plain data, which `fill` is not: input-otp's paste listener and the page's pasteTransformer and onPaste run. */
+async function pasteInto(field: Locator, text: string) {
+  await field.focus();
+  await field.evaluate((element, value) => {
+    const data = new DataTransfer();
+    data.setData('text/plain', value);
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  }, text);
+}
+
+/** Empties the code the way a person does (select all, Backspace); Playwright's fill('') is not applied by input-otp after an error. */
+async function clearCode(field: Locator) {
+  await field.focus();
+  await field.press('ControlOrMeta+a');
+  await field.press('Backspace');
+}
+
+/** The six cells as the person sees them: the digits they hold, in order. */
+const cellDigits = (page: Page) => page.locator('[data-slot="input-otp-slot"]').evaluateAll((cells) => cells.map((cell) => cell.textContent ?? '').join(''));
+
+/** The help block on every linking state (WCAG 2.2 SC 3.2.6): a region named "Need help?", h1 then h2, the contact line. */
+async function expectHelpBlock(page: Page, label: string) {
+  const region = page.getByRole('region', { name: 'Need help?' });
+  await expect(region, `${label}: the Need help? region`).toBeVisible();
+  await expect(region.getByRole('heading', { level: 2, name: 'Need help?' })).toBeVisible();
+  await expect(region.getByText("Can't link online? Contact the bank.")).toBeVisible();
+  const headings = await page.locator('main').getByRole('heading').evaluateAll((elements) => elements.map((element) => `${element.tagName}:${element.textContent?.trim()}`));
+  // h1 first, "Need help?" last; the only heading between them is the error summary's, when it is showing.
+  expect(headings[0], `${label}: the first heading`).toMatch(/^H1:/);
+  expect(headings.at(-1), `${label}: the last heading`).toBe('H2:Need help?');
+  expect(headings.slice(1, -1).filter((heading) => heading !== 'H2:Check the details below'), `${label}: no other heading`).toEqual([]);
 }
 
 const focusedText = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.id || document.activeElement?.textContent?.trim().slice(0, 40) || document.activeElement?.tagName);
@@ -295,7 +336,9 @@ test('login 1: 2a bounds, 202 to 2b, two wrong codes with tries left, the third 
   expect(calls[0]).toMatchObject({ path: '/api/v1/linking/start', status: 202, xsrf: true, query: '' });
   expect(JSON.parse(calls[0].body!)).toEqual({ idNumber: customerD.idNumber, accountNumber: customerD.accountNumber });
   await expect(page.getByText("If these details match our records, we've sent a code to the cellphone number we hold for you.")).toBeVisible();
-  await expect(page.getByText('The code expires 5 minutes after we send it.')).toBeVisible();
+  await expect(page.getByText('The code expires 5 minutes after we send it. You can paste it, or let your phone fill it in.')).toBeVisible();
+  await expect(page.getByText('Link your login, step 2 of 2')).toBeVisible();
+  await expect(page.locator('[data-slot="input-otp-slot"]')).toHaveCount(6);
   expect(await page.locator('main').innerText()).not.toMatch(/\+?27\d|\*{2}|\d{3}\s?\*/); // no masked or full cellphone
   await nextCodeForD(smsBefore);
   await expect.poll(() => challengeOf(login.sub).startsWith('0|CUS-000004|true|true'), { message: 'the challenge to hold an OTP', timeout: 40_000 }).toBe(true);
@@ -304,7 +347,9 @@ test('login 1: 2a bounds, 202 to 2b, two wrong codes with tries left, the third 
   await expect(otp).toHaveAttribute('autocomplete', 'one-time-code');
   await expect(otp).toHaveAttribute('inputmode', 'numeric');
   await expect(otp).toHaveAttribute('spellcheck', 'false');
-  expect(await otp.getAttribute('maxlength')).toBeNull();
+  await expect(otp).toHaveAttribute('maxlength', '6');
+  await expect(otp).toHaveAttribute('id', 'code');
+  await expect(page.locator('[data-slot="input-otp-group"]')).toHaveAttribute('aria-hidden', 'true');
   await checkState(page, '2b initial');
 
   // 2b: typing five digits, a letter: no request; six digits never submit by themselves.
@@ -316,11 +361,16 @@ test('login 1: 2a bounds, 202 to 2b, two wrong codes with tries left, the third 
   await expect(page.getByText('Enter the 6-digit code.')).toHaveCount(2);
   await expect(page.getByRole('group', { name: 'Check the details below' })).toBeFocused();
   await checkState(page, '2b field error');
-  await otp.fill('12345a');
+  // A letter typed after five digits is dropped by input-otp (digits only): the cells hold 12345 and Verify refuses it.
+  await clearCode(otp);
+  await otp.pressSequentially('12345a');
+  expect(await cellDigits(page), 'a typed letter is dropped').toBe('12345');
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page.getByText('Enter the 6-digit code.')).toHaveCount(2);
   const pastingSendsNothing = expectNoLinkingRequest(page, 500);
-  await otp.fill(wrongCodes[0].slice(0, 3) + ' ' + wrongCodes[0].slice(3)); // pasted with a space
+  await clearCode(otp);
+  await pasteInto(otp, wrongCodes[0].slice(0, 3) + ' ' + wrongCodes[0].slice(3)); // pasted with a space
+  expect(await cellDigits(page), 'the pasted space is removed').toBe(wrongCodes[0]);
   await pastingSendsNothing;
   expect(calls, 'six digits typed or pasted do not submit').toHaveLength(1);
 
@@ -373,19 +423,20 @@ test('login 1: 2a bounds, 202 to 2b, two wrong codes with tries left, the third 
   await expect(page.getByRole('alert').filter({ hasText: 'Too many attempts. Try again in 15 minutes.' })).toBeVisible();
   expect(calls[5]).toMatchObject({ path: '/api/v1/linking/verify', status: 429, retryAfter: '900' });
   expect(calls[5].contentType).toMatch(/^application\/problem\+json/);
-  await expect(page.getByRole('button', { name: 'Verify' })).toHaveAttribute('aria-disabled', 'true');
+  // A rate limit with Retry-After disables the form (the disabled attribute) and moves focus to the notice.
+  await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled();
+  await expect(otp).toBeDisabled();
+  await expect(page.getByRole('alert').filter({ hasText: 'Too many attempts. Try again in 15 minutes.' })).toBeFocused();
   expect(await otp.inputValue(), 'the field keeps its value').toBe('123456');
-  await otp.fill('654321'); // still editable
   const waitingVerifySendsNothing = expectNoLinkingRequest(page, 700);
-  await page.getByRole('button', { name: 'Verify' }).click({ force: true });
   await waitingVerifySendsNothing;
-  expect(calls, 'the waiting button sends nothing').toHaveLength(6);
+  expect(calls, 'the waiting form sends nothing').toHaveLength(6);
   expect(await page.locator('body').innerText()).not.toMatch(/\d+ seconds|\bcount/i);
   await checkState(page, '2b rate limited with Retry-After 900');
   note(`login 1 DB audit: ${auditRows(login.sub).join(' ; ')}`);
   expect(auditRows(login.sub).filter((row) => row.startsWith('LinkingRateLimited|'))).toHaveLength(1);
 
-  await expectNothingKept(page, context, [customerD.idNumber, customerD.accountNumber, noMatchAccount, ...wrongCodes, '123456', '654321'], 'login 1 end');
+  await expectNothingKept(page, context, [customerD.idNumber, customerD.accountNumber, noMatchAccount, ...wrongCodes, '123456'], 'login 1 end');
   (globalThis as { neutral?: string }).neutral = neutralNoMatch;
   await context.close();
 });
@@ -415,15 +466,16 @@ test('login 2: five starts spend the login limit, the sixth shows the 15-minute 
   await expect(page.getByRole('alert').filter({ hasText: 'Too many attempts. Try again in 15 minutes.' })).toBeVisible();
   expect(calls[5]).toMatchObject({ path: '/api/v1/linking/start', status: 429, retryAfter: '900' });
   await expect(page).toHaveURL(`${origin}/link`);
-  await expect(page.getByRole('button', { name: 'Continue' })).toHaveAttribute('aria-disabled', 'true');
-  await accountNumber(page).fill('1000000050'); // fields stay editable
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  await expect(accountNumber(page)).toBeDisabled();
+  await expect(idNumber(page)).toBeDisabled();
+  await expect(page.getByRole('alert').filter({ hasText: 'Too many attempts. Try again in 15 minutes.' })).toBeFocused();
   const waitingContinueSendsNothing = expectNoLinkingRequest(page, 700);
-  await page.getByRole('button', { name: 'Continue' }).click({ force: true });
   await waitingContinueSendsNothing;
-  expect(calls, 'the waiting button sends nothing').toHaveLength(6);
+  expect(calls, 'the waiting form sends nothing').toHaveLength(6);
   await checkState(page, '2a rate limited with Retry-After 900');
   // 2a rate limited by the same login does not leave /link and does not echo values
-  await expectNothingKept(page, context, [customerD.idNumber, customerD.accountNumber, noMatchAccount, '1000000050'], 'login 2 end');
+  await expectNothingKept(page, context, [customerD.idNumber, customerD.accountNumber, noMatchAccount], 'login 2 end');
   await context.close();
 });
 
@@ -470,7 +522,7 @@ test('full queue: the sixth start gets 429 with no Retry-After, "Try again later
     await expect(page.getByRole('alert').filter({ hasText: 'Too many attempts. Try again later.' })).toBeVisible();
     expect(calls[0]).toMatchObject({ path: '/api/v1/linking/start', status: 429, retryAfter: null });
     expect(await page.locator('main').innerText()).not.toMatch(/minute/);
-    await expect(page.getByRole('button', { name: 'Continue' })).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
     await expect(page).toHaveURL(`${origin}/link`);
     await checkState(page, '2a rate limited without Retry-After (full queue)');
     // the button works again at once: a second press sends a request
@@ -536,7 +588,8 @@ test('login 3: 2a -> 202 -> 2b, two wrong codes, the real code from the SMS sink
       }
     }).observe(document.body, { subtree: true, childList: true, characterData: true });
   });
-  await code(page).fill(otpCode.slice(0, 3) + ' ' + otpCode.slice(3));
+  await pasteInto(code(page), otpCode.slice(0, 3) + ' ' + otpCode.slice(3)); // a real paste, with the space the SMS reads
+  expect(await cellDigits(page), 'the pasted code fills the six cells').toBe(otpCode);
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page).toHaveURL(`${origin}/transactions`);
   const verifyCalls = calls.filter((call) => call.path === '/api/v1/linking/verify');
@@ -587,6 +640,133 @@ test('login 4: details of an already-linked customer give the same 202 and the s
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page.getByText("That code didn't work. You have 2 tries left.")).toBeVisible(); // the same copy as no challenge
   note(`login 4 (already-linked details): start 202, 2b text identical to the no-match case, verify -> 422 with 2 tries left; challenge = ${challengeOf(logins[3].sub)}`);
+  await context.close();
+});
+
+// ---- story ui-linking: focus under a rate limit, CSP on /link/otp, the paste bound ----------------------------------------------
+// These stub the API (no real link, no OTP sent to customer D) and use logins nobody else uses.
+
+async function stubRateLimit(page: Page, path: string) {
+  await page.route(`**${path}`, (route) => route.fulfill({
+    status: 429,
+    headers: { 'Retry-After': '1', 'Content-Type': 'application/problem+json' },
+    body: JSON.stringify({ type: `${problemTypeBase}rate-limited.md`, title: 'Too many requests', status: 429, traceId: 'qa-stub' }),
+  }));
+}
+
+/** Samples document.activeElement every 5 ms from now on, so a moment on body between two controls cannot hide. */
+async function sampleFocus(page: Page) {
+  await page.evaluate(() => {
+    const holder = window as unknown as { focusSamples: string[] };
+    holder.focusSamples = [];
+    setInterval(() => holder.focusSamples.push(document.activeElement === document.body || !document.activeElement ? 'BODY' : `${document.activeElement.tagName}#${document.activeElement.id}`), 5);
+  });
+}
+const focusSamples = (page: Page) => page.evaluate(() => (window as unknown as { focusSamples: string[] }).focusSamples);
+
+test('ui-linking criterion 6: with a stubbed 429 and Retry-After 1 on /link/otp, focus is never on body; the notice, then Verify', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const { context, page } = await signIn(browser, logins[10]);
+  await stubRateLimit(page, '/api/v1/linking/verify');
+  await page.goto('/link/otp');
+  await code(page).fill('123456');
+  await sampleFocus(page);
+  await page.getByRole('button', { name: 'Verify' }).click();
+  const notice = page.getByRole('alert').filter({ hasText: 'Too many attempts. Try again in 1 minute.' });
+  await expect(notice).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled();
+  await expect(code(page)).toBeDisabled();
+  await expect(notice).toBeFocused();
+  // the wait ends: the notice unmounts, the controls are enabled and focus moves to Verify
+  await expect(page.getByRole('button', { name: 'Verify' })).toBeEnabled({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: 'Verify' })).toBeFocused();
+  await expect(code(page)).toBeEnabled();
+  expect(await focusSamples(page), 'document.activeElement was never body').not.toContain('BODY');
+  await context.close();
+});
+
+test('ui-linking criterion 6: with a stubbed 429 and Retry-After 1 on /link, focus is never on body; the notice, then Continue', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const { context, page } = await signIn(browser, logins[11]);
+  await stubRateLimit(page, '/api/v1/linking/start');
+  await page.goto('/link');
+  await idNumber(page).fill(customerD.idNumber);
+  await accountNumber(page).fill(noMatchAccount);
+  await sampleFocus(page);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  const notice = page.getByRole('alert').filter({ hasText: 'Too many attempts. Try again in 1 minute.' });
+  await expect(notice).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  await expect(idNumber(page)).toBeDisabled();
+  await expect(accountNumber(page)).toBeDisabled();
+  await expect(notice).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeFocused();
+  expect(await focusSamples(page), 'document.activeElement was never body').not.toContain('BODY');
+  await context.close();
+});
+
+test('ui-linking criterion 5: /link/otp has the app CSP, zero securitypolicyviolation events and no console error after load, focus, typing and paste', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const { context, page } = await signIn(browser, logins[12]);
+  await page.addInitScript(() => {
+    (window as unknown as { cspViolations: string[] }).cspViolations = [];
+    document.addEventListener('securitypolicyviolation', (event) => {
+      (window as unknown as { cspViolations: string[] }).cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`);
+    });
+  });
+  const consoleErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  const document = await page.goto('/link/otp');
+  expect(document!.headers()['content-security-policy']).toBe(gatewayContentSecurityPolicy);
+  await expect(page.getByRole('heading', { level: 1, name: 'Enter your OTP' })).toBeVisible();
+  const otp = code(page);
+  await otp.focus();
+  await expect(page.locator('[data-slot="input-otp-slot"][data-active="true"]')).toHaveCount(1);
+  await otp.pressSequentially('4815');
+  expect(await cellDigits(page), 'typed digits show in the cells').toBe('4815');
+  await clearCode(otp);
+  await pasteInto(otp, '481 516');
+  expect(await cellDigits(page), 'the pasted digits show in the cells').toBe('481516');
+  await expectNoLinkingRequest(page, 500);
+  expect(await page.evaluate(() => (window as unknown as { cspViolations: string[] }).cspViolations), 'securitypolicyviolation events').toEqual([]);
+  expect(consoleErrors, 'console errors on /link/otp').toEqual([]);
+  await context.close();
+});
+
+test('ui-linking criterion 3: a 7-digit paste is refused, the cells keep their value, the field shows the 6-digit error, no request and no summary', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const { context, page } = await signIn(browser, logins[13]);
+  const calls = recordLinking(page);
+  await page.goto('/link/otp');
+  const otp = code(page);
+  // The field error under the cells; the same text is also announced in the live region (WCAG 2.2 SC 4.1.3).
+  const refused = page.locator('#code-error');
+  // into an empty field
+  await pasteInto(otp, '4815167');
+  expect(await cellDigits(page), 'the cells keep their prior value (empty)').toBe('');
+  await expect(refused).toHaveText('Enter the 6-digit code.');
+  await expect(otp).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByRole('group', { name: 'Check the details below' })).toHaveCount(0);
+  await expect(otp).toBeFocused();
+  // more than six digits once the space is removed, into a field holding 481
+  await clearCode(otp);
+  await otp.pressSequentially('481');
+  await pasteInto(otp, '4815 1678');
+  expect(await cellDigits(page), 'the cells keep their prior value (481)').toBe('481');
+  await expect(refused).toHaveText('Enter the 6-digit code.');
+  // six digits and a newline are accepted (the newline is white space)
+  await clearCode(otp);
+  await pasteInto(otp, '481516\n');
+  expect(await cellDigits(page), 'six digits and a newline').toBe('481516');
+  // a letter in the paste drops it whole
+  await clearCode(otp);
+  await pasteInto(otp, '48151a');
+  expect(await cellDigits(page), 'a paste with a letter is ignored whole').toBe('');
+  await expectNoLinkingRequest(page, 500);
+  expect(calls, 'no paste sends a request').toEqual([]);
   await context.close();
 });
 

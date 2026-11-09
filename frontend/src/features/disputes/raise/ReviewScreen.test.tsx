@@ -355,7 +355,9 @@ describe('after a 201', () => {
     serveDispute();
     const { user, router } = renderApp({ path: '/transactions' });
     const openRaiseFor = async (index: number) => {
-      const links = await screen.findAllByRole('link', { name: 'Dispute this transaction' });
+      const links = await screen.findAllByRole('link', {
+        name: 'Dispute ZXP*GLOBALSVCS 0800',
+      });
       await user.click(links[index] as HTMLElement);
     };
     await openRaiseFor(0);

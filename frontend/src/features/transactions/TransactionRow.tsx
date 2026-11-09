@@ -1,14 +1,29 @@
 import { Link } from '@tanstack/react-router';
-import { Info } from 'lucide-react';
+import { ChevronRight, Info } from 'lucide-react';
 import type { Ref } from 'react';
 
 import type { TransactionResponse } from '@/api/generated/model';
 
 import { describeCustomerStatus } from '@/features/disputes/customerStatus';
 import { DisputeStatusBadge } from '@/features/disputes/DisputeStatusBadge';
+import { cn } from '@/lib/utils';
 
 import { describeAmount, showAmount } from './format';
 import { notDisputableHint } from './notDisputableHint';
+
+/**
+ * The list's columns from 768px (HANDOFF 3.2): text, amount, action. The header, every row and the skeleton rows use
+ * them, so every amount and action lines up down the panel. Below 768px a row has two columns and the action sits
+ * under the amount.
+ */
+export const ledgerColumns =
+  'md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)] md:gap-x-6';
+
+/** One row of the panel: the grid, the hairline above it and its padding. The first row's hairline closes its day band. */
+export const ledgerRow = cn(
+  'grid min-h-(--row-min) grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 border-t border-border px-4 py-3 md:items-center md:px-6',
+  ledgerColumns,
+);
 
 /** "Card 492345•• •••• 3456" for a card, "Account •••• 4821" otherwise. Screen readers get the short form. */
 export function MaskedNumber({
@@ -56,9 +71,10 @@ export function TransactionRow({
     <li
       ref={rowRef}
       tabIndex={-1}
-      className="grid min-h-(--row-min) grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 border-t border-border px-4 py-3 first:border-t-0 md:gap-x-6"
+      // The panel clips its content, so the ring of a row that takes focus after Load more is drawn inside it.
+      className={cn(ledgerRow, 'focus-visible:-outline-offset-3')}
     >
-      <div className="row-span-2 min-w-0">
+      <div className="col-start-1 row-span-2 row-start-1 min-w-0 md:row-span-1">
         <p className="font-strong wrap-break-word">{row.description}</p>
         <MaskedNumber row={row} />
         {hint ? (
@@ -73,12 +89,15 @@ export function TransactionRow({
         <span className="sr-only">{describeAmount(row)}</span>
       </span>
       {row.disputable ? (
+        // The link is 44px tall (WCAG 2.2 SC 2.5.5). On a phone its negative margins let it overlap the row's padding,
+        // so the row stays compact. The merchant is read after "Dispute" (SC 2.5.3).
         <Link
           to="/transactions/$transactionId/dispute"
           params={{ transactionId: row.transactionId }}
-          className="col-start-2 row-start-2 justify-self-end py-2 text-label font-strong"
+          className="col-start-2 row-start-2 -my-3 -mr-1 inline-flex min-h-(--tap-target) items-center gap-1 justify-self-end px-1 text-label font-strong no-underline hover:underline focus-visible:-outline-offset-3 md:col-start-3 md:row-start-1 md:m-0 md:justify-self-start"
         >
-          Dispute <span className="sr-only">this transaction</span>
+          Dispute <span className="sr-only">{row.description}</span>
+          <ChevronRight className="size-4" />
         </Link>
       ) : null}
       {row.disputeId && statusDescription ? (
@@ -86,7 +105,7 @@ export function TransactionRow({
         <Link
           to="/disputes/$disputeId"
           params={{ disputeId: row.disputeId }}
-          className="col-span-2 row-start-3 group justify-self-end rounded-full py-2 md:col-span-1 md:col-start-2 md:row-start-2"
+          className="group col-span-2 row-start-3 inline-flex min-h-(--tap-target) items-center justify-self-end rounded-full md:col-span-1 md:col-start-3 md:row-start-1 md:justify-self-start"
         >
           <DisputeStatusBadge statusDescription={statusDescription} />
         </Link>
