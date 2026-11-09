@@ -296,7 +296,9 @@ Run them after the first deploy, and after any change to the Terraform or the AW
 1. Sign in at `https://<APP_HOST>` as a fixture customer and raise a dispute.
 2. Within an hour, the dispute shows up in X-Ray, CloudWatch metrics (namespace `DisputeDesk`) and the
    `/disputedesk-dev/otel` logs. X-Ray's trace list indexes only a sample of spans, about 1 % by default, so look in
-   `aws/spans` (CloudWatch, Transaction Search), which holds every span. Each command prints at least one line:
+   `aws/spans` (CloudWatch, Transaction Search), which holds every span. Each command prints at least one line; the
+   metrics are only the app's own `disputedesk.*` instruments (`disputedesk.disputes.raised` after a raise), because
+   the collector drops every other metric:
 
    ```sh
    since=$(( ($(date +%s) - 3600) * 1000 ))

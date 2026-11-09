@@ -481,7 +481,7 @@ Only these arrows are allowed. The architecture tests enforce the graph: `LayerT
 
 - **Binds:** R36
 - **Prevents:** code that knows where telemetry goes
-- **Rule:** The hosts export OTLP only, switched on by `OTEL_EXPORTER_OTLP_ENDPOINT` (P0-3): locally to the Aspire Dashboard, and in AWS to an `otel/opentelemetry-collector-contrib` container, pinned by digest, that sends traces to the X-Ray OTLP endpoint, metrics to CloudWatch and logs to a log group. Locally the SPA exports OTLP/HTTP to `/otlp/` on the same origin, and the gateway proxies it to the Aspire Dashboard. In AWS there is no browser telemetry intake, so browser spans are a local-stack feature.
+- **Rule:** The hosts export OTLP only, switched on by `OTEL_EXPORTER_OTLP_ENDPOINT` (P0-3): locally to the Aspire Dashboard, and in AWS to an `otel/opentelemetry-collector-contrib` container, pinned by digest, that sends traces to the X-Ray OTLP endpoint, the app's own `disputedesk.*` metrics (AD-20) to CloudWatch, dropping every other metric, and logs to a log group. Locally the SPA exports OTLP/HTTP to `/otlp/` on the same origin, and the gateway proxies it to the Aspire Dashboard. In AWS there is no browser telemetry intake, so browser spans are a local-stack feature.
 - **Details:**
   - The collector uses `sigv4auth` and the instance role (`CloudWatchAgentServerPolicy`). Terraform enables Transaction Search and creates the log group with 7-day retention.
   - The local `/otlp/` proxy has a body-size cap and the coarse limit, so the CSP keeps `connect-src 'self'`.
