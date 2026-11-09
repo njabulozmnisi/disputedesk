@@ -15,8 +15,10 @@ export function DisputeStatusBadge({
   const Icon = statusDescription.icon;
 
   return (
-    <Badge tone={statusDescription.tone}>
-      <Icon className="size-4" />
+    // The label wraps, even inside a word, instead of overflowing a narrow panel at a large text size
+    // (WCAG 2.2 SC 1.4.4, 1.4.10).
+    <Badge tone={statusDescription.tone} className="whitespace-normal wrap-anywhere">
+      <Icon className="size-4 shrink-0" />
       <span className="group-hover:underline">
         <span className="sr-only">Dispute status:</span> {statusDescription.label}
       </span>
