@@ -47,3 +47,11 @@ column marks a finding with no feature record of its own.
 | ui-tokens-icons | ui-tokens-icons-qa.md | `linking-start.spec.ts` criterion 2 flakes when a random traceId contains "abc". | |
 | ui-notices-states | ui-detail-start-review.md | `ErrorSummary.tsx:48`: the summary's field links are 22px tall at 767px and wider, against EXPERIENCE's 44px minimum (seen inside the withdraw dialog). | |
 | ui-notices-states | ui-notices-states-review.md | One theme outline width token for the 1.5px border shared by Button, Input, Textarea and RadioGroup (raw `border-[1.5px]` in each). | |
+| ui-linking | ui-linking-review.md | `input-otp.tsx:59`: `-m-px` does not keep the cells equal (the active cell is 43px against 41px at 320px, QA L2); draw the second pixel with `inset-ring` and drop `-m-px`. | |
+| ui-linking | ui-linking-review.md | The "field holding 481" paste test pastes `4815 1678`, not the `4815167` criterion 3 names. | |
+| ui-linking | ui-linking-review.md, ui-linking-qa.md | The inline "Start again" link is 81x22px: WCAG 2.5.8's inline exception applies, but DESIGN's 44px rule says otherwise; reconcile DESIGN with the inline-link pattern. | |
+| ui-linking | ui-linking-review.md | A disabled field's label is not dimmed as the mockup draws it (`field.tsx`, outside the story's Touches). | |
+| ui-linking | ui-linking-review.md | `docs/backlog/story-ui-linking.md:52`: the Inputs bullet still describes the old paste condition; the code refuses any paste holding more than 6 digits (add `481-5167` and `4815167\n` as refused rows). | |
+| ui-linking | ui-linking-review.md | `OtpScreen.tsx:241`: after a wrong code the field error keeps role="alert", so a refused paste may be announced twice. | |
+| ui-linking | ui-linking-qa.md | After a refused paste, "Enter the 6-digit code." stays beside six valid digits until the next Verify (validate-on-submit). | |
+| carried | ui-linking-qa.md | A 429 from the gateway limiter on `/api/v1/antiforgery` leaves Verify with no visible notice. | |

@@ -124,6 +124,6 @@ Build-order constraint (decided 2026-10-30): 7.1 starts once 6.4 and 3.12 have m
 | ui-tokens-icons | [Icons are Lucide components and the theme file holds the list columns](../backlog/story-ui-tokens-icons.md) | frontend | Feature | done |
 | ui-notices-states | [Notices lead with a tone icon, and full-screen and empty states share one surface](../backlog/story-ui-notices-states.md) | frontend | Feature | done |
 | ui-lists | [Transactions and disputes line up in columns on one panel](../backlog/story-ui-lists.md) | frontend | Feature | planned |
-| ui-linking | [Linking shows its step, a six-cell code and one help block](../backlog/story-ui-linking.md) | frontend, backend (gateway) | High-stakes | planned |
+| ui-linking | [Linking shows its step, a six-cell code and one help block](../backlog/story-ui-linking.md) | frontend, backend (gateway) | High-stakes | done |
 | ui-raise-review | [Raising and reviewing a dispute show the step and a quiet transaction block](../backlog/story-ui-raise-review.md) | frontend | Feature | planned |
 | ui-detail-start | [Dispute detail shows when it was disputed, and the start page reassures](../backlog/story-ui-detail-start.md) | frontend | Feature | planned |
