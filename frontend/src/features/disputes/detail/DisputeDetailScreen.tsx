@@ -10,9 +10,10 @@ import { usePageHeading } from '@/app/usePageHeading';
 import { Page } from '@/components/Page';
 import { ProblemNotice } from '@/components/ProblemNotice';
 import { StateSurface } from '@/components/StateSurface';
+import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatFullDay, formatMoney } from '@/features/transactions/format';
+import { formatDayWithYear, formatFullDay, formatMoney } from '@/features/transactions/format';
 import { MaskedNumber } from '@/features/transactions/TransactionRow';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +21,7 @@ import { describeCustomerStatus } from '../customerStatus';
 import { DisputeStatusBadge } from '../DisputeStatusBadge';
 import { reasonCopy } from '../raise/reasons';
 import { WithdrawDialog } from '../withdraw/WithdrawDialog';
+import { surfaceClass } from './surfaceClass';
 import { Timeline } from './Timeline';
 
 const headingClass = 'text-title font-title tracking-title wrap-anywhere text-heading';
@@ -27,8 +29,10 @@ const cardClass = 'grid gap-4 rounded-lg border border-border bg-card p-6 shadow
 // The same words as the not-found route (NotFoundPage), for a dispute the API does not know.
 const notFoundTitle = "We can't find that dispute";
 
-const rejectedGuidance =
-  "If you disagree with this outcome, you can complain to the bank first. If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers.";
+const rejectedSteps = [
+  'You can complain to the bank first.',
+  "If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers.",
+];
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -39,25 +43,63 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+// The skeleton matches the loaded layout: the summary card's bars under the real h1, then a timeline surface with three
+// entries, a dot and two bars each. Bar widths are classes, not inline styles.
 function LoadingCard() {
   return (
     <>
-      <Skeleton className="w-24" />
-      <Skeleton className="w-2/5" />
+      <Skeleton className="h-5.5 w-2/5" />
+      <div className="grid gap-2">
+        <Skeleton className="h-2.5 w-1/4" />
+        <Skeleton className="h-8 w-2/5" />
+        <Skeleton className="h-2.5 w-1/2" />
+      </div>
+      <Skeleton className="w-full" />
+      <Skeleton className="w-full" />
     </>
   );
 }
 
 function LoadingTimeline() {
   return (
-    <ol className="grid gap-4">
-      {[1, 2, 3].map((placeholder) => (
-        <li key={placeholder} className="grid gap-2">
-          <Skeleton className="w-3/5" />
-          <Skeleton className="w-2/5" />
-        </li>
-      ))}
-    </ol>
+    <div className={surfaceClass}>
+      <Skeleton className="h-5.5 w-1/3" />
+      <ol className="grid gap-4">
+        {[1, 2, 3].map((placeholder) => (
+          <li key={placeholder} className="flex items-start gap-4">
+            <span aria-hidden="true" className="mt-1 size-3 shrink-0 rounded-full bg-muted" />
+            <div className="grid flex-1 gap-2">
+              <Skeleton className="w-3/4" />
+              <Skeleton className="h-2.5 w-1/2" />
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** DESIGN.md, Rejected guidance: its own flat surface below the timeline, with numbered steps like the start page's. */
+function RejectedGuidance() {
+  return (
+    <section className={surfaceClass} aria-labelledby="guidance-heading">
+      <h2 id="guidance-heading" className="text-subheading font-strong">
+        If you disagree with this outcome
+      </h2>
+      <ol className="grid gap-3">
+        {rejectedSteps.map((step, index) => (
+          <li key={step} className="flex gap-3">
+            <span
+              aria-hidden="true"
+              className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-label font-title text-heading"
+            >
+              {index + 1}
+            </span>
+            <p>{step}</p>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -133,22 +175,31 @@ function LoadedCard({
         </p>
       </div>
       <MaskedNumber row={transaction} />
-      <dl>
+      <dl className="border-t border-border">
         {reasonLabel ? <Row label="Reason">{reasonLabel}</Row> : null}
-        <Row label="Transaction date">{formatFullDay(transaction.transactionDate)}</Row>
         {dispute.expectedAmount ? (
           <>
             <Row label="Transaction amount">{formatMoney(transaction.amount)}</Row>
             <Row label="Expected amount">{formatMoney(dispute.expectedAmount)}</Row>
           </>
         ) : null}
+        <Row label="Transaction date">{formatFullDay(transaction.transactionDate)}</Row>
+        {/* From createdAt, which the contract guarantees; the timeline's order is only a mapping convention. */}
+        <Row label="Disputed on">
+          <time dateTime={dispute.createdAt}>{formatDayWithYear(dispute.createdAt)}</time>
+        </Row>
       </dl>
       {status?.group === 'open' ? (
-        <div>
+        <div className="grid justify-items-start gap-3 border-t border-border pt-4">
+          <p className="text-caption text-muted-foreground">
+            Changed your mind? You can withdraw while the dispute is open. You can&apos;t dispute
+            this transaction again after you withdraw.
+          </p>
           <Button
             ref={withdrawButtonRef}
             type="button"
             variant="secondary"
+            className="w-full md:w-auto"
             onClick={() => {
               setWithdrawOpen(true);
             }}
@@ -218,9 +269,7 @@ export function DisputeDetailScreen() {
     timeline = (
       <>
         <Timeline dispute={dispute} />
-        {dispute.outcome === 'rejected' ? (
-          <p className="text-muted-foreground">{rejectedGuidance}</p>
-        ) : null}
+        {dispute.outcome === 'rejected' ? <RejectedGuidance /> : null}
       </>
     );
   } else if (query.isError) {
@@ -243,14 +292,16 @@ export function DisputeDetailScreen() {
     <Page width={isMessage ? 'form' : 'content'}>
       {isMessage ? null : (
         <div>
-          <Link to="/disputes">Back to disputes</Link>
+          <Link to="/disputes" className="inline-flex min-h-(--tap-target) items-center">
+            Back to disputes
+          </Link>
         </div>
       )}
 
       {dispute && justSubmitted ? (
-        <div className="rounded-md bg-status-success-bg p-4 text-status-success-fg">
-          <strong className="font-strong">Dispute submitted</strong>
-        </div>
+        <Alert tone="success">
+          <AlertTitle>Dispute submitted</AlertTitle>
+        </Alert>
       ) : null}
 
       <div

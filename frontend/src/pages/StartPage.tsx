@@ -1,4 +1,4 @@
-import { Search } from 'lucide-react';
+import { Lock, Search } from 'lucide-react';
 
 import { usePageHeading } from '@/app/usePageHeading';
 import { Button } from '@/components/ui/button';
@@ -106,6 +106,11 @@ export function StartPage() {
               <a href={signInUrl}>Create a login</a>
             </Button>
           </div>
+          <p className="flex items-start gap-2 text-caption text-muted-foreground">
+            <Lock aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            You&apos;ll confirm it&apos;s you with your ID number, account number and a one-time
+            code.
+          </p>
         </div>
         <figure className="m-0 rounded-lg bg-primary-subtle p-4 py-6 md:p-8">
           <SampleDispute />

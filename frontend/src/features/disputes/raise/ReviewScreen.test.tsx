@@ -272,7 +272,9 @@ describe('after a 201', () => {
     await screen.findByRole('heading', { level: 1, name: 'ZXP*GLOBALSVCS 0800' });
     expect(router.state.location.pathname).toBe(`/disputes/${disputeGuid}`);
     expect(router.state.location.state.justSubmitted).toBe(true);
-    expect(screen.getByText('Dispute submitted', { selector: 'strong' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Dispute submitted', { selector: '[data-slot="alert-title"]' }),
+    ).toBeInTheDocument();
     expect(requests).toHaveLength(1);
     expect(screen.getByRole('status')).toHaveTextContent('Dispute submitted');
     const stateOf = (key: readonly unknown[]) => queryClient.getQueryState(key)?.isInvalidated;
