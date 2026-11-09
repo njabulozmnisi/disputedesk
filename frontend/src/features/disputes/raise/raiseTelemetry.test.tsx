@@ -253,7 +253,7 @@ describe('the open span', () => {
   it('is still one after 4a, 4b and 4a again', async () => {
     const { user } = await openReviewScreen(entry);
 
-    await user.click(screen.getByRole('link', { name: 'Change' }));
+    await user.click(screen.getByRole('link', { name: 'Change your dispute' }));
 
     await screen.findByRole('heading', { level: 1, name: 'Dispute this transaction' });
     expect(openSpans()).toHaveLength(1);
