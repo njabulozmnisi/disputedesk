@@ -72,3 +72,7 @@ column marks a finding with no feature record of its own.
 | carried | ui-raise-review-qa.md | `aria-disabled:opacity-70` on Change, Cancel and Button differs from DESIGN's Button. | |
 | carried | ui-raise-review-qa.md | At 320px and 200% text the 2rem hero amount widens the review card slightly. | |
 | carried | ui-raise-review-qa.md | `e2e/run-regression.sh` fails every group with only a docker error when port 4318 is taken; check the port first. | |
+| ui-detail-start | ui-detail-start-review.md | `alert-dialog.tsx:63`: the footer turns into a row at `sm` (640px) while the sheet becomes a dialog at `md` (768px), so 640-767px shows a sheet with side-by-side buttons; use `md:flex-row`. | |
+| ui-detail-start | ui-detail-start-review.md | `wordmark.test.ts:131-148`: transparency checks one pixel, and the dot-on-baseline check measures against a box that includes the descender of "p". Check the corners and compare with a letter without a descender. | |
+| carried | ui-detail-start-qa.md | Medium: the session warning does not move focus into the dialog on open, and Tab walks the page behind it (WAI-ARIA APG alertdialog; WCAG 2.2 SC 2.4.3). Give it initial focus on Stay signed in and add a keyboard test. | |
+| carried | ui-detail-start-qa.md | Opening any dialog logs one CSP violation from the scroll-lock library's injected style; the CSP blocks it as intended. | |
