@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
@@ -16,11 +17,25 @@ namespace DisputeDesk.PlatformTests;
 /// The provision.sh runs here stop at its first Zitadel call, which a stub curl cannot answer (its arguments name a
 /// random temporary file); the cases after that point read the file, because the script then runs
 /// /provision/label-policy.sh and reads /brand/, which only the zitadel image holds. infra/tests/smoke.sh runs it whole.
+/// The branding cases run a copy with those two paths moved, against a stand-in for Zitadel, up to the call after the
+/// activation.
 /// </summary>
 [UnsupportedOSPlatform("windows")] // the stubs need their execute bit
 public partial class PlatformScriptTests
 {
+    private const string PublicOrigin = "https://auth.public.test";
+    private const string LogoPath = "/assets/v1/1/policy/label/logo-1";
+    private const string DarkLogoPath = "/assets/v1/1/policy/label/logo-dark-1";
+    private const string UploadFont = "POST /assets/v1/instance/policy/label/font";
+    private const string UploadLogo = "POST /assets/v1/instance/policy/label/logo";
+    private const string UploadDarkLogo = "POST /assets/v1/instance/policy/label/logo/dark";
+    private const string Activate = "POST /admin/v1/policies/label/_activate";
+    private const int ClosesTheConnection = 0;
+
     private static readonly string ProvisionScript = File.ReadAllText(Path.Combine(SourceRoots.Repo, "infra/images/zitadel/provision.sh"));
+    private static readonly byte[] MountedLogo = "the mounted logo"u8.ToArray();
+    private static readonly byte[] MountedDarkLogo = "the mounted dark logo"u8.ToArray();
+    private static readonly byte[] OlderLogo = "an older logo"u8.ToArray();
 
     [Fact]
     public void GitHubDownloads_EveryCurl_BoundsItsRetries()
@@ -323,6 +338,62 @@ public partial class PlatformScriptTests
     }
 
     [Fact]
+    public async Task ProvisionScript_ServedLogosMatchTheMountedFiles_UploadsNothingAndStillActivates()
+    {
+        // The second run of infra/tests/smoke.sh: nothing uploaded. The preview's URLs are https on the public host, as in
+        // AWS, and still reach the stand-in, because only their path is used. The font is never downloaded.
+        BrandingRun branding = await RunProvisionBrandingAsync(MountedLogo, MountedDarkLogo);
+
+        Assert.Contains("[provision] label policy activated\n", branding.Run.Errors, StringComparison.Ordinal);
+        Assert.DoesNotContain("uploaded", branding.Run.Errors, StringComparison.Ordinal);
+        Assert.Empty(branding.Uploads);
+        Assert.Equal([$"GET {LogoPath}", $"GET {DarkLogoPath}"], branding.Downloads.Select(download => download.Line));
+        Assert.All(branding.Downloads, download => Assert.False(download.HasToken));
+        Assert.DoesNotContain(branding.Requests, request => request.Line.Contains("font", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProvisionScript_OneServedLogoDiffers_UploadsOnlyThatOneThenActivates(bool lightDiffers)
+    {
+        BrandingRun branding = await RunProvisionBrandingAsync(
+            lightDiffers ? OlderLogo : MountedLogo,
+            lightDiffers ? MountedDarkLogo : OlderLogo);
+
+        string upload = lightDiffers ? UploadLogo : UploadDarkLogo;
+        Assert.Equal([upload], branding.Uploads);
+        string[] requests = [.. branding.Requests.Select(request => request.Line)];
+        Assert.True(Array.IndexOf(requests, upload) < Array.IndexOf(requests, Activate), string.Join('\n', requests));
+        Assert.Contains("[provision] label policy activated\n", branding.Run.Errors, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProvisionScript_NothingUploadedYet_UploadsTheFontAndBothLogosWithoutDownloading()
+    {
+        BrandingRun branding = await RunProvisionBrandingAsync(null, null, hasFont: false);
+
+        Assert.Equal([UploadFont, UploadLogo, UploadDarkLogo], branding.Uploads);
+        Assert.Empty(branding.Downloads);
+        Assert.Contains("[provision] label policy activated\n", branding.Run.Errors, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(StatusCodes.Status302Found, "302")]
+    [InlineData(StatusCodes.Status404NotFound, "404")]
+    [InlineData(StatusCodes.Status500InternalServerError, "500")]
+    [InlineData(ClosesTheConnection, "curl exit")] // the code depends on how the platform reports the closed connection
+    public async Task ProvisionScript_ServedLogoDownloadFails_FailsTheRunWithoutUploadingOrActivating(int answer, string reason)
+    {
+        BrandingRun branding = await RunProvisionBrandingAsync(MountedLogo, MountedDarkLogo, downloadAnswer: answer);
+
+        Assert.Equal(1, branding.Run.ExitCode);
+        Assert.Contains($"[provision] FAIL GET {LogoPath} -> {reason}", branding.Run.Errors, StringComparison.Ordinal);
+        Assert.Empty(branding.Uploads);
+        Assert.DoesNotContain(branding.Requests, request => request.Line == Activate);
+    }
+
+    [Fact]
     public async Task Compose_Api_StartsAfterTheGatewayThatHoldsTheIssuerAlias()
     {
         // Before the gateway's auth.localhost alias exists, Docker's DNS passes the name to the host's resolver, which may
@@ -415,6 +486,97 @@ public partial class PlatformScriptTests
     }
 
     private static int ZitadelReadyCalls(PathStubs stubs) => File.ReadAllLines(Path.Combine(stubs.Directory, "zitadel.calls")).Length;
+
+    /// <summary>
+    /// Runs a copy of provision.sh, with /brand/ and /provision/label-policy.sh moved to files the test holds, against a
+    /// stand-in for Zitadel that serves the given logos (null: none yet). A download answers with the given status, or
+    /// closes the connection. The run stops at the first call after the activation, which the stand-in refuses.
+    /// </summary>
+    private static async Task<BrandingRun> RunProvisionBrandingAsync(
+        byte[]? servedLogo, byte[]? servedDarkLogo, bool hasFont = true, int downloadAnswer = StatusCodes.Status200OK)
+    {
+        var policy = new JsonObject();
+        if (hasFont)
+        {
+            policy["fontUrl"] = $"{PublicOrigin}/assets/v1/1/policy/label/font-1";
+        }
+
+        if (servedLogo is not null)
+        {
+            policy["logoUrl"] = PublicOrigin + LogoPath;
+        }
+
+        if (servedDarkLogo is not null)
+        {
+            policy["logoUrlDark"] = PublicOrigin + DarkLogoPath;
+        }
+
+        string preview = new JsonObject { ["policy"] = policy }.ToJsonString();
+
+        var requests = new ConcurrentQueue<BrandingRequest>();
+        await using WebApplication zitadel = await StartStubZitadelAsync(0, async context =>
+        {
+            string request = $"{context.Request.Method} {context.Request.Path}";
+            requests.Enqueue(new BrandingRequest(request, context.Request.Headers.Authorization.Count > 0));
+            if (request == "GET /admin/v1/policies/label/_preview")
+            {
+                await context.Response.WriteAsync(preview, context.RequestAborted);
+            }
+            else if (request == "GET /.well-known/openid-configuration")
+            {
+                await context.Response.WriteAsync("{\"issuer\":\"https://auth.public.test\"}", context.RequestAborted);
+            }
+            else if (request is $"GET {LogoPath}" or $"GET {DarkLogoPath}")
+            {
+                if (downloadAnswer == ClosesTheConnection)
+                {
+                    context.Abort();
+                    return;
+                }
+
+                context.Response.StatusCode = downloadAnswer;
+                byte[]? served = request == $"GET {LogoPath}" ? servedLogo : servedDarkLogo;
+                await context.Response.Body.WriteAsync(served, context.RequestAborted);
+            }
+            else if (request == "GET /auth/v1/users/me")
+            {
+                context.Response.StatusCode = StatusCodes.Status418ImATeapot;
+            }
+            else
+            {
+                await context.Response.WriteAsync("{}", context.RequestAborted); // the label policy's PUT, the uploads and the activation
+            }
+        });
+
+        using var stubs = new PathStubs();
+        Dictionary<string, string> environment = ProvisionEnvironment(stubs);
+        environment["PROVISION_CONNECT_TO"] = $"auth.localhost:8080:127.0.0.1:{new Uri(zitadel.Urls.First()).Port}";
+        WriteZitadelReadyStub(stubs, failures: 0, writesPat: environment["PROVISION_PAT_FILE"]);
+        string script = Path.Combine(stubs.Directory, "provision.sh");
+        CancellationToken cancellation = TestContext.Current.CancellationToken;
+        await File.WriteAllTextAsync(script, ProvisionScript
+            .Replace("/brand/", $"{stubs.Directory}/", StringComparison.Ordinal)
+            .Replace("/provision/label-policy.sh", Path.Combine(SourceRoots.Repo, "infra/images/zitadel/label-policy.sh"), StringComparison.Ordinal), cancellation);
+        File.Copy(Path.Combine(SourceRoots.Repo, "frontend/src/theme/tokens.css"), Path.Combine(stubs.Directory, "tokens.css"));
+        await File.WriteAllTextAsync(Path.Combine(stubs.Directory, "nunito-sans-latin-400-normal.woff2"), "font", cancellation);
+        await File.WriteAllBytesAsync(Path.Combine(stubs.Directory, "wordmark.png"), MountedLogo, cancellation);
+        await File.WriteAllBytesAsync(Path.Combine(stubs.Directory, "wordmark-dark.png"), MountedDarkLogo, cancellation);
+
+        ProcessResult run = await Processes.RunAsync("bash", [script], environment, TimeSpan.FromSeconds(30));
+
+        return new BrandingRun(run, [.. requests]);
+    }
+
+    /// <summary>One request the stand-in received, and whether it carried a bearer token.</summary>
+    private sealed record BrandingRequest(string Line, bool HasToken);
+
+    /// <summary>How a branding run ended and what it asked of the stand-in, in order.</summary>
+    private sealed record BrandingRun(ProcessResult Run, BrandingRequest[] Requests)
+    {
+        public BrandingRequest[] Downloads => [.. Requests.Where(request => request.Line.Contains("/logo-", StringComparison.Ordinal))];
+
+        public string[] Uploads => [.. Requests.Select(request => request.Line).Where(line => line.StartsWith("POST /assets/", StringComparison.Ordinal))];
+    }
 
     // From the "is the file current" test up to the log line it ends with.
     [GeneratedRegex(@"if \[ -s ""\$OUT_FILE"" \][^;]*;[^\n]*then\s*\n\s*log ""\$OUT_FILE is current; secrets not rotated""")]
