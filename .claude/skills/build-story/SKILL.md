@@ -38,6 +38,7 @@ The input is a feature spec, `docs/backlog/story-<id>.md` (`<id>` as AGENTS.md, 
 - Tag throwaway comparison images `disputedesk-*` and remove them before reporting; the Docker daemon and disk are shared (tf-gateway-spa).
 - `infra/tests/smoke.sh` runs `docker compose down -v` and wipes the shared stack's volumes: run it only under the `stack` lock and say so in the report (tf-gateway-spa).
 - A change that relies on a tool behaviour (Compose, Docker, curl) checks it on the oldest version any environment runs: local, the CI runner, AWS (tf-gateway-spa: CI's Compose 2.38.2).
+- A frontend change to the size or position of an interactive element, or to a width in rem: before reporting, run a throwaway headless Chromium pass against `vite preview` (API stubbed with `page.route`) at 320px with axe, a keyboard walk that focuses the skip link, and the root font size at 200% (ui-tokens-icons, ui-raise-review).
 
 ## Report
 
