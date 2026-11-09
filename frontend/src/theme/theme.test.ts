@@ -48,6 +48,26 @@ describe('the theme file', () => {
     expect(withoutLineHeight).toEqual([]);
   });
 
+  // HANDOFF 1: the list columns, read as var(--amount-col) in an arbitrary grid, like --content-max.
+  it('declares the list columns', () => {
+    const tokens = appSourceFiles(['.css']).find(({ path }) => path === 'theme/tokens.css');
+
+    expect(tokens?.text).toMatch(/^\s*--amount-col: 9rem;/m);
+    expect(tokens?.text).toMatch(/^\s*--action-col: 14rem;/m);
+  });
+
+  // HANDOFF 5: icons are Lucide components. The pattern uses Unicode escapes so that this file holds no glyph:
+  // arrow, circle, triangle, check, cross, return arrow, circled i, warning sign, trigram, flag.
+  it('has no text-glyph icon', () => {
+    const glyph =
+      /\u{279A}|\u{25D4}|\u{25B2}|\u{2713}|\u{2715}|\u{21A9}|\u{24D8}|\u{26A0}|\u{2630}|\u{2691}/u;
+    const offenders = appSourceFiles(['.ts', '.tsx'])
+      .filter(({ text }) => glyph.test(text))
+      .map(({ path }) => path);
+
+    expect(offenders).toEqual([]);
+  });
+
   it('loads the tokens into the app stylesheet', () => {
     const stylesheet = appSourceFiles(['.css']).find(({ path }) => path === 'index.css');
 

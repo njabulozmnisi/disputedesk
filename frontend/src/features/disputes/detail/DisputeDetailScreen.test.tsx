@@ -7,6 +7,7 @@ import {
   getListTransactionsInfiniteQueryKey,
 } from '@/api/generated/disputedesk';
 import type { DisputeResponse, TimelineEntryResponse } from '@/api/generated/model';
+import { expectDecorativeIcon } from '@/test/icons';
 import { server } from '@/test/server';
 import {
   disputeGuid,
@@ -252,6 +253,28 @@ describe('loading, failing and loaded', () => {
     await waitFor(() => {
       expect(h1()).toHaveFocus();
     });
+  });
+
+  it('keeps one h1 element from failure to not found, and draws not found as a state surface', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`*/api/v1/disputes/${disputeGuid}`, () => {
+        calls += 1;
+        return calls === 1 ? problemResponse('internal', 500) : problemResponse('not-found', 404);
+      }),
+    );
+    const { user } = renderApp({ path: `/disputes/${disputeGuid}` });
+    await screen.findByText('Something went wrong on our side. Try again.');
+    const failureHeading = h1();
+    // The failure message is not a state surface: no tile.
+    expect(failureHeading.closest('section')?.querySelector('svg.lucide-search')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await screen.findByRole('heading', { level: 1, name: notFoundHeading });
+    expect(h1()).toBe(failureHeading);
+    expectDecorativeIcon(h1().closest('section')?.querySelector('svg.lucide-search'), 'size-6');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
   it('leaves focus on Try again when it fails again', async () => {

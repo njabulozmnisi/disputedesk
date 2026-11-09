@@ -92,7 +92,7 @@ describe('Sign out', () => {
     );
     const submitted = recordFormSubmissions();
     const { user, router, queryClient } = renderApp({ path: '/transactions' });
-    await screen.findByText('PRIVATE MERCHANT 4321');
+    await screen.findByText('PRIVATE MERCHANT 4321', { selector: 'p' });
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
 
@@ -125,7 +125,7 @@ describe('Sign out', () => {
       failTokenFetch();
       const submitted = recordFormSubmissions();
       const { user, router, queryClient } = renderApp({ path: '/transactions' });
-      await screen.findByText('PRIVATE MERCHANT 4321');
+      await screen.findByText('PRIVATE MERCHANT 4321', { selector: 'p' });
 
       await user.click(screen.getByRole('button', { name: 'Sign out' }));
 
@@ -133,7 +133,7 @@ describe('Sign out', () => {
       expect(notice).toHaveTextContent("We couldn't finish signing you out.");
       expect(notice).toHaveTextContent('Try again.');
       expect(router.state.location.pathname).toBe('/transactions');
-      expect(screen.getByText('PRIVATE MERCHANT 4321')).toBeInTheDocument();
+      expect(screen.getByText('PRIVATE MERCHANT 4321', { selector: 'p' })).toBeInTheDocument();
       expect(queryClient.getQueryData(getGetSessionQueryKey())).toEqual({
         state: 'linked',
       });
@@ -155,7 +155,7 @@ describe('Sign out', () => {
     failWith('/api/v1/antiforgery', 'unauthorized', 401);
     const submitted = recordFormSubmissions();
     const { user } = renderApp({ path: '/transactions' });
-    await screen.findByText('PRIVATE MERCHANT 4321');
+    await screen.findByText('PRIVATE MERCHANT 4321', { selector: 'p' });
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
 

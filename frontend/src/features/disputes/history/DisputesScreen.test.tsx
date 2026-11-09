@@ -3,6 +3,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
 import type { CustomerStatus, DisputeSummaryResponse, Reason } from '@/api/generated/model';
+import { expectDecorativeIcon } from '@/test/icons';
 import { server } from '@/test/server';
 import {
   makeSummary,
@@ -126,6 +127,68 @@ describe('the history', () => {
 
     await user.click(link);
     expect(router.state.location.pathname).toBe('/disputes/o1');
+  });
+
+  // ui-lists, criterion 5.
+  it('makes each row one link, one tab stop, named by merchant, reason, date, amount and status', async () => {
+    serveDisputes([
+      summary('o1', 'submitted', {
+        reason: 'duplicateCharge',
+        createdAt: '2026-10-26T09:00:00Z',
+        disputedAmount: { amount: '849.00', currency: 'ZAR' },
+      }),
+    ]);
+    renderApp({ path: '/disputes' });
+
+    const row = (await screen.findByText('Shop o1')).closest('li') as HTMLElement;
+    const links = within(row).getAllByRole('link');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName(
+      'Shop o1 Duplicate charge, raised 26 Oct 2026 R849.00 Dispute status: Submitted',
+    );
+  });
+
+  it('puts a decorative chevron, hidden on a phone, and the badge on its own line below 768px', async () => {
+    serveDisputes([summary('o1', 'submitted')]);
+    renderApp({ path: '/disputes' });
+
+    const link = await screen.findByRole('link', { name: /Shop o1/ });
+    const chevron = link.querySelector('svg.lucide-chevron-right');
+    expectDecorativeIcon(chevron);
+    expect(chevron).toHaveClass('hidden', 'md:block', 'md:col-start-4');
+    expect(link).toHaveClass('grid-cols-[minmax(0,1fr)_auto]');
+    expect(link).toHaveClass(
+      'md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)_--spacing(5)]',
+    );
+    expect(link).toHaveClass('md:gap-x-6');
+    expect(
+      within(link).getByText('Submitted').closest('[data-slot="badge"]')?.parentElement,
+    ).toHaveClass(
+      'col-span-2',
+      'row-start-3',
+      'justify-self-end',
+      'md:col-span-1',
+      'md:col-start-3',
+      'md:row-start-1',
+      'md:justify-self-start',
+    );
+  });
+
+  // Tailwind, Differentiating nested groups: the row's own group name keeps DisputeStatusBadge's plain
+  // `group-hover:underline` from firing, so a hovered row underlines the merchant only.
+  it('tints the row on hover and underlines the merchant only, through the group/row name', async () => {
+    serveDisputes([summary('o1', 'submitted')]);
+    renderApp({ path: '/disputes' });
+
+    const link = await screen.findByRole('link', { name: /Shop o1/ });
+    expect(link).toHaveClass('group/row', 'hover:bg-background');
+    expect(link).not.toHaveClass('group');
+    expect(screen.getByText('Shop o1')).toHaveClass(
+      'font-strong',
+      'text-primary',
+      'group-hover/row:underline',
+    );
+    expect(within(link).getByText('Submitted')).toHaveClass('group-hover:underline');
   });
 
   it('leaves out an item whose status is outside the enum, and never says "Escalated"', async () => {
@@ -377,6 +440,9 @@ describe('states', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 2, name: 'Open' })).not.toBeInTheDocument();
+    // Criterion 5: one state surface with the Flag tile, holding the one action.
+    const surface = screen.getByRole('link', { name: 'Go to transactions' }).closest('section');
+    expectDecorativeIcon(surface?.querySelector('svg.lucide-flag'), 'size-6');
     expect(await axe(document.body)).toHaveNoViolations();
 
     await user.click(screen.getByRole('link', { name: 'Go to transactions' }));

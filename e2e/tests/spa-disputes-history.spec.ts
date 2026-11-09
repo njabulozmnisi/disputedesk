@@ -12,7 +12,7 @@ import { ownDisputable, queryDatabase, axeTags, origin, signInContext } from './
 // proves the SPA itself sends no `limit`. A transaction is disputed once: the spec tops A up to three disputes
 // (one withdrawn) from its reserved transactions (support.ts) and raises nothing else; a full run raises none.
 
-const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
+const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'sha256-47DEQpj8HBSa\+\/TImW\+5JCeuQeRkm5NMpJWZG3hSuFU=''\./;
 const problemMessage = 'Something went wrong on our side. Try again.';
 const reasonLabels: Record<string, string> = { unrecognised: 'Unrecognised', duplicateCharge: 'Duplicate charge', wrongAmount: 'Wrong amount', notReceived: 'Not received', cancelledSubscription: 'Cancelled subscription', refundNotProcessed: 'Refund not processed' };
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -279,8 +279,8 @@ test('criterion 2: outcome badges, and an unknown status or outcome (response ed
   expect(text).not.toMatch(/escalated|something-new|partially/i);
   expect(open[1].text).toMatch(/Raised \d/);
   // Tone and icon: success and danger tones carry a check and a cross, on the existing status tokens.
-  const upheld = page.getByRole('link', { name: /Resolved · Upheld/ }).locator('span').filter({ hasText: '✓' }).first();
-  const rejected = page.getByRole('link', { name: /Resolved · Rejected/ }).locator('span').filter({ hasText: '✕' }).first();
+  const upheld = page.getByRole('link', { name: /Resolved · Upheld/ }).locator('svg.lucide-check').first();
+  const rejected = page.getByRole('link', { name: /Resolved · Rejected/ }).locator('svg.lucide-x').first();
   await expect(upheld).toBeVisible();
   await expect(rejected).toBeVisible();
   expect(await axeViolations(page), 'axe with outcome badges').toEqual([]);

@@ -5,9 +5,10 @@ import { Slot } from 'radix-ui';
 import { cn } from '@/lib/utils';
 
 // shadcn/ui Button with the DisputeDesk brand layer (DESIGN.md, Components): every button is a pill, at least 48px
-// tall; primary is filled, secondary is outlined. `compact` is the 44px pill used in the header.
+// tall; primary is filled, secondary is outlined. `compact` is the 44px pill used in the header. A disabled button is
+// drawn with the muted fill, border edge and text, never at reduced opacity (HANDOFF 3.9); `aria-disabled` is the pending look.
 const buttonVariants = cva(
-  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border-[1.5px] border-transparent font-strong whitespace-nowrap no-underline transition-colors aria-disabled:cursor-progress aria-disabled:opacity-70',
+  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border-[1.5px] border-transparent font-strong whitespace-nowrap no-underline transition-colors aria-disabled:cursor-progress aria-disabled:opacity-70 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground',
   {
     variants: {
       variant: {

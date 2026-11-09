@@ -1,8 +1,9 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, isInaccessible, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { axe } from 'vitest-axe';
 
 import type { TransactionResponse } from '@/api/generated/model';
+import { expectDecorativeIcon } from '@/test/icons';
 import { server } from '@/test/server';
 import {
   failWith,
@@ -37,7 +38,8 @@ function serveTwoPages(first: TransactionResponse[], second: TransactionResponse
   return cursors;
 }
 
-// Criterion 5: the list.
+// Criterion 5: the list. A disputable row names its merchant a second time, visually hidden, in its Dispute link
+// (WCAG 2.2 SC 2.5.3), so a test finds the visible description as the `p` that holds it: `{ selector: 'p' }`.
 describe('transaction rows', () => {
   it('shows the description, the masked card, the amount and the day in South African time', async () => {
     serveTransactions([
@@ -52,7 +54,9 @@ describe('transaction rows', () => {
     ]);
     renderApp({ path: '/transactions' });
 
-    const row = (await screen.findByText('Karoo Fuel Stop, Pinetown')).closest('li');
+    const row = (await screen.findByText('Karoo Fuel Stop, Pinetown', { selector: 'p' })).closest(
+      'li',
+    );
     expect(row).not.toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'Tue 27 Oct' })).toBeInTheDocument();
     expect(within(row as HTMLElement).getByText('Card 492345•• •••• 3456')).toBeInTheDocument();
@@ -96,7 +100,7 @@ describe('transaction rows', () => {
       }),
     ]);
     renderApp({ path: '/transactions' });
-    await screen.findByText('Can dispute');
+    await screen.findByText('Can dispute', { selector: 'p' });
 
     expect(await axe(document.body)).toHaveNoViolations();
   });
@@ -121,7 +125,7 @@ describe('transaction rows', () => {
     ]);
     renderApp({ path: '/transactions' });
 
-    await screen.findByText('Later');
+    await screen.findByText('Later', { selector: 'p' });
     const headings = screen
       .getAllByRole('heading', { level: 2 })
       .map((heading) => heading.textContent);
@@ -130,6 +134,149 @@ describe('transaction rows', () => {
       .getAllByRole('listitem')
       .map((item) => item.querySelector('p')?.textContent);
     expect(descriptions).toEqual(['Later', 'Earlier', 'Day before']);
+  });
+});
+
+// ui-lists, criterion 1: the lede and the column header.
+describe('the lede and the column header', () => {
+  it('shows the lede and lists a row older than 90 days', async () => {
+    serveTransactions([
+      makeRow({ description: 'Old shop', disputable: false, notDisputableReason: 'outsideWindow' }),
+    ]);
+    renderApp({ path: '/transactions' });
+
+    expect(
+      await screen.findByText(
+        'Your card and account transactions, newest first. You can dispute those from the last 90 days.',
+        { exact: true },
+      ),
+    ).toBeInTheDocument();
+    expect(await screen.findByText('Old shop', { selector: 'p' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Older than 90 days. Contact the bank about this transaction.'),
+    ).toBeInTheDocument();
+  });
+
+  // Each row already reads in full, so the header is decoration (MDN, aria-hidden).
+  it('hides the column header from assistive technology', async () => {
+    serveTransactions([makeRow({ description: 'Shop' })]);
+    renderApp({ path: '/transactions' });
+    await screen.findByText('Shop', { selector: 'p' });
+
+    const header = screen.getByText('Amount').parentElement as HTMLElement;
+    expect(header).toHaveAttribute('aria-hidden', 'true');
+    expect(header).toHaveClass('hidden', 'md:grid');
+    expect(screen.queryByRole('columnheader')).not.toBeInTheDocument();
+    for (const label of ['Transaction', 'Amount', 'Dispute']) {
+      expect(isInaccessible(within(header).getByText(label))).toBe(true);
+    }
+  });
+});
+
+// ui-lists, criterion 2: the day bands.
+describe('the day bands', () => {
+  it('draws each day heading as a band inside the one panel, above its rows', async () => {
+    serveTransactions([
+      makeRow({
+        transactionId: 'TXN-1',
+        description: 'Later',
+        transactionDate: '2026-10-26T15:00:00Z',
+      }),
+      makeRow({
+        transactionId: 'TXN-2',
+        description: 'Day before',
+        transactionDate: '2026-10-25T10:00:00Z',
+      }),
+    ]);
+    renderApp({ path: '/transactions' });
+    await screen.findByText('Later', { selector: 'p' });
+
+    const band = screen.getByRole('heading', { level: 2, name: 'Mon 26 Oct' });
+    const otherBand = screen.getByRole('heading', { level: 2, name: 'Sun 25 Oct' });
+    const panel = band.parentElement as HTMLElement;
+    expect(otherBand.parentElement).toBe(panel);
+    expect(panel).toContainElement(screen.getByText('Amount').parentElement);
+    expect(band).toHaveClass('border-t', 'bg-background', 'text-label', 'font-strong');
+    expect(band).toHaveClass('text-muted-foreground');
+    // The hairline below a band is the first row's top border.
+    expect(screen.getByText('Later', { selector: 'p' }).closest('li')).toHaveClass('border-t');
+    expect(panel).toContainElement(screen.getByText('Day before', { selector: 'p' }).closest('li'));
+  });
+});
+
+// ui-lists, criterion 3: three columns from 768px.
+describe('the row columns', () => {
+  it('is a grid of text, amount and action from 768px, with a right-aligned tabular amount', async () => {
+    serveTransactions([makeRow({ description: 'Shop' })]);
+    renderApp({ path: '/transactions' });
+
+    const row = (await screen.findByText('Shop', { selector: 'p' })).closest('li') as HTMLElement;
+    expect(row).toHaveClass('grid', 'grid-cols-[minmax(0,1fr)_auto]');
+    expect(row).toHaveClass('md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)]');
+    expect(row).toHaveClass('md:gap-x-6');
+    const amount = within(row).getByText('R849.00').parentElement;
+    expect(amount).toHaveClass('text-right', 'tabular-nums');
+    expect(amount).toHaveClass('col-start-2', 'row-start-1');
+  });
+
+  it('puts the Dispute link in the action column, left-aligned, and under the amount on a phone', async () => {
+    serveTransactions([makeRow({ description: 'Shop' })]);
+    renderApp({ path: '/transactions' });
+
+    const link = await screen.findByRole('link', { name: 'Dispute Shop' });
+    expect(link).toHaveClass('col-start-2', 'row-start-2', 'justify-self-end');
+    expect(link).toHaveClass('md:col-start-3', 'md:row-start-1', 'md:justify-self-start');
+  });
+
+  it("makes a disputed row's badge link 44px tall, in the action column from 768px and on its own line below", async () => {
+    serveTransactions([disputedRow({ description: 'Already raised' })]);
+    renderApp({ path: '/transactions' });
+
+    const link = await screen.findByRole('link', { name: 'Dispute status: Submitted' });
+    expect(link).toHaveClass('inline-flex', 'min-h-(--tap-target)', 'items-center');
+    expect(link).toHaveClass('col-span-2', 'row-start-3', 'justify-self-end');
+    expect(link).toHaveClass('md:col-span-1', 'md:col-start-3', 'md:row-start-1');
+    expect(link).toHaveClass('md:justify-self-start');
+  });
+});
+
+// ui-lists, criterion 4: the Dispute link.
+describe('the Dispute link', () => {
+  it('reads "Dispute", is named after the merchant, is 44px tall and underlines on hover only', async () => {
+    serveTransactions([makeRow({ description: 'ZXP*GLOBALSVCS 0800' })]);
+    renderApp({ path: '/transactions' });
+
+    const link = await screen.findByRole('link', {
+      name: 'Dispute ZXP*GLOBALSVCS 0800',
+    });
+    expect(link).toHaveAttribute('href', '/transactions/TXN-1/dispute');
+    expect(link).toHaveTextContent(/^Dispute /);
+    expect(within(link).getByText('ZXP*GLOBALSVCS 0800')).toHaveClass('sr-only');
+    expect(link).toHaveClass('inline-flex', 'min-h-(--tap-target)', 'items-center');
+    expect(link).toHaveClass('no-underline', 'hover:underline');
+    expectDecorativeIcon(link.querySelector('svg.lucide-chevron-right'));
+  });
+
+  // The panel clips its content, so the ring of the last row's link must be drawn inside it (WCAG 2.2 SC 2.4.7).
+  it('draws the focus ring of the Dispute link inside the panel', async () => {
+    serveTransactions([makeRow({ description: 'Steers Braamfontein' })]);
+    renderApp({ path: '/transactions' });
+
+    const link = await screen.findByRole('link', { name: 'Dispute Steers Braamfontein' });
+    expect(link).toHaveClass('focus-visible:-outline-offset-3');
+  });
+
+  // A badge link is named "Dispute status: …": a regex such as /^Dispute / matches both links, a full name only one.
+  it('is told apart from a badge link only by its exact name', async () => {
+    serveTransactions([
+      makeRow({ transactionId: 'TXN-A', description: 'Open row' }),
+      disputedRow({ transactionId: 'TXN-B', description: 'Already raised' }),
+    ]);
+    renderApp({ path: '/transactions' });
+
+    await screen.findByText('Open row', { selector: 'p' });
+    expect(screen.getAllByRole('link', { name: /^Dispute / })).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: 'Dispute Open row' })).toHaveLength(1);
   });
 });
 
@@ -163,26 +310,26 @@ describe('Load more', () => {
     const cursors = serveTwoPages(firstPage, secondPage);
     const { user } = renderApp({ path: '/transactions' });
 
-    await screen.findByText('First page row 1');
+    await screen.findByText('First page row 1', { selector: 'p' });
     expect(cursors).toEqual([null]);
 
     await user.click(screen.getByRole('button', { name: 'Load more' }));
 
-    expect(await screen.findByText('Second page row 2')).toBeInTheDocument();
+    expect(await screen.findByText('Second page row 2', { selector: 'p' })).toBeInTheDocument();
     expect(cursors).toEqual([null, 'cursor-for-page-2']);
-    expect(screen.getByText('First page row 1')).toBeInTheDocument();
+    expect(screen.getByText('First page row 1', { selector: 'p' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
   });
 
   it('moves focus to the first new row and announces the new rows politely', async () => {
     serveTwoPages(firstPage, secondPage);
     const { user } = renderApp({ path: '/transactions' });
-    await screen.findByText('First page row 1');
+    await screen.findByText('First page row 1', { selector: 'p' });
 
     await user.click(screen.getByRole('button', { name: 'Load more' }));
 
-    await screen.findByText('Second page row 1');
-    const firstNewRow = screen.getByText('Second page row 1').closest('li');
+    await screen.findByText('Second page row 1', { selector: 'p' });
+    const firstNewRow = screen.getByText('Second page row 1', { selector: 'p' }).closest('li');
     await waitFor(() => {
       expect(firstNewRow).toHaveFocus();
     });
@@ -195,7 +342,7 @@ describe('Load more', () => {
   it('says "1 more transaction loaded" for a single new row', async () => {
     serveTwoPages(firstPage, secondPage.slice(0, 1));
     const { user } = renderApp({ path: '/transactions' });
-    await screen.findByText('First page row 1');
+    await screen.findByText('First page row 1', { selector: 'p' });
 
     await user.click(screen.getByRole('button', { name: 'Load more' }));
 
@@ -221,7 +368,7 @@ describe('Load more', () => {
       }),
     );
     const { user } = renderApp({ path: '/transactions' });
-    await screen.findByText('First page row 1');
+    await screen.findByText('First page row 1', { selector: 'p' });
 
     const button = screen.getByRole('button', { name: 'Load more' });
     await user.click(button);
@@ -232,7 +379,7 @@ describe('Load more', () => {
     expect(requests).toBe(2);
 
     release();
-    expect(await screen.findByText('Second page row 2')).toBeInTheDocument();
+    expect(await screen.findByText('Second page row 2', { selector: 'p' })).toBeInTheDocument();
     expect(requests).toBe(2);
   });
 
@@ -253,18 +400,18 @@ describe('Load more', () => {
       }),
     );
     const { user } = renderApp({ path: '/transactions' });
-    await screen.findByText('First page row 1');
+    await screen.findByText('First page row 1', { selector: 'p' });
 
     await user.click(screen.getByRole('button', { name: 'Load more' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Something went wrong on our side. Try again.',
     );
-    expect(screen.getByText('First page row 1')).toBeInTheDocument();
+    expect(screen.getByText('First page row 1', { selector: 'p' })).toBeInTheDocument();
 
     calls = 3;
     await user.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('Second page row 2')).toBeInTheDocument();
+    expect(await screen.findByText('Second page row 2', { selector: 'p' })).toBeInTheDocument();
   });
 
   it('leaves the document for the session-ended screen when Load more gets a 401', async () => {
@@ -282,7 +429,7 @@ describe('Load more', () => {
       }),
     );
     const { user } = renderApp({ path: '/transactions' });
-    await screen.findByText('First page row 1');
+    await screen.findByText('First page row 1', { selector: 'p' });
 
     await user.click(screen.getByRole('button', { name: 'Load more' }));
 
@@ -309,9 +456,13 @@ describe('disputability', () => {
     ]);
     renderApp({ path: '/transactions' });
 
-    const disputable = (await screen.findByText('Can dispute')).closest('li') as HTMLElement;
+    const disputable = (await screen.findByText('Can dispute', { selector: 'p' })).closest(
+      'li',
+    ) as HTMLElement;
     const notDisputable = screen.getByText('Cannot dispute').closest('li') as HTMLElement;
-    const dispute = within(disputable).getByRole('link', { name: 'Dispute this transaction' });
+    const dispute = within(disputable).getByRole('link', {
+      name: 'Dispute Can dispute',
+    });
     expect(dispute).toHaveAttribute('href', '/transactions/TXN-OK/dispute');
     expect(within(notDisputable).queryByRole('link')).not.toBeInTheDocument();
     expect(within(disputable).queryByText(/disputable|Older than|Pending/)).not.toBeInTheDocument();
@@ -351,9 +502,27 @@ describe('disputability', () => {
     serveTransactions([makeRow({ description: 'Why not', disputable: false, ...overrides })]);
     renderApp({ path: '/transactions' });
 
-    const row = (await screen.findByText('Why not')).closest('li') as HTMLElement;
+    const row = (await screen.findByText('Why not', { selector: 'p' })).closest(
+      'li',
+    ) as HTMLElement;
     expect(within(row).getByText(hint)).toBeInTheDocument();
     expect(within(row).queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('draws the hint with a decorative 14px Lucide info icon', async () => {
+    serveTransactions([
+      makeRow({
+        description: 'Why not',
+        disputable: false,
+        notDisputableReason: 'outsideWindow',
+      }),
+    ]);
+    renderApp({ path: '/transactions' });
+
+    const row = (await screen.findByText('Why not', { selector: 'p' })).closest(
+      'li',
+    ) as HTMLElement;
+    expectDecorativeIcon(row.querySelector('svg.lucide-info'), 'size-3.5');
   });
 });
 
@@ -391,11 +560,13 @@ describe('dispute status badge on a row', () => {
       expect(links).toHaveLength(1);
       expect(links[0]).toHaveAccessibleName(`Dispute status: ${label}`);
       expect(links[0]).toHaveAttribute('href', `/disputes/${disputeId}`);
-      expect(within(row).queryByText(/Dispute this transaction/)).not.toBeInTheDocument();
+      expect(
+        within(row).queryByRole('link', { name: 'Dispute Already raised' }),
+      ).not.toBeInTheDocument();
       expect(
         within(row).queryByText(/Not a card transaction|Contact the bank|Not disputable/),
       ).toBeNull();
-      expect(within(row).queryByText('ⓘ', { exact: false })).not.toBeInTheDocument();
+      expect(row.querySelector('svg.lucide-info')).not.toBeInTheDocument();
     },
   );
 
@@ -406,7 +577,7 @@ describe('dispute status badge on a row', () => {
     const link = await screen.findByRole('link', {
       name: 'Dispute status: Under review (prioritised)',
     });
-    expect(link.querySelector('[aria-hidden="true"]')).toHaveTextContent('▲');
+    expectDecorativeIcon(link.querySelector('svg.lucide-search-priority'));
     expect(screen.queryByText(new RegExp(disputeId))).not.toBeInTheDocument();
     expect(link).not.toHaveAccessibleName(expect.stringContaining(disputeId));
   });
@@ -464,8 +635,10 @@ describe('dispute status badge on a row', () => {
     serveTransactions([makeRow({ description: 'Open row' })]);
     renderApp({ path: '/transactions' });
 
-    const row = (await screen.findByText('Open row')).closest('li') as HTMLElement;
-    expect(within(row).getByRole('link', { name: 'Dispute this transaction' })).toBeInTheDocument();
+    const row = (await screen.findByText('Open row', { selector: 'p' })).closest(
+      'li',
+    ) as HTMLElement;
+    expect(within(row).getByRole('link', { name: 'Dispute Open row' })).toBeInTheDocument();
     expect(within(row).queryByRole('link', { name: /Dispute status/ })).not.toBeInTheDocument();
   });
 
@@ -490,6 +663,18 @@ describe('dispute status badge on a row', () => {
     expect(new Set(paths)).toEqual(
       new Set(['/api/v1/authentication/session', '/api/v1/transactions']),
     );
+  });
+
+  // At 200% text size a long status such as "Under review (prioritised)" is wider than a phone's panel, which clips its
+  // content: the badge wraps instead of overflowing (WCAG 2.2 SC 1.4.4, 1.4.10).
+  it('lets the badge wrap, with an icon that keeps its size', async () => {
+    serveTransactions([disputedRow({})]);
+    renderApp({ path: '/transactions' });
+
+    const link = await screen.findByRole('link', { name: 'Dispute status: Submitted' });
+    const badge = link.querySelector('[data-slot="badge"]');
+    expect(badge).toHaveClass('whitespace-normal', 'wrap-anywhere');
+    expect(badge?.querySelector('svg')).toHaveClass('shrink-0');
   });
 
   // Mockup a.badge:hover: the label underlines on hover, and the link is full-radius so its focus ring matches.
@@ -525,11 +710,57 @@ describe('loading, empty and error states', () => {
     const list = await screen.findByRole('list', { name: 'Loading transactions' });
     expect(list).toHaveAttribute('aria-busy', 'true');
     expect(within(list).getAllByRole('listitem')).toHaveLength(5);
+    const header = screen.getByText('Amount').parentElement;
+    expect(header).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByRole('heading', { level: 1, name: 'Transactions' })).toBeInTheDocument();
 
     release();
-    expect(await screen.findByText('Arrived')).toBeInTheDocument();
+    expect(await screen.findByText('Arrived', { selector: 'p' })).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Loading transactions' })).not.toBeInTheDocument();
+  });
+
+  // ui-lists, criterion 6. A div with no role is generic, which cannot be named (WAI-ARIA 1.2), so the name stays on
+  // the list and the panel carries no ARIA attribute.
+  it('matches the columns: a plain panel, the hidden header, 2 hidden bands and 5 rows of four bars', async () => {
+    server.use(http.get('*/api/v1/transactions', () => new Promise(() => undefined)));
+    renderApp({ path: '/transactions' });
+
+    const list = await screen.findByRole('list', { name: 'Loading transactions' });
+    const panel = list.parentElement as HTMLElement;
+    const ariaOnPanel = panel
+      .getAttributeNames()
+      .filter((name) => name === 'role' || name.startsWith('aria-'));
+    expect(ariaOnPanel).toEqual([]);
+    expect(panel.firstElementChild).toHaveAttribute('aria-hidden', 'true');
+    expect(panel.firstElementChild).toHaveClass('hidden', 'md:grid');
+    expect(panel.firstElementChild).toHaveTextContent('TransactionAmountDispute');
+
+    const bands = list.querySelectorAll(':scope > [aria-hidden="true"]');
+    expect(bands).toHaveLength(2);
+    for (const band of bands) {
+      expect(band.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(1);
+    }
+    expect(within(list).queryByRole('heading')).not.toBeInTheDocument();
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows).toHaveLength(5);
+    for (const row of rows) {
+      expect(row.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4);
+      expect(row).toHaveClass('md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)]');
+    }
+  });
+
+  // A ul has only li children (HTML, content model of ul): the bands are li elements, hidden from assistive technology.
+  it('keeps every child of the skeleton list a list item', async () => {
+    server.use(http.get('*/api/v1/transactions', () => new Promise(() => undefined)));
+    renderApp({ path: '/transactions' });
+
+    const list = await screen.findByRole('list', { name: 'Loading transactions' });
+    const children = Array.from(list.children);
+    expect(children).toHaveLength(7);
+    for (const child of children) {
+      expect(child.tagName).toBe('LI');
+    }
+    expect(within(list).getAllByRole('listitem')).toHaveLength(5);
   });
 
   it('has no accessibility violations while loading', async () => {
@@ -573,6 +804,13 @@ describe('loading, empty and error states', () => {
     ).toBeInTheDocument();
     const link = within(screen.getByRole('main')).getByRole('link', { name: 'Disputes' });
     expect(link).toHaveAttribute('href', '/disputes');
+    // Criterion 5: one state surface with the List tile, and no button.
+    const surface = link.closest('section');
+    expectDecorativeIcon(surface?.querySelector('svg.lucide-list'), 'size-6');
+    expect(surface).toContainElement(
+      screen.getByRole('heading', { level: 2, name: 'No transactions in the last 90 days.' }),
+    );
+    expect(surface?.querySelector('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 
     // The router takes the click over (`preventDefault`), so the browser makes no document request.
@@ -637,7 +875,7 @@ describe('loading, empty and error states', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Try again' }));
 
-    expect(await screen.findByText('Back again')).toBeInTheDocument();
+    expect(await screen.findByText('Back again', { selector: 'p' })).toBeInTheDocument();
     expect(requests).toBe(3);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -669,7 +907,7 @@ describe('loading, empty and error states', () => {
     fail = false;
     await user.click(tryAgain);
 
-    await screen.findByText('Back again');
+    await screen.findByText('Back again', { selector: 'p' });
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1, name: 'Transactions' })).toHaveFocus();
     });
@@ -703,7 +941,7 @@ describe('keyboard', () => {
       [],
     );
     const { user } = renderApp({ path: '/transactions' });
-    await screen.findByText('One');
+    await screen.findByText('One', { selector: 'p' });
 
     const order: string[] = [];
     for (let index = 0; index < 10; index += 1) {
@@ -718,11 +956,11 @@ describe('keyboard', () => {
       'a:Transactions',
       'a:Disputes',
       'button:Sign out',
-      'a:Dispute this transaction',
-      'a:Dispute this transaction',
+      'a:Dispute One',
+      'a:Dispute Three',
       'button:Load more',
-      'a:☰Transactions',
-      'a:⚑Disputes',
+      'a:Transactions',
+      'a:Disputes',
     ]);
   });
 });

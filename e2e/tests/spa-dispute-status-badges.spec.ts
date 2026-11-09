@@ -9,7 +9,7 @@ import { ownDisputable, queryDatabase, topicRecords, axeTags, origin, signInCont
 // the transactions response in the browser (route.fetch, then edit the first rows); the row layout, the badge and
 // the href are the real SPA. The list is not stubbed in the first test.
 
-const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
+const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'sha256-47DEQpj8HBSa\+\/TImW\+5JCeuQeRkm5NMpJWZG3hSuFU=''\./;
 const screenshotDir = process.env.QA_SCREENSHOT_DIR;
 
 type ApiRow = {
@@ -97,7 +97,7 @@ test('a raised dispute shows a Submitted badge link on its row; stored event, ou
 
   // Every other row of the list: a Dispute link exactly when disputable, a badge link exactly when it has a dispute.
   for (const [index, row] of body.items.entries()) {
-    await expect(rows.nth(index).getByRole('link', { name: 'Dispute this transaction' }), row.transactionId).toHaveCount(row.disputable ? 1 : 0);
+    await expect(rows.nth(index).getByRole('link', { name: `Dispute ${row.description}`, exact: true }), row.transactionId).toHaveCount(row.disputable ? 1 : 0);
     await expect(rows.nth(index).getByRole('link', { name: /^Dispute status: / }), row.transactionId).toHaveCount(row.disputeId ? 1 : 0);
   }
   // Only the transactions list (and the session check) is requested: no dispute request, no preload.
@@ -198,7 +198,7 @@ test.describe('every status, an unknown one and a half-set pair (response edited
     // Rows past the edited ones are as the API sent them.
     for (const [index, row] of body.items.entries()) {
       if (index < 8) continue;
-      await expect(rows.nth(index).getByRole('link', { name: 'Dispute this transaction' })).toHaveCount(row.disputable ? 1 : 0);
+      await expect(rows.nth(index).getByRole('link', { name: `Dispute ${row.description}`, exact: true })).toHaveCount(row.disputable ? 1 : 0);
       await expect(rows.nth(index).getByRole('link', { name: /^Dispute status: / })).toHaveCount(row.disputeId ? 1 : 0);
     }
     expect(dataRequests.filter((request) => !/ \/api\/v1\/(transactions|authentication\/session)$/.test(request))).toEqual([]);

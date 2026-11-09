@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { TriangleAlert } from 'lucide-react';
 
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -50,13 +51,16 @@ function FieldDescription({ className, ...props }: React.ComponentProps<'p'>) {
 }
 
 // No `role="alert"`: the error summary takes focus when errors appear, so it is the announcement.
-function FieldError({ className, ...props }: React.ComponentProps<'p'>) {
+function FieldError({ className, children, ...props }: React.ComponentProps<'p'>) {
   return (
     <p
       data-slot="field-error"
-      className={cn('text-label font-label text-destructive', className)}
+      className={cn('flex items-start gap-1.5 text-label font-label text-destructive', className)}
       {...props}
-    />
+    >
+      <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+      {children}
+    </p>
   );
 }
 

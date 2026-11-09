@@ -1,5 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
+import { Alert } from '@/components/ui/alert';
+
 export type ErrorSummaryItem = { fieldId: string; message: string };
 
 /**
@@ -26,14 +28,16 @@ export function ErrorSummary({
   }, [requests, summaryRef]);
 
   return (
-    <div
+    // The danger `Alert`'s look and icon, with the group role in place of its alert role (the registry's `Alert` lets a
+    // caller's `role` win): the summary takes focus, and the inner element is the one announcement.
+    <Alert
       ref={summaryRef}
+      tone="danger"
       role="group"
       aria-labelledby="error-summary-title"
       tabIndex={-1}
-      className="rounded-md border-[1.5px] border-destructive bg-status-danger-bg p-4 text-status-danger-fg"
     >
-      <div role="alert" className="grid gap-2">
+      <div role="alert" className="col-start-2 grid gap-2">
         <h2 id="error-summary-title" className="text-body font-strong">
           Check the details below
         </h2>
@@ -54,6 +58,6 @@ export function ErrorSummary({
           ))}
         </ul>
       </div>
-    </div>
+    </Alert>
   );
 }

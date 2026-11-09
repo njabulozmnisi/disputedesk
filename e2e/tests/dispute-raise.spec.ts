@@ -13,7 +13,7 @@ import { gatewayContentSecurityPolicy, ownDisputable, problemTypeBase, queryData
 const disputesPath = '/api/v1/disputes';
 const quotedUuid = /^"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"$/;
 /** The one console error accepted by decision (story 2.5 criterion 7): Radix's scroll-lock <style> under style-src 'self'. */
-const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
+const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'sha256-47DEQpj8HBSa\+\/TImW\+5JCeuQeRkm5NMpJWZG3hSuFU=''\./;
 
 type ApiRow = {
   transactionId: string;
@@ -95,7 +95,7 @@ async function openFirstDispute(page: Page) {
   const target = ownDisputable(firstPage, 'dispute-raise', 'a')[0];
   expect(target, 'a reserved transaction on the first page is disputable (reservedTransactions in support.ts)').toBeTruthy();
   await page.goto('/transactions');
-  const link = page.locator('li').nth(firstPage.indexOf(target)).getByRole('link', { name: 'Dispute this transaction', exact: true });
+  const link = page.locator('li').nth(firstPage.indexOf(target)).getByRole('link', { name: `Dispute ${target.description}`, exact: true });
   await link.waitFor();
   await link.click();
   await expect(page.getByRole('heading', { name: 'Dispute this transaction' })).toBeVisible();
@@ -328,7 +328,7 @@ test('criteria 2, 3: wrong amount: bounds in integer cents, live difference, str
   await second.goto('/transactions');
   const stillDisputable = (await listRows(customerA)).some((candidate) => candidate.disputable);
   expect(stillDisputable, 'a disputable transaction is left for the note test').toBe(true);
-  await second.getByRole('link', { name: 'Dispute this transaction', exact: true }).first().click();
+  await second.getByRole('link', { name: /^Dispute (?!status: )/ }).first().click();
   const note = second.getByLabel('Note (optional)');
   const live = second.locator('[aria-live="polite"]');
   await note.fill('a'.repeat(899));
@@ -625,11 +625,11 @@ test('criterion 1: deep link, reload, not-disputable and unknown ID all land on 
 
   // A not-disputable row has no Dispute control; a disputable one has a link (no full page load).
   await page.goto('/transactions');
-  await page.getByRole('link', { name: 'Dispute this transaction', exact: true }).first().waitFor();
+  await page.getByRole('link', { name: /^Dispute (?!status: )/ }).first().waitFor();
   const navigations: string[] = [];
   page.on('framenavigated', (frame) => navigations.push(frame.url()));
   await page.evaluate(() => { (window as unknown as { marker: string }).marker = 'same-document'; });
-  await page.getByRole('link', { name: 'Dispute this transaction', exact: true }).first().click();
+  await page.getByRole('link', { name: /^Dispute (?!status: )/ }).first().click();
   await expect(page.getByRole('heading', { name: 'Dispute this transaction' })).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { marker?: string }).marker)).toBe('same-document');
 

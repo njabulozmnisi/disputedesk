@@ -45,7 +45,7 @@ function useReloadOnPageRestore() {
   }, []);
 }
 
-/** The shell around every screen: skip link, header, the page, footer, the phone tab bar and the inactivity warning. */
+/** The shell around every screen: header (with the skip link), the page, footer, the phone tab bar and the inactivity warning. */
 export function RootLayout() {
   // The session-ended screen asks for nothing: any authenticated request would renew the session it reports as ended.
   const onSessionEndedScreen = useMatch({
@@ -72,19 +72,12 @@ export function RootLayout() {
     <LiveRegionProvider>
       <FirstHeadingContext value={headingSeen}>
         <div className={cn('flex flex-1 flex-col', state === 'linked' && 'pb-24 md:pb-0')}>
-          {/* The first focusable element, hidden until focused (WCAG 2.2 SC 2.4.1, 2.4.7; technique G1). Focus moves by
-            script, with no hash navigation for the router to see. */}
-          <a
-            href="#main"
-            className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-20 focus:rounded-full focus:bg-card focus:px-4 focus:py-2 focus:shadow-overlay"
-            onClick={(event) => {
-              event.preventDefault();
-              mainRef.current?.focus();
-            }}
-          >
-            Skip to main content
-          </a>
-          <Header state={state} isStartPage={isStartPage} onSignOut={() => void signOut()} />
+          <Header
+            state={state}
+            isStartPage={isStartPage}
+            onSignOut={() => void signOut()}
+            onSkipToMain={() => mainRef.current?.focus()}
+          />
           {signOutFailed ? (
             <div className="mx-auto grid w-full max-w-(--content-max) gap-4 px-4 pt-4 md:px-6">
               <ProblemNotice

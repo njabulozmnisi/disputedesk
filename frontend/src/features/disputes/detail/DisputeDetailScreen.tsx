@@ -1,4 +1,5 @@
 import { Link, useLocation, useParams } from '@tanstack/react-router';
+import { Search } from 'lucide-react';
 import { useRef, useState, type ReactNode, type RefObject } from 'react';
 
 import { useGetDispute } from '@/api/generated/disputedesk';
@@ -8,6 +9,7 @@ import { isProblem, traceIdOf } from '@/api/problems';
 import { usePageHeading } from '@/app/usePageHeading';
 import { Page } from '@/components/Page';
 import { ProblemNotice } from '@/components/ProblemNotice';
+import { StateSurface } from '@/components/StateSurface';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatFullDay, formatMoney } from '@/features/transactions/format';
@@ -79,7 +81,7 @@ function NotFoundCard() {
   return (
     <>
       <p className="text-muted-foreground">Check the link, or find it in your disputes.</p>
-      <div>
+      <div className="mt-3">
         <Button asChild>
           <Link to="/disputes">Go to your disputes</Link>
         </Button>
@@ -197,8 +199,11 @@ export function DisputeDetailScreen() {
 
   let card = <LoadingCard />;
   let timeline = <LoadingTimeline />;
+  // Not found is a state surface, which draws its own classes; the failure message and the card are styled here.
+  let sectionClass: string | undefined = cardClass;
   if (isNotFound) {
     card = <NotFoundCard />;
+    sectionClass = undefined;
   } else if (dispute) {
     card = (
       <LoadedCard
@@ -219,6 +224,7 @@ export function DisputeDetailScreen() {
       </>
     );
   } else if (query.isError) {
+    sectionClass = 'grid gap-4';
     card = (
       <FailureCard
         error={query.error}
@@ -251,12 +257,19 @@ export function DisputeDetailScreen() {
         aria-busy={isLoading ? true : undefined}
         className={cn('grid gap-6', !isMessage && 'lg:grid-cols-2 lg:items-start lg:gap-8')}
       >
-        <section className={isMessage ? 'grid gap-4' : cardClass}>
-          <h1 ref={headingRef} tabIndex={-1} className={headingClass}>
-            {title}
-          </h1>
+        {/* One StateSurface in every state, so the h1 is one element at one place in the tree and keeps focus. Only not
+            found is drawn as a state surface (it gets an icon); the other states style the section as before. */}
+        <StateSurface
+          icon={isNotFound ? Search : undefined}
+          className={sectionClass}
+          heading={
+            <h1 ref={headingRef} tabIndex={-1} className={headingClass}>
+              {title}
+            </h1>
+          }
+        >
           {card}
-        </section>
+        </StateSurface>
         {isMessage ? null : <div className="grid gap-6">{timeline}</div>}
       </div>
     </Page>
