@@ -146,7 +146,7 @@ No high finding, so nothing is escalated.
 Delta-only re-run on the fix round 1 tree `.claude/worktrees/agent-a718a1e0fc36c5203`, compared with the previous tree
 `.claude/worktrees/agent-ac84704905088292a`. The fix list is `docs/verification/ui-linking-fixes.md`. Both trees sit on
 `2f897c3` and change the same files: their `git status --short` lists are identical. `diff -rq` over `frontend/src` and
-`infra` shows six changed files, and nothing else differs (`infra/tests/TestResults` exists only in the old tree as a
+`infra` shows six changed files, and nothing else differs (a `TestResults` folder under `infra/tests/` exists only in the old tree as a
 build output):
 
 - production code: `features/linking/linkSchema.ts`, `features/linking/OtpScreen.tsx`, `components/ui/button.tsx`;

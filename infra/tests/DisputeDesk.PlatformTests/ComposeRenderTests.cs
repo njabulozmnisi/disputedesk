@@ -495,7 +495,8 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
 
         Assert.DoesNotContain(config, line => DebugWord().IsMatch(line));
         Assert.Equal(3, config.Count(line => line.StartsWith("      processors: ", StringComparison.Ordinal)));
-        Assert.Equal(3, config.Count(line => line == "      processors: [memory_limiter, batch]"));
+        Assert.Equal(2, config.Count(line => line == "      processors: [memory_limiter, batch]"));
+        Assert.Contains("      processors: [memory_limiter, filter/app-metrics, batch]", config);
         Assert.Contains("        endpoint: 0.0.0.0:4317", config);
         Assert.Contains("        endpoint: 0.0.0.0:4318", config);
     }
@@ -512,6 +513,113 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
             aws.Services["otel-collector"]!["image"]!.GetValue<string>(), "validate", "--config=/etc/otelcol-contrib/config.yaml");
 
         Assert.True(validate.ExitCode == 0, $"otelcol-contrib validate failed: {validate.Output}{validate.Errors}");
+    }
+
+    [Fact]
+    public async Task CollectorConfig_ExportsOnlyTheAppsMetricsEachWithItsOwnAttributesAsItsOneDimensionSet()
+    {
+        // cloudwatch-metric-filter: the pinned collector runs this config with one change, awsemf printing its EMF records
+        // to stdout instead of sending them (awsemf README, output_destination), and gets two of the app's counters and
+        // one ASP.NET Core counter twice, as the Api's periodic export sends them. Stopping the container flushes the
+        // batch processor, so its stdout then holds every record the requests produced.
+        string container = $"disputedesk-collector-test-{Environment.ProcessId}";
+        try
+        {
+            ProcessResult run = await Processes.DockerAsync(CommandTimeout,
+                "run", "-d", "--name", container, "-p", "127.0.0.1::4318",
+                "-e", $"AWS_REGION={TestValues["AWS_REGION"]}", "-e", $"OTEL_LOG_GROUP={TestValues["OTEL_LOG_GROUP"]}",
+                "-e", "AWS_ACCESS_KEY_ID=placeholder", "-e", "AWS_SECRET_ACCESS_KEY=placeholder",
+                "-v", $"{Path.Combine(SourceRoots.Repo, "infra/images/otel-collector/config.yaml")}:/etc/otelcol-contrib/config.yaml:ro",
+                aws.Services["otel-collector"]!["image"]!.GetValue<string>(),
+                "--config=/etc/otelcol-contrib/config.yaml", "--set=exporters::awsemf::output_destination=stdout");
+            Assert.True(run.ExitCode == 0, $"The collector did not start: {run.Errors}");
+            await WaitForCollectorLogAsync(container, "Everything is ready");
+
+            ProcessResult port = await Processes.DockerAsync(CommandTimeout, "port", container, "4318/tcp");
+            var endpoint = new Uri($"http://{port.Output.Trim()}/v1/metrics");
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            long start = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            // awsemf turns a cumulative sum into the change since its last point, so the first point is only the baseline.
+            foreach (int count in new[] { 1, 2 })
+            {
+                using var request = new StringContent(CollectorTestMetrics(start, count), System.Text.Encoding.UTF8, "application/json");
+                using HttpResponseMessage response = await client.PostAsync(endpoint, request, TestContext.Current.CancellationToken);
+                Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+            }
+
+            await Processes.DockerAsync(CommandTimeout, "stop", container);
+            ProcessResult logs = await Processes.DockerAsync(CommandTimeout, "logs", container);
+            // Dropped before the exporter, so not even written to the log group as a record without a CloudWatch metric,
+            // which is what awsemf's metric_declarations would do with it.
+            Assert.DoesNotContain("aspnetcore.routing.match_attempts", logs.Output, StringComparison.Ordinal);
+
+            // Each exported metric with each of its dimension sets. Resource attributes (service.name) are not
+            // dimensions; OTelLib is the label awsemf adds for the instrumentation scope, one value (the Meter's name).
+            var exported = new List<string>();
+            foreach (string record in logs.Output.Split('\n').Where(line => line.StartsWith('{')))
+            {
+                foreach (JsonNode? measurement in JsonNode.Parse(record)!["_aws"]!["CloudWatchMetrics"]!.AsArray())
+                {
+                    string[] dimensionSets = [.. measurement!["Dimensions"]!.AsArray()
+                        .Select(set => string.Join(',', Strings(set!).Order(StringComparer.Ordinal)))];
+                    exported.AddRange(measurement["Metrics"]!.AsArray()
+                        .SelectMany(metric => dimensionSets.Select(set => $"{metric!["Name"]}: {set}")));
+                }
+            }
+
+            Assert.Equal(
+                ["disputedesk.dispute_actions: OTelLib,action,actor_type", "disputedesk.disputes.raised: OTelLib,reason"],
+                exported.Order(StringComparer.Ordinal));
+        }
+        finally
+        {
+            await Processes.DockerAsync(CommandTimeout, "rm", "-f", container);
+        }
+    }
+
+    /// <summary>Waits up to a minute for the text in the container's log.</summary>
+    private static async Task WaitForCollectorLogAsync(string container, string text)
+    {
+        for (int attempt = 0; attempt < 60; attempt++)
+        {
+            ProcessResult logs = await Processes.DockerAsync(CommandTimeout, "logs", container);
+            if (logs.Output.Contains(text, StringComparison.Ordinal) || logs.Errors.Contains(text, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+        }
+
+        ProcessResult last = await Processes.DockerAsync(CommandTimeout, "logs", container);
+        Assert.Fail($"The collector did not log \"{text}\" within a minute: {last.Output}{last.Errors}");
+    }
+
+    /// <summary>
+    /// One OTLP/JSON metrics request (OTLP specification, JSON Protobuf encoding) as the Api sends it: the DisputeDesk
+    /// Meter's counters and an ASP.NET Core one, cumulative (the OpenTelemetry .NET SDK's default), each at the given
+    /// count, a second after the start per count.
+    /// </summary>
+    private static string CollectorTestMetrics(long startMilliseconds, int count)
+    {
+        string start = (startMilliseconds * 1_000_000).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string time = ((startMilliseconds + (count * 1000)) * 1_000_000).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string Sum(string name, string attributes) => $$"""
+            {"name": "{{name}}", "sum": {"aggregationTemporality": 2, "isMonotonic": true, "dataPoints": [{"asInt": "{{count}}",
+              "startTimeUnixNano": "{{start}}", "timeUnixNano": "{{time}}", "attributes": [{{attributes}}]}]} }
+            """;
+        string Attribute(string key, string value) => $$"""{"key": "{{key}}", "value": {"stringValue": "{{value}}"} }""";
+
+        return $$"""
+            {"resourceMetrics": [{
+              "resource": {"attributes": [{{Attribute("service.name", "disputedesk-api")}}]},
+              "scopeMetrics": [
+                {"scope": {"name": "DisputeDesk"}, "metrics": [
+                  {{Sum("disputedesk.disputes.raised", Attribute("reason", "duplicateCharge"))}},
+                  {{Sum("disputedesk.dispute_actions", $"{Attribute("action", "withdraw")}, {Attribute("actor_type", "customer")}")}}]},
+                {"scope": {"name": "Microsoft.AspNetCore.Routing"}, "metrics": [
+                  {{Sum("aspnetcore.routing.match_attempts", Attribute("aspnetcore.routing.match_status", "success"))}}]}]}]}
+            """;
     }
 
     // ---- ci-e2e-regression criterion 7: the list that starts the regression suite covers every stack input

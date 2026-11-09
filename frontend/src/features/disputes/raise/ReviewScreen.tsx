@@ -14,10 +14,11 @@ import { isProblem, validationFields } from '@/api/problems';
 import { useAnnounce } from '@/app/LiveRegion';
 import { usePageHeading } from '@/app/usePageHeading';
 import { Page } from '@/components/Page';
+import { StepProgress } from '@/components/StepProgress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { endRaiseSubmit, startRaiseSubmit, withRaiseSubmit } from '@/telemetry/raiseSpans';
 import { formatFullDay, formatMoney } from '@/features/transactions/format';
-import { MaskedNumber } from '@/features/transactions/TransactionRow';
 
 import { useRaiseDraft, type Draft, type FieldName, type ServerErrors } from './RaiseDraft';
 import { useRaiseOpenSpan, useRaiseRow } from './RaiseLayout';
@@ -58,10 +59,33 @@ const isDisputesQuery = (query: Query) =>
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid gap-1 border-t border-border py-3 first:border-t-0 md:grid-cols-[8rem_1fr] md:gap-4">
-      <dt className="text-label text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 wrap-break-word">{children}</dd>
+    <div className="grid grid-cols-[minmax(0,min(var(--label-col),40%))_minmax(0,1fr)] gap-x-4 gap-y-1 border-t border-border py-3">
+      <dt className="text-label wrap-anywhere text-muted-foreground">{label}</dt>
+      <dd className="wrap-anywhere">{children}</dd>
     </div>
+  );
+}
+
+/**
+ * The masked number as a read-back row: the card for a card transaction, the account otherwise. Screen readers get
+ * the short form, as `MaskedNumber` gives it (EXPERIENCE.md, Accessibility).
+ */
+function NumberRow({ row }: { row: TransactionResponse }) {
+  if (row.maskedCard) {
+    const firstSix = row.maskedCard.slice(0, 6);
+    const lastFour = row.maskedCard.slice(-4);
+    return (
+      <Row label="Card">
+        <span aria-hidden="true">{`${firstSix}•• •••• ${lastFour}`}</span>
+        <span className="sr-only">{`card ending ${lastFour}`}</span>
+      </Row>
+    );
+  }
+  return (
+    <Row label="Account">
+      <span aria-hidden="true">{`•••• ${row.accountLast4}`}</span>
+      <span className="sr-only">{`account ending ${row.accountLast4}`}</span>
+    </Row>
   );
 }
 
@@ -170,62 +194,74 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
 
   return (
     <Page width="form">
-      <h1
-        ref={headingRef}
-        tabIndex={-1}
-        className="text-title font-title tracking-title wrap-break-word text-heading"
-      >
-        Review your dispute
-      </h1>
+      <div className="grid gap-2">
+        {refused ? null : <StepProgress label="Step 2 of 2: review and submit" step={2} />}
+        <h1
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-title font-title tracking-title wrap-break-word text-heading"
+        >
+          Review your dispute
+        </h1>
+      </div>
 
       {error ? <SubmitFailure error={error} /> : null}
 
       {refused ? null : (
         <>
-          <div className="grid gap-1 rounded-lg border border-border bg-card p-6">
-            <p className="text-label text-muted-foreground">You&apos;re disputing</p>
-            <p className="text-amount-hero font-title tabular-nums">
-              {formatMoney({ amount: amountToDispute, currency: row.amount.currency })}
-            </p>
-          </div>
+          <section
+            aria-label="Your dispute"
+            className="grid gap-4 rounded-lg border border-border bg-card px-4 py-6 md:p-6"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="grid gap-1">
+                <p className="text-label text-muted-foreground">You&apos;re disputing</p>
+                <p className="text-amount-hero font-title tabular-nums">
+                  {formatMoney({ amount: amountToDispute, currency: row.amount.currency })}
+                </p>
+              </div>
+              <Link
+                to={raisePath}
+                params={{ transactionId: row.transactionId }}
+                disabled={pending}
+                className="inline-flex min-h-(--tap-target) items-center px-1 aria-disabled:cursor-progress aria-disabled:opacity-70"
+              >
+                Change <span className="sr-only">your dispute</span>
+              </Link>
+            </div>
 
-          <MaskedNumber row={row} />
+            <dl>
+              <Row label="Transaction">{row.description}</Row>
+              <Row label="Date">{formatFullDay(row.transactionDate)}</Row>
+              <NumberRow row={row} />
+              <Row label="Reason">
+                {draft.request.reason ? reasonCopy[draft.request.reason].label : null}
+              </Row>
+              {draft.request.note ? <Row label="Note">{draft.request.note}</Row> : null}
+            </dl>
+          </section>
 
-          <dl className="rounded-md border border-border bg-card px-4">
-            <Row label="Transaction">{row.description}</Row>
-            <Row label="Date">{formatFullDay(row.transactionDate)}</Row>
-            <Row label="Reason">
-              {draft.request.reason ? reasonCopy[draft.request.reason].label : null}
-            </Row>
-            {draft.request.note ? <Row label="Note">{draft.request.note}</Row> : null}
-          </dl>
+          <Alert tone="neutral">
+            <AlertDescription>
+              You can dispute a transaction only once. You can withdraw the dispute while it is
+              open.
+            </AlertDescription>
+          </Alert>
 
-          <div>
-            <Link
-              to={raisePath}
-              params={{ transactionId: row.transactionId }}
-              disabled={pending}
-              className="aria-disabled:cursor-progress aria-disabled:opacity-70"
+          <div className="flex flex-col gap-3 md:flex-row">
+            <Button
+              type="button"
+              aria-disabled={pending}
+              onClick={send}
+              className="w-full md:w-auto"
             >
-              Change
-            </Link>
-          </div>
-
-          <p className="text-muted-foreground">
-            You can dispute a transaction only once. You can withdraw the dispute while it is open.
-          </p>
-
-          <div className="flex flex-wrap items-center gap-4">
-            <Button type="button" aria-disabled={pending} onClick={send}>
               {submitLabel}
             </Button>
-            <Link
-              to="/transactions"
-              disabled={pending}
-              className="aria-disabled:cursor-progress aria-disabled:opacity-70"
-            >
-              Cancel
-            </Link>
+            <Button asChild variant="secondary" className="w-full md:w-auto">
+              <Link to="/transactions" disabled={pending}>
+                Cancel
+              </Link>
+            </Button>
           </div>
         </>
       )}

@@ -1,0 +1,258 @@
+{
+  "status": "built",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-ab20da3b8d15147ee",
+  "base": "2f897c37b3b58b11119c6126123213f98defeb43 plus the uncommitted ui-tokens-icons (r3-fixed, docs and e2e excluded) and ui-notices-states (only, r1) patches; the diff hash covers both bases plus this story; fix round 1 applied on top (the r1 patch carries QA e2e edits and spa-lists-layout.spec.ts; e2e/ is unchanged by this round)",
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "FR-11, NFR-CODE-6",
+      "test": [
+        "src/features/transactions/TransactionsScreen.test.tsx > the lede and the column header > shows the lede and lists a row older than 90 days",
+        "src/features/transactions/TransactionsScreen.test.tsx > the lede and the column header > hides the column header from assistive technology"
+      ]
+    },
+    {
+      "id": "AC2",
+      "requirement": "FR-11, NFR-CODE-6",
+      "test": [
+        "src/features/transactions/TransactionsScreen.test.tsx > the day bands > draws each day heading as a band inside the one panel, above its rows",
+        "src/features/transactions/TransactionsScreen.test.tsx > transaction rows > groups rows made on the same day under one heading, newest first"
+      ]
+    },
+    {
+      "id": "AC3",
+      "requirement": "FR-11, FR-16",
+      "test": [
+        "src/features/transactions/TransactionsScreen.test.tsx > the row columns > is a grid of text, amount and action from 768px, with a right-aligned tabular amount",
+        "src/features/transactions/TransactionsScreen.test.tsx > the row columns > puts the Dispute link in the action column, left-aligned, and under the amount on a phone",
+        "src/features/transactions/TransactionsScreen.test.tsx > the row columns > makes a disputed row's badge link 44px tall, in the action column from 768px and on its own line below",
+        "src/features/transactions/TransactionsScreen.test.tsx > dispute status badge on a row > shows resolved as the only link, with no Dispute control and no hint (existing test; the Resolved clause needs no new code)"
+      ]
+    },
+    {
+      "id": "AC4",
+      "requirement": "FR-12, NFR-CODE-6",
+      "test": [
+        "src/features/transactions/TransactionsScreen.test.tsx > the Dispute link > reads Dispute, is named after the merchant, is 44px tall and underlines on hover only",
+        "src/features/transactions/TransactionsScreen.test.tsx > the Dispute link > is told apart from a badge link only by its exact name"
+      ]
+    },
+    {
+      "id": "AC5",
+      "requirement": "FR-12, NFR-CODE-6",
+      "test": [
+        "src/features/disputes/history/DisputesScreen.test.tsx > the history > makes each row one link, one tab stop, named by merchant, reason, date, amount and status",
+        "src/features/disputes/history/DisputesScreen.test.tsx > the history > puts a decorative chevron, hidden on a phone, and the badge on its own line below 768px",
+        "src/features/disputes/history/DisputesScreen.test.tsx > the history > tints the row on hover and underlines the merchant only, through the group/row name"
+      ]
+    },
+    {
+      "id": "AC6",
+      "requirement": "FR-11, NFR-CODE-6",
+      "test": [
+        "src/features/transactions/TransactionsScreen.test.tsx > loading, empty and error states > matches the columns: a plain panel, the hidden header, 2 hidden bands and 5 rows of four bars",
+        "src/features/transactions/TransactionsScreen.test.tsx > loading, empty and error states > shows a skeleton with aria-busy on the list while the first page loads",
+        "src/features/transactions/TransactionsScreen.test.tsx > loading, empty and error states > has no accessibility violations while loading"
+      ]
+    },
+    {
+      "id": "FIX1",
+      "requirement": "NFR-CODE-6",
+      "test": [
+        "src/features/transactions/TransactionsScreen.test.tsx > dispute status badge on a row > lets the badge wrap, with an icon that keeps its size"
+      ]
+    },
+    {
+      "id": "FIX2",
+      "requirement": "NFR-CODE-6",
+      "test": [
+        "src/features/transactions/TransactionsScreen.test.tsx > the Dispute link > draws the focus ring of the Dispute link inside the panel"
+      ]
+    },
+    {
+      "id": "FIX3",
+      "requirement": "NFR-CODE-6",
+      "test": [
+        "src/features/transactions/TransactionsScreen.test.tsx > loading, empty and error states > keeps every child of the skeleton list a list item"
+      ]
+    }
+  ],
+  "story_files": [
+    "frontend/src/features/transactions/TransactionsScreen.tsx",
+    "frontend/src/features/transactions/TransactionRow.tsx",
+    "frontend/src/features/disputes/history/DisputeRow.tsx",
+    "frontend/src/features/disputes/history/DisputesScreen.tsx",
+    "frontend/src/features/transactions/TransactionsScreen.test.tsx",
+    "frontend/src/features/disputes/history/DisputesScreen.test.tsx",
+    "frontend/src/features/disputes/raise/raiseTelemetry.test.tsx",
+    "frontend/src/features/disputes/raise/ReviewScreen.test.tsx",
+    "frontend/src/test/raise.tsx",
+    "frontend/src/app/signOut.test.tsx",
+    "frontend/src/features/disputes/DisputeStatusBadge.tsx"
+  ],
+  "smoke": "Headless Chromium (Playwright, throwaway script, deleted) against vite preview of the built dist with /api stubbed by page.route, widths 320, 767, 768 and 1280, light and dark, on /transactions, its loading skeleton and /disputes. axe wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa: 24 runs, 0 violations. Horizontal overflow: 0px in every run. Interactive elements inside main shorter than 44px: none in any run (the visually hidden skip link, outside main, is 1px until focused). Disputes keyboard walk at 320 and 1280: 5 row links, one tab stop each per pass, focus ring 3px solid with offset -3px, inside the panel. Transactions keyboard walk at 320 and 1280: the column header takes no stop; the stops are the Dispute links and badge links in reading order. Layout: at 767 the header is display none, the first band has no top hairline, the disputes chevron is display none and the badge sits under the text; at 768 and 1280 the header is a grid, every amount right edge and every action left edge is the same down the list (amount right 471 and 783px, action left 495 and 807px on transactions; 427 and 739, 451 and 763 on disputes), and the disputes chevron is a 16px block in the 20px column. Chromium accessibility tree: Dispute links named Dispute plus the merchant, badge links Dispute status plus label, no node named Transaction or Amount exposed. Hover: a disputes row takes the background fill, underlines the merchant and not the badge label; the Dispute link is not underlined until hover. Not run: the real stack and the stack lock, the e2e suite (QA). FIX ROUND 1: throwaway headless Chromium script (deleted) against vite preview of the built dist, /api stubbed with page.route, /transactions (5 badge rows) and /disputes (7 badge rows, both sections), 320, 360, 767, 768 and 1280px, root font 100, 150 and 200 percent, 30 runs per mode, axe wcag2a/2aa/21a/21aa/22aa. Mode A, the browser font size setting (CDP Page.setFontSizes, so rem in media queries scales as for a user who sets very large text): 30 of 30 runs have every badge box inside the panel box, no clipped text, no scroll inside the panel, axe 0 violations; the last row Dispute link at 360px is :focus-visible with a 3px outline at offset -3px and its ring box is inside the panel at 100 and 200 percent. Mode B, CSS html font-size (QA method): 25 of 30 runs clean, including every width below 768px at all three sizes. The 5 failing runs are 768px at 150 percent (disputes only, panel scroll 26px) and 200 percent, and 1280px at 200 percent, where the grid tracks --amount-col 9rem and --action-col 14rem plus the gaps and padding are wider than the panel; not part of the fix list, see assumptions.",
+  "standards": [
+    {
+      "mechanism": "aria-hidden on the decorative column header and skeleton bands",
+      "source": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-hidden"
+    },
+    {
+      "mechanism": "Day bands stay h2 headings",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/info-and-relationships"
+    },
+    {
+      "mechanism": "CSS grid columns with responsive variants, on the theme tokens",
+      "source": "https://tailwindcss.com/docs/grid-template-columns"
+    },
+    {
+      "mechanism": "Visible label inside the accessible name (Dispute plus a visually hidden merchant)",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/label-in-name"
+    },
+    {
+      "mechanism": "44px target through min-h-(--tap-target)",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced"
+    },
+    {
+      "mechanism": "One link per disputes row",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/link-purpose-in-context"
+    },
+    {
+      "mechanism": "Named group group/row, so the badge label does not underline on row hover",
+      "source": "https://tailwindcss.com/docs/hover-focus-and-other-states#differentiating-nested-groups"
+    },
+    {
+      "mechanism": "shadcn Skeleton for the loading rows",
+      "source": "https://ui.shadcn.com/docs/components/skeleton"
+    },
+    {
+      "mechanism": "aria-busy on the named list",
+      "source": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-busy"
+    },
+    {
+      "mechanism": "Generic role cannot be named, so the name stays on the ul and the panel div has no ARIA",
+      "source": "https://www.w3.org/TR/wai-aria-1.2/#generic"
+    },
+    {
+      "mechanism": "Focus ring drawn inside the clipped panel (negative outline-offset) so it stays visible",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/focus-visible"
+    },
+    {
+      "mechanism": "Status badge wraps with overflow-wrap: anywhere (Tailwind wrap-anywhere, already used for the page headings) so its min-content width shrinks",
+      "source": "https://developer.mozilla.org/en-US/docs/Web/CSS/overflow-wrap"
+    },
+    {
+      "mechanism": "Resize text and reflow: no loss of content at 200 percent text and 320 CSS px",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/resize-text"
+    },
+    {
+      "mechanism": "A ul has only li children (skeleton bands are li with aria-hidden)",
+      "source": "https://html.spec.whatwg.org/multipage/grouping-content.html#the-ul-element"
+    },
+    {
+      "mechanism": "Focus ring drawn inside a clipping panel (outline-offset)",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/focus-visible"
+    }
+  ],
+  "breaks": [
+    {
+      "criterion": "AC1 lede",
+      "patch": "--- a/frontend/src/features/transactions/TransactionsScreen.tsx\n+++ b/frontend/src/features/transactions/TransactionsScreen.tsx\n@@ -136,8 +136,7 @@\n           Transactions\n         </h1>\n         <p className=\"max-w-[68ch] text-muted-foreground\">\n-          Your card and account transactions, newest first. You can dispute those from the last 90\n-          days.\n+          Your card and account transactions, newest first.\n         </p>\n       </div>\n \n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"shows the lede and lists a row older than 90 days\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC1 header aria-hidden",
+      "patch": "--- a/frontend/src/features/transactions/TransactionsScreen.tsx\n+++ b/frontend/src/features/transactions/TransactionsScreen.tsx\n@@ -26,7 +26,6 @@\n function ColumnHeader() {\n   return (\n     <div\n-      aria-hidden=\"true\"\n       className={cn(\n         'hidden px-6 py-2.5 text-caption font-strong text-muted-foreground md:grid',\n         ledgerColumns,\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"hides the column header from assistive technology\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC2 band fill",
+      "patch": "--- a/frontend/src/features/transactions/TransactionsScreen.tsx\n+++ b/frontend/src/features/transactions/TransactionsScreen.tsx\n@@ -20,7 +20,7 @@\n const panelClass = 'overflow-hidden rounded-md border border-border bg-card';\n // A day band: the page fill, with a hairline above. On a phone the first band has no header above it, so no hairline.\n const bandClass =\n-  'border-t border-border bg-background px-4 py-2 text-label font-strong text-muted-foreground first-of-type:max-md:border-t-0 md:px-6';\n+  'border-t border-border px-4 py-2 text-label font-strong text-muted-foreground first-of-type:max-md:border-t-0 md:px-6';\n \n /** From 768px the panel opens with the column names. Each row already reads in full, so the header is hidden from assistive technology. */\n function ColumnHeader() {\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"draws each day heading as a band\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC3 three columns",
+      "patch": "--- a/frontend/src/features/transactions/TransactionRow.tsx\n+++ b/frontend/src/features/transactions/TransactionRow.tsx\n@@ -17,7 +17,7 @@\n  * under the amount.\n  */\n export const ledgerColumns =\n-  'md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)] md:gap-x-6';\n+  'md:gap-x-6';\n \n /** One row of the panel: the grid, the hairline above it and its padding. The first row's hairline closes its day band. */\n export const ledgerRow = cn(\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"is a grid of text, amount and action from 768px\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC3 badge link 44px",
+      "patch": "--- a/frontend/src/features/transactions/TransactionRow.tsx\n+++ b/frontend/src/features/transactions/TransactionRow.tsx\n@@ -105,7 +105,7 @@\n         <Link\n           to=\"/disputes/$disputeId\"\n           params={{ disputeId: row.disputeId }}\n-          className=\"group col-span-2 row-start-3 inline-flex min-h-(--tap-target) items-center justify-self-end rounded-full md:col-span-1 md:col-start-3 md:row-start-1 md:justify-self-start\"\n+          className=\"group col-span-2 row-start-3 inline-flex items-center justify-self-end rounded-full md:col-span-1 md:col-start-3 md:row-start-1 md:justify-self-start\"\n         >\n           <DisputeStatusBadge statusDescription={statusDescription} />\n         </Link>\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"badge link 44px tall\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC4 merchant in link name",
+      "patch": "diff --git a/frontend/src/features/transactions/TransactionRow.tsx b/frontend/src/features/transactions/TransactionRow.tsx\n--- a/frontend/src/features/transactions/TransactionRow.tsx\n+++ b/frontend/src/features/transactions/TransactionRow.tsx\n@@ -96,7 +96,7 @@\n           params={{ transactionId: row.transactionId }}\n           className=\"col-start-2 row-start-2 -my-3 -mr-1 inline-flex min-h-(--tap-target) items-center gap-1 justify-self-end px-1 text-label font-strong no-underline hover:underline focus-visible:-outline-offset-3 md:col-start-3 md:row-start-1 md:m-0 md:justify-self-start\"\n         >\n-          Dispute <span className=\"sr-only\">{row.description}</span>\n+          Dispute <span className=\"sr-only\">this transaction</span>\n           <ChevronRight className=\"size-4\" />\n         </Link>\n       ) : null}\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"is named after the merchant\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC5 group name",
+      "patch": "--- a/frontend/src/features/disputes/history/DisputeRow.tsx\n+++ b/frontend/src/features/disputes/history/DisputeRow.tsx\n@@ -39,7 +39,7 @@\n       <Link\n         to=\"/disputes/$disputeId\"\n         params={{ disputeId: dispute.disputeId }}\n-        className=\"group/row grid min-h-(--row-min) grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-4 py-3 font-normal text-foreground no-underline hover:bg-background hover:text-foreground focus-visible:-outline-offset-3 md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)_--spacing(5)] md:items-center md:gap-x-6 md:px-6\"\n+        className=\"group grid min-h-(--row-min) grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-4 py-3 font-normal text-foreground no-underline hover:bg-background hover:text-foreground focus-visible:-outline-offset-3 md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)_--spacing(5)] md:items-center md:gap-x-6 md:px-6\"\n       >\n         <div className=\"col-start-1 row-span-2 row-start-1 min-w-0 md:row-span-1\">\n           <p className=\"font-strong wrap-break-word text-primary group-hover/row:underline\">\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/history/DisputesScreen.test.tsx -t \"underlines the merchant only\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC5 one link with chevron",
+      "patch": "--- a/frontend/src/features/disputes/history/DisputeRow.tsx\n+++ b/frontend/src/features/disputes/history/DisputeRow.tsx\n@@ -56,7 +56,7 @@\n         <div className=\"col-span-2 row-start-3 justify-self-end md:col-span-1 md:col-start-3 md:row-start-1 md:justify-self-start\">\n           <DisputeStatusBadge statusDescription={statusDescription} />\n         </div>\n-        <ChevronRight className=\"hidden size-4 text-muted-foreground md:col-start-4 md:row-start-1 md:block\" />\n+        <ChevronRight className=\"size-4 text-muted-foreground md:col-start-4 md:row-start-1 md:block\" />\n       </Link>\n     </li>\n   );\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/history/DisputesScreen.test.tsx -t \"puts a decorative chevron, hidden on a phone\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "AC6 hidden bands",
+      "patch": "diff --git a/frontend/src/features/transactions/TransactionsScreen.tsx b/frontend/src/features/transactions/TransactionsScreen.tsx\n--- a/frontend/src/features/transactions/TransactionsScreen.tsx\n+++ b/frontend/src/features/transactions/TransactionsScreen.tsx\n@@ -53,7 +53,7 @@\n       <ul aria-busy=\"true\" aria-label=\"Loading transactions\">\n         {skeletonDays.map((placeholders) => (\n           <Fragment key={placeholders.join()}>\n-            <li aria-hidden=\"true\" className={bandClass}>\n+            <li className={bandClass}>\n               <Skeleton className=\"h-3 w-22\" />\n             </li>\n             {placeholders.map((placeholder) => (\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"matches the columns\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "FIX1",
+      "patch": "--- a/frontend/src/features/disputes/DisputeStatusBadge.tsx\n+++ b/frontend/src/features/disputes/DisputeStatusBadge.tsx\n@@ -16,7 +16,7 @@\n   return (\n     // The label wraps, even inside a word, instead of overflowing a narrow panel at a large text size\n     // (WCAG 2.2 SC 1.4.4, 1.4.10).\n-    <Badge tone={statusDescription.tone} className=\"whitespace-normal wrap-anywhere\">\n-      <Icon className=\"size-4 shrink-0\" />\n+    <Badge tone={statusDescription.tone}>\n+      <Icon className=\"size-4\" />\n       <span className=\"group-hover:underline\">\n         <span className=\"sr-only\">Dispute status:</span> {statusDescription.label}\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"lets the badge wrap\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "FIX2",
+      "patch": "--- a/frontend/src/features/transactions/TransactionRow.tsx\n+++ b/frontend/src/features/transactions/TransactionRow.tsx\n@@ -95,6 +95,6 @@\n           to=\"/transactions/$transactionId/dispute\"\n           params={{ transactionId: row.transactionId }}\n-          className=\"col-start-2 row-start-2 -my-3 -mr-1 inline-flex min-h-(--tap-target) items-center gap-1 justify-self-end px-1 text-label font-strong no-underline hover:underline focus-visible:-outline-offset-3 md:col-start-3 md:row-start-1 md:m-0 md:justify-self-start\"\n+          className=\"col-start-2 row-start-2 -my-3 -mr-1 inline-flex min-h-(--tap-target) items-center gap-1 justify-self-end px-1 text-label font-strong no-underline hover:underline md:col-start-3 md:row-start-1 md:m-0 md:justify-self-start\"\n         >\n           Dispute <span className=\"sr-only\">{row.description}</span>\n           <ChevronRight className=\"size-4\" />\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"focus ring of the Dispute link\"",
+      "expect": "fails"
+    },
+    {
+      "criterion": "FIX3",
+      "patch": "--- a/frontend/src/features/transactions/TransactionsScreen.tsx\n+++ b/frontend/src/features/transactions/TransactionsScreen.tsx\n@@ -54,8 +54,8 @@\n         {skeletonDays.map((placeholders) => (\n           <Fragment key={placeholders.join()}>\n-            <li aria-hidden=\"true\" className={bandClass}>\n+            <div aria-hidden=\"true\" className={bandClass}>\n               <Skeleton className=\"h-3 w-22\" />\n-            </li>\n+            </div>\n             {placeholders.map((placeholder) => (\n               <li key={placeholder} className={ledgerRow}>\n                 <div className=\"col-start-1 row-span-2 row-start-1 grid gap-2 md:row-span-1\">\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"keeps every child of the skeleton list\"",
+      "expect": "fails"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a1c721639cdb71441/TestResults/ui-lists-vitest.junit.xml"
+    ],
+    "diff_hash": "2611a228a19e",
+    "note": "Vitest 730 tests in 39 files, 0 failures, one full run with --maxWorkers=3 because the machine was under load (load average about 26). The hash is scripts/diff-hash.sh against 2f897c3 and covers both bases, this story and fix round 1. npm run typecheck, lint, format and build pass on the same tree. Breaks: the 9 earlier ones are from the first build; each of the 3 new ones was applied, its test run and seen to fail, then reverted, and the hash re-checked. Record-only update (fix round 1b): breaks 6 and 9 regenerated against the current files; no source change, so the diff hash and results file are unchanged. run-breaks.sh: all 12 failed as expected."
+  },
+  "assumptions": [
+    "The base patches stay uncommitted, so the spec's two commits (presentation, then the test update) are not made. The test-only edits are the src/**/*.test.tsx files and src/test/raise.tsx; the guard refuses builder commits.",
+    "The panel gets overflow-hidden (the mockup .panel) so a band fill or a hover fill follows the rounded corners. That would clip the 3px focus ring of a full-width row, so the disputes row link and the li of both lists use focus-visible:-outline-offset-3; checked in Chromium, the ring sits inside the panel.",
+    "On a phone the Dispute link overlaps the row padding through -my-3 -mr-1 (the mockup .dispute-link), so the row stays compact. The badge link has no negative margin, so a disputed row on a phone is about 6px taller than before.",
+    "The chevron uses Lucide's default stroke 2 (the spec); the mockup draws 2.5.",
+    "A disputes row hover tints with --background (the spec), not --muted as before.",
+    "The disputes amount is now a p and the badge wrapper a div, so the link name keeps a space before the status in every engine (dom-accessibility-api put none between inline spans). Verified in jsdom; the Chromium tree was read for the transactions links, not for the disputes row names.",
+    "The skeleton day bands are div elements inside the ul (the spec). The HTML content model allows only li there; axe passes and the list still exposes 5 items.",
+    "e2e is untouched (guard). Lines QA must change: spa-transactions.spec.ts 225-232 and 328-332; spa-dispute-status-badges.spec.ts 100, 201 and 228 (on a transaction row span.tabular-nums stays a span; on a disputes row the amount is now a p); dispute-raise.spec.ts 98, 331, 628 and 632; spa-disputes-history.spec.ts name and text expectations (a space now separates the amount and the status); and, missing from the spec's list, tests/journeys/uj-1.spec.ts lines 69, 75 and 103 and tests/journeys/uj-2.spec.ts line 118, which also look the link up as Dispute this transaction. Every lookup becomes Dispute plus the description. The visually hidden merchant now repeats the description inside a disputable row, so a getByText(description) can match two elements (dispute-raise.spec.ts 162 already uses .first()).",
+    "Fix 1 is in DisputeStatusBadge (one place for both lists and the dispute detail): whitespace-normal wrap-anywhere on the Badge and shrink-0 on the icon. whitespace-normal alone was not enough: at 200 percent and 320px \"Withdrawn\" and \"(prioritised)\" are single words wider than the row, so wrap-anywhere lets them break inside the word. The shared Badge component is unchanged; the dispute detail badge wraps the same way if it is ever too narrow.",
+    "NOT FIXED, outside the fix list and needing a decision: when only the CSS root font size is raised (Firefox text-only zoom, or QA method), the md grid (768px and up, rem tracks 9rem and 14rem plus gaps and padding) is wider than the panel at 768px with 150 or 200 percent text and at 1280px with 200 percent: panel scroll 26 to 290px and the badge column is clipped. With the browser font size setting (Chrome, Edge, Safari: rem in the media query scales too) the phone layout is used up to 1536px at 200 percent and nothing overflows. A fix would change the column tracks in ledgerColumns and DisputeRow, so it is left for a lows entry or a spec change.",
+    "The page-level horizontal scroll at 200 percent and 320 or 360px (132px and 92px) is the known signed-in header and phone tab bar low, unchanged.",
+    "The merchant breaking per character at 200 percent and 320px (QA Q2) goes to lows.md as the fix list says; not changed."
+  ],
+  "open_questions": [],
+  "conflicts": [
+    "Criterion 4 and Tests and commits say to select the link with exact: true, but exact is not an option of getByRole in the installed @testing-library/dom (tsc rejects it). A string name already matches the whole accessible name; only a regex such as /^Dispute / matches the badge links too. The unit tests use the full string name. Playwright's getByRole does accept exact.",
+    "Files outside the spec's Touches list had to change because the new link name and the repeated merchant text break them: src/test/raise.tsx (openRaiseScreen), src/features/disputes/raise/ReviewScreen.test.tsx (one Dispute link lookup) and src/app/signOut.test.tsx (4 getByText lookups of the merchant, now selector p). TransactionsScreen.test.tsx got the same selector p on 31 description lookups.",
+    "raiseTelemetry.test.tsx: only the three Dispute link lookups changed (the click lines formerly at 267, 406 and 428); its line 256 is untouched."
+  ],
+  "fix_round": 1
+}
