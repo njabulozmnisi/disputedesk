@@ -12,7 +12,7 @@ import { ownDisputable, queryDatabase, axeTags, origin, signInContext } from './
 // proves the SPA itself sends no `limit`. A transaction is disputed once: the spec tops A up to three disputes
 // (one withdrawn) from its reserved transactions (support.ts) and raises nothing else; a full run raises none.
 
-const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
+const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'sha256-47DEQpj8HBSa\+\/TImW\+5JCeuQeRkm5NMpJWZG3hSuFU=''\./;
 const problemMessage = 'Something went wrong on our side. Try again.';
 const reasonLabels: Record<string, string> = { unrecognised: 'Unrecognised', duplicateCharge: 'Duplicate charge', wrongAmount: 'Wrong amount', notReceived: 'Not received', cancelledSubscription: 'Cancelled subscription', refundNotProcessed: 'Refund not processed' };
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

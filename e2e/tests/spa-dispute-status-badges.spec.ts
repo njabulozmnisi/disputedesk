@@ -9,7 +9,7 @@ import { ownDisputable, queryDatabase, topicRecords, axeTags, origin, signInCont
 // the transactions response in the browser (route.fetch, then edit the first rows); the row layout, the badge and
 // the href are the real SPA. The list is not stubbed in the first test.
 
-const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
+const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'sha256-47DEQpj8HBSa\+\/TImW\+5JCeuQeRkm5NMpJWZG3hSuFU=''\./;
 const screenshotDir = process.env.QA_SCREENSHOT_DIR;
 
 type ApiRow = {
