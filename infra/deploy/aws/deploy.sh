@@ -10,7 +10,7 @@
 # 4. Creates the database roles and databases on RDS on the first deploy
 #    (infra/images/postgres/10-roles-and-databases.sh).
 # 5. Lets only the api and the otel-collector containers reach the instance metadata service.
-# 6. Starts the stack and exits with Compose's exit code.
+# 6. Starts the stack, recreating every container, and exits with Compose's exit code.
 #
 # It never prints a value it reads: no set -x, no .env, no `docker compose config` or `logs`. DeployScriptTests
 # (infra/tests) runs it with stubs.
@@ -167,5 +167,8 @@ else
   systemctl enable iptables
 fi
 
+# Compose recreates a container only when its service's configuration or image changed, not for a changed
+# bind-mounted file such as the collector's config.yaml (Docker, "docker compose up"), so every container is recreated
+# and starts with the files this deploy checked out and wrote.
 step "starting the stack"
-docker compose -f docker-compose.yml -f infra/deploy/aws/compose.yml up -d --wait
+docker compose -f docker-compose.yml -f infra/deploy/aws/compose.yml up -d --wait --force-recreate

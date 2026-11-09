@@ -35,7 +35,7 @@ internal sealed partial class DeployCopy : IDisposable
     /// <summary>deploy.sh's five arguments, in order.</summary>
     public static readonly string[] ImageNames = ["API_IMAGE", "WORKER_IMAGE", "GATEWAY_IMAGE", "CORE_BANKING_IMAGE", "ZITADEL_IMAGE"];
 
-    public static readonly string[] ComposeUpCall = ["compose", "-f", "docker-compose.yml", "-f", "infra/deploy/aws/compose.yml", "up", "-d", "--wait"];
+    public static readonly string[] ComposeUpCall = ["compose", "-f", "docker-compose.yml", "-f", "infra/deploy/aws/compose.yml", "up", "-d", "--wait", "--force-recreate"];
 
     public static readonly string[] RuleCheckCall = ["-C", "DOCKER-USER", "-s", "10.201.89.0/24", "-d", "169.254.169.254/32", "-j", "DROP"];
 

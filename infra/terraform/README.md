@@ -256,6 +256,10 @@ gh run watch "$(gh run list --workflow deploy.yml --limit 1 --json databaseId --
 
 Every later deploy is the same dispatch, with the SHA to deploy.
 
+Every deploy recreates every container (`docker compose up --force-recreate`), so a changed mounted file, such as the
+collector's `config.yaml`, takes effect. The stack is briefly unavailable while the containers restart, and Mailpit's
+inbox empties.
+
 ## A half-done database init
 
 The first deploy creates the roles `disputedesk`, `zitadel` and `qa_readonly`, and the databases `disputedesk` and
