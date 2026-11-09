@@ -6,6 +6,12 @@ describe('cn', () => {
     expect(cn('text-label', 'text-primary')).toBe('text-label text-primary');
   });
 
+  it('reads text-heading as the navy colour, not a size, so it keeps the size beside it', () => {
+    expect(cn('text-label text-muted-foreground', 'text-label font-strong text-heading')).toBe(
+      'text-label font-strong text-heading',
+    );
+  });
+
   it('still lets a later class of the same kind win', () => {
     expect(cn('text-body', 'text-label')).toBe('text-label');
     expect(cn('text-primary', 'text-foreground')).toBe('text-foreground');

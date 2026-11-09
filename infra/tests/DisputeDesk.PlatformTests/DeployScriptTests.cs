@@ -142,6 +142,21 @@ public sealed class DeployScriptTests
     }
 
     [Fact]
+    public async Task LaterDeploy_RecreatesEveryContainer_SoAChangedMountedFileTakesEffect()
+    {
+        // Compose recreates a container on its own only when its service's configuration or image changed, not when a
+        // bind-mounted file's content did (the collector's config.yaml, 2026-11-09), so the deploy forces it.
+        using var deploy = new DeployCopy { RolesAndDatabases = "3 2", RuleExists = true };
+
+        ProcessResult run = await deploy.RunAsync();
+
+        Assert.True(run.ExitCode == 0, $"The deploy failed: {run.Output}{run.Errors}");
+        string[] composeUp = deploy.Stubs.Calls("docker")[^1].Arguments;
+        Assert.Contains("--force-recreate", composeUp);
+        Assert.Contains("--wait", composeUp);
+    }
+
+    [Fact]
     public async Task LaterDeploy_FailedComposeUp_ExitsWithComposesExitCode()
     {
         using var deploy = new DeployCopy { RolesAndDatabases = "3 2", RuleExists = true, ComposeExit = 7 };

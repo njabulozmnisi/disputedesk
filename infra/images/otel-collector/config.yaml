@@ -1,9 +1,9 @@
 # The OpenTelemetry Collector in AWS (AD-29): it takes the Aspire Dashboard's place for the Api and the Worker, which
-# export OTLP/gRPC to it, and sends traces to X-Ray, logs to CloudWatch Logs and metrics to CloudWatch, signed with the
-# instance role (OpenTelemetry Collector, "Configuration"; AWS, "CloudWatch OTLP endpoints"). The browser sends nothing
-# here: AWS has no browser telemetry intake.
+# export OTLP/gRPC to it, and sends traces to X-Ray, logs to CloudWatch Logs and the app's own metrics to CloudWatch,
+# signed with the instance role (OpenTelemetry Collector, "Configuration"; AWS, "CloudWatch OTLP endpoints"). The
+# browser sends nothing here: AWS has no browser telemetry intake.
 # infra/deploy/aws/compose.yml mounts this file and sets AWS_REGION and OTEL_LOG_GROUP; ComposeRenderTests (infra/tests)
-# validates it with the pinned image's `validate` command.
+# validates it with the pinned image's `validate` command and runs it to check which metrics it exports.
 
 extensions:
   # SigV4 request signing with the default AWS credential chain, which on the instance is its role (sigv4auth README).
@@ -31,6 +31,13 @@ processors:
     check_interval: 1s
     limit_mib: 100
     spike_limit_mib: 20
+  # CloudWatch gets only the app's own instruments, the disputedesk.* metrics (AD-20): every other metric (runtime,
+  # ASP.NET Core, HttpClient, Npgsql) is dropped here, because awsemf's metric_declarations would still write an
+  # unmatched metric to the log group, only without a CloudWatch metric (filter processor README, metric_conditions).
+  filter/app-metrics:
+    error_mode: ignore
+    metric_conditions:
+      - not HasPrefix(metric.name, "disputedesk.")
   batch: {}
 
 exporters:
@@ -46,12 +53,14 @@ exporters:
       x-aws-log-stream: otlp
     auth:
       authenticator: sigv4auth/logs
-  # Metrics as CloudWatch embedded metric format records in the same log group (awsemf README).
+  # Metrics as CloudWatch embedded metric format records in the same log group (awsemf README). NoDimensionRollup:
+  # each metric's one dimension set is its own attributes (with OTelLib, the Meter's name), with no rolled-up copies.
   awsemf:
     region: ${env:AWS_REGION}
     namespace: DisputeDesk
     log_group_name: ${env:OTEL_LOG_GROUP}
     log_stream_name: metrics
+    dimension_rollup_option: NoDimensionRollup
 
 service:
   extensions: [sigv4auth/xray, sigv4auth/logs]
@@ -66,5 +75,6 @@ service:
       exporters: [otlphttp/logs]
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      # Filtering after memory_limiter and before batch (collector processor README, "Recommended processors").
+      processors: [memory_limiter, filter/app-metrics, batch]
       exporters: [awsemf]

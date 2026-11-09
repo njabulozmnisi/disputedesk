@@ -114,6 +114,7 @@
   --page-max: 1120px; /* start page only: two-column hero */
   --row-min: 64px; /* list rows */
   --amount-col: 9rem; /* list grid: the amount column, from 768px */
+  --label-col: 9rem; /* review read-back: the label column, capped at 40% of the row so text scaling keeps room for the value */
   --action-col: 14rem; /* list grid: the Dispute link and badge column, from 768px */
 
   /* Radius */

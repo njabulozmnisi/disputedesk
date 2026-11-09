@@ -152,7 +152,7 @@ test('the detail answers 200 from the stored snapshot while core banking is down
 // ---------------------------------------------------------------------------------------------------------------------
 
 const screenshotDir = process.env.QA_SCREENSHOT_DIR;
-const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self''\./;
+const knownRadixStyleViolation = /^Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'sha256-47DEQpj8HBSa\+\/TImW\+5JCeuQeRkm5NMpJWZG3hSuFU=''\./;
 // The browser logs every 4xx and 5xx response; the spec provokes those on purpose and asserts them as responses.
 const refusedOnPurpose = /^Failed to load resource: the server responded with a status of (404|409|500)/;
 const notFoundTitle = "We can't find that dispute";
@@ -359,7 +359,9 @@ test.describe('story 3.12: the detail screen', () => {
     const expectedText = `${expectedTime.getUTCDate()} ${month} ${expectedTime.getUTCFullYear()}, ${pad(expectedTime.getUTCHours())}:${pad(expectedTime.getUTCMinutes())} SAST`;
     await expect(items.first().locator('time')).toHaveText(expectedText);
     await expect(items.first().locator('time')).toHaveAttribute('datetime', entry.occurredAt);
-    await expect(items.first()).toContainText(`You · ${expectedText}`);
+    const attribution = items.first().locator('p', { has: page.locator('time') });
+    await expect(attribution.locator('span')).toHaveText('You');
+    await expect(attribution).not.toContainText('·');
     await expect(page.getByText("We'll update the timeline as your dispute moves.")).toHaveCount(1);
     await expect(items.filter({ hasText: "We'll update" })).toHaveCount(0);
 
@@ -408,7 +410,7 @@ test.describe('story 3.12: the detail screen', () => {
     });
     await page.goto(`/disputes/${openId}`);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(openDescription);
-    const items = page.locator('ol li');
+    const items = page.getByRole('region', { name: 'Timeline' }).locator('ol li');
     await expect(items).toHaveCount(5);
     await expect(items.nth(0).locator('time')).toHaveText('26 Oct 2026, 14:32 SAST');
     await expect(items.nth(1).locator('time')).toHaveText('3 Sep 2026, 10:05 SAST');
@@ -421,7 +423,13 @@ test.describe('story 3.12: the detail screen', () => {
     await expect(items.nth(3)).toContainText('Rejected');
     const unknownEntry = (await items.nth(4).innerText()).replace(/\s+/g, ' ');
     expect(unknownEntry).not.toMatch(/archive|escalated|Escalated|robot/);
-    expect(await text(page)).toContain("If you disagree with this outcome, you can complain to the bank first. If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers.");
+    const guidance = page.getByRole('region', { name: 'If you disagree with this outcome' });
+    await expect(guidance.getByRole('heading', { level: 2, name: 'If you disagree with this outcome' })).toBeVisible();
+    await expect(guidance.locator('ol li > span[aria-hidden="true"]')).toHaveText(['1', '2']);
+    await expect(guidance.locator('ol li > p')).toHaveText([
+      'You can complain to the bank first.',
+      "If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers.",
+    ]);
     await expect(page.getByRole('button', { name: 'Withdraw dispute' })).toHaveCount(0);
     await expect(page.getByText("We'll update the timeline")).toHaveCount(0);
     expect(await axeFindings(page, 'rejected')).toEqual([]);

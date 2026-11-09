@@ -1,5 +1,5 @@
 # DisputeDesk in AWS (AD-28): the same stack as docker-compose.yml, merged with this file on the one EC2 instance.
-#   docker compose -f docker-compose.yml -f infra/deploy/aws/compose.yml up -d --wait
+#   docker compose -f docker-compose.yml -f infra/deploy/aws/compose.yml up -d --wait --force-recreate
 # Run from the repository root: Compose resolves relative paths in every file from the first file's folder (Compose,
 # "Merge Compose files"), so ./infra/... below is the repository's infra/.
 #

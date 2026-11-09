@@ -10,6 +10,7 @@ import { usePageHeading } from '@/app/usePageHeading';
 import { ErrorSummary } from '@/components/ErrorSummary';
 import { Page } from '@/components/Page';
 import { ProblemNotice } from '@/components/ProblemNotice';
+import { StepProgress } from '@/components/StepProgress';
 import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
@@ -27,7 +28,9 @@ export function DetailsScreen() {
   const headingRef = usePageHeading('Link your login');
   const navigate = useNavigate();
   const goToTransactions = useGoToTransactions();
-  const rateLimit = useRateLimit();
+  const noticeRef = useRef<HTMLDivElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
+  const rateLimit = useRateLimit(noticeRef, submitRef);
   // Set synchronously on submit, because isPending only changes on the next render (as in ReviewScreen).
   const attemptInFlight = useRef(false);
   const [failure, setFailure] = useState<{ traceId: string | undefined }>();
@@ -90,19 +93,22 @@ export function DetailsScreen() {
 
   return (
     <Page width="form">
-      <h1
-        ref={headingRef}
-        tabIndex={-1}
-        className="text-title font-title tracking-title wrap-break-word text-heading"
-      >
-        Link your login
-      </h1>
+      <div className="grid gap-2">
+        <StepProgress label="Link your login, step 1 of 2" step={1} />
+        <h1
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-title font-title tracking-title wrap-break-word text-heading"
+        >
+          Link your login
+        </h1>
+      </div>
 
       {summaryRequests > 0 && summaryItems.length > 0 ? (
         <ErrorSummary items={summaryItems} requests={summaryRequests} />
       ) : null}
       {rateLimit.message ? (
-        <Alert tone="rate-limited">
+        <Alert ref={noticeRef} tabIndex={-1} tone="rate-limited">
           <AlertTitle>{rateLimit.message}</AlertTitle>
         </Alert>
       ) : null}
@@ -135,6 +141,7 @@ export function DetailsScreen() {
                   inputMode="numeric"
                   autoComplete="off"
                   spellCheck={false}
+                  disabled={rateLimit.isWaiting}
                   aria-invalid={fieldState.invalid}
                   aria-describedby={describedBy('idNumber')}
                 />
@@ -158,6 +165,7 @@ export function DetailsScreen() {
                   inputMode="numeric"
                   autoComplete="off"
                   spellCheck={false}
+                  disabled={rateLimit.isWaiting}
                   aria-invalid={fieldState.invalid}
                   aria-describedby={describedBy('accountNumber')}
                 />
@@ -168,8 +176,13 @@ export function DetailsScreen() {
             )}
           />
 
-          {/* `aria-disabled`, not `disabled`, so the button keeps focus while it waits. */}
-          <Button type="submit" aria-disabled={mutation.isPending || rateLimit.isWaiting}>
+          {/* A rate limit disables the form; a pending request is only aria-disabled, so the button keeps focus. */}
+          <Button
+            ref={submitRef}
+            type="submit"
+            disabled={rateLimit.isWaiting}
+            aria-disabled={mutation.isPending}
+          >
             Continue
           </Button>
         </FieldGroup>

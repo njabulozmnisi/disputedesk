@@ -4,7 +4,7 @@ import { AlertDialog as AlertDialogPrimitive } from 'radix-ui';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-// shortcut: Radix scroll lock injects a <style> that the gateway CSP (style-src 'self') blocks, so the page behind the dialog can still scroll; upgrade if the dialog must lock scrolling
+// shortcut: Radix scroll lock injects a <style> with CSS text that the gateway CSP (style-src 'self' and the empty-string hash) blocks, so the page behind the dialog can still scroll; upgrade if the dialog must lock scrolling
 function AlertDialog({ ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
 }
@@ -35,7 +35,9 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         className={cn(
-          'fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg bg-card p-6 text-card-foreground shadow-overlay sm:max-w-(--form-max) sm:p-8',
+          // A bottom sheet below 768px, a centred dialog from 768px. Either way the content is capped at the viewport height and
+          // scrolls inside, so the title and both buttons stay reachable at 320px and at 200% zoom (WCAG 2.2 SC 1.4.10).
+          'fixed inset-x-0 bottom-0 z-50 grid max-h-dvh w-full gap-4 overflow-y-auto rounded-t-lg bg-card px-4 py-6 text-card-foreground shadow-overlay md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:max-w-(--form-max) md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-lg md:p-8',
           className,
         )}
         {...props}
@@ -58,7 +60,7 @@ function AlertDialogFooter({ className, ...props }: React.ComponentProps<'div'>)
   return (
     <div
       data-slot="alert-dialog-footer"
-      className={cn('flex flex-col gap-3 sm:flex-row', className)}
+      className={cn('flex flex-col gap-3 border-t border-border pt-4 sm:flex-row', className)}
       {...props}
     />
   );

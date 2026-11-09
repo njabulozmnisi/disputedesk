@@ -22,8 +22,10 @@ import {
 } from '@/test/support';
 
 const notFoundHeading = "We can't find that dispute";
-const rejectedGuidance =
-  "If you disagree with this outcome, you can complain to the bank first. If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers.";
+const withdrawConsequence =
+  "Changed your mind? You can withdraw while the dispute is open. You can't dispute this transaction again after you withdraw.";
+const rejectedGuidanceSecondStep =
+  "If you're still not satisfied after the bank has answered your complaint, you can take it to the National Financial Ombud Scheme South Africa, an independent service that is free for customers.";
 
 beforeEach(() => {
   signInAs('linked');
@@ -52,6 +54,17 @@ async function openDetail(dispute: DisputeResponse = makeDispute()) {
 }
 
 const h1 = () => screen.getByRole('heading', { level: 1 });
+
+/** The visible text of an element, one string per text node in reading order. */
+function textsOf(element: HTMLElement): string[] {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  const texts: string[] = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.textContent?.trim();
+    if (text) texts.push(text);
+  }
+  return texts;
+}
 
 // A GUID with hex letters, so that its upper-case form differs from the API's lower-case one.
 const lettersGuid = 'abcdef12-abcd-4bcd-8bcd-abcdef123456';
@@ -172,6 +185,14 @@ describe('loading, failing and loaded', () => {
     const busy = document.querySelector('[aria-busy="true"]');
     expect(busy).not.toBeNull();
     expect(busy?.querySelectorAll('li')).toHaveLength(3);
+    // The skeleton card holds the real h1, which is not hidden; each placeholder's dot is decorative; no inline style
+    // (criterion 6).
+    expect(busy).toContainElement(h1());
+    expect(h1().closest('[aria-hidden="true"]')).toBeNull();
+    for (const placeholder of busy?.querySelectorAll('li') ?? []) {
+      expect(placeholder.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    }
+    expect(busy?.querySelectorAll('[style]')).toHaveLength(0);
 
     const loadingHeading = h1();
 
@@ -363,6 +384,9 @@ describe('loading, failing and loaded', () => {
       'href',
       '/disputes',
     );
+    expect(screen.getByRole('link', { name: 'Back to disputes' })).toHaveClass(
+      'min-h-(--tap-target)',
+    );
     expect(document.body).not.toHaveTextContent(disputeGuid);
   });
 
@@ -382,13 +406,50 @@ describe('loading, failing and loaded', () => {
     expect(screen.getByText('R100.00')).toBeInTheDocument();
   });
 
+  // Criterion 1: "Disputed on" is the day of createdAt in South African time, not the first timeline entry's.
+  it('shows Disputed on from createdAt in a <time>, not the first timeline entry day', async () => {
+    await openDetail(
+      makeDispute({
+        createdAt: '2026-10-25T22:30:00Z',
+        timeline: [entry({ occurredAt: '2026-10-27T08:00:00Z' })],
+      }),
+    );
+
+    const summary = screen.getByText('Disputed on').closest('dl') as HTMLElement;
+    const disputedOn = within(summary).getByText('26 Oct 2026');
+    expect(disputedOn.tagName).toBe('TIME');
+    expect(disputedOn).toHaveAttribute('datetime', '2026-10-25T22:30:00Z');
+    expect(summary).not.toHaveTextContent('27 Oct 2026');
+    expect(screen.getByText('27 Oct 2026, 10:00 SAST')).toBeInTheDocument();
+  });
+
+  it('runs the summary rows: Reason, the two amounts, Transaction date, Disputed on', async () => {
+    await openDetail(
+      makeDispute({
+        reason: 'wrongAmount',
+        expectedAmount: { amount: '749.00', currency: 'ZAR' },
+      }),
+    );
+
+    const summary = screen.getByText('Disputed on').closest('dl') as HTMLElement;
+    const labels = [...summary.querySelectorAll('dt')].map((term) => term.textContent);
+    expect(labels).toEqual([
+      'Reason',
+      'Transaction amount',
+      'Expected amount',
+      'Transaction date',
+      'Disputed on',
+    ]);
+  });
+
   it('shows no label for an unknown reason, never the raw value', async () => {
     await openDetail(makeDispute({ reason: 'martian' as DisputeResponse['reason'] }));
 
     expect(screen.queryByText('martian')).not.toBeInTheDocument();
   });
 
-  it('shows the Rejected guidance only for a rejected outcome', async () => {
+  // Criterion 5: the guidance is its own surface below the timeline, with two numbered steps.
+  it('shows the Rejected guidance as its own surface with two steps, below the timeline', async () => {
     await openDetail(
       makeDispute({
         customerStatus: 'resolved',
@@ -400,7 +461,21 @@ describe('loading, failing and loaded', () => {
       }),
     );
 
-    expect(screen.getByText(rejectedGuidance)).toBeInTheDocument();
+    const heading = screen.getByRole('heading', {
+      level: 2,
+      name: 'If you disagree with this outcome',
+    });
+    const guidance = screen.getByRole('region', { name: 'If you disagree with this outcome' });
+    expect(guidance).toContainElement(heading);
+    const steps = within(within(guidance).getByRole('list')).getAllByRole('listitem');
+    expect(steps.map((step) => step.querySelector('p')?.textContent)).toEqual([
+      'You can complain to the bank first.',
+      rejectedGuidanceSecondStep,
+    ]);
+    const timeline = screen.getByRole('region', { name: 'Timeline' });
+    expect(
+      timeline.compareDocumentPosition(guidance) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it.each([
@@ -425,6 +500,9 @@ describe('loading, failing and loaded', () => {
 
     const banner = await screen.findByText('Dispute submitted');
     expect(banner.closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
+    // A success Alert with the CircleCheck icon (criterion 3).
+    const alert = banner.closest('[data-slot="alert"]');
+    expectDecorativeIcon(alert?.querySelector('svg.lucide-circle-check'));
     expect(banner.compareDocumentPosition(h1()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(app.router.state.location.search).toEqual({});
   });
@@ -559,6 +637,76 @@ describe('the timeline', () => {
     expect(document.body).not.toHaveTextContent('Escalated');
   });
 
+  // Criterion 4: within an entry, the label, the sentence, the actor, the time, then the note; no separator.
+  it('reads each entry as label, sentence, actor, time, note, with no separator between actor and time', async () => {
+    await openDetail(
+      makeDispute({
+        customerStatus: 'resolved',
+        outcome: 'rejected',
+        timeline: [
+          entry({ note: 'Never bought here' }),
+          entry({
+            action: 'resolve',
+            customerStatus: 'resolved',
+            actor: 'theBank',
+            occurredAt: '2026-10-29T08:00:00Z',
+            note: 'Signed slip on file',
+          }),
+        ],
+      }),
+    );
+
+    const items = within(screen.getByRole('region', { name: 'Timeline' })).getAllByRole('listitem');
+    expect(items.map(textsOf)).toEqual([
+      [
+        'Submitted',
+        'You submitted this dispute.',
+        'You',
+        '26 Oct 2026, 14:32 SAST',
+        '“Never bought here”',
+      ],
+      [
+        'Resolved · Rejected',
+        "The bank didn't uphold your dispute.",
+        'The bank',
+        '29 Oct 2026, 10:00 SAST',
+        '“Signed slip on file”',
+      ],
+    ]);
+    for (const item of items) {
+      const meta = item.querySelector('time')?.parentElement;
+      expect(meta?.textContent).not.toContain(' · ');
+    }
+  });
+
+  it('draws earlier entries with a 12px outlined dot and the latest with the 16px primary dot and halo', async () => {
+    await openDetail(
+      makeDispute({
+        timeline: [entry({}), entry({ action: 'startReview', customerStatus: 'underReview' })],
+      }),
+    );
+
+    const timeline = screen.getByRole('region', { name: 'Timeline' });
+    const dots = timeline.querySelectorAll('[data-slot="timeline-dot"]');
+    const rails = timeline.querySelectorAll('[data-slot="timeline-rail"]');
+    expect(dots).toHaveLength(2);
+    expect(dots[0]).toHaveClass('size-3', 'border-input', 'bg-card');
+    expect(dots[0]).toHaveAttribute('aria-hidden', 'true');
+    expect(dots[1]).toHaveClass('size-4', 'bg-primary', 'ring-4', 'ring-primary-subtle');
+    expect(dots[1]).toHaveAttribute('aria-hidden', 'true');
+    // The rail joins the dots: every entry but the last has a segment.
+    expect(rails).toHaveLength(1);
+    expect(rails[0]).toHaveClass('w-0.5', 'bg-border');
+  });
+
+  it('is a flat surface: card, hairline, rounded-lg, no shadow', async () => {
+    await openDetail();
+
+    const surface = screen.getByRole('region', { name: 'Timeline' });
+    expect(surface).toHaveClass('bg-card', 'border', 'border-border', 'rounded-lg');
+    expect(surface).not.toHaveClass('shadow-card');
+  });
+
   it('words a rejected resolve and a withdraw', async () => {
     await openDetail(
       makeDispute({
@@ -644,6 +792,10 @@ describe('the timeline', () => {
     }
     expect(screen.queryByText('The bank agreed with you.')).not.toBeInTheDocument();
     expect(screen.queryByText("The bank didn't uphold your dispute.")).not.toBeInTheDocument();
+    // Every entry stays in the list with at least its time (AD-13).
+    const items = within(screen.getByRole('region', { name: 'Timeline' })).getAllByRole('listitem');
+    expect(items).toHaveLength(4);
+    for (const item of items) expect(item.querySelector('time')).not.toBeNull();
   });
 });
 
@@ -661,7 +813,21 @@ describe('the Withdraw button', () => {
       makeDispute({ customerStatus: customerStatus as DisputeResponse['customerStatus'] }),
     );
 
+    // The consequence sentence and the button are offered together (criterion 2).
     expect(screen.queryByRole('button', { name: 'Withdraw dispute' }) !== null).toBe(shown);
+    expect(screen.queryByText(withdrawConsequence) !== null).toBe(shown);
+  });
+
+  it('puts the sentence and the button at the card foot, after a hairline, sentence first', async () => {
+    await openDetail();
+
+    const sentence = screen.getByText(withdrawConsequence);
+    const button = screen.getByRole('button', { name: 'Withdraw dispute' });
+    expect(sentence.parentElement).toBe(button.parentElement);
+    expect(sentence.parentElement).toHaveClass('border-t', 'border-border');
+    expect(
+      sentence.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
 
@@ -720,6 +886,19 @@ describe('the withdraw dialog', () => {
     expect(within(dialog).getByRole('button', { name: 'Withdraw dispute' })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Keep dispute' })).toHaveFocus();
     expect(await axe(document.body)).toHaveNoViolations();
+  });
+
+  // Criterion 7: a hairline above the buttons; a bottom sheet below 768px; capped at the viewport height, scrolling inside.
+  it('has a hairline above the buttons, a phone sheet and a height cap', async () => {
+    const { user } = await openDetail();
+
+    const dialog = await openWithdrawDialog(user);
+
+    const keep = within(dialog).getByRole('button', { name: 'Keep dispute' });
+    expect(keep.parentElement).toHaveClass('border-t', 'border-border');
+    expect(dialog).toHaveClass('max-h-dvh', 'overflow-y-auto');
+    expect(dialog).toHaveClass('inset-x-0', 'bottom-0', 'rounded-t-lg');
+    expect(dialog).toHaveClass('md:top-1/2', 'md:left-1/2', 'md:rounded-lg');
   });
 
   it('keeps focus inside while open', async () => {

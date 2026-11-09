@@ -71,7 +71,33 @@ describe('screen 2a, the details form', () => {
       expect(input).toHaveAttribute('spellcheck', 'false');
     }
     expect(continueButton()).not.toHaveAttribute('aria-disabled', 'true');
+    expect(continueButton()).toBeEnabled();
     expect(screen.getByText("Can't link online? Contact the bank.")).toBeInTheDocument();
+  });
+
+  // Criterion 1: the step indicator sits above the h1.
+  it('shows "Link your login, step 1 of 2" above the heading', async () => {
+    await openDetails();
+
+    const step = screen.getByText('Link your login, step 1 of 2');
+    const heading = screen.getByRole('heading', { level: 1, name: 'Link your login' });
+    expect(step.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // Criterion 7: one help block, a region named by its h2, after the h1.
+  it('ends with the help block: a region named "Need help?", h1 then h2, and no "Start again"', async () => {
+    await openDetails();
+
+    const help = screen.getByRole('region', { name: 'Need help?' });
+    expect(
+      screen.getAllByRole('heading').map((heading) => [heading.tagName, heading.textContent]),
+    ).toEqual([
+      ['H1', 'Link your login'],
+      ['H2', 'Need help?'],
+    ]);
+    expect(help).toHaveTextContent("Can't link online? Contact the bank.");
+    expect(help).not.toHaveTextContent("Didn't get a code?");
+    expect(help.parentElement?.lastElementChild).toBe(help);
   });
 
   it('leaves focus alone on a direct load', async () => {
@@ -176,6 +202,9 @@ describe('screen 2a, the details form', () => {
     await waitFor(() => {
       expect(continueButton()).toHaveAttribute('aria-disabled', 'true');
     });
+    // A pending request is not a rate limit: the button stays enabled and keeps focus.
+    expect(continueButton()).toBeEnabled();
+    expect(continueButton()).toHaveFocus();
     expect(await axe(document.body)).toHaveNoViolations();
     await user.click(continueButton());
     await user.keyboard('{Enter}');
@@ -335,9 +364,10 @@ describe('screen 2a, rate limited', () => {
     expectDecorativeIcon(notice.querySelector('svg.lucide-clock'));
     expect(notice.querySelector('svg.lucide-triangle-alert')).not.toBeInTheDocument();
     expect(screen.queryByText(/quote this reference/)).not.toBeInTheDocument();
-    expect(continueButton()).toHaveAttribute('aria-disabled', 'true');
-    expect(continueButton()).toHaveFocus();
-    expect(idField()).not.toBeDisabled();
+    expect(continueButton()).toBeDisabled();
+    expect(notice).toHaveFocus();
+    expect(idField()).toBeDisabled();
+    expect(accountField()).toBeDisabled();
     expect(idField()).toHaveValue(validId);
 
     await user.click(continueButton());
@@ -348,10 +378,54 @@ describe('screen 2a, rate limited', () => {
 
     await passSeconds(1);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(continueButton()).not.toHaveAttribute('aria-disabled', 'true');
+    expect(continueButton()).toBeEnabled();
+    expect(idField()).toBeEnabled();
+    expect(accountField()).toBeEnabled();
     await user.click(continueButton());
     await screen.findByRole('heading', { level: 1, name: 'Enter your OTP' });
     expect(requests).toHaveLength(2);
+  });
+
+  it('moves focus to the notice after Enter in a field, as the focused field becomes disabled', async () => {
+    recordLinkingRequests('start', () => rateLimited('120'));
+    const { user } = await openDetails({ fakeTimers: true });
+    await enter(user, validId, validAccount);
+
+    await user.keyboard('{Enter}');
+
+    const notice = await screen.findByRole('alert');
+    expect(accountField()).toBeDisabled();
+    expect(notice).toHaveFocus();
+  });
+
+  it('gives focus to Continue when the wait ends while the notice still has it', async () => {
+    recordLinkingRequests('start', () => rateLimited('2'));
+    const { user } = await openDetails({ fakeTimers: true });
+    await submitDetails(user);
+    expect(await screen.findByRole('alert')).toHaveFocus();
+
+    await passSeconds(2);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(continueButton()).toBeEnabled();
+    expect(continueButton()).toHaveFocus();
+  });
+
+  it('leaves focus where the person moved it when the wait ends', async () => {
+    recordLinkingRequests('start', () => rateLimited('2'));
+    const { user } = await openDetails({ fakeTimers: true });
+    await submitDetails(user);
+    await screen.findByRole('alert');
+    const homeLink = screen.getByRole('link', { name: /DisputeDesk/ });
+    act(() => {
+      homeLink.focus();
+    });
+
+    await passSeconds(2);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(homeLink).toHaveFocus();
+    expect(continueButton()).not.toHaveFocus();
   });
 
   it('reads an HTTP-date 12 minutes ahead', async () => {
@@ -372,10 +446,10 @@ describe('screen 2a, rate limited', () => {
     await submitDetails(user);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Try again in 1 minute.');
-    expect(continueButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(continueButton()).toBeDisabled();
     await passSeconds(1);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(continueButton()).not.toHaveAttribute('aria-disabled', 'true');
+    expect(continueButton()).toBeEnabled();
   });
 
   it.each([
@@ -410,6 +484,10 @@ describe('screen 2a, rate limited', () => {
       'Too many attempts. Try again later.',
     );
     expect(continueButton()).not.toHaveAttribute('aria-disabled', 'true');
+    expect(continueButton()).toBeEnabled();
+    expect(idField()).toBeEnabled();
+    expect(accountField()).toBeEnabled();
+    expect(continueButton()).toHaveFocus();
     await user.click(continueButton());
     await screen.findByRole('heading', { level: 1, name: 'Enter your OTP' });
     expect(requests).toHaveLength(2);
@@ -425,6 +503,18 @@ describe('screen 2a, rate limited', () => {
     await screen.findByRole('alert');
 
     expect(await axe(document.body)).toHaveNoViolations();
+  });
+
+  it('keeps the help block, h1 then h2, while rate limited', async () => {
+    recordLinkingRequests('start', () => rateLimited('900'));
+    const { user } = await openDetails({ fakeTimers: true });
+    await submitDetails(user);
+    await screen.findByRole('alert');
+
+    expect(screen.getByRole('region', { name: 'Need help?' })).toHaveTextContent(
+      "Can't link online? Contact the bank.",
+    );
+    expect(screen.getAllByRole('heading').map((heading) => heading.tagName)).toEqual(['H1', 'H2']);
   });
 
   it('does not repeat typed values in the 429 notice', async () => {

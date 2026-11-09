@@ -432,8 +432,94 @@ describe('a body the screen does not know', () => {
   });
 });
 
-// Boundaries, CSP: the gateway sends `script-src 'self'; style-src 'self'`, so the app's markup has no inline script, no
-// <style> element and no `style` attribute. (Radix sets a few styles through the CSSOM, which the policy allows.)
+// Criteria 1 to 4 of ui-raise-review: the step, the form surface, the difference and the actions.
+describe('the raise form drawn to the mockup', () => {
+  const formOf = () => {
+    const form = screen.getByRole('main').querySelector('form');
+    if (!form) throw new Error('the raise screen has a form');
+    return form;
+  };
+
+  it('shows "Step 1 of 2: reason and note" above the h1', async () => {
+    await openRaiseScreen();
+
+    const step = screen.getByText('Step 1 of 2: reason and note');
+    const heading = screen.getByRole('heading', { level: 1, name: 'Dispute this transaction' });
+    expect(step.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('keeps the error summary after the h1, below the step', async () => {
+    const { user } = await openRaiseScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    const summary = await screen.findByRole('group', { name: 'Check the details below' });
+    const heading = screen.getByRole('heading', { level: 1, name: 'Dispute this transaction' });
+    expect(
+      heading.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('is one flat surface: the form holds the transaction block, the reasons and the actions', async () => {
+    await openRaiseScreen();
+
+    const form = formOf();
+    expect(form).toHaveClass('bg-card', 'border', 'border-border', 'rounded-lg');
+    expect(within(form).getByText('ZXP*GLOBALSVCS 0800')).toBeInTheDocument();
+    expect(within(form).getByText('Card 492345•• •••• 3456')).toBeInTheDocument();
+    expect(within(form).getByText('R849.00')).toBeInTheDocument();
+    expect(within(form).getAllByRole('radio')).toHaveLength(6);
+    expect(within(form).getByRole('link', { name: 'Cancel' })).toBeInTheDocument();
+  });
+
+  it('draws the transaction as a quiet block: background fill, rounded-md, no border', async () => {
+    await openRaiseScreen();
+
+    const block = screen.getByText('ZXP*GLOBALSVCS 0800').closest('div')?.parentElement;
+    expect(block).toHaveClass('bg-background', 'rounded-md');
+    expect(block).not.toHaveClass('border');
+    expect(block).not.toHaveClass('bg-card');
+  });
+
+  it('draws the difference as 14/700 heading text, still the described-by hint of the input', async () => {
+    const { user } = await openRaiseScreen();
+    await chooseReason(user, 'Wrong amount');
+
+    await user.type(screen.getByLabelText('Expected amount'), '500.00');
+
+    const difference = screen.getByText("You're disputing R349.00");
+    expect(difference).toHaveClass('text-label', 'font-strong', 'text-heading');
+    expect(difference).not.toHaveClass('text-muted-foreground');
+    expect(difference).toHaveAttribute('id', 'expectedAmount-disputing');
+    expect(screen.getByLabelText('Expected amount')).toHaveAccessibleDescription(
+      "You're disputing R349.00",
+    );
+  });
+
+  it('puts a hairline above the buttons, which are full width below 768px', async () => {
+    await openRaiseScreen();
+
+    const submit = screen.getByRole('button', { name: 'Continue' });
+    const actions = submit.parentElement;
+    expect(actions).toHaveClass('border-t', 'border-border');
+    expect(submit).toHaveClass('w-full', 'md:w-auto');
+    expect(actions?.children).toHaveLength(2);
+    expect(actions?.firstElementChild).toBe(submit);
+  });
+
+  it('draws Cancel as the secondary pill around the same link', async () => {
+    await openRaiseScreen();
+
+    const cancel = screen.getByRole('link', { name: 'Cancel' });
+    expect(cancel).toHaveAttribute('href', '/transactions');
+    expect(cancel).toHaveAttribute('data-slot', 'button');
+    expect(cancel).toHaveClass('rounded-full', 'min-h-12', 'border-primary', 'w-full', 'md:w-auto');
+  });
+});
+
+// Boundaries, CSP: the gateway sends `script-src 'self'; style-src 'self' 'sha256-<empty string>'`, so the app's markup
+// has no inline script, no <style> element and no `style` attribute. (Radix and input-otp set styles through the CSSOM,
+// which the policy allows; the hash admits only input-otp's empty <style> element.)
 describe('content security policy', () => {
   it.each([
     ['a style attribute', /\bstyle=\{/],

@@ -8,6 +8,7 @@ import { useAnnounce } from '@/app/LiveRegion';
 import { usePageHeading } from '@/app/usePageHeading';
 import { ErrorSummary } from '@/components/ErrorSummary';
 import { Page } from '@/components/Page';
+import { StepProgress } from '@/components/StepProgress';
 import { Button } from '@/components/ui/button';
 import {
   Field,
@@ -138,13 +139,16 @@ export function RaiseScreen() {
 
   return (
     <Page width="form">
-      <h1
-        ref={headingRef}
-        tabIndex={-1}
-        className="text-title font-title tracking-title wrap-break-word text-heading"
-      >
-        Dispute this transaction
-      </h1>
+      <div className="grid gap-2">
+        <StepProgress label="Step 1 of 2: reason and note" step={1} />
+        <h1
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-title font-title tracking-title wrap-break-word text-heading"
+        >
+          Dispute this transaction
+        </h1>
+      </div>
 
       {showSummary ? (
         <ErrorSummary
@@ -155,10 +159,9 @@ export function RaiseScreen() {
         />
       ) : null}
 
-      <TransactionSummary row={row} />
-
       <form
         noValidate
+        className="rounded-lg border border-border bg-card px-4 py-6 md:p-8"
         onSubmit={(event) => {
           void handleSubmit(onValid, () => {
             setSummaryRequests((requests) => requests + 1);
@@ -166,6 +169,8 @@ export function RaiseScreen() {
         }}
       >
         <FieldGroup>
+          <TransactionSummary row={row} />
+
           <Controller
             name="reason"
             control={control}
@@ -245,7 +250,10 @@ export function RaiseScreen() {
                     />
                   </div>
                   {showDifference ? (
-                    <FieldDescription id="expectedAmount-disputing">
+                    <FieldDescription
+                      id="expectedAmount-disputing"
+                      className="text-label font-strong text-heading"
+                    >
                       You&apos;re disputing{' '}
                       {formatMoney({
                         amount: disputedAmount(values, row.amount.amount),
@@ -283,9 +291,13 @@ export function RaiseScreen() {
             )}
           />
 
-          <div className="flex flex-wrap items-center gap-4">
-            <Button type="submit">Continue</Button>
-            <Link to="/transactions">Cancel</Link>
+          <div className="flex flex-col gap-3 border-t border-border pt-6 md:flex-row">
+            <Button type="submit" className="w-full md:w-auto">
+              Continue
+            </Button>
+            <Button asChild variant="secondary" className="w-full md:w-auto">
+              <Link to="/transactions">Cancel</Link>
+            </Button>
           </div>
         </FieldGroup>
       </form>

@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link } from '@tanstack/react-router';
+import { REGEXP_ONLY_DIGITS } from 'input-otp';
 import { Lock } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -13,15 +14,26 @@ import { ErrorSummary } from '@/components/ErrorSummary';
 import { Page } from '@/components/Page';
 import { ProblemNotice } from '@/components/ProblemNotice';
 import { StateSurface } from '@/components/StateSurface';
+import { StepProgress } from '@/components/StepProgress';
 import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 
 import { ContactHelp } from './ContactHelp';
-import { codeFrom, linkingMessages, otpSchema, type OtpValues } from './linkSchema';
+import {
+  codeFrom,
+  codeLength,
+  isOverlongCode,
+  linkingMessages,
+  otpSchema,
+  transformPastedCode,
+  type OtpValues,
+} from './linkSchema';
 import { useGoToTransactions } from './useGoToTransactions';
 import { useRateLimit } from './useRateLimit';
+
+const cellIndexes = Array.from({ length: codeLength }, (_, index) => index);
 
 /** "That code didn't work. You have 2 tries left." The count shows only when the API sent 1 or 2. */
 function wrongCodeCopy(attemptsRemaining: number | undefined): string {
@@ -64,13 +76,17 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
   const headingRef = usePageHeading('Enter your OTP');
   const announce = useAnnounce();
   const goToTransactions = useGoToTransactions();
-  const rateLimit = useRateLimit();
+  const noticeRef = useRef<HTMLDivElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
+  const rateLimit = useRateLimit(noticeRef, submitRef);
   // Set synchronously on submit, because isPending only changes on the next render (as in ReviewScreen).
   const attemptInFlight = useRef(false);
   const [failure, setFailure] = useState<{ traceId: string | undefined }>();
   const [wrongCode, setWrongCode] = useState<{ attemptsRemaining: number | undefined }>();
-  // The summary shows after a failed Verify or a returned 400, and takes focus each time.
+  // The summary shows after a failed Verify or a returned 400, and takes focus each time. A refused paste is not one:
+  // its error shows under the field only, until the next Verify.
   const [summaryRequests, setSummaryRequests] = useState(0);
+  const [summaryShown, setSummaryShown] = useState(false);
 
   const { control, handleSubmit, setError, setValue, setFocus, formState } = useForm<OtpValues>({
     resolver: zodResolver(otpSchema),
@@ -109,6 +125,7 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
           validationFields(error).includes('code')
         ) {
           setError('code', { message: linkingMessages.code });
+          setSummaryShown(true);
           setSummaryRequests((requests) => requests + 1);
         } else {
           setFailure({ traceId: traceIdOf(error) });
@@ -133,32 +150,30 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
 
   return (
     <Page width="form">
-      <h1
-        ref={headingRef}
-        tabIndex={-1}
-        className="text-title font-title tracking-title wrap-break-word text-heading"
-      >
-        Enter your OTP
-      </h1>
-
-      <div className="grid gap-1">
-        <p>
-          If these details match our records, we&apos;ve sent a code to the cellphone number we hold
-          for you.
-        </p>
-        <p className="text-label text-muted-foreground">
-          The code expires 5 minutes after we send it.
-        </p>
+      <div className="grid gap-2">
+        <StepProgress label="Link your login, step 2 of 2" step={2} />
+        <h1
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-title font-title tracking-title wrap-break-word text-heading"
+        >
+          Enter your OTP
+        </h1>
       </div>
 
-      {summaryRequests > 0 && codeError ? (
+      <p>
+        If these details match our records, we&apos;ve sent a code to the cellphone number we hold
+        for you.
+      </p>
+
+      {summaryShown && codeError ? (
         <ErrorSummary
           items={[{ fieldId: 'code', message: codeError }]}
           requests={summaryRequests}
         />
       ) : null}
       {rateLimit.message ? (
-        <Alert tone="rate-limited">
+        <Alert ref={noticeRef} tabIndex={-1} tone="rate-limited">
           <AlertTitle>{rateLimit.message}</AlertTitle>
         </Alert>
       ) : null}
@@ -173,7 +188,9 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
         noValidate
         onSubmit={(event) => {
           setWrongCode(undefined);
+          setSummaryShown(false);
           void handleSubmit(onValid, () => {
+            setSummaryShown(true);
             setSummaryRequests((requests) => requests + 1);
           })(event);
         }}
@@ -182,40 +199,67 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
           <Controller
             name="code"
             control={control}
-            render={({ field, fieldState }) => (
-              <Field data-invalid={fieldState.invalid || Boolean(wrongCode)}>
-                <FieldLabel htmlFor="code">6-digit one-time code</FieldLabel>
-                {/* One plain input, so paste and one-time-code autofill work and nothing hides the focus ring. */}
-                <Input
-                  {...field}
-                  id="code"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  spellCheck={false}
-                  aria-invalid={fieldState.invalid || Boolean(wrongCode)}
-                  aria-describedby={message ? 'code-error' : undefined}
-                />
-                {message ? (
-                  <FieldError id="code-error" role={wrongCode ? 'alert' : undefined}>
-                    {message}
-                  </FieldError>
-                ) : null}
-              </Field>
-            )}
+            render={({ field, fieldState }) => {
+              const invalid = fieldState.invalid || Boolean(wrongCode);
+              return (
+                <Field data-invalid={invalid}>
+                  <FieldLabel htmlFor="code">6-digit one-time code</FieldLabel>
+                  {/* Six cells over one real input (input-otp), so paste and one-time-code autofill work. The
+                      cells are decoration: the input is the control, and the label and hint describe it. */}
+                  <InputOTP
+                    {...field}
+                    id="code"
+                    maxLength={codeLength}
+                    pattern={REGEXP_ONLY_DIGITS}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pushPasswordManagerStrategy="none"
+                    pasteTransformer={transformPastedCode}
+                    onPaste={(event) => {
+                      // input-otp has dropped an over-long paste whole; say why, under the field and to a screen reader
+                      // (WCAG 2.2 SC 4.1.3), without the summary or a focus move.
+                      if (isOverlongCode(event.clipboardData.getData('text/plain'))) {
+                        setError('code', { message: linkingMessages.code });
+                        announce(linkingMessages.code);
+                      }
+                    }}
+                    disabled={rateLimit.isWaiting}
+                    aria-invalid={invalid}
+                    aria-describedby={message ? 'code-hint code-error' : 'code-hint'}
+                  >
+                    <InputOTPGroup aria-hidden="true">
+                      {cellIndexes.map((index) => (
+                        <InputOTPSlot key={index} index={index} aria-invalid={invalid} />
+                      ))}
+                    </InputOTPGroup>
+                  </InputOTP>
+                  <FieldDescription id="code-hint" className="text-caption">
+                    The code expires 5 minutes after we send it. You can paste it, or let your phone
+                    fill it in.
+                  </FieldDescription>
+                  {message ? (
+                    <FieldError id="code-error" role={wrongCode ? 'alert' : undefined}>
+                      {message}
+                    </FieldError>
+                  ) : null}
+                </Field>
+              );
+            }}
           />
 
-          {/* `aria-disabled`, not `disabled`, so the button keeps focus while it waits. */}
-          <Button type="submit" aria-disabled={mutation.isPending || rateLimit.isWaiting}>
+          {/* A rate limit disables the form; a pending request is only aria-disabled, so the button keeps focus. */}
+          <Button
+            ref={submitRef}
+            type="submit"
+            disabled={rateLimit.isWaiting}
+            aria-disabled={mutation.isPending}
+          >
             Verify
           </Button>
         </FieldGroup>
       </form>
 
-      <p className="text-caption text-muted-foreground">
-        Didn&apos;t get a code? <Link to="/link">Start again</Link>
-      </p>
-      <ContactHelp />
+      <ContactHelp offerStartAgain />
     </Page>
   );
 }
