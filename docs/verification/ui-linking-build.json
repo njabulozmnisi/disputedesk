@@ -1,0 +1,446 @@
+{
+ "status": "built",
+ "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a718a1e0fc36c5203",
+ "part": "frontend and gateway",
+ "base": "git 2f897c37b3b58b11119c6126123213f98defeb43 plus the uncommitted ui-tokens-icons (r3-fixed, without docs and e2e) and ui-notices-states (only, r1) patches; the diff hash covers both bases plus this story",
+ "criteria": [
+  {
+   "id": "AC1",
+   "requirement": "FR-4, FR-6; HANDOFF 3.4",
+   "test": [
+    "frontend/src/features/linking/OtpScreen.test.tsx > screen 2b, the code form > shows \"Link your login, step 2 of 2\" above the heading and ends with the help block",
+    "frontend/src/features/linking/DetailsScreen.test.tsx > screen 2a, the details form > shows \"Link your login, step 1 of 2\" above the heading",
+    "frontend/src/features/linking/OtpScreen.test.tsx > screen 2b, wrong codes and the lockout > shows the tries left, empties the input and focuses it, then locks after the third (locked state shows no step)"
+   ]
+  },
+  {
+   "id": "AC2",
+   "requirement": "NFR-CODE-5; HANDOFF 3.9",
+   "test": [
+    "frontend/src/packagePins.test.ts > package.json > pins every dependency to an exact version (input-otp 1.5.0)",
+    "frontend/src/components/ui/input-otp.test.tsx > InputOTP > exports the three parts the code form uses and no separator"
+   ]
+  },
+  {
+   "id": "AC3",
+   "requirement": "FR-7, FR-8; NFR-CODE-6; WCAG 3.2.2, 3.3.8",
+   "test": [
+    "frontend/src/features/linking/OtpScreen.test.tsx > has one real input for the code with autofill, a numeric keypad and a limit of six digits",
+    "frontend/src/features/linking/OtpScreen.test.tsx > draws six empty cells in a group that is hidden from assistive technology",
+    "frontend/src/features/linking/OtpScreen.test.tsx > describes the input with the help text under the cells, and adds the error when there is one",
+    "frontend/src/features/linking/OtpScreen.test.tsx > does not set up the password-manager probe, which would call elementFromPoint",
+    "frontend/src/features/linking/OtpScreen.test.tsx > fills the six cells by pasting \"481516\" / \"481 516\", with the spaces removed, and sends nothing",
+    "frontend/src/features/linking/OtpScreen.test.tsx > ignores a typed 7th digit and sends the first six",
+    "frontend/src/features/linking/OtpScreen.test.tsx > drops a typed letter or space and keeps the digits",
+    "frontend/src/features/linking/OtpScreen.test.tsx > refuses a pasted 7 digits into an empty field: the cells stay empty, the error shows, nothing is sent",
+    "frontend/src/features/linking/OtpScreen.test.tsx > refuses a pasted 7 digits with a space into a field holding 481: it keeps 481",
+    "frontend/src/features/linking/OtpScreen.test.tsx > sends a pasted 6 digits on Verify, with no error shown before",
+    "frontend/src/features/linking/OtpScreen.test.tsx > ignores a paste of \"48151a\" / \"481-516\" / words / Arabic-Indic digits whole and leaves the field empty",
+    "frontend/src/features/linking/OtpScreen.test.tsx > replaces the last digit and truncates a paste into a full field",
+    "frontend/src/features/linking/OtpScreen.test.tsx > takes a programmatic fill, as autofill does, and sends nothing until Verify",
+    "frontend/src/features/linking/OtpScreen.test.tsx > refuses five digits / a letter typed after five digits / empty with the summary focused, and sends nothing",
+    "frontend/src/features/linking/linkSchema.test.ts > a pasted code (isOverlongCode and transformPastedCode, each side of the 6 digit bound)",
+    "frontend/src/features/linking/OtpScreen.test.tsx > refuses a paste of \"4815167\\n\" / \"4815167\\r\\n\" / \"481516 7\" / \"4815167a\", which holds 7 digits: the cells stay empty, the error shows and is announced, nothing is sent",
+    "frontend/src/features/linking/OtpScreen.test.tsx > accepts a paste of \"481516\\n\" / \"481516a\", which holds 6 digits: the cells show 481516, no error, nothing announced",
+    "frontend/src/features/linking/OtpScreen.test.tsx > keeps focus in the field, and mounts no summary, when a 7-digit paste follows an earlier submit",
+    "frontend/src/features/linking/OtpScreen.test.tsx > keeps the summary it already shows, and its focus, when a 7-digit paste follows an invalid submit",
+    "frontend/src/features/linking/linkSchema.test.ts > a pasted code > is over-long when %j holds more than 6 digits, whatever else it holds (and the not-over-long list: 481516a, 481516\\n)"
+   ]
+  },
+  {
+   "id": "AC4",
+   "requirement": "NFR-CODE-6; HANDOFF 3.9; WCAG 2.4.7, 2.3.3",
+   "test": [
+    "frontend/src/components/ui/input-otp.test.tsx > InputOTP (cell size and radius, active ring and halo, destructive border, caret motion-reduce, disabled look)",
+    "frontend/src/features/linking/OtpScreen.test.tsx > marks the cells invalid together with the input after a refused submit",
+    "Chromium pass against vite preview: computed 24px/800 digits, 12px radius, 2px ring border and 4px primary-subtle halo, 48x56 cells at 360, 56x64 at 1280"
+   ]
+  },
+  {
+   "id": "AC5",
+   "requirement": "NFR-SEC-7; AD-23; decision 2026-11-08 D1",
+   "test": [
+    "frontend/src/features/disputes/raise/RaiseScreen.test.tsx > content security policy > has no a style attribute / a style element / an inline script / raw HTML in the app source",
+    "Chromium pass with the gateway CSP: 0 securitypolicyviolation events with the empty-string hash, 1 (style-src-elem inline) without it",
+    "DisputeDesk.PlatformTests.GatewayTests.AppOrigin_ContentSecurityPolicies_HoldBaseUriNone (aws and local images: the exact app CSP with style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; the Scalar CSP unchanged)",
+    "DisputeDesk.PlatformTests.GatewayTests.AppOrigin_StyleSrcHash_IsTheHashOfTheEmptyString (the template hash equals 'sha256-' + Convert.ToBase64String(SHA256.HashData([])), recomputed)",
+    "AD-23 text: the supervisor; the e2e zero-violation test on /link/otp: QA"
+   ]
+  },
+  {
+   "id": "AC6",
+   "requirement": "FR-8; EXPERIENCE Rate limited; WCAG 2.4.3",
+   "test": [
+    "frontend/src/features/linking/OtpScreen.test.tsx > screen 2b, rate limited > says the wait, keeps the code, blocks Verify for the exact seconds, then works again",
+    "frontend/src/features/linking/OtpScreen.test.tsx > screen 2b, rate limited > moves focus to the notice after Enter in the field, as the focused input becomes disabled",
+    "frontend/src/features/linking/OtpScreen.test.tsx > screen 2b, rate limited > gives focus to Verify when the wait ends while the notice still has it",
+    "frontend/src/features/linking/OtpScreen.test.tsx > screen 2b, rate limited > leaves focus where the person moved it when the wait ends",
+    "frontend/src/features/linking/OtpScreen.test.tsx > screen 2b, rate limited > says \"Try again later\" and keeps Verify usable when there is no Retry-After",
+    "frontend/src/features/linking/OtpScreen.test.tsx > screen 2b, the code form > blocks a second press while the first verify is pending (aria-disabled, focus kept)",
+    "frontend/src/features/linking/DetailsScreen.test.tsx > screen 2a, rate limited (blocks the button for the exact seconds, Enter in a field, end of wait with focus on the notice and elsewhere, no Retry-After) and screen 2a, the details form > blocks a second press while the first start is pending",
+    "frontend/src/components/ui/disabled.test.tsx > a disabled Button / a disabled Input",
+    "frontend/src/components/ui/disabled.test.tsx > a disabled Button > is drawn muted, not faded, in the %s variant (now asserts disabled:border-border)"
+   ]
+  },
+  {
+   "id": "AC7",
+   "requirement": "WCAG 3.2.6",
+   "test": [
+    "frontend/src/features/linking/OtpScreen.test.tsx > screen 2b, the code form > shows \"Link your login, step 2 of 2\" above the heading and ends with the help block",
+    "frontend/src/features/linking/OtpScreen.test.tsx > screen 2b, wrong codes and the lockout > shows the tries left ... then locks after the third (help region and heading order in the locked state)",
+    "frontend/src/features/linking/OtpScreen.test.tsx > screen 2b, rate limited > keeps the help block, with \"Start again\", while rate limited",
+    "frontend/src/features/linking/DetailsScreen.test.tsx > screen 2a, the details form > ends with the help block: a region named \"Need help?\", h1 then h2, and no \"Start again\"",
+    "frontend/src/features/linking/DetailsScreen.test.tsx > screen 2a, rate limited > keeps the help block, h1 then h2, while rate limited"
+   ]
+  }
+ ],
+ "story_files": [
+  "frontend/package.json",
+  "frontend/package-lock.json",
+  "frontend/src/components/ui/input-otp.tsx",
+  "frontend/src/components/ui/input-otp.test.tsx",
+  "frontend/src/components/ui/disabled.test.tsx",
+  "frontend/src/components/ui/button.tsx",
+  "frontend/src/components/ui/input.tsx",
+  "frontend/src/components/ui/alert-dialog.tsx",
+  "frontend/src/features/disputes/raise/RaiseScreen.test.tsx",
+  "frontend/src/features/linking/ContactHelp.tsx",
+  "frontend/src/features/linking/DetailsScreen.tsx",
+  "frontend/src/features/linking/DetailsScreen.test.tsx",
+  "frontend/src/features/linking/OtpScreen.tsx",
+  "frontend/src/features/linking/OtpScreen.test.tsx",
+  "frontend/src/features/linking/linkSchema.ts",
+  "frontend/src/features/linking/linkSchema.test.ts",
+  "frontend/src/features/linking/useRateLimit.ts",
+  "infra/images/gateway/templates/security-headers.conf.template",
+  "infra/tests/DisputeDesk.PlatformTests/GatewayTests.cs"
+ ],
+ "smoke": "Fix round 1: throwaway headless Chromium (Playwright from the main checkout's e2e install, Chromium 1248) against vite preview on :4173 with /api stubbed by page.route (session unlinked, antiforgery, verify answering otp-incorrect 422 with attemptsRemaining 2, OTLP 204), 360px wide, real clipboard paste (navigator.clipboard.writeText then ControlOrMeta+V). Refused, with the six cells empty, value empty, field error 'Enter the 6-digit code.', the live region (role=status) announcing it, no summary, focus in the code input and 0 verify requests: '4815167\\n', '4815167a', '481516 7'. Accepted, cells 4|8|1|5|1|6, no error, empty live region, 0 requests until Verify: '481516\\n', '481516a'. Sequence: invalid submit (summary mounted, focus on the summary), then 481516 and Verify answered otp-incorrect (summary gone, focus in the code input, 'You have 2 tries left', 1 request), then a 7-digit paste: focus stays in the code input, no summary, field error and announcement shown, still 1 request. axe-core (wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa): 0 violations after each of the five pastes and after the sequence. The script was deleted and the preview server stopped. Not run against the real API or the Compose stack (no stack lock taken). The round-0 smoke (320, 360 and 1280px, 200% font, 429 and 409 states) is not repeated: the changes touch only the paste path, the summary mount and the disabled border. Gateway part unchanged: security-headers.conf.template and GatewayTests.cs compared byte for byte (cmp) against the previous worktree, identical.",
+ "standards": [
+  {
+   "mechanism": "Six cells over one real input (input-otp props maxLength, pattern, pasteTransformer, onPaste, pushPasswordManagerStrategy), manual install of the shadcn Input OTP component",
+   "source": "https://ui.shadcn.com/docs/components/input-otp"
+  },
+  {
+   "mechanism": "input-otp documented props and its 1.5.0 paste listener (the over-long paste refused through pattern)",
+   "source": "https://github.com/guilhermerodz/input-otp"
+  },
+  {
+   "mechanism": "One-time-code autofill",
+   "source": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/autocomplete"
+  },
+  {
+   "mechanism": "Field error from a paste: React Hook Form setError",
+   "source": "https://react-hook-form.com/docs/useform/seterror"
+  },
+  {
+   "mechanism": "The HTML disabled attribute for the rate-limited form",
+   "source": "https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#enabling-and-disabling-form-controls:-the-disabled-attribute"
+  },
+  {
+   "mechanism": "Focus moves to the notice and back to the submit button, never to body",
+   "source": "https://www.w3.org/WAI/WCAG22/Understanding/focus-order"
+  },
+  {
+   "mechanism": "Help block as a named region, same wording on every state",
+   "source": "https://www.w3.org/WAI/WCAG22/Understanding/consistent-help"
+  },
+  {
+   "mechanism": "Caret stops blinking under prefers-reduced-motion (Tailwind motion-reduce)",
+   "source": "https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions"
+  },
+  {
+   "mechanism": "Visible focus: the active cell ring and halo",
+   "source": "https://www.w3.org/WAI/WCAG22/Understanding/focus-visible"
+  },
+  {
+   "mechanism": "Refs passed into a hook, because the React compiler lint (react-hooks/refs) rejects reading a hook-returned ref object in render",
+   "source": "https://react.dev/reference/react/useRef"
+  },
+  {
+   "mechanism": "Step indicator text label with decorative bar",
+   "source": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-content"
+  },
+  {
+   "mechanism": "Empty style element admitted by a CSP hash-source (gateway part, backend builder)",
+   "source": "https://www.w3.org/TR/CSP3/#grammardef-hash-source"
+  },
+  {
+   "mechanism": "CSP style-src hash-source admitting only an empty style element (gateway template)",
+   "source": "https://www.w3.org/TR/CSP3/#grammardef-hash-source"
+  },
+  {
+   "mechanism": "style-src directive and its hash values",
+   "source": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src"
+  },
+  {
+   "mechanism": "The empty-string hash recomputed in the test with SHA256.HashData",
+   "source": "https://learn.microsoft.com/dotnet/api/system.security.cryptography.sha256.hashdata?view=net-10.0"
+  }
+ ],
+ "breaks": [
+  {
+   "id": "step-indicator-removed",
+   "criterion": "AC1",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -148,7 +148,6 @@\n   return (\n     <Page width=\"form\">\n       <div className=\"grid gap-2\">\n-        <StepProgress label=\"Link your login, step 2 of 2\" step={2} />\n         <h1\n           ref={headingRef}\n           tabIndex={-1}\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"above the heading and ends with the help block\"",
+   "expect": "fails"
+  },
+  {
+   "id": "input-otp-unpinned",
+   "criterion": "AC2",
+   "patch": "--- a/frontend/package.json\n+++ b/frontend/package.json\n@@ -25,7 +25,7 @@\n     \"@tanstack/react-router\": \"1.170.46\",\n     \"class-variance-authority\": \"0.7.1\",\n     \"clsx\": \"2.1.1\",\n-    \"input-otp\": \"1.5.0\",\n+    \"input-otp\": \"^1.5.0\",\n     \"lucide-react\": \"1.70.0\",\n     \"radix-ui\": \"1.8.1\",\n     \"react\": \"19.3.1\",\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/packagePins.test.ts -t \"pins every dependency\"",
+   "expect": "fails"
+  },
+  {
+   "id": "paste-transformer-removed",
+   "criterion": "AC3",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -214,7 +214,6 @@\n                     inputMode=\"numeric\"\n                     autoComplete=\"one-time-code\"\n                     pushPasswordManagerStrategy=\"none\"\n-                    pasteTransformer={transformPastedCode}\n                     onPaste={(event) => {\n                       // input-otp has dropped an over-long paste whole; say why, under the field and to a screen reader\n                       // (WCAG 2.2 SC 4.1.3), without the summary or a focus move.\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"refuses a pasted 7 digits into an empty field\"",
+   "expect": "fails"
+  },
+  {
+   "id": "overlong-paste-error-removed",
+   "criterion": "AC3",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -218,7 +218,7 @@\n                     onPaste={(event) => {\n                       // input-otp has dropped an over-long paste whole; say why, under the field and to a screen reader\n                       // (WCAG 2.2 SC 4.1.3), without the summary or a focus move.\n-                      if (isOverlongCode(event.clipboardData.getData('text/plain'))) {\n+                      if (false) {\n                         setError('code', { message: linkingMessages.code });\n                         announce(linkingMessages.code);\n                       }\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"refuses a pasted 7 digits with a space\"",
+   "expect": "fails"
+  },
+  {
+   "id": "password-manager-strategy-removed",
+   "criterion": "AC3",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -213,7 +213,6 @@\n                     pattern={REGEXP_ONLY_DIGITS}\n                     inputMode=\"numeric\"\n                     autoComplete=\"one-time-code\"\n-                    pushPasswordManagerStrategy=\"none\"\n                     pasteTransformer={transformPastedCode}\n                     onPaste={(event) => {\n                       // input-otp has dropped an over-long paste whole; say why, under the field and to a screen reader\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"does not set up the password-manager probe\"",
+   "expect": "fails"
+  },
+  {
+   "id": "max-length-widened",
+   "criterion": "AC3",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -204,7 +204,7 @@\n                   <InputOTP\n                     {...field}\n                     id=\"code\"\n-                    maxLength={codeLength}\n+                    maxLength={codeLength + 1}\n                     pattern={REGEXP_ONLY_DIGITS}\n                     inputMode=\"numeric\"\n                     autoComplete=\"one-time-code\"\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"ignores a typed 7th digit\"",
+   "expect": "fails"
+  },
+  {
+   "id": "cells-not-hidden",
+   "criterion": "AC3",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -220,7 +220,7 @@\n                     aria-invalid={invalid}\n                     aria-describedby={message ? 'code-hint code-error' : 'code-hint'}\n                   >\n-                    <InputOTPGroup aria-hidden=\"true\">\n+                    <InputOTPGroup>\n                       {cellIndexes.map((index) => (\n                         <InputOTPSlot key={index} index={index} aria-invalid={invalid} />\n                       ))}\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"draws six empty cells in a group that is hidden\"",
+   "expect": "fails"
+  },
+  {
+   "id": "hint-not-described",
+   "criterion": "AC3",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -218,7 +218,7 @@\n                     }}\n                     disabled={rateLimit.isWaiting}\n                     aria-invalid={invalid}\n-                    aria-describedby={message ? 'code-hint code-error' : 'code-hint'}\n+                    aria-describedby={message ? 'code-error' : undefined}\n                   >\n                     <InputOTPGroup aria-hidden=\"true\">\n                       {cellIndexes.map((index) => (\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"describes the input with the help text under the cells\"",
+   "expect": "fails"
+  },
+  {
+   "id": "caret-keeps-blinking",
+   "criterion": "AC4",
+   "patch": "--- a/frontend/src/components/ui/input-otp.tsx\n+++ b/frontend/src/components/ui/input-otp.tsx\n@@ -67,7 +67,7 @@\n       {char}\n       {hasFakeCaret && (\n         <div className=\"pointer-events-none absolute inset-0 flex items-center justify-center\">\n-          <div className=\"h-4 w-px animate-caret-blink bg-foreground motion-reduce:animate-none\" />\n+          <div className=\"h-4 w-px animate-caret-blink bg-foreground\" />\n         </div>\n       )}\n     </div>\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/components/ui/input-otp.test.tsx -t \"stops the fake caret blinking\"",
+   "expect": "fails"
+  },
+  {
+   "id": "cells-not-invalid",
+   "criterion": "AC4",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -222,7 +222,7 @@\n                   >\n                     <InputOTPGroup aria-hidden=\"true\">\n                       {cellIndexes.map((index) => (\n-                        <InputOTPSlot key={index} index={index} aria-invalid={invalid} />\n+                        <InputOTPSlot key={index} index={index} />\n                       ))}\n                     </InputOTPGroup>\n                   </InputOTP>\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"marks the cells invalid together with the input\"",
+   "expect": "fails"
+  },
+  {
+   "id": "style-attribute-added",
+   "criterion": "AC5",
+   "patch": "--- a/frontend/src/features/linking/ContactHelp.tsx\n+++ b/frontend/src/features/linking/ContactHelp.tsx\n@@ -6,7 +6,7 @@\n  */\n export function ContactHelp({ offerStartAgain = false }: { offerStartAgain?: boolean }) {\n   return (\n-    <section aria-labelledby=\"help-heading\" className=\"grid gap-2 border-t border-border pt-6\">\n+    <section style={{ margin: 0 }} aria-labelledby=\"help-heading\" className=\"grid gap-2 border-t border-border pt-6\">\n       <h2 id=\"help-heading\" className=\"text-body font-strong\">\n         Need help?\n       </h2>\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/raise/RaiseScreen.test.tsx -t \"a style attribute\"",
+   "expect": "fails"
+  },
+  {
+   "id": "verify-not-disabled",
+   "criterion": "AC6",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -244,7 +244,6 @@\n           <Button\n             ref={submitRef}\n             type=\"submit\"\n-            disabled={rateLimit.isWaiting}\n             aria-disabled={mutation.isPending}\n           >\n             Verify\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"says the wait, keeps the code, blocks Verify\"",
+   "expect": "fails"
+  },
+  {
+   "id": "continue-not-disabled",
+   "criterion": "AC6",
+   "patch": "--- a/frontend/src/features/linking/DetailsScreen.tsx\n+++ b/frontend/src/features/linking/DetailsScreen.tsx\n@@ -180,7 +180,6 @@\n           <Button\n             ref={submitRef}\n             type=\"submit\"\n-            disabled={rateLimit.isWaiting}\n             aria-disabled={mutation.isPending}\n           >\n             Continue\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/DetailsScreen.test.tsx -t \"says the wait in minutes, blocks the button\"",
+   "expect": "fails"
+  },
+  {
+   "id": "focus-not-moved-to-notice",
+   "criterion": "AC6",
+   "patch": "--- a/frontend/src/features/linking/useRateLimit.ts\n+++ b/frontend/src/features/linking/useRateLimit.ts\n@@ -38,7 +38,6 @@\n   // Runs after the render that shows or removes the notice, so the notice exists and the submit button is enabled.\n   useEffect(() => {\n     if (isWaiting) {\n-      noticeRef.current?.focus();\n     } else if (noticeHadFocusAtEnd.current) {\n       noticeHadFocusAtEnd.current = false;\n       submitRef.current?.focus();\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"moves focus to the notice after Enter in the field\"",
+   "expect": "fails"
+  },
+  {
+   "id": "focus-not-returned-to-submit",
+   "criterion": "AC6",
+   "patch": "--- a/frontend/src/features/linking/useRateLimit.ts\n+++ b/frontend/src/features/linking/useRateLimit.ts\n@@ -41,7 +41,6 @@\n       noticeRef.current?.focus();\n     } else if (noticeHadFocusAtEnd.current) {\n       noticeHadFocusAtEnd.current = false;\n-      submitRef.current?.focus();\n     }\n   }, [isWaiting, noticeRef, submitRef]);\n \n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"gives focus to Verify when the wait ends\"",
+   "expect": "fails"
+  },
+  {
+   "id": "focus-always-taken-at-end",
+   "criterion": "AC6",
+   "patch": "--- a/frontend/src/features/linking/useRateLimit.ts\n+++ b/frontend/src/features/linking/useRateLimit.ts\n@@ -27,7 +27,7 @@\n   useEffect(() => {\n     if (limit?.seconds === undefined) return;\n     const timer = setTimeout(() => {\n-      noticeHadFocusAtEnd.current = document.activeElement === noticeRef.current;\n+      noticeHadFocusAtEnd.current = true;\n       setLimit(undefined);\n     }, limit.seconds * 1000);\n     return () => {\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"leaves focus where the person moved it when the wait ends\"",
+   "expect": "fails"
+  },
+  {
+   "id": "disabled-button-faded",
+   "criterion": "AC6",
+   "patch": "--- a/frontend/src/components/ui/button.tsx\n+++ b/frontend/src/components/ui/button.tsx\n@@ -8,7 +8,7 @@\n // tall; primary is filled, secondary is outlined. `compact` is the 44px pill used in the header. A disabled button is\n // drawn with the muted fill, border edge and text, never at reduced opacity (HANDOFF 3.9); `aria-disabled` is the pending look.\n const buttonVariants = cva(\n-  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border-[1.5px] border-transparent font-strong whitespace-nowrap no-underline transition-colors aria-disabled:cursor-progress aria-disabled:opacity-70 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground',\n+  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border-[1.5px] border-transparent font-strong whitespace-nowrap no-underline transition-colors aria-disabled:cursor-progress aria-disabled:opacity-70 disabled:cursor-not-allowed disabled:border-border disabled:opacity-50 disabled:text-muted-foreground',\n   {\n     variants: {\n       variant: {\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/components/ui/disabled.test.tsx -t \"is drawn muted, not faded\"",
+   "expect": "fails"
+  },
+  {
+   "id": "help-region-unnamed",
+   "criterion": "AC7",
+   "patch": "--- a/frontend/src/features/linking/ContactHelp.tsx\n+++ b/frontend/src/features/linking/ContactHelp.tsx\n@@ -6,7 +6,7 @@\n  */\n export function ContactHelp({ offerStartAgain = false }: { offerStartAgain?: boolean }) {\n   return (\n-    <section aria-labelledby=\"help-heading\" className=\"grid gap-2 border-t border-border pt-6\">\n+    <section className=\"grid gap-2 border-t border-border pt-6\">\n       <h2 id=\"help-heading\" className=\"text-body font-strong\">\n         Need help?\n       </h2>\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/DetailsScreen.test.tsx -t \"ends with the help block\"",
+   "expect": "fails"
+  },
+  {
+   "id": "start-again-missing-from-help",
+   "criterion": "AC7",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -252,7 +252,7 @@\n         </FieldGroup>\n       </form>\n \n-      <ContactHelp offerStartAgain />\n+      <ContactHelp />\n     </Page>\n   );\n }\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"keeps the help block, with\"",
+   "expect": "fails"
+  },
+  {
+   "id": "app-csp-hash-removed",
+   "criterion": "AC5",
+   "patch": "--- a/infra/images/gateway/templates/security-headers.conf.template\n+++ b/infra/images/gateway/templates/security-headers.conf.template\n@@ -5,7 +5,7 @@\n # base element, so none may be injected (CSP Level 3; ASVS 5.0 V3.4.3).\n # style-src's one hash is the SHA-256 of the empty string (CSP Level 3 hash-source): it admits only an empty style\n # element, the one input-otp appends and fills through the CSSOM, so no inline CSS text gets through (ui-linking).\n-add_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' ${GATEWAY_AUTH_ORIGIN}\" always;\n+add_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' ${GATEWAY_AUTH_ORIGIN}\" always;\n add_header X-Content-Type-Options \"nosniff\" always;\n add_header X-Frame-Options \"DENY\" always;\n add_header Referrer-Policy \"strict-origin-when-cross-origin\" always;\n",
+   "test_method": "DisputeDesk.PlatformTests.GatewayTests.AppOrigin_ContentSecurityPolicies_HoldBaseUriNone",
+   "expect": "fails"
+  },
+  {
+   "id": "app-csp-wrong-hash",
+   "criterion": "AC5",
+   "patch": "--- a/infra/images/gateway/templates/security-headers.conf.template\n+++ b/infra/images/gateway/templates/security-headers.conf.template\n@@ -5,7 +5,7 @@\n # base element, so none may be injected (CSP Level 3; ASVS 5.0 V3.4.3).\n # style-src's one hash is the SHA-256 of the empty string (CSP Level 3 hash-source): it admits only an empty style\n # element, the one input-otp appends and fills through the CSSOM, so no inline CSS text gets through (ui-linking).\n-add_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' ${GATEWAY_AUTH_ORIGIN}\" always;\n+add_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'sha256-ypeBEsobvcr6wjGzmiPcTaeG7/gUfE5yuYB3ha/uSLs='; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' ${GATEWAY_AUTH_ORIGIN}\" always;\n add_header X-Content-Type-Options \"nosniff\" always;\n add_header X-Frame-Options \"DENY\" always;\n add_header Referrer-Policy \"strict-origin-when-cross-origin\" always;\n",
+   "test_method": "DisputeDesk.PlatformTests.GatewayTests.AppOrigin_StyleSrcHash_IsTheHashOfTheEmptyString",
+   "expect": "fails"
+  },
+  {
+   "id": "paste-counts-only-digit-only-text",
+   "criterion": "AC3",
+   "patch": "--- a/frontend/src/features/linking/linkSchema.ts\n+++ b/frontend/src/features/linking/linkSchema.ts\n@@ -44,8 +44,8 @@\n  * spends an attempt on one. A paste with exactly 6 digits and other characters (\"481516\\n\") is accepted.\n  */\n export function isOverlongCode(pasted: string): boolean {\n-  const digitCount = (pasted.match(/[0-9]/g) ?? []).length;\n-  return digitCount > codeLength;\n+  const withoutSpaces = codeFrom(pasted);\n+  return /^[0-9]+$/.test(withoutSpaces) && withoutSpaces.length > codeLength;\n }\n \n /**\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"refuses a paste of\"",
+   "expect": "fails"
+  },
+  {
+   "id": "refused-paste-not-announced",
+   "criterion": "AC3",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -220,7 +220,6 @@\n                       // (WCAG 2.2 SC 4.1.3), without the summary or a focus move.\n                       if (isOverlongCode(event.clipboardData.getData('text/plain'))) {\n                         setError('code', { message: linkingMessages.code });\n-                        announce(linkingMessages.code);\n                       }\n                     }}\n                     disabled={rateLimit.isWaiting}\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"refuses a paste of\"",
+   "expect": "fails"
+  },
+  {
+   "id": "paste-error-mounts-summary",
+   "criterion": "AC3",
+   "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -166,7 +166,7 @@\n         for you.\n       </p>\n \n-      {summaryShown && codeError ? (\n+      {summaryRequests > 0 && codeError ? (\n         <ErrorSummary\n           items={[{ fieldId: 'code', message: codeError }]}\n           requests={summaryRequests}\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/linking/OtpScreen.test.tsx -t \"keeps focus in the field, and mounts no summary\"",
+   "expect": "fails"
+  },
+  {
+   "id": "disabled-button-transparent-edge",
+   "criterion": "AC6",
+   "patch": "--- a/frontend/src/components/ui/button.tsx\n+++ b/frontend/src/components/ui/button.tsx\n@@ -8,7 +8,7 @@\n // tall; primary is filled, secondary is outlined. `compact` is the 44px pill used in the header. A disabled button is\n // drawn with the muted fill, border edge and text, never at reduced opacity (HANDOFF 3.9); `aria-disabled` is the pending look.\n const buttonVariants = cva(\n-  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border-[1.5px] border-transparent font-strong whitespace-nowrap no-underline transition-colors aria-disabled:cursor-progress aria-disabled:opacity-70 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground',\n+  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border-[1.5px] border-transparent font-strong whitespace-nowrap no-underline transition-colors aria-disabled:cursor-progress aria-disabled:opacity-70 disabled:cursor-not-allowed disabled:border-transparent disabled:bg-muted disabled:text-muted-foreground',\n   {\n     variants: {\n       variant: {\n",
+   "test_method": "cd frontend && npm ci --silent && npx vitest run src/components/ui/disabled.test.tsx -t \"is drawn muted, not faded\"",
+   "expect": "fails"
+  }
+ ],
+ "test_results": {
+  "files": [
+   "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a718a1e0fc36c5203/TestResults/frontend-junit.xml",
+   "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-ac84704905088292a/TestResults/njabulomnisi_Njabulos-Ayoba-MacBook-Pro_2026-11-08_18_01_15.412034.trx"
+  ],
+  "diff_hash": "bc234a527a9a",
+  "base": "2f897c37b3b58b11119c6126123213f98defeb43",
+  "platform_command": "from infra/tests: scripts/test-lock.sh run stack ui-linking-gateway -- dotnet test --project DisputeDesk.PlatformTests --report-xunit-trx --results-directory <worktree>/TestResults",
+  "platform_summary": "440 total, 440 passed, 0 failed, 0 skipped (macOS, Docker Desktop); that run is the previous round's, in the previous worktree (path above). The gateway files are byte-identical in this worktree (cmp), so it still covers them. Not re-run.",
+  "frontend_summary": "One full Vitest run in this worktree: 41 files, 788 tests, 788 passed, 0 failed, run with --maxWorkers=3 because the machine was loaded (load average about 27). tsc --noEmit, eslint . and prettier --check . clean; npm run build passed (chunk-size warning only).",
+  "frontend_note": "frontend-junit.xml covers diff hash bc234a527a9a: the whole tree (both UI bases, the frontend part and the gateway part, fix round 1 applied). Nothing but this record changed after the run."
+ },
+ "evidence": {
+  "package": "input-otp 1.5.0: npm dist-tag latest, maintainer guilhermerodz, repository github.com/guilhermerodz/input-otp, MIT, no dependencies, no install scripts, peer react ^16.8 || ^17 || ^18 || ^19, 26,689,052 downloads in the week to 2026-11-07; pinned exactly in package.json and the lockfile; npm audit --omit=dev: 0 vulnerabilities. shadcn@4.23.0 add input-otp was run: it added a second package, cn, and imported cn from \"cn\", so it was reverted and the component copied by hand with cn from @/lib/utils (the spec rule).",
+  "csp_chromium_156": "input-otp appends one empty <style id=\"input-otp-style\"> on mount and fills it with 5 rules through the CSSOM (insertRule). Under style-src self only: 1 securitypolicyviolation (style-src-elem, blockedURI inline), the style element has no sheet (null), one console error, digits still show. Under style-src self plus the empty-string hash sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=: 0 violations, 0 console errors, sheet present with 5 rules. React inline style props (CSSOM) raise no violation.",
+  "numbers": "Cells: 41x56 at 320, 48x56 at 360, 56x64 at 1280, 29x112 at 320 with a 200% root font. Active cell: 2px border rgb(43,87,201) (ring token) and a 4px halo rgb(232,238,251) (primary-subtle); digits 24px/800; radius 12px. Invalid cell border rgb(180,35,24) (destructive). Disabled (rate limited) cell and button: bg rgb(238,240,243) (muted), text rgb(88,96,112) (muted-foreground), opacity 1, container opacity 1, a hovered disabled button stays muted. Pasted \"481 516\" gives 481516 with no error; typed 4815167 gives 481516; a pasted 7 digits into 48 keeps 48, shows \"Enter the 6-digit code.\" with aria-invalid true and sends 0 requests. After the 1 second wait: focus on Verify (OTP) or Continue (details) when the notice had it, on the Start again link when it had been moved there; never body. Tab walk /link/otp: skip link, DisputeDesk, Sign out, #code (one stop), Verify, Start again. Controls under 44px: none except the visually hidden skip link (1x1) and the inline Start again link (22px, an inline link in a sentence)."
+ },
+ "assumptions": [
+  "The shadcn CLI added the cn package and a cn import from \"cn\", so the spec rule applied: manual installation, cn from @/lib/utils, no other package.",
+  "Disabled cells take the muted look through the container group and group-has-disabled: (a variant on the cells), because has-disabled: on the container cannot style its children; no opacity anywhere.",
+  "text-heading is the colour utility, so the 24px digits use text-(length:--text-heading); lib/utils.ts is untouched and no cn call gets text-label with text-heading.",
+  "The active cell takes a negative 1px margin so the thicker border does not make it 2px wider than its neighbours (flex-basis 0 counts borders); seen in Chromium at 320 before the fix.",
+  "The paste error stays until Verify (React Hook Form revalidates on submit), even if a valid paste follows, as for every other field error.",
+  "Existing assertions changed beyond the spec list: the locked state test (the help is now a region after the surface, not a bare line), typed-entry refusal tests (a typed letter and seven digits), echo checks rescoped as the spec says; the end-of-wait focus checks sit in dedicated tests because a user click on a disabled button moves focus to body, in jsdom and in browsers.",
+  "Not built, outside the spec: the mockup .surface card around the OTP form, the info notice for the neutral sentence, and the muted label of a disabled field (field.tsx is not in Touches).",
+  "useRateLimit takes the notice and submit refs from the screen, because the react-hooks/refs lint rejects reading a ref object that a hook returns.",
+  "Verified in Chromium 156 only; Firefox, WebKit, iOS autofill and real SMS autofill are unverified. A Playwright fill of six digits into the new input and the full e2e suite were not run (QA).",
+  "Gateway: both images read the one template: the Dockerfile copies templates/ to /etc/nginx/templates/ (local) and copies templates/security-headers.conf.template into /etc/nginx/templates-aws/ (AWS); both nginx.conf templates include /etc/nginx/security-headers.conf. The two cases of AppOrigin_ContentSecurityPolicies_HoldBaseUriNone (AWS and local images) prove it by response.",
+  "Gateway: the new hash test is a file test, but it sits in GatewayTests (as the spec names) and so runs with that class's container fixture.",
+  "Gateway: infra/tests/smoke.sh pins only the Scalar CSP exactly and compares the other Scalar headers to the SPA's own, so it needs no change; the e2e CSP expectations (support.ts gatewayContentSecurityPolicy, knownRadixStyleViolation) are QA's per the spec and were not edited.",
+  "Gateway: PlatformTests ran on macOS under the stack lock, not in the Linux SDK container: GatewayTests drive the host Docker daemon, prior gateway builds ran them the same way, and the change touches no shell tooling; CI's ubuntu run is the Linux result.",
+  "Gateway: scripts/security-local.sh not run: no Terraform, Dockerfile or Compose file changed (an nginx header template only). floor-guard clean; secret-scan no leaks; dotnet build of PlatformTests 0 warnings; dotnet format style and whitespace --verify-no-changes clean.",
+  "Gateway security self-check: the header is loosened by exactly the human-decided D1 hash. A hash-source admits only an inline style element whose content hashes to it, so only an empty element; it does not cover style attributes (no unsafe-hashes) and adds no unsafe-inline or nonce. Rules inserted through the CSSOM are not governed by style-src, which is why input-otp works with an empty element, and script-src 'self' still blocks the script any CSSOM injection would need. The security agent reviews this against CSP Level 3 and AD-23.",
+  "input-otp slices a paste to six characters before it checks the pattern, so a paste with exactly 6 digits and other characters is accepted with the rest dropped ('481516a' and '481516\\n' give 481516, as the fix list asks). A paste with more than 6 digits, whatever else it holds, is refused (decision 2026-11-08). A paste whose letters push its first six characters off the digits ('48151a') is still dropped whole by the library with no error, as the spec's Inputs table says.",
+  "A refused paste while the summary from an earlier failed Verify is showing leaves that summary in place and does not move focus; the field error and the announcement are the same words. '481-5167' (7 digits with a hyphen) is now refused as 7 digits.",
+  "Breaks 19 and 20 (gateway PlatformTests) were not re-run here: those files are byte-identical to the previous round's, where they were verified to fail. The other 23 breaks were each applied to this worktree, their Vitest test run and seen to fail, and the patch reversed; breaks 2, 3, 4 and 16 were rewritten because the onPaste comment and the button class changed."
+ ],
+ "open_questions": [
+  "The inline \"Start again\" link in the help block is 22px tall (WCAG 2.5.8 exempts an inline link in a sentence), while the story Verify asks every interactive element to be 44px: QA to confirm the exemption or the link becomes a block-level 44px row.",
+  "Outside this story: at 320px with a 200% root font the header Sign out button overflows (scrollWidth 452 of 320) on every page; the linking content reflows (scrollWidth 320 with the header hidden).",
+  "Outside this story: StartPage.tsx and alert-dialog.tsx use text-heading with font-strong expecting a 24px size, but text-heading is only the colour utility.",
+  "AD-23 in docs/architecture/architecture.md still needs the hash text (criterion 5, third clause): the supervisor writes it, as briefed."
+ ],
+ "conflicts": [],
+ "e2e_for_qa": {
+  "linking-screens.spec.ts": [
+   ":191-235 keyboard pass: visible focus (:211-213, outline or box-shadow of document.activeElement) is false for the OTP input (input-otp sets outline 0 and box-shadow none); check the [data-active=\"true\"] cell: 2px ring border and a 4px primary-subtle box-shadow. :223 the reachable count: a disabled control is not reachable, so it leaves the count only while disabled; the OTP form has one stop for the code (the six cells are aria-hidden).",
+   ":298 getByText \"The code expires 5 minutes after we send it.\" becomes the new help text \"The code expires 5 minutes after we send it. You can paste it, or let your phone fill it in.\"",
+   ":312 fill 12345 (ok); :319 fill 12345a: input-otp refuses a value that fails the digits pattern, so the field is not 12345a; use typed keys and expect 12345, or drop the letter case. :323 and :539 fill with a space (\"481 516\"): fill is not a paste, the change listener refuses the space; dispatch a paste event (clipboardData text/plain \"481 516\") or fill the six digits. Add a 7-digit paste case: the cells keep their value and \"Enter the 6-digit code.\" shows with no request.",
+   ":376 Verify aria-disabled true becomes toBeDisabled(); :378 \"still editable\" fill becomes toBeDisabled() on the code input; :380 the forced click goes. :418 Continue aria-disabled true becomes toBeDisabled(); :419 \"fields stay editable\" becomes toBeDisabled() on the account input; :421 the forced click goes. :473 not.toHaveAttribute aria-disabled becomes toBeEnabled().",
+   ":263, :356 the \"Can't link online? Contact the bank.\" line stays visible (now inside the Need help? region); add the region name and h1 then h2 order for the form, locked and rate-limited states.",
+   "New: with a stubbed 429 and Retry-After 1 on /link and /link/otp, document.activeElement is never body (the notice during the wait, then Verify or Continue); and a zero securitypolicyviolation and no console error check on /link/otp after load, focus, typing and paste with the digits visible in the cells."
+  ],
+  "linking-queue.spec.ts, linking-verify.spec.ts, linking-start.spec.ts, linking-rate-limits.spec.ts": "grep finds no UI entry of the code in these (they call the API); confirm none reads the old single input, the old expiry line or aria-disabled on Verify or Continue.",
+  "support.ts": ":215-217 page.locator(\"#code\").waitFor() and fill(code) work for six digits (id=code is the real input); gatewayContentSecurityPolicy takes the new style-src (gateway part).",
+  "journeys/uj-1.spec.ts": ":62 getByLabel(\"6-digit one-time code\").fill(otp) is six digits, so it should still work; re-run it, since a Playwright fill into input-otp was not run here.",
+  "CSP expectations": "knownRadixStyleViolation in dispute-raise, spa-transactions, dispute-detail, spa-disputes-history and spa-dispute-status-badges specs, and gatewayContentSecurityPolicy in support.ts (read by dispute-raise.spec.ts:726 and spa-transactions.spec.ts:66), take the app CSP with the hash."
+ },
+ "frontend_worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a718a1e0fc36c5203",
+ "gateway_part_for_backend_builder": [
+  "Done: infra/images/gateway/templates/security-headers.conf.template: the app origin CSP style-src is exactly 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; every other directive and the Scalar locations CSP unchanged; both gateway images (local and AWS) read this template.",
+  "Done: infra/tests/DisputeDesk.PlatformTests/GatewayTests.cs: AppOrigin_ContentSecurityPolicies_HoldBaseUriNone asserts the exact new app CSP; AppOrigin_StyleSrcHash_IsTheHashOfTheEmptyString checks the template hash against sha256- plus Convert.ToBase64String(SHA256.HashData([])), recomputed in the test.",
+  "Open, for the supervisor: docs/architecture/architecture.md, AD-23 only: state the hash, that it admits only an empty style element, and why (input-otp 1.5.0 appends an empty style element and fills it through the CSSOM). Radix scroll-lock style (CSS text) stays blocked as accepted in story 2.5.",
+  "Chromium 156 evidence for the text: style-src self only gives one style-src-elem violation (blockedURI inline) and a style element with no sheet; with the hash, no violation and 5 rules in the sheet."
+ ],
+ "round": "fix round 1",
+ "fix_round_1": [
+  {
+   "finding": "1 (security M1, review M1)",
+   "fix": "isOverlongCode counts the digits in the pasted text (/[0-9]/g, more than codeLength), the one check used by pasteTransformer and onPaste",
+   "tests": "linkSchema.test.ts a pasted code; OtpScreen.test.tsx refuses and accepts paste cases"
+  },
+  {
+   "finding": "2 (review M2)",
+   "fix": "onPaste calls the existing useAnnounce with linkingMessages.code when it refuses a paste (WCAG 2.2 SC 4.1.3)",
+   "tests": "OtpScreen.test.tsx: role=status holds the six-digit error after a refusal, is empty after an accepted paste"
+  },
+  {
+   "finding": "3 (verify M1)",
+   "fix": "the ErrorSummary mounts on summaryShown, set only by a failed Verify or a returned 400 and cleared at the next submit; a paste error is the field's alone",
+   "tests": "OtpScreen.test.tsx sequence tests"
+  },
+  {
+   "finding": "4 (verify M2)",
+   "fix": "button.tsx: disabled:border-border in place of disabled:border-transparent; comment updated",
+   "tests": "disabled.test.tsx"
+  }
+ ]
+}
