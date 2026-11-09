@@ -66,13 +66,13 @@ test('UJ-1: sign up, link to D, raise on TXN-D-0030, sign out, traced to the dat
   // ---- transactions: the pending row is not disputable, TXN-D-0030 is -----------------------------------------------------
   const settledRow = page.getByRole('listitem').filter({ hasText: 'ZX Digital Services' }).filter({ hasText: '849.00' });
   const pendingRow = page.getByRole('listitem').filter({ hasText: 'Checkers Sixty60' }).filter({ hasText: '319.73' });
-  await expect(settledRow.getByRole('link', { name: 'Dispute this transaction' })).toBeVisible();
+  await expect(settledRow.getByRole('link', { name: 'Dispute ZX Digital Services', exact: true })).toBeVisible();
   await expect(pendingRow).toContainText('Pending. You can dispute it once it has settled.');
   await expect(pendingRow.getByRole('link', { name: /Dispute/ })).toHaveCount(0);
   await expectAccessibleAtBothWidths(page, 'transactions');
 
   // ---- raise: reason, note, review, submit ----------------------------------------------------------------------------------
-  await settledRow.getByRole('link', { name: 'Dispute this transaction' }).click();
+  await settledRow.getByRole('link', { name: 'Dispute ZX Digital Services', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Dispute this transaction' })).toBeVisible();
   await page.getByRole('radio', { name: 'Unrecognised', exact: true }).click();
   await page.getByLabel('Note (optional)').fill(note);
@@ -100,7 +100,7 @@ test('UJ-1: sign up, link to D, raise on TXN-D-0030, sign out, traced to the dat
   // ---- browser: the row badge, the history, the detail timeline ----------------------------------------------------------------
   await page.goto('/transactions');
   await expect(settledRow.getByRole('link', { name: /Dispute status: Submitted/ })).toBeVisible();
-  await expect(settledRow.getByRole('link', { name: 'Dispute this transaction' })).toHaveCount(0);
+  await expect(settledRow.getByRole('link', { name: /^Dispute (?!status: )/ })).toHaveCount(0);
   await page.goto('/disputes');
   await expect(page.getByRole('heading', { level: 1, name: 'Disputes' })).toBeVisible();
   await expect(page.getByRole('link', { name: /ZX Digital Services/ })).toHaveCount(1);

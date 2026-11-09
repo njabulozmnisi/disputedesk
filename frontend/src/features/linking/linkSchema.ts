@@ -35,6 +35,27 @@ export function codeFrom(typed: string): string {
   return typed.replaceAll(' ', '');
 }
 
+/** The six cells of the code input, and the length the server expects. */
+export const codeLength = 6;
+
+/**
+ * A paste that holds more than 6 digits, whatever else it holds, cannot sit in six cells: input-otp would cut it to its
+ * first six. It is refused, never truncated, so the cells never show a code the person did not have and Verify never
+ * spends an attempt on one. A paste with exactly 6 digits and other characters ("481516\n") is accepted.
+ */
+export function isOverlongCode(pasted: string): boolean {
+  const digitCount = (pasted.match(/[0-9]/g) ?? []).length;
+  return digitCount > codeLength;
+}
+
+/**
+ * input-otp's `pasteTransformer`: it has no option to refuse a paste, but it drops a paste whole when the result fails
+ * its `pattern`, so an over-long code becomes a space, which `REGEXP_ONLY_DIGITS` refuses.
+ */
+export function transformPastedCode(pasted: string): string {
+  return isOverlongCode(pasted) ? ' ' : codeFrom(pasted);
+}
+
 export const otpSchema = z.object({
   code: z.string().refine((typed) => /^[0-9]{6}$/.test(codeFrom(typed)), linkingMessages.code),
 });

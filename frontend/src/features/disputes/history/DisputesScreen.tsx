@@ -13,6 +13,7 @@ import { StateSurface } from '@/components/StateSurface';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadMoreButton } from '@/features/transactions/LoadMoreButton';
+import { cn } from '@/lib/utils';
 
 import { describeCustomerStatus, type StatusDescription } from '../customerStatus';
 import { DisputeRow } from './DisputeRow';
@@ -101,7 +102,7 @@ export function DisputesScreen() {
     return (
       <section className="grid gap-3">
         <h2 className="text-subheading font-strong">{heading}</h2>
-        <ul className={panelClass}>
+        <ul className={cn(panelClass, 'overflow-hidden')}>
           {rows.map(({ dispute, statusDescription }) => (
             <DisputeRow
               key={dispute.disputeId}

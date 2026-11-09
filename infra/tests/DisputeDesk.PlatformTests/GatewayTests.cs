@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
@@ -479,7 +480,7 @@ public sealed partial class GatewayTests(GatewayFixture gateway) : IClassFixture
     {
         string host = HostOf(gatewayName, "app");
         string authOrigin = EnvironmentOf(gatewayName)["GATEWAY_AUTH_ORIGIN"];
-        string appCsp = $"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' {authOrigin}";
+        string appCsp = $"default-src 'self'; script-src 'self'; style-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' {authOrigin}";
         string scalarHash = ScalarHash().Match(await File.ReadAllTextAsync(Path.Combine(SourceRoots.Repo, "infra/images/gateway/templates/scalar-headers.conf.template"), TestContext.Current.CancellationToken)).Value;
         string scalarCsp = $"default-src 'self'; script-src 'self' {scalarHash}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
@@ -489,6 +490,17 @@ public sealed partial class GatewayTests(GatewayFixture gateway) : IClassFixture
         }
 
         AssertExactly(await GatewayAsync(gatewayName, host, "/scalar/"), "content-security-policy", scalarCsp, $"{gatewayName} /scalar/");
+    }
+
+    [Fact]
+    public async Task AppOrigin_StyleSrcHash_IsTheHashOfTheEmptyString()
+    {
+        // ui-linking criterion 5: the one hash admits only an empty style element (input-otp's), never CSS text
+        // (CSP Level 3 hash-source: base64 of the SHA-256 digest of the element's content).
+        string template = await File.ReadAllTextAsync(Path.Combine(SourceRoots.Repo, "infra/images/gateway/templates/security-headers.conf.template"), TestContext.Current.CancellationToken);
+        string emptyStringHash = "'sha256-" + Convert.ToBase64String(SHA256.HashData([])) + "'";
+
+        Assert.Equal(emptyStringHash, AppStyleSrcHash().Match(template).Groups["hash"].Value);
     }
 
     [Theory]
@@ -812,4 +824,7 @@ public sealed partial class GatewayTests(GatewayFixture gateway) : IClassFixture
 
     [GeneratedRegex(@"'sha256-[^']*'")]
     private static partial Regex ScalarHash();
+
+    [GeneratedRegex(@"style-src 'self' (?<hash>'sha256-[^']*');")]
+    private static partial Regex AppStyleSrcHash();
 }

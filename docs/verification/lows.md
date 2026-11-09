@@ -45,3 +45,5 @@ column marks a finding with no feature record of its own.
 | ui-tokens-icons | ui-tokens-icons-verify.md | `scripts/run-breaks.sh` has no Vitest mode; a non-dotnet `test_method` must be a runnable shell command (queued by the guard owner for the next scripts/ change). | |
 | ui-tokens-icons | ui-tokens-icons-verify.md | `scripts/verify-with-copilot.sh` run from a worktree that lacks the spec cannot grade criteria and writes its record into the worktree. | |
 | ui-tokens-icons | ui-tokens-icons-qa.md | `linking-start.spec.ts` criterion 2 flakes when a random traceId contains "abc". | |
+| ui-notices-states | ui-detail-start-review.md | `ErrorSummary.tsx:48`: the summary's field links are 22px tall at 767px and wider, against EXPERIENCE's 44px minimum (seen inside the withdraw dialog). | |
+| ui-notices-states | ui-notices-states-review.md | One theme outline width token for the 1.5px border shared by Button, Input, Textarea and RadioGroup (raw `border-[1.5px]` in each). | |
