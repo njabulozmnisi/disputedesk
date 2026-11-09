@@ -15,4 +15,12 @@ describe('the start page', () => {
     const sample = screen.getByText('A sample dispute.', { exact: false }).closest('figure');
     expectDecorativeIcon(sample?.querySelector('svg.lucide-search'));
   });
+
+  it('draws the "How it works" h2 at the 24px h2 size, in the heading colour', async () => {
+    signInAs('anonymous');
+    renderApp({ path: '/' });
+
+    const heading = await screen.findByRole('heading', { level: 2, name: 'How it works' });
+    expect(heading).toHaveClass('text-h2', 'font-strong', 'text-heading');
+  });
 });
