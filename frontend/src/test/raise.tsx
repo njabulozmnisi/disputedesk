@@ -49,7 +49,10 @@ export async function openRaiseScreen(
   serveTransactions(rows);
   serveDispute();
   const app = renderApp({ path: '/transactions', fakeTimers, strictMode });
-  await app.user.click(await screen.findByRole('link', { name: 'Dispute this transaction' }));
+  const [first] = rows;
+  await app.user.click(
+    await screen.findByRole('link', { name: `Dispute ${first?.description ?? ''}` }),
+  );
   await screen.findByRole('heading', { level: 1, name: 'Dispute this transaction' });
   return app;
 }
