@@ -48,6 +48,19 @@ describe('the theme file', () => {
     expect(withoutLineHeight).toEqual([]);
   });
 
+  // DESIGN.md, Typography: h2 is 24px. The size is named h2, not heading: the theme has a colour named heading, so
+  // Tailwind would build text-heading as that colour only and the size would never apply.
+  it('exposes the h2 size with its line height, and keeps heading a colour only', () => {
+    const css =
+      appSourceFiles(['.css']).find(({ path }) => path === 'theme/tokens.css')?.text ?? '';
+
+    expect(css).toMatch(/^\s*--text-h2: 1\.5rem;/m);
+    expect(css).toContain('--text-h2: var(--text-h2);');
+    expect(css).toContain('--text-h2--line-height: var(--leading-h2);');
+    expect(css).toContain('--color-heading: var(--heading);');
+    expect(css).not.toMatch(/--(text|leading)-heading/);
+  });
+
   // HANDOFF 1: the list columns, read as var(--amount-col) in an arbitrary grid, like --content-max.
   it('declares the list columns', () => {
     const tokens = appSourceFiles(['.css']).find(({ path }) => path === 'theme/tokens.css');

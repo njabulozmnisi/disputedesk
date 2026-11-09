@@ -12,6 +12,14 @@ describe('cn', () => {
     );
   });
 
+  it('reads text-h2 as a size, so it replaces another size', () => {
+    expect(cn('text-label', 'text-h2')).toBe('text-h2');
+  });
+
+  it('keeps text-h2 beside text-heading: a size and the navy colour', () => {
+    expect(cn('text-h2', 'text-heading')).toBe('text-h2 text-heading');
+  });
+
   it('still lets a later class of the same kind win', () => {
     expect(cn('text-body', 'text-label')).toBe('text-label');
     expect(cn('text-primary', 'text-foreground')).toBe('text-foreground');

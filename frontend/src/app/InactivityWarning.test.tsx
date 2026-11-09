@@ -65,6 +65,14 @@ describe('the inactivity warning', () => {
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });
 
+  it('draws the dialog title at the 24px h2 size, in the heading colour', async () => {
+    await openTransactions();
+
+    await passMinutes(13);
+    const title = await screen.findByRole('heading', { name: warningTitle });
+    expect(title).toHaveClass('text-h2', 'font-strong', 'text-heading');
+  });
+
   it('has no accessibility violations while the warning is open', async () => {
     await openTransactions();
     await passMinutes(13);
