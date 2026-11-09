@@ -121,7 +121,7 @@ export function StartPage() {
       </section>
       <section aria-labelledby="how-heading" className="border-t border-border bg-card">
         <div className="mx-auto w-full max-w-(--page-max) px-4 py-12 md:px-6 md:py-16">
-          <h2 id="how-heading" className="text-heading font-strong">
+          <h2 id="how-heading" className="text-h2 font-strong text-heading">
             How it works
           </h2>
           <ol className="mt-6 grid gap-6 md:grid-cols-3 md:gap-8">
