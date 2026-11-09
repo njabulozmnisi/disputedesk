@@ -115,7 +115,7 @@ test('UJ-2: A withdraws the Under review dispute on TXN-A-0022', async () => {
   // /transactions: the row shows Withdrawn and no Dispute control; the API says the same and refuses a second raise.
   const row = await openTransactionsRow(page, before.Id);
   await expect(row.getByRole('link', { name: 'Dispute status: Withdrawn' })).toBeVisible();
-  await expect(row.getByRole('link', { name: 'Dispute this transaction' })).toHaveCount(0);
+  await expect(row.getByRole('link', { name: /^Dispute (?!status: )/ })).toHaveCount(0);
   await expectAccessibleAtBothWidths(page, 'Transactions with the Withdrawn row');
 
   const listed = await listAll();
