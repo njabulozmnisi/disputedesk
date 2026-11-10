@@ -22,7 +22,7 @@ the login is not a finding here. Whether the records describe its effect correct
 - **Links:** every relative link target in `README.md` exists. Every anchor link into a README in the repo was listed,
   and each resolves: the AD-13 and AD-20 GitHub slugs, `infra/README.md:110` `../README.md#on-aws`,
   `infra/README.md:168` `../README.md#try-it` (the brief's line 145 is now 168), `infra/terraform/README.md:13`
-  `../README.md#deployed-on-aws` (this is infra/README, which keeps that heading). No test or script reads the root
+  `../README.md#deployed-on-aws` (this is infra/README.md, which keeps that heading). No test or script reads the root
   README.
 - **Rules:** `scripts/secret-scan.sh` exits 0 on the change (gitleaks: no leaks, the published password included). No
   forbidden term in any of the six files. The README and the moved infra text were scanned for the humanize list (AI
@@ -37,12 +37,12 @@ the login is not a finding here. Whether the records describe its effect correct
    PRD 247, story 7.7 Note 115). The three NFR-DOC-5 simplifications (93-95). The reset note (27-28, P40,
    architecture 861, ad-005). Fixture logins live on AWS (39, story 7.7 Note 117). The runbook and onboarding are
    linked (108, 110). The README still ends with the ten-area map (113-126).
-2. **Nothing is gone from the repo.** The component diagram is in architecture's Component view and infra/README's
+2. **Nothing is gone from the repo.** The component diagram is in architecture's Component view and infra/README.md's
    local stack. Tech stack: architecture Stack, plus `frontend/README.md` (shadcn, Orval), ad-012 (CodeQL, Trivy, ZAP),
    ad-009 and ad-010 (CloudEvents), ad-001 and ad-007 (Zitadel v4, server-side sessions). The AWS parts table moved
-   like this: entry and budget to infra/README 103-104; no SSH, CloudFront-only, RDS TLS and SSM to infra/README
+   like this: entry and budget to infra/README.md 103-104; no SSH, CloudFront-only, RDS TLS and SSM to infra/README.md
    57-100; db.t4g.micro and Transaction Search to architecture and the terraform README. The cost section is now
-   infra/README 112-125. The lifecycle diagram matches `Dispute.IsAllowed` (`Dispute.cs:258-261`). "Escalated shows as
+   infra/README.md 112-125. The lifecycle diagram matches `Dispute.IsAllowed` (`Dispute.cs:258-261`). "Escalated shows as
    Under review (prioritised)" is in AD-13's customer wire view and the glossary. The repo map is onboarding 14-26.
    The one-repo note is ad-011, linked at README 109. How it was built is docs/README 33-110.
 3. **Facts.** Correct: the budget thresholds (`budget/main.tf:32-47`); the Free plan wording; only the api and the
