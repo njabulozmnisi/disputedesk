@@ -16,6 +16,7 @@ namespace DisputeDesk.PlatformTests;
 /// The provision.sh runs here stop at its first Zitadel call, which a stub curl cannot answer (its arguments name a
 /// random temporary file); the cases after that point read the file, because the script then runs
 /// /provision/label-policy.sh and reads /brand/, which only the zitadel image holds. infra/tests/smoke.sh runs it whole.
+/// The ProvisionSection cases run one section's own code with a stand-in for its `call` function instead.
 /// </summary>
 [UnsupportedOSPlatform("windows")] // the stubs need their execute bit
 public partial class PlatformScriptTests
@@ -141,6 +142,133 @@ public partial class PlatformScriptTests
         Assert.Empty(run.Output);
         Assert.Empty(stubs.Calls());
         Assert.False(File.Exists(environment["PROVISION_MARKER_FILE"]));
+    }
+
+    [Fact]
+    public async Task ProvisionScript_DeactivateHumanAdminsNotABoolean_RemovesTheMarkerAndFailsBeforeCallingZitadel()
+    {
+        // aws-admin-lockdown: a mistyped value must not quietly leave a human administrator active in AWS.
+        using var stubs = new PathStubs("curl", "sleep", "zitadel");
+        Dictionary<string, string> environment = ProvisionEnvironment(stubs);
+        environment["PROVISION_DEACTIVATE_HUMAN_ADMINS"] = "True";
+        await File.WriteAllTextAsync(environment["PROVISION_MARKER_FILE"], "", TestContext.Current.CancellationToken);
+
+        ProcessResult run = await RunProvisionAsync(environment);
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Equal("[provision] PROVISION_DEACTIVATE_HUMAN_ADMINS must be true or false, not 'True'\n", run.Errors);
+        Assert.Empty(run.Output);
+        Assert.Empty(stubs.Calls());
+        Assert.False(File.Exists(environment["PROVISION_MARKER_FILE"]));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProvisionSection_PublicOrganizationRegistration_IsClosedLocallyAndInAws(bool deactivateHumanAdmins)
+    {
+        // aws-admin-lockdown H1: anyone could create an organization at /ui/login/register/org and own it. The instance
+        // restriction closes it on an instance made before the DefaultInstance setting; locally too, as nothing uses it.
+        SectionRun run = await RunProvisionSectionAsync("public organization registration", deactivateHumanAdmins, new() { ["restrictions"] = ["{}"] });
+
+        Assert.Equal(0, run.Result.ExitCode);
+        Assert.Equal(["PUT /admin/v1/restrictions {\"disallowPublicOrgRegistration\":true}"], run.Calls);
+        Assert.Equal("[provision] public organization registration closed\n", run.Result.Errors);
+    }
+
+    [Fact]
+    public async Task ProvisionSection_HumanAdministrators_AreLeftAloneLocally()
+    {
+        // Locally the console admin stays usable (infra/README.md): no call at all.
+        SectionRun run = await RunProvisionSectionAsync(HumanAdministratorsSection, deactivateHumanAdmins: false, []);
+
+        Assert.Equal(0, run.Result.ExitCode);
+        Assert.Empty(run.Calls);
+        Assert.Empty(run.Result.Errors);
+    }
+
+    [Fact]
+    public async Task ProvisionSection_HumanAdministratorsInScope_AreDeactivated_AndAFreshReadingFindsNoneActive()
+    {
+        // aws-admin-lockdown H1 and M1. The list is asked for DisputeDesk users' roles and instance roles only, so a user
+        // of another organization who owns only that organization is never listed and never fails the step.
+        // ListAdministrators has one entry per role assignment; each user is read once (IDs in sorted order). The
+        // provisioner (a machine) and an inactive human are left; an active and a locked human are deactivated.
+        SectionRun run = await RunProvisionSectionAsync(HumanAdministratorsSection, deactivateHumanAdmins: true, new()
+        {
+            ["ListAdministrators"] = [FourAdministrators, FourAdministrators],
+            ["GetUserByID"] =
+            [
+                Human("USER_STATE_ACTIVE"), Human("USER_STATE_INACTIVE"), Human("USER_STATE_LOCKED"), Machine,
+                Human("USER_STATE_INACTIVE"), Human("USER_STATE_INACTIVE"), Human("USER_STATE_INACTIVE"), Machine,
+            ],
+            ["DeactivateUser"] = ["{}", "{}"],
+        });
+
+        const string ListAdministrators = "POST /zitadel.internal_permission.v2.InternalPermissionService/ListAdministrators "
+            + "{\"filters\":[{\"or\":{\"queries\":[{\"userOrganizationId\":{\"id\":\"org-disputedesk\"}},{\"resource\":{\"instance\":true}}]}}]}";
+        string[] userIds = ["human-active", "human-inactive", "human-locked", "provisioner-1"];
+        string[] readEachUser = [.. userIds.Select(id => $"POST /zitadel.user.v2.UserService/GetUserByID {{\"userId\":\"{id}\"}}")];
+        Assert.Equal(0, run.Result.ExitCode);
+        Assert.Equal(
+            [
+                ListAdministrators, .. readEachUser,
+                "POST /zitadel.user.v2.UserService/DeactivateUser {\"userId\":\"human-active\"}",
+                "POST /zitadel.user.v2.UserService/DeactivateUser {\"userId\":\"human-locked\"}",
+                ListAdministrators, .. readEachUser,
+            ],
+            run.Calls);
+        Assert.Equal(
+            "[provision] human administrator human-active deactivated\n[provision] human administrator human-locked deactivated\n"
+            + "[provision] no human administrator of DisputeDesk or the instance can sign in\n",
+            run.Result.Errors);
+    }
+
+    [Fact]
+    public async Task ProvisionSection_HumanAdministratorStillActiveAfterwards_FailsTheRun()
+    {
+        // M1: the postcondition. The second reading still finds the human active, so the run fails, loudly.
+        SectionRun run = await RunProvisionSectionAsync(HumanAdministratorsSection, deactivateHumanAdmins: true, new()
+        {
+            ["ListAdministrators"] = [TwoAdministrators, TwoAdministrators],
+            ["GetUserByID"] = [Human("USER_STATE_ACTIVE"), Machine, Human("USER_STATE_ACTIVE"), Machine],
+            ["DeactivateUser"] = ["{}"],
+        });
+
+        Assert.Equal(1, run.Result.ExitCode);
+        Assert.EndsWith("[provision] human administrators still active: human-active\n", run.Result.Errors, StringComparison.Ordinal);
+        Assert.DoesNotContain("can sign in", run.Result.Errors, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("more administrators than one page holds", """{"pagination":{"totalResult":"3","appliedLimit":"100"},"administrators":[{"user":{"id":"human-active"},"instance":true},{"user":{"id":"provisioner-1"},"instance":true}]}""")]
+    [InlineData("the provisioner is not on the list", """{"pagination":{"totalResult":"1","appliedLimit":"100"},"administrators":[{"user":{"id":"human-active"},"instance":true}]}""")]
+    [InlineData("an answer of another shape", """{"administrators":[{"user":{"id":"human-active"},"instance":true},{"user":{"id":"provisioner-1"},"instance":true}]}""")]
+    [InlineData("an empty answer", "{}")]
+    public async Task ProvisionSection_AdministratorListNotWholeOrWithoutTheProvisioner_FailsBeforeReadingAnyUser(string because, string answer)
+    {
+        // M1: a list that was not read whole, or not read at all, fails the run instead of deactivating nothing.
+        SectionRun run = await RunProvisionSectionAsync(HumanAdministratorsSection, deactivateHumanAdmins: true, new() { ["ListAdministrators"] = [answer] });
+
+        Assert.True(run.Result.ExitCode != 0, because);
+        Assert.Single(run.Calls);
+        Assert.Contains("[provision] ListAdministrators did not return every administrator in scope, with this provisioner among them\n", run.Result.Errors, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProvisionSection_UserThatIsNeitherHumanNorMachine_FailsTheRun()
+    {
+        // M1: a user answer of another shape is never read as "not a human to deactivate".
+        SectionRun run = await RunProvisionSectionAsync(HumanAdministratorsSection, deactivateHumanAdmins: true, new()
+        {
+            ["ListAdministrators"] = [TwoAdministrators],
+            ["GetUserByID"] = ["""{"user":{"userId":"human-active","state":"USER_STATE_ACTIVE"}}"""],
+        });
+
+        Assert.True(run.Result.ExitCode != 0);
+        Assert.Contains("a user that is neither human nor machine", run.Result.Errors, StringComparison.Ordinal);
+        Assert.Equal(2, run.Calls.Length); // ListAdministrators, then the first GetUserByID, where the run stops
+        Assert.DoesNotContain("can sign in", run.Result.Errors, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -389,11 +517,100 @@ public partial class PlatformScriptTests
         environment["PROVISION_MARKER_FILE"] = Path.Combine(stubs.Directory, "provisioned");
         environment["PROVISION_APP_ORIGINS"] = "http://localhost:8080";
         environment["PROVISION_AUTH_DEVELOPMENT_MODE"] = "true";
+        environment["PROVISION_DEACTIVATE_HUMAN_ADMINS"] = "false";
         return environment;
     }
 
     private static Task<ProcessResult> RunProvisionAsync(Dictionary<string, string> environment) =>
         Processes.RunAsync("bash", ["infra/images/zitadel/provision.sh"], environment, TimeSpan.FromSeconds(30));
+
+    private const string HumanAdministratorsSection = "human administrators, where the inbox may be public";
+
+    // ListAdministrators answers: proto3 JSON writes the uint64 totalResult as a string.
+    private const string TwoAdministrators = """
+        {"pagination":{"totalResult":"2","appliedLimit":"100"},"administrators":[
+          {"user":{"id":"human-active"},"instance":true,"roles":["IAM_OWNER"]},
+          {"user":{"id":"provisioner-1"},"instance":true,"roles":["IAM_OWNER"]}]}
+        """;
+
+    private const string FourAdministrators = """
+        {"pagination":{"totalResult":"7","appliedLimit":"100"},"administrators":[
+          {"user":{"id":"provisioner-1"},"instance":true,"roles":["IAM_OWNER"]},
+          {"user":{"id":"human-active"},"instance":true,"roles":["IAM_OWNER"]},
+          {"user":{"id":"provisioner-1"},"organization":{"id":"org-disputedesk"},"roles":["ORG_OWNER"]},
+          {"user":{"id":"human-active"},"organization":{"id":"org-disputedesk"},"roles":["ORG_OWNER"]},
+          {"user":{"id":"human-locked"},"organization":{"id":"org-disputedesk"},"roles":["ORG_OWNER"]},
+          {"user":{"id":"human-inactive"},"organization":{"id":"org-disputedesk"},"roles":["ORG_OWNER"]},
+          {"user":{"id":"human-inactive"},"project":{"id":"project-1"},"roles":["PROJECT_OWNER"]}]}
+        """;
+
+    private const string Machine = """{"user":{"userId":"provisioner-1","state":"USER_STATE_ACTIVE","machine":{"name":"Provisioner (IAM_OWNER)"}}}""";
+
+    /// <summary>A GetUserByID answer for a human in the given state.</summary>
+    private static string Human(string state) => """{"user":{"state":"STATE","human":{"profile":{"givenName":"Dispute"}}}}""".Replace("STATE", state, StringComparison.Ordinal);
+
+    /// <summary>A section run: how it ended and its Zitadel calls, each "METHOD PATH BODY".</summary>
+    private sealed record SectionRun(ProcessResult Result, string[] Calls);
+
+    /// <summary>
+    /// Runs one section of provision.sh, from its "# ---- NAME" header to the next header, with the script's shell options,
+    /// its log function and rpc function, ORG_ID org-disputedesk, PROVISIONER_ID provisioner-1 and
+    /// DEACTIVATE_HUMAN_ADMINS. A stand-in replaces `call`: each call is recorded and answered with the next answer
+    /// listed under the last segment of its path; a call with no answer left fails, as a failed call does.
+    /// </summary>
+    private static async Task<SectionRun> RunProvisionSectionAsync(string header, bool deactivateHumanAdmins, Dictionary<string, string[]> answers)
+    {
+        Match section = new Regex($@"\n# -+ {Regex.Escape(header)}\n(?<section>.*?)\n# -+ ", RegexOptions.Singleline, TimeSpan.FromSeconds(1)).Match(ProvisionScript);
+        Assert.True(section.Success, $"provision.sh has no section headed '{header}'.");
+        string folder = Directory.CreateTempSubdirectory("disputedesk-provision-").FullName;
+        try
+        {
+            foreach ((string name, string[] replies) in answers)
+            {
+                for (int reply = 0; reply < replies.Length; reply++)
+                {
+                    await File.WriteAllTextAsync(Path.Combine(folder, $"{name}.{reply + 1}"), replies[reply], TestContext.Current.CancellationToken);
+                }
+            }
+
+            string script = $$"""
+                set -euo pipefail
+                {{ShellFunction("log")}}
+                {{ShellFunction("rpc")}}
+                call(){
+                  local name=${2##*/} n=1
+                  printf '%s %s %s\n' "$1" "$2" "${3:-}" >> "$FOLDER/calls"
+                  while [ -e "$FOLDER/$name.$n.used" ]; do n=$((n + 1)); done
+                  : > "$FOLDER/$name.$n.used"
+                  cat "$FOLDER/$name.$n" 2>/dev/null
+                }
+                ORG_ID=org-disputedesk
+                PROVISIONER_ID=provisioner-1
+                DEACTIVATE_HUMAN_ADMINS={{(deactivateHumanAdmins ? "true" : "false")}}
+                {{section.Groups["section"].Value}}
+                """;
+            await File.WriteAllTextAsync(Path.Combine(folder, "section.sh"), script, TestContext.Current.CancellationToken);
+            Dictionary<string, string> environment = Processes.BaseEnvironment();
+            environment["FOLDER"] = folder;
+
+            ProcessResult result = await Processes.RunAsync("bash", [Path.Combine(folder, "section.sh")], environment, TimeSpan.FromSeconds(30));
+
+            string calls = Path.Combine(folder, "calls");
+            return new SectionRun(result, File.Exists(calls) ? await File.ReadAllLinesAsync(calls, TestContext.Current.CancellationToken) : []);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>The one-line definition of a function in provision.sh, such as log(){ ...; }.</summary>
+    private static string ShellFunction(string name)
+    {
+        Match definition = new Regex($@"^{name}\(\)\{{.*$", RegexOptions.Multiline, TimeSpan.FromSeconds(1)).Match(ProvisionScript);
+        Assert.True(definition.Success, $"provision.sh defines no one-line {name} function.");
+        return definition.Value;
+    }
 
     /// <summary>
     /// A stand-in for `zitadel ready` that fails the first FAILURES calls, then succeeds, writing the PAT file first when

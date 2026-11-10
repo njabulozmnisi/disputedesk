@@ -134,6 +134,9 @@ services:
       # already allow self-registration, leave MFA optional and allow TOTP, so they are not restated here.
       # Zitadel's own login at /ui/login, which also enforces email verification before a sign-in completes.
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
+      # No public organization registration (/ui/login/register/org answers 404); customers still sign up inside the
+      # DisputeDesk organization. provision.sh closes it on an instance made before this setting.
+      ZITADEL_DEFAULTINSTANCE_RESTRICTIONS_DISALLOWPUBLICORGREGISTRATION: "true"
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_SMTP_HOST: mailpit:1025
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_TLS: "false"
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROM: noreply@disputedesk.test
@@ -149,6 +152,7 @@ services:
       PROVISION_MARKER_FILE: /provision/state/provisioned   # in the container, not a volume: a recreate removes it
       PROVISION_APP_ORIGINS: http://localhost:8080 http://localhost:5101 http://localhost:5102
       PROVISION_AUTH_DEVELOPMENT_MODE: ${AUTH_DEVELOPMENT_MODE:-true}   # allows the plain-http origins; false in AWS (AD-24)
+      PROVISION_DEACTIVATE_HUMAN_ADMINS: "false"   # the console admin above stays usable locally; true in AWS
     volumes:
       - zitadel-bootstrap:/zitadel/bootstrap
       - zitadel-clients:/provision/out

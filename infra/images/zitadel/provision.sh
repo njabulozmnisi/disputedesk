@@ -4,7 +4,9 @@
 # restarts the container.
 # It creates only what Zitadel's FirstInstance / DefaultInstance environment variables cannot: the project
 # and its roles, the web app, the operations machine user, the fixture logins and the hosted login's
-# label policy (branding). Instance settings (SMTP, login policy) live in docker-compose.yml.
+# label policy (branding). Instance settings (SMTP, login policy) live in docker-compose.yml. It closes public
+# organization registration on an existing instance, and in AWS it also deactivates every human administrator of
+# DisputeDesk or the instance (PROVISION_DEACTIVATE_HUMAN_ADMINS).
 # Auth:  the IAM_OWNER PAT that FirstInstance writes into the bootstrap volume before Zitadel reports ready.
 # Idempotent: every object is looked up before it is created. Client secrets are shown only once,
 #        so they are (re)generated only when the output file is missing or belongs to another instance.
@@ -21,6 +23,7 @@ FIXTURES="${PROVISION_FIXTURES_FILE:?}"
 PAT_FILE="${PROVISION_PAT_FILE:?}"
 APP_ORIGINS="${PROVISION_APP_ORIGINS:?}"   # space-separated origins allowed to complete the sign-in
 AUTH_DEVELOPMENT_MODE="${PROVISION_AUTH_DEVELOPMENT_MODE:?}"   # true only where the app origins are plain http (local)
+DEACTIVATE_HUMAN_ADMINS="${PROVISION_DEACTIVATE_HUMAN_ADMINS:?}"   # true only where the Mailpit inbox may be public (AWS)
 PROJECT_NAME=DisputeDesk
 WEB_APP_NAME=disputedesk-web
 OPS_USERNAME=operations-tools
@@ -40,6 +43,11 @@ log(){ printf '[provision] %s\n' "$*" >&2; }
 case "$AUTH_DEVELOPMENT_MODE" in
   true|false) ;;
   *) log "PROVISION_AUTH_DEVELOPMENT_MODE must be true or false, not '$AUTH_DEVELOPMENT_MODE'"; exit 1 ;;
+esac
+# Refused up front too, so a mistyped value never quietly leaves a human administrator active.
+case "$DEACTIVATE_HUMAN_ADMINS" in
+  true|false) ;;
+  *) log "PROVISION_DEACTIVATE_HUMAN_ADMINS must be true or false, not '$DEACTIVATE_HUMAN_ADMINS'"; exit 1 ;;
 esac
 
 # The hook starts right after the container does, before Zitadel listens (Compose runs post_start after the start, not
@@ -126,7 +134,9 @@ fi
 call POST /admin/v1/policies/label/_activate '{}' >/dev/null
 log "label policy activated"
 
-ORG_ID=$(call GET /auth/v1/users/me | jq -r '.user.details.resourceOwner')
+ME=$(call GET /auth/v1/users/me)
+ORG_ID=$(jq -r '.user.details.resourceOwner' <<< "$ME")
+PROVISIONER_ID=$(jq -er '.user.id' <<< "$ME")
 log "organization $ORG_ID"
 
 # ------------------------------------------------------------------------------------ project and roles
@@ -231,6 +241,57 @@ jq -c '.logins[]' "$FIXTURES" | while read -r login; do
   rpc zitadel.user.v2.UserService/CreateUser "$body" >/dev/null
   log "login $username created ($(jq -r .userId <<< "$login")), email verified"
 done
+
+# ------------------------------------------------------------ public organization registration
+# Zitadel's hosted login lets anyone create an organization at /ui/login/register/org and become its owner, an
+# administrator. Nothing here uses it, so it is closed: the DefaultInstance restriction in docker-compose.yml closes it
+# on a new instance, and this Admin API call on one made before. Customers still sign up inside the DisputeDesk
+# organization (/ui/login/register), which the restriction does not touch. Setting the current value changes nothing
+# and succeeds, so it runs at every start.
+call PUT /admin/v1/restrictions '{"disallowPublicOrgRegistration":true}' >/dev/null
+log "public organization registration closed"
+
+# ------------------------------------------------------------ human administrators, where the inbox may be public
+# Zitadel mails password-reset links to the Mailpit inbox, which may be public in AWS, so there a reader could reset a
+# human administrator's password. So each human administrator in scope is deactivated, and Zitadel refuses a
+# deactivated user's sign-in. In scope: every administrator role of a DisputeDesk user, and every instance
+# administrator role. A user of another organization who administers only that organization is out of scope, so it
+# can never fail this step. This provisioner is a machine user with a PAT, so it keeps working. It runs at every start;
+# an inactive user is skipped, because DeactivateUser fails on one. It fails closed: the administrator list must be
+# whole and hold this provisioner, and a second reading afterwards must find no human administrator in scope active.
+ADMIN_SCOPE="{\"filters\":[{\"or\":{\"queries\":[{\"userOrganizationId\":{\"id\":\"$ORG_ID\"}},{\"resource\":{\"instance\":true}}]}}]}"
+ADMIN_IDS='[.administrators[].user.id] | unique | .[]'   # one entry per role assignment, so a user can appear twice
+# GetUserByID, unlike ListUsers, brings Zitadel's user view up to date before it reads, so it sees each deactivation.
+HUMAN_NOT_INACTIVE='.user | if has("human") then .state != "USER_STATE_INACTIVE"
+  elif has("machine") then false else error("a user that is neither human nor machine") end'
+
+# active_human_admins: prints the ID of each human administrator in scope that is not inactive.
+active_human_admins(){
+  local admins ids id active
+  admins=$(rpc zitadel.internal_permission.v2.InternalPermissionService/ListAdministrators "$ADMIN_SCOPE") || return 1
+  # Whole: one page (Zitadel's default limit, 100) holds every entry. Read: this provisioner, always one, is on it.
+  if ! jq -e --arg provisioner "$PROVISIONER_ID" '(.pagination.totalResult | tonumber) == (.administrators | length)
+      and any(.administrators[]; .user.id == $provisioner)' <<< "$admins" >/dev/null; then
+    log "ListAdministrators did not return every administrator in scope, with this provisioner among them"
+    return 1
+  fi
+  ids=$(jq -r "$ADMIN_IDS" <<< "$admins") || return 1
+  for id in $ids; do
+    active=$(rpc zitadel.user.v2.UserService/GetUserByID "{\"userId\":\"$id\"}" | jq -r "$HUMAN_NOT_INACTIVE") || return 1
+    if [ "$active" = true ]; then printf '%s\n' "$id"; fi
+  done
+}
+
+if [ "$DEACTIVATE_HUMAN_ADMINS" = true ]; then
+  humans=$(active_human_admins)
+  for id in $humans; do
+    rpc zitadel.user.v2.UserService/DeactivateUser "{\"userId\":\"$id\"}" >/dev/null
+    log "human administrator $id deactivated"
+  done
+  still_active=$(active_human_admins)
+  if [ -n "$still_active" ]; then log "human administrators still active: $still_active"; exit 1; fi
+  log "no human administrator of DisputeDesk or the instance can sign in"
+fi
 
 # --------------------------------------------------------------------- client settings for the Api
 # The Zitadel:* and Operations:* keys of AD-26, plus the operations tools' client credentials (infra/tests/smoke.sh and
