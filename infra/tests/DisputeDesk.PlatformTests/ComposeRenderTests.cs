@@ -36,7 +36,7 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
 
     /// <summary>The inputs that are secrets (input-bounds.sh generates each from [A-Za-z0-9]).</summary>
     private static readonly string[] SecretInputs =
-        ["APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "ZITADEL_MASTERKEY", "ZITADEL_ADMIN_PASSWORD", "LINKING_OTP_HMAC_KEY", "MAILPIT_UI_AUTH", "GATEWAY_ORIGIN_VERIFY"];
+        ["APP_DB_PASSWORD", "ZITADEL_DB_PASSWORD", "ZITADEL_MASTERKEY", "ZITADEL_ADMIN_PASSWORD", "LINKING_OTP_HMAC_KEY", "MAILPIT_UI_AUTH", "MAILPIT_SEND_API_AUTH", "GATEWAY_ORIGIN_VERIFY"];
 
     // ---- criterion 1: every input is required, and only the inputs are
 
@@ -62,6 +62,7 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
             ["ZITADEL_ADMIN_PASSWORD"] = 1,
             ["LINKING_OTP_HMAC_KEY"] = 1,
             ["MAILPIT_UI_AUTH"] = 1,
+            ["MAILPIT_SEND_API_AUTH"] = 1,
             ["GATEWAY_ORIGIN_VERIFY"] = 1,
             ["APP_HOST"] = 3,
             ["AUTH_HOST"] = 5,
@@ -309,7 +310,7 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
             ],
             []
         },
-        { "mailpit", ["MP_SMTP_AUTH_ACCEPT_ANY", "MP_SMTP_AUTH_ALLOW_INSECURE", "MP_UI_AUTH"], [] },
+        { "mailpit", ["MP_SEND_API_AUTH", "MP_SMTP_AUTH_ACCEPT_ANY", "MP_SMTP_AUTH_ALLOW_INSECURE", "MP_UI_AUTH"], [] },
         {
             "api",
             [
@@ -447,7 +448,18 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
         Assert.Null(aws.Services["mailpit"]!["ports"]);
         Assert.Null(aws.Services["mailpit"]!["environment"]!["MP_WEBROOT"]);
         Assert.Equal(TestValues["MAILPIT_UI_AUTH"], EnvironmentValue("mailpit", "MP_UI_AUTH"));
+        // aws-admin-lockdown L2: the Send API has its own login, so the published UI login cannot send mail.
+        Assert.Equal(TestValues["MAILPIT_SEND_API_AUTH"], EnvironmentValue("mailpit", "MP_SEND_API_AUTH"));
+        Assert.NotEqual(TestValues["MAILPIT_UI_AUTH"], TestValues["MAILPIT_SEND_API_AUTH"]);
         Assert.Empty(aws.Services["gateway"]!["networks"]!["default"]?["aliases"]?.AsArray() ?? []);
+    }
+
+    [Fact]
+    public void Redpanda_HasTheStopGracePeriodOfRedpandasHelmChart()
+    {
+        // deploy-recreate-on-config: every deploy recreates Redpanda, so it gets the 90 s Redpanda's Helm chart gives a
+        // broker to shut down (terminationGracePeriodSeconds), not Compose's default 10 s before SIGKILL.
+        Assert.Equal("1m30s", aws.Services["redpanda"]!["stop_grace_period"]?.GetValue<string>());
     }
 
     [Fact]
@@ -547,7 +559,8 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
         string container = $"disputedesk-collector-test-{Environment.ProcessId}";
         try
         {
-            ProcessResult run = await Processes.DockerAsync(CommandTimeout,
+            // Five minutes, as validate above allows: on a cold runner this run pulls the image.
+            ProcessResult run = await Processes.DockerAsync(TimeSpan.FromMinutes(5),
                 "run", "-d", "--name", container, "-p", "127.0.0.1::4318",
                 "-e", $"AWS_REGION={TestValues["AWS_REGION"]}", "-e", $"OTEL_LOG_GROUP={TestValues["OTEL_LOG_GROUP"]}",
                 "-e", "AWS_ACCESS_KEY_ID=placeholder", "-e", "AWS_SECRET_ACCESS_KEY=placeholder",
@@ -558,6 +571,7 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
             await WaitForCollectorLogAsync(container, "Everything is ready");
 
             ProcessResult port = await Processes.DockerAsync(CommandTimeout, "port", container, "4318/tcp");
+            Assert.True(port.ExitCode == 0, $"docker port failed: {port.Errors}");
             var endpoint = new Uri($"http://{port.Output.Trim()}/v1/metrics");
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
             long start = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -569,7 +583,9 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
                 Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
             }
 
-            await Processes.DockerAsync(CommandTimeout, "stop", container);
+            // The flush the assertions below read happens on this stop, so a failed stop fails here, not as a missing record.
+            ProcessResult stop = await Processes.DockerAsync(CommandTimeout, "stop", container);
+            Assert.True(stop.ExitCode == 0, $"docker stop failed: {stop.Errors}");
             ProcessResult logs = await Processes.DockerAsync(CommandTimeout, "logs", container);
             // Dropped before the exporter, so not even written to the log group as a record without a CloudWatch metric,
             // which is what awsemf's metric_declarations would do with it.
@@ -650,10 +666,14 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
     public async Task RegressionPathsList_CoversEveryStackInputAndTheJobsOwnFiles()
     {
         string[] lines = await File.ReadAllLinesAsync(Path.Combine(SourceRoots.Repo, "scripts/regression-paths.list"), TestContext.Current.CancellationToken);
-        var profiles = new Dictionary<string, string> { ["COMPOSE_PROFILES"] = "build,console" };
+        // Every profile, so a service a new profile holds is read too (Docker, "Using profiles with Compose": "*").
+        var profiles = new Dictionary<string, string> { ["COMPOSE_PROFILES"] = "*" };
         JsonNode model = await ComposeModel.RenderAsync(["docker-compose.yml"], variables: profiles);
+        string[] sources = [.. StackSources(model)];
+        // The spa's build context, which only the build profile holds: the walk found the sources, every profile's.
+        Assert.Contains("frontend", sources);
 
-        string[] uncovered = [.. StackSources(model).Where(source => !lines.Any(line => LineMatches(line, source)))];
+        string[] uncovered = [.. sources.Where(source => !lines.Any(line => LineMatches(line, source)))];
         string[] jobFiles =
             ["docker-compose.yml", "e2e/", ".nvmrc", ".github/workflows/ci.yml", ".github/actions/install-compose/", "scripts/regression-paths.sh", "scripts/regression-paths.list"];
 
@@ -661,33 +681,21 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
         Assert.Empty(jobFiles.Except(lines, StringComparer.Ordinal));
     }
 
-    /// <summary>Every build context, path-valued additional context and bind-mount source, relative to the repository root.</summary>
-    private static IEnumerable<string> StackSources(JsonNode model)
+    /// <summary>
+    /// Every repository path the stack reads, relative to the repository root: the model's strings that start with the
+    /// root. `docker compose config` resolves a relative host path against the project directory (Compose
+    /// Specification, relative paths), so a build context, a path-valued additional context and a bind-mount source
+    /// render this way, and so would a later env_file, configs or secrets file. A dockerfile renders relative to its
+    /// context, so one outside the context is not read here.
+    /// </summary>
+    private static IEnumerable<string> StackSources(JsonNode? node) => node switch
     {
-        foreach ((string _, JsonNode? service) in model["services"]!.AsObject())
-        {
-            if (service!["build"] is { } build)
-            {
-                yield return Path.GetRelativePath(SourceRoots.Repo, build["context"]!.GetValue<string>());
-                foreach ((string _, JsonNode? context) in build["additional_contexts"]?.AsObject() ?? [])
-                {
-                    string value = context!.GetValue<string>();
-                    if (!value.StartsWith("service:", StringComparison.Ordinal))
-                    {
-                        yield return Path.GetRelativePath(SourceRoots.Repo, value);
-                    }
-                }
-            }
-
-            foreach (JsonNode? volume in service["volumes"]?.AsArray() ?? [])
-            {
-                if (volume!["type"]!.GetValue<string>() == "bind")
-                {
-                    yield return Path.GetRelativePath(SourceRoots.Repo, volume["source"]!.GetValue<string>());
-                }
-            }
-        }
-    }
+        JsonObject map => map.SelectMany(entry => StackSources(entry.Value)),
+        JsonArray list => list.SelectMany(StackSources),
+        JsonValue value when value.TryGetValue(out string? text) && (text == SourceRoots.Repo || text.StartsWith($"{SourceRoots.Repo}/", StringComparison.Ordinal))
+            => [Path.GetRelativePath(SourceRoots.Repo, text)],
+        _ => [],
+    };
 
     /// <summary>The list's rule: a line ending in / matches that directory and every path under it, any other line exactly that path.</summary>
     private static bool LineMatches(string line, string source) =>

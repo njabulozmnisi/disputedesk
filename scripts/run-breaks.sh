@@ -8,7 +8,9 @@
 #                one in the DisputeDesk.PlatformTests namespace over infra/tests' DisputeDesk.PlatformTests project
 #                under the stack lock (its GatewayTests start containers directly, outside Testcontainers); any other
 #                over backend/DisputeDesk.slnx under the testcontainers lock. Anything else is a shell command run from
-#                the copy's root (for example scripts/ci-gates.test.sh).
+#                the copy's root (for example scripts/ci-gates.test.sh). A Vitest test is such a command; the copy has no
+#                node_modules, so it installs them first:
+#                cd frontend && npm ci --silent && npx vitest run <file> -t "<test name>"
 # Every patch is checked with `git apply --check` before any test runs. A break counts only when its patch applies,
 # its test passes without it, the tests still build, and the test then fails. A break whose test fails without it is
 # reported as FAIL and not counted. ERROR marks a break with no result of its test, also not counted: a patch that does

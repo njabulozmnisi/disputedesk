@@ -33,7 +33,9 @@ processors:
     spike_limit_mib: 20
   # CloudWatch gets only the app's own instruments, the disputedesk.* metrics (AD-20): every other metric (runtime,
   # ASP.NET Core, HttpClient, Npgsql) is dropped here, because awsemf's metric_declarations would still write an
-  # unmatched metric to the log group, only without a CloudWatch metric (filter processor README, metric_conditions).
+  # unmatched metric to the log group, only without a CloudWatch metric (awsemf's metric_translator.go writes every
+  # metric's value into the record and adds the CloudWatch metric only for a match; filter processor README,
+  # metric_conditions, for the condition below).
   filter/app-metrics:
     error_mode: ignore
     metric_conditions:

@@ -22,11 +22,11 @@ cd "$(dirname "$0")/../../.."
 fail(){ echo "deploy: $*" >&2; exit 1; }
 step(){ echo "deploy: $*"; }
 
-# The names read from SSM, and only these: story 7.4's inputs that SSM holds (six a person creates, eight Terraform
+# The names read from SSM, and only these: story 7.4's inputs that SSM holds (seven a person creates, eight Terraform
 # writes), and the two that only the database init uses. Any other parameter under SSM_PATH is ignored.
 FROM_SSM=(
   APP_DB_PASSWORD ZITADEL_DB_PASSWORD ZITADEL_MASTERKEY ZITADEL_ADMIN_PASSWORD
-  LINKING_OTP_HMAC_KEY MAILPIT_UI_AUTH
+  LINKING_OTP_HMAC_KEY MAILPIT_UI_AUTH MAILPIT_SEND_API_AUTH
   APP_HOST AUTH_HOST MAILPIT_HOST DB_HOST OTEL_LOG_GROUP DATAPROTECTION_SSM_PATH DATAPROTECTION_KMS_KEY_ID
   GATEWAY_ORIGIN_VERIFY
   QA_DB_PASSWORD RDS_MASTER_PASSWORD

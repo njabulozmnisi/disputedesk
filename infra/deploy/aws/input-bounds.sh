@@ -10,7 +10,7 @@
 # shellcheck disable=SC2034 # read by the scripts that source this file
 AWS_INPUTS=(
   APP_DB_PASSWORD ZITADEL_DB_PASSWORD ZITADEL_MASTERKEY ZITADEL_ADMIN_PASSWORD
-  LINKING_OTP_HMAC_KEY MAILPIT_UI_AUTH GATEWAY_ORIGIN_VERIFY
+  LINKING_OTP_HMAC_KEY MAILPIT_UI_AUTH MAILPIT_SEND_API_AUTH GATEWAY_ORIGIN_VERIFY
   APP_HOST AUTH_HOST MAILPIT_HOST DB_HOST AWS_REGION OTEL_LOG_GROUP DATAPROTECTION_SSM_PATH DATAPROTECTION_KMS_KEY_ID
   RDS_CA_BUNDLE GATEWAY_REALIP_CONF API_IMAGE WORKER_IMAGE GATEWAY_IMAGE CORE_BANKING_IMAGE ZITADEL_IMAGE
 )
@@ -35,7 +35,7 @@ within_bounds() {
       # LinkingOptions' bound: base64 (RFC 4648 section 4, padded) for at least 32 bytes.
       [[ $value =~ ^[A-Za-z0-9+/]+={0,2}$ ]] && (( ${#value} % 4 == 0 )) \
         && (( $(printf '%s' "$value" | base64 -d 2>/dev/null | wc -c) >= 32 )) ;;
-    MAILPIT_UI_AUTH)
+    MAILPIT_UI_AUTH | MAILPIT_SEND_API_AUTH)
       [[ $value =~ ^[A-Za-z0-9]{1,32}:[A-Za-z0-9]{32,128}$ ]] ;;
     APP_HOST | AUTH_HOST | MAILPIT_HOST | DB_HOST)
       (( ${#value} <= 253 )) && [[ $value =~ $HOST_NAME ]] ;;

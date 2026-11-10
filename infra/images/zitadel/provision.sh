@@ -152,7 +152,7 @@ call POST /admin/v1/policies/label/_activate '{}' >/dev/null
 log "label policy activated"
 
 ME=$(call GET /auth/v1/users/me)
-ORG_ID=$(jq -r '.user.details.resourceOwner' <<< "$ME")
+ORG_ID=$(jq -er '.user.details.resourceOwner' <<< "$ME")
 PROVISIONER_ID=$(jq -er '.user.id' <<< "$ME")
 log "organization $ORG_ID"
 
@@ -271,12 +271,13 @@ log "public organization registration closed"
 # ------------------------------------------------------------ human administrators, where the inbox may be public
 # Zitadel mails password-reset links to the Mailpit inbox, which may be public in AWS, so there a reader could reset a
 # human administrator's password. So each human administrator in scope is deactivated, and Zitadel refuses a
-# deactivated user's sign-in. In scope: every administrator role of a DisputeDesk user, and every instance
-# administrator role. A user of another organization who administers only that organization is out of scope, so it
-# can never fail this step. This provisioner is a machine user with a PAT, so it keeps working. It runs at every start;
-# an inactive user is skipped, because DeactivateUser fails on one. It fails closed: the administrator list must be
+# deactivated user's sign-in. In scope: every administrator role of a DisputeDesk user, every instance administrator
+# role, and every administrator role on the DisputeDesk organization or project, whoever holds it. A user of another
+# organization who administers only that organization is out of scope, so it can never fail this step. This
+# provisioner is a machine user with a PAT, so it keeps working. It runs at every start; an inactive user is skipped,
+# because DeactivateUser fails on one. It fails closed: the administrator list must be
 # whole and hold this provisioner, and a second reading afterwards must find no human administrator in scope active.
-ADMIN_SCOPE="{\"filters\":[{\"or\":{\"queries\":[{\"userOrganizationId\":{\"id\":\"$ORG_ID\"}},{\"resource\":{\"instance\":true}}]}}]}"
+ADMIN_SCOPE="{\"filters\":[{\"or\":{\"queries\":[{\"userOrganizationId\":{\"id\":\"$ORG_ID\"}},{\"resource\":{\"instance\":true}},{\"resource\":{\"organizationId\":\"$ORG_ID\"}},{\"resource\":{\"projectId\":\"$PROJECT_ID\"}}]}}]}"
 ADMIN_IDS='[.administrators[].user.id] | unique | .[]'   # one entry per role assignment, so a user can appear twice
 # GetUserByID, unlike ListUsers, brings Zitadel's user view up to date before it reads, so it sees each deactivation.
 HUMAN_NOT_INACTIVE='.user | if has("human") then .state != "USER_STATE_INACTIVE"
@@ -295,7 +296,12 @@ active_human_admins(){
   ids=$(jq -r "$ADMIN_IDS" <<< "$admins") || return 1
   for id in $ids; do
     active=$(rpc zitadel.user.v2.UserService/GetUserByID "{\"userId\":\"$id\"}" | jq -r "$HUMAN_NOT_INACTIVE") || return 1
-    if [ "$active" = true ]; then printf '%s\n' "$id"; fi
+    # jq prints nothing for an empty body, so only true and false are answers.
+    case $active in
+      true) printf '%s\n' "$id" ;;
+      false) ;;
+      *) log "GetUserByID $id did not answer with one user"; return 1 ;;
+    esac
   done
 }
 

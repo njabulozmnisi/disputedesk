@@ -53,8 +53,9 @@ flowchart LR
   `ci.yml`.
 - The Zitadel console is not exposed: the gateway answers 404 on `/ui/console`.
 - **No human administrator can sign in to Zitadel.** Zitadel mails password-reset links to Mailpit, whose inbox may be
-  public, so at every deploy the provisioner deactivates each human that holds an administrator role on the instance
-  or as a DisputeDesk user, the FirstInstance `admin` included, and the deploy fails if one is left active. Public
+  public, so at every deploy the provisioner deactivates each human that holds an administrator role on the instance,
+  on the DisputeDesk organization or project, or as a DisputeDesk user, the FirstInstance `admin` included, and the
+  deploy fails if one is left active. Public
   organization registration is closed, so no visitor can make themselves an organization's owner. For administrator
   access, open a shell on the instance (as in *A half-done database init*) and call Zitadel's API from the zitadel
   container with the provisioner's IAM_OWNER token, `/zitadel/bootstrap/admin.pat`, which never leaves the instance
@@ -184,6 +185,24 @@ letters_and_digits 32 | put_secret ZITADEL_MASTERKEY                # exactly 32
 { letters_and_digits 60; printf 'Aa1-'; } | put_secret ZITADEL_ADMIN_PASSWORD   # [A-Za-z0-9-]{32,128}, each class
 openssl rand -base64 32 | tr -d '\n' | put_secret LINKING_OTP_HMAC_KEY        # base64 of 32 bytes
 { printf 'mailpit:'; letters_and_digits 64; } | put_secret MAILPIT_UI_AUTH     # user:password, [A-Za-z0-9]
+{ printf 'send:'; letters_and_digits 64; } | put_secret MAILPIT_SEND_API_AUTH  # user:password, [A-Za-z0-9]
+```
+
+`MAILPIT_SEND_API_AUTH` is Mailpit's Send API login, kept apart from the published UI login so a reader cannot send
+mail into the inbox. Nothing in the stack uses the Send API, so this login is never handed out. It was added after the
+first deploy, and the next deploy stops with "MAILPIT_SEND_API_AUTH is missing" until it exists. On an environment that
+predates it, create it with this command alone. Never rerun the block above on a deployed environment: its
+`--overwrite` would replace the live Zitadel master key and database passwords.
+
+```sh
+SSM_PATH=/disputedesk/dev
+KEY_ARN=$(aws ssm get-parameter --name "$SSM_PATH/DATAPROTECTION_KMS_KEY_ID" --query Parameter.Value --output text)
+file=$(mktemp)            # mode 0600
+{ printf 'send:'; LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 64; } > "$file"
+# No --overwrite: it fails if the parameter already exists.
+aws ssm put-parameter --name "$SSM_PATH/MAILPIT_SEND_API_AUTH" --type SecureString --key-id "$KEY_ARN" \
+  --value "file://$file" > /dev/null
+rm -f "$file"
 ```
 
 Terraform already wrote the other nine values the deploy reads, the RDS master password among them. The Api keeps its
@@ -309,13 +328,15 @@ Run them after the first deploy, and after any change to the Terraform or the AW
    `/disputedesk-dev/otel` logs. X-Ray's trace list indexes only a sample of spans, about 1 % by default, so look in
    `aws/spans` (CloudWatch, Transaction Search), which holds every span. Each command prints at least one line; the
    metrics are only the app's own `disputedesk.*` instruments (`disputedesk.disputes.raised` after a raise), because
-   the collector drops every other metric:
+   the collector drops every other metric. `--recently-active PT3H` lists only metrics with data in the past three
+   hours (CloudWatch `ListMetrics`), since a metric that stops receiving data stays listed for two weeks:
 
    ```sh
    since=$(( ($(date +%s) - 3600) * 1000 ))
    aws logs filter-log-events --log-group-name aws/spans --start-time "$since" --filter-pattern '"disputes"' \
      --max-items 5 --query 'events[].message' --output text
-   aws cloudwatch list-metrics --namespace DisputeDesk --query 'Metrics[].MetricName' --output text
+   aws cloudwatch list-metrics --namespace DisputeDesk --recently-active PT3H --query 'Metrics[].MetricName' \
+     --output text
    aws logs filter-log-events --log-group-name /disputedesk-dev/otel --log-stream-names otlp --start-time "$since" \
      --max-items 5 --query 'events[].message' --output text
    ```
@@ -367,7 +388,9 @@ Run them after the first deploy, and after any change to the Terraform or the AW
     done
     ```
 
-12. No human can administer Zitadel, and nothing was added beside the provisioner's own users. On the instance, from
+12. No human can administer Zitadel, nothing was added beside the provisioner's own users, and no administrative
+    change was made by anyone but Zitadel's setup or the provisioner. Run it a minute after the deploy finishes, because
+    `ListUsers` reads a projection that catches up after the deploy's changes. On the instance, from
     `/opt/disputedesk`, this asks Zitadel's API with the provisioner's token, inside the zitadel container:
 
     ```sh
@@ -383,20 +406,58 @@ Run them after the first deploy, and after any change to the Terraform or the AW
     rpc zitadel.org.v2.OrganizationService/ListOrganizations '{}' | jq -c '[.result[].name] | sort'
     rpc zitadel.user.v2.UserService/ListUsers '{"queries":[{"typeQuery":{"type":"TYPE_MACHINE"}}]}' \
       | jq -c '[.result[].username] | sort'
+
+    # Administrative events (Admin API ListEvents): organizations, administrators, machine credentials, apps,
+    # authorizations, actions, the mail server. Zitadel's setup writes its events with no editor; the provisioner
+    # writes the rest of what it creates. Any other event of these types is printed.
+    provisioner=$(rpc zitadel.user.v2.UserService/ListUsers \
+      '{"queries":[{"userNameQuery":{"userName":"provisioner","method":"TEXT_QUERY_METHOD_EQUALS"}}]}' \
+      | jq -er '.result | if length == 1 then .[0].userId else error("not exactly one provisioner") end')
+    expected='{"setup":["org.added","instance.member.added","org.member.added","user.machine.added","user.pat.added",
+        "project.application.added","instance.smtp.config.added"],
+      "provisioner":["project.application.added","project.application.config.oidc.secret.changed","user.machine.added",
+        "user.machine.secret.set","user.grant.added"]}'
+    rpc admin/v1/events/_search '{"asc":true,"limit":1000,
+      "aggregateTypes":["org","instance","project","user","usergrant","execution","target"],
+      "eventTypes":["org.added","instance.member.added","instance.member.changed","org.member.added","org.member.changed",
+        "project.member.added","project.member.changed","project.grant.added","project.grant.member.added",
+        "project.application.added","project.application.config.oidc.changed","project.application.config.oidc.secret.changed",
+        "project.application.config.api.secret.changed","user.machine.added","user.pat.added","user.machine.key.added",
+        "user.machine.secret.set","user.machine.secret.updated","user.grant.added","user.grant.changed","user.reactivated",
+        "user.unlocked","user.impersonated","execution.set","execution.v2.set","target.added",
+        "instance.smtp.config.added","instance.smtp.config.changed"]}' \
+      | jq -c --arg provisioner "$provisioner" --argjson expected "$expected" '
+          if (.events // [] | length) >= 1000 then error("1000 events or more: page them with from") else . end
+          | [(.events // [])[]
+             | {date: .creationDate, type: .type.type, aggregate: .aggregate.id,
+                editor: ((.editor.userId // "") | if . == "" then "setup" elif . == $provisioner then "provisioner" else . end)}
+             | select(. as $event | $expected[$event.editor] // [] | any(.[]; . == $event.type) | not)]'
+
+    # Identity providers (instance and DisputeDesk), v1 actions, and v2 targets and executions: none is configured.
+    { rpc admin/v1/idps/templates/_search '{}' | jq '.result | length'
+      rpc management/v1/idps/templates/_search '{}' | jq '.result | length'
+      rpc management/v1/actions/_search '{}' | jq '.result | length'
+      rpc zitadel.action.v2.ActionService/ListTargets '{}' | jq '.targets | length'
+      rpc zitadel.action.v2.ActionService/ListExecutions '{}' | jq '.executions | length'
+    } | jq -sc .
     SH
     ```
 
-    It must print exactly these three lines: the administrators are the provisioner (active) and `admin` (inactive),
-    DisputeDesk is the only organization, and the only machine users are the provisioner and the operations tools.
-    Zitadel stores the FirstInstance admin's username with its domain, `admin@disputedesk.<AUTH_HOST>`.
+    It must print exactly these five lines: the administrators are the provisioner (active) and `admin` (inactive),
+    DisputeDesk is the only organization, the only machine users are the provisioner and the operations tools, no
+    administrative event came from anyone else, and no identity provider, action, target or execution exists. Zitadel
+    stores the FirstInstance admin's username with its domain, `admin@disputedesk.<AUTH_HOST>`.
 
     ```text
     [{"username":"admin@disputedesk.<AUTH_HOST>","type":"human","state":"USER_STATE_INACTIVE"},{"username":"provisioner","type":"machine","state":"USER_STATE_ACTIVE"}]
     ["DisputeDesk"]
     ["operations-tools","provisioner"]
+    []
+    [0,0,0,0,0]
     ```
 
-    Publish the Mailpit login only after this check passes.
+    Publish the Mailpit login only after this check passes. Any other output goes to a human before anything is
+    changed: an event in the fourth line names its type, its editor's user ID and the user or object it changed.
 
 ## Rollback
 
@@ -415,7 +476,7 @@ First delete what Terraform did not create: the person-made secrets and the Api'
 
 ```sh
 for name in APP_DB_PASSWORD ZITADEL_DB_PASSWORD QA_DB_PASSWORD ZITADEL_MASTERKEY \
-  ZITADEL_ADMIN_PASSWORD LINKING_OTP_HMAC_KEY MAILPIT_UI_AUTH; do
+  ZITADEL_ADMIN_PASSWORD LINKING_OTP_HMAC_KEY MAILPIT_UI_AUTH MAILPIT_SEND_API_AUTH; do
   aws ssm delete-parameter --name "/disputedesk/dev/$name"
 done
 aws ssm get-parameters-by-path --path /disputedesk-dataprotection/dev --recursive --query 'Parameters[].Name' \

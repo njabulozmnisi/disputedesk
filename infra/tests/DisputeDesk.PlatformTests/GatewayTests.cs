@@ -360,6 +360,21 @@ public sealed partial class GatewayTests(GatewayFixture gateway) : IClassFixture
         Assert.Equal(200, right.Status);
     }
 
+    [Fact]
+    public async Task AwsMailpitOrigin_SendApi_RefusesTheUiLoginAndTakesItsOwn()
+    {
+        // aws-admin-lockdown L2: with MP_SEND_API_AUTH set, Mailpit checks the Send API against it alone (Mailpit
+        // v1.32.0, server.go sendAPIAuthMiddleware), so a reader holding the published UI login cannot send mail.
+        string[] message = ["-X", "POST", "-H", "Content-Type: application/json",
+            "--data", """{"From":{"Email":"sender@disputedesk.test"},"To":[{"Email":"reader@disputedesk.test"}],"Subject":"Send API test"}"""];
+
+        Reply uiLogin = await AwsAsync(gateway.MailHost, "/api/v1/send", ["-u", gateway.MailpitCredentials, .. message]);
+        Reply sendLogin = await AwsAsync(gateway.MailHost, "/api/v1/send", ["-u", gateway.MailpitSendCredentials, .. message]);
+
+        Assert.Equal(401, uiLogin.Status);
+        Assert.Equal(200, sendLogin.Status);
+    }
+
     [Theory]
     [InlineData("/mailpit/")]
     [InlineData("/mailpit/api/v1/messages")]

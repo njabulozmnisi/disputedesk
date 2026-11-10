@@ -1,0 +1,307 @@
+{
+  "status": "built",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a5148379790fc8974",
+  "base": "f6193f5b574953f4212a8bbea9d6b4668430f886",
+  "rows": [
+    {
+      "row": 1,
+      "feature": "ui-tokens-icons",
+      "outcome": "fixed (documented): the shell-command form already runs Vitest (ui-tokens-icons fix rounds 1 and 2 used it); run-breaks.sh's header now gives that form, with npm ci because the copy has no node_modules. No new mode.",
+      "test": "scripts/run-breaks.test.sh (unchanged behaviour)"
+    },
+    {
+      "row": 2,
+      "feature": "ui-tokens-icons",
+      "outcome": "fixed: verify-with-copilot.sh refuses a spec path that does not exist (exit 2, before the model runs), passes the spec by its absolute path, writes the record to the main checkout's docs/verification/ (the parent of git's common directory), and appends a '## Copilot run' section when the record exists instead of overwriting it.",
+      "test": "scripts/verify-with-copilot.test.sh (new, added to CI's floor-guard job)"
+    },
+    {
+      "row": 3,
+      "feature": "cloudwatch-metric-filter",
+      "outcome": "fixed: the collector's docker run -d gets 5 minutes like validate; docker port and docker stop exit codes are asserted.",
+      "test": "DisputeDesk.PlatformTests.ComposeRenderTests.CollectorConfig_ExportsOnlyTheAppsMetricsEachWithItsOwnAttributesAsItsOneDimensionSet (test-only change, no break)"
+    },
+    {
+      "row": 4,
+      "feature": "cloudwatch-metric-filter",
+      "outcome": "fixed (docs): post-deploy check 2 uses list-metrics --recently-active PT3H (AWS CLI reference: the only valid value; ListMetrics drops a metric after two weeks without data).",
+      "test": "none (README; run on AWS by the owner)"
+    },
+    {
+      "row": 5,
+      "feature": "cloudwatch-metric-filter",
+      "outcome": "fixed (comment): config.yaml cites awsemf's metric_translator.go for unmatched metrics written to the record, and the filter processor README for metric_conditions only. Checked against opentelemetry-collector-contrib v0.164.0 source.",
+      "test": "none (comment)"
+    },
+    {
+      "row": 6,
+      "feature": "deploy-recreate-on-config",
+      "outcome": "fixed: redpanda gets stop_grace_period: 90s in docker-compose.yml (Redpanda Helm chart's terminationGracePeriodSeconds default, 90), inherited by the AWS override.",
+      "test": "DisputeDesk.PlatformTests.ComposeRenderTests.Redpanda_HasTheStopGracePeriodOfRedpandasHelmChart"
+    },
+    {
+      "row": 7,
+      "feature": "rds-init-grant",
+      "outcome": "L1 fixed: a source assertion that neither infra/deploy/aws/deploy.sh nor infra/images/postgres/10-roles-and-databases.sh sets createrole_self_grant. L2 not changed: the record says to add GRANT disputedesk TO CURRENT_USER only once RDS shows it is needed; four deploys since 2026-11-07 succeeded, so RDS is at '3 2' and the old script's half-done state is gone, and the reviewer confirmed the recovery holds for any state the current script can leave.",
+      "test": "DisputeDesk.PlatformTests.DeployScriptTests.Source_NeverSetsCreateroleSelfGrant"
+    },
+    {
+      "row": 8,
+      "feature": "aws-admin-lockdown",
+      "outcome": "fixed: provision.sh's ListAdministrators filter adds resource organizationId (DisputeDesk) and projectId (DisputeDesk project), so a user of another organization holding an administrator role on either is in scope.",
+      "test": "DisputeDesk.PlatformTests.PlatformScriptTests.ProvisionSection_HumanAdministratorsInScope_AreDeactivated_AndAFreshReadingFindsNoneActive"
+    },
+    {
+      "row": 9,
+      "feature": "aws-admin-lockdown",
+      "outcome": "fixed (docs): check 12 now also prints the security record's sweep C (administrative events not written by Zitadel's setup or the provisioner, as one JSON array, expected []) and sweep D (IdP, action, target and execution counts, expected [0,0,0,0,0]); exact expected output is five lines. Not run against AWS.",
+      "test": "none (README; the jq filter was run locally on sample events)"
+    },
+    {
+      "row": 10,
+      "feature": "aws-admin-lockdown",
+      "outcome": "fixed: new SSM input MAILPIT_SEND_API_AUTH (README step 5 put_secret line and destroy list, deploy.sh FROM_SSM, input-bounds.sh with MAILPIT_UI_AUTH's bound, AWS compose MP_SEND_API_AUTH). Mailpit v1.32.0 checked in source: MP_SEND_API_AUTH takes the same htpasswd user:password form, and when set the Send API checks it alone; delete stays behind the UI login (accepted in the record). The owner must create /disputedesk/dev/MAILPIT_SEND_API_AUTH before the next deploy, which otherwise stops with 'MAILPIT_SEND_API_AUTH is missing'.",
+      "test": "DisputeDesk.PlatformTests.GatewayTests.AwsMailpitOrigin_SendApi_RefusesTheUiLoginAndTakesItsOwn"
+    },
+    {
+      "row": 11,
+      "feature": "aws-admin-lockdown",
+      "outcome": "fixed: ORG_ID read with jq -er.",
+      "test": "DisputeDesk.PlatformTests.PlatformScriptTests.ProvisionScript_ItsOwnUserWithoutAnOrganization_FailsTheRun"
+    },
+    {
+      "row": 12,
+      "feature": "aws-admin-lockdown",
+      "outcome": "fixed: active_human_admins accepts only true or false from GetUserByID; anything else (an empty 200 body) logs and fails the run.",
+      "test": "DisputeDesk.PlatformTests.PlatformScriptTests.ProvisionSection_EmptyUserAnswer_FailsTheRun"
+    },
+    {
+      "row": 13,
+      "feature": "process-checks",
+      "outcome": "out of scope: process-checks feature",
+      "test": "none"
+    },
+    {
+      "row": 14,
+      "feature": "process-checks",
+      "outcome": "out of scope: process-checks feature",
+      "test": "none"
+    },
+    {
+      "row": 15,
+      "feature": "process-checks",
+      "outcome": "out of scope: process-checks feature (note for that spec: story-patch.sh already builds the patch with a temporary index and git add -A, so untracked files are carried without touching the worktree index; it may already be fixed)",
+      "test": "none"
+    },
+    {
+      "row": 16,
+      "feature": "process-checks",
+      "outcome": "out of scope: process-checks feature",
+      "test": "none"
+    },
+    {
+      "row": 17,
+      "feature": "process-checks",
+      "outcome": "out of scope: process-checks feature (verify-with-copilot.sh's usage line was left as it was)",
+      "test": "none"
+    },
+    {
+      "row": 18,
+      "feature": "process-checks",
+      "outcome": "out of scope: process-checks feature",
+      "test": "none"
+    },
+    {
+      "row": "19 L2",
+      "feature": "lows batch (ci-e2e-regression)",
+      "outcome": "fixed (comment): the record's wall time is still pending, so the time was measured from CI: e2e-regression jobs of runs 42233345892, 42489923783, 42566513585 and 42607278678 took 28.4, 26.7, 27.5 and 26.6 minutes; ci.yml says about 27 minutes (26.6 to 28.4).",
+      "test": "scripts/regression-paths.test.sh (comment still names the wall time)"
+    },
+    {
+      "row": "19 L3",
+      "feature": "lows batch (ci-e2e-regression)",
+      "outcome": "fixed: StackSources takes every string of the rendered model that starts with the repository root, rendered with COMPOSE_PROFILES=* (Docker docs: --profile \"*\" enables every profile; checked on Compose 5.6.1, CI's version), and asserts the build-profile spa's context is among them. A dockerfile outside its context is still not read (it renders relative).",
+      "test": "DisputeDesk.PlatformTests.ComposeRenderTests.RegressionPathsList_CoversEveryStackInputAndTheJobsOwnFiles"
+    },
+    {
+      "row": "19 L4",
+      "feature": "lows batch (ci-e2e-regression)",
+      "outcome": "fixed: step decide passes the checked-out merge commit's parents (HEAD^1 base, HEAD^2 head) instead of the payload SHAs, which a force-pushed stacked base can make unreachable.",
+      "test": "scripts/regression-paths.test.sh (decide now runs on a scratch repository whose HEAD is a merge commit)"
+    }
+  ],
+  "criteria": [
+    {
+      "id": "row 1",
+      "test": "scripts/run-breaks.test.sh"
+    },
+    {
+      "id": "row 2",
+      "test": "scripts/verify-with-copilot.test.sh"
+    },
+    {
+      "id": "row 3",
+      "test": "DisputeDesk.PlatformTests.ComposeRenderTests.CollectorConfig_ExportsOnlyTheAppsMetricsEachWithItsOwnAttributesAsItsOneDimensionSet"
+    },
+    {
+      "id": "row 6",
+      "test": "DisputeDesk.PlatformTests.ComposeRenderTests.Redpanda_HasTheStopGracePeriodOfRedpandasHelmChart"
+    },
+    {
+      "id": "row 7 L1",
+      "test": "DisputeDesk.PlatformTests.DeployScriptTests.Source_NeverSetsCreateroleSelfGrant"
+    },
+    {
+      "id": "row 8",
+      "test": "DisputeDesk.PlatformTests.PlatformScriptTests.ProvisionSection_HumanAdministratorsInScope_AreDeactivated_AndAFreshReadingFindsNoneActive"
+    },
+    {
+      "id": "row 10",
+      "test": "DisputeDesk.PlatformTests.GatewayTests.AwsMailpitOrigin_SendApi_RefusesTheUiLoginAndTakesItsOwn; ComposeRenderTests (inputs, references, mailpit environment); DeployScriptTests Input_AtItsBound_IsAccepted and Input_PastItsBound_IsRefusedBeforeDockerNamingIt for MAILPIT_SEND_API_AUTH"
+    },
+    {
+      "id": "row 11",
+      "test": "DisputeDesk.PlatformTests.PlatformScriptTests.ProvisionScript_ItsOwnUserWithoutAnOrganization_FailsTheRun"
+    },
+    {
+      "id": "row 12",
+      "test": "DisputeDesk.PlatformTests.PlatformScriptTests.ProvisionSection_EmptyUserAnswer_FailsTheRun"
+    },
+    {
+      "id": "row 19 L3",
+      "test": "DisputeDesk.PlatformTests.ComposeRenderTests.RegressionPathsList_CoversEveryStackInputAndTheJobsOwnFiles"
+    },
+    {
+      "id": "row 19 L4",
+      "test": "scripts/regression-paths.test.sh"
+    }
+  ],
+  "smoke": "No running-stack smoke: nothing here changes the local stack's behaviour except Redpanda's stop grace, which the render test covers. Run: platform suite (480/480, stack lock), scripts ci-gates, run-breaks, verify-with-copilot, main-protection, check-ready, regression-paths, check-infra-paths, rule-text and guard tests (all pass), shellcheck over CI's file set (clean), actionlint (clean), floor-guard (clean), check-infra-paths (clean), ci-gates on ci.yml (clean), secret-scan (no leaks), security-local.sh Trivy fs and config (exit 0), dotnet format on PlatformTests (no changes).",
+  "standards": [
+    {
+      "mechanism": "Mailpit Send API authentication (MP_SEND_API_AUTH)",
+      "source": "https://mailpit.axllent.org/docs/configuration/runtime-options/ ; checked in https://github.com/axllent/mailpit/blob/v1.32.0/server/server.go (sendAPIAuthMiddleware) and internal/auth/auth.go"
+    },
+    {
+      "mechanism": "Compose stop_grace_period, 90 s from Redpanda's Helm chart",
+      "source": "https://docs.docker.com/reference/compose-file/services/#stop_grace_period ; https://docs.redpanda.com/current/reference/k-redpanda-helm-spec/ (terminationGracePeriodSeconds default 90)"
+    },
+    {
+      "mechanism": "Compose every-profile render (COMPOSE_PROFILES=*)",
+      "source": "https://docs.docker.com/compose/how-tos/profiles/"
+    },
+    {
+      "mechanism": "pull_request merge commit parents for the path diff",
+      "source": "https://docs.github.com/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#pull_request (GITHUB_SHA is the last merge commit)"
+    },
+    {
+      "mechanism": "Zitadel ListAdministrators resource filter (organizationId, projectId)",
+      "source": "https://github.com/zitadel/zitadel/blob/v4.20.0/proto/zitadel/internal_permission/v2/query.proto"
+    },
+    {
+      "mechanism": "Zitadel Admin ListEvents for check 12 (sweep C) and the IdP, action, target and execution listings (sweep D)",
+      "source": "docs/verification/aws-admin-lockdown-security.md (read from the v4.20.0 protos); setup events carry no editor: https://github.com/zitadel/zitadel/blob/v4.20.0/internal/command/instance.go (contextWithInstanceSetupInfo sets no UserID)"
+    },
+    {
+      "mechanism": "CloudWatch list-metrics --recently-active PT3H",
+      "source": "https://docs.aws.amazon.com/cli/latest/reference/cloudwatch/list-metrics.html"
+    },
+    {
+      "mechanism": "git common directory to find the main checkout",
+      "source": "https://git-scm.com/docs/git-rev-parse#Documentation/git-rev-parse.txt---git-common-dir ; https://git-scm.com/docs/git-worktree#_details"
+    },
+    {
+      "mechanism": "jq -e exit status for a missing field",
+      "source": "https://jqlang.org/manual/#invoking-jq (--exit-status)"
+    }
+  ],
+  "breaks": [
+    {
+      "row": "2",
+      "patch": "--- a/scripts/verify-with-copilot.sh\n+++ b/scripts/verify-with-copilot.sh\n@@ -7,7 +7,6 @@\n set -euo pipefail\n \n story=${1:?story id}; story_file=${2:?story file}\n-[[ -f \"$story_file\" ]] || { echo \"verify: no spec at $story_file; give the main checkout's path when the worktree lacks it\" >&2; exit 2; }\n story_file=\"$(cd \"$(dirname \"$story_file\")\" && pwd)/$(basename \"$story_file\")\"\n models=(\"${VERIFIER_MODEL:-gpt-6-astra}\" \"${VERIFIER_FALLBACK_MODEL:-gpt-6-sol}\")\n root=$(git rev-parse --show-toplevel)\n",
+      "test_method": "scripts/verify-with-copilot.test.sh",
+      "expect": "fails: a spec the worktree lacks is no longer refused"
+    },
+    {
+      "row": "2",
+      "patch": "--- a/scripts/verify-with-copilot.sh\n+++ b/scripts/verify-with-copilot.sh\n@@ -16,7 +16,7 @@\n diff_hash=$(\"$root/scripts/diff-hash.sh\" \"$root\" HEAD)\n # The main checkout holds the repository's common git directory, which every worktree shares (git-worktree, DETAILS).\n main_checkout=$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\n-out=\"$main_checkout/docs/verification/$story-verify.md\"\n+out=\"$root/docs/verification/$story-verify.md\"\n mkdir -p \"$(dirname \"$out\")\"\n \n # The heredoc is read outside $(...): bash 3.2 (macOS /bin/bash) ends a command substitution early on the\n",
+      "test_method": "scripts/verify-with-copilot.test.sh",
+      "expect": "fails: the record goes back into the worktree"
+    },
+    {
+      "row": "2",
+      "patch": "--- a/scripts/verify-with-copilot.sh\n+++ b/scripts/verify-with-copilot.sh\n@@ -52,7 +52,7 @@\n       echo \"- Commit: \\`$sha\\` (uncommitted diff hash \\`$diff_hash\\`)\"\n       echo \"- Verifier: $model via GitHub Copilot CLI\"\n       echo \"- Date (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)\"; echo\n-      echo \"$result\"; } >> \"$out\"\n+      echo \"$result\"; } > \"$out\"\n     echo \"$out\"\n     grep -q '^VERDICT: PASS' <<<\"$result\" && exit 0 || exit 1\n   fi\n",
+      "test_method": "scripts/verify-with-copilot.test.sh",
+      "expect": "fails: a second run replaces the record"
+    },
+    {
+      "row": "19 L4",
+      "patch": "--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -435,7 +435,7 @@\n             exit 0\n           fi\n           status=0\n-          scripts/regression-paths.sh HEAD^1 HEAD^2 || status=$?\n+          scripts/regression-paths.sh HEAD^2 HEAD^1 || status=$?\n           case $status in\n             0) echo \"run=true\" >> \"$GITHUB_OUTPUT\" ;;\n             1)\n",
+      "test_method": "scripts/regression-paths.test.sh",
+      "expect": "fails: decide passes the merge parents head first (needs yq v4 on PATH)"
+    },
+    {
+      "row": "6",
+      "patch": "--- a/docker-compose.yml\n+++ b/docker-compose.yml\n@@ -68,7 +68,6 @@\n       - --default-log-level=warn\n     # Time to shut down after SIGTERM before Compose kills it: the 90 s Redpanda's Helm chart gives a broker\n     # (statefulset terminationGracePeriodSeconds), not Compose's default 10 s. Each AWS deploy recreates it.\n-    stop_grace_period: 90s\n     ports: [\"127.0.0.1:${DISPUTEDESK_REDPANDA_PORT:-19092}:19092\"]\n     volumes: [\"redpanda:/var/lib/redpanda/data\"]\n     healthcheck:\n",
+      "test_method": "DisputeDesk.PlatformTests.ComposeRenderTests.Redpanda_HasTheStopGracePeriodOfRedpandasHelmChart",
+      "expect": "fails: no stop_grace_period"
+    },
+    {
+      "row": "7 L1",
+      "patch": "--- a/infra/images/postgres/10-roles-and-databases.sh\n+++ b/infra/images/postgres/10-roles-and-databases.sh\n@@ -6,7 +6,7 @@\n #   qa_readonly  QA evidence queries. SELECT on the app schema only, read-only sessions.\n # Passwords arrive as environment variables. psql reads them itself (\\getenv, psql 15+), so they never\n # appear on a command line, and binds them as psql variables, never spliced into SQL.\n-set -eu\n+set -eu; export PGOPTIONS=\"-c createrole_self_grant=set,inherit\"\n \n psql -v ON_ERROR_STOP=1 --username \"$POSTGRES_USER\" --dbname postgres <<'SQL'\n \\getenv app_password APP_DB_PASSWORD\n",
+      "test_method": "DisputeDesk.PlatformTests.DeployScriptTests.Source_NeverSetsCreateroleSelfGrant",
+      "expect": "fails: the init sets createrole_self_grant through PGOPTIONS"
+    },
+    {
+      "row": "8",
+      "patch": "--- a/infra/images/zitadel/provision.sh\n+++ b/infra/images/zitadel/provision.sh\n@@ -277,7 +277,7 @@\n # provisioner is a machine user with a PAT, so it keeps working. It runs at every start; an inactive user is skipped,\n # because DeactivateUser fails on one. It fails closed: the administrator list must be\n # whole and hold this provisioner, and a second reading afterwards must find no human administrator in scope active.\n-ADMIN_SCOPE=\"{\\\"filters\\\":[{\\\"or\\\":{\\\"queries\\\":[{\\\"userOrganizationId\\\":{\\\"id\\\":\\\"$ORG_ID\\\"}},{\\\"resource\\\":{\\\"instance\\\":true}},{\\\"resource\\\":{\\\"organizationId\\\":\\\"$ORG_ID\\\"}},{\\\"resource\\\":{\\\"projectId\\\":\\\"$PROJECT_ID\\\"}}]}}]}\"\n+ADMIN_SCOPE=\"{\\\"filters\\\":[{\\\"or\\\":{\\\"queries\\\":[{\\\"userOrganizationId\\\":{\\\"id\\\":\\\"$ORG_ID\\\"}},{\\\"resource\\\":{\\\"instance\\\":true}}]}}]}\"\n ADMIN_IDS='[.administrators[].user.id] | unique | .[]'   # one entry per role assignment, so a user can appear twice\n # GetUserByID, unlike ListUsers, brings Zitadel's user view up to date before it reads, so it sees each deactivation.\n HUMAN_NOT_INACTIVE='.user | if has(\"human\") then .state != \"USER_STATE_INACTIVE\"\n",
+      "test_method": "DisputeDesk.PlatformTests.PlatformScriptTests.ProvisionSection_HumanAdministratorsInScope_AreDeactivated_AndAFreshReadingFindsNoneActive",
+      "expect": "fails: the organization and project roles are out of scope again"
+    },
+    {
+      "row": "10",
+      "patch": "--- a/infra/deploy/aws/compose.yml\n+++ b/infra/deploy/aws/compose.yml\n@@ -110,7 +110,6 @@\n       MP_SMTP_AUTH_ALLOW_INSECURE: \"1\"\n       MP_UI_AUTH: ${MAILPIT_UI_AUTH:?MAILPIT_UI_AUTH, one user:password pair, is required}\n       # Its own login for the Send API, which otherwise takes the published UI login (Mailpit, \"Send API\" authentication).\n-      MP_SEND_API_AUTH: ${MAILPIT_SEND_API_AUTH:?MAILPIT_SEND_API_AUTH, one user:password pair, is required}\n     ports: !reset []\n     mem_limit: 128m\n \n",
+      "test_method": "DisputeDesk.PlatformTests.GatewayTests.AwsMailpitOrigin_SendApi_RefusesTheUiLoginAndTakesItsOwn",
+      "expect": "fails: without MP_SEND_API_AUTH the UI login sends mail"
+    },
+    {
+      "row": "11",
+      "patch": "--- a/infra/images/zitadel/provision.sh\n+++ b/infra/images/zitadel/provision.sh\n@@ -152,7 +152,7 @@\n log \"label policy activated\"\n \n ME=$(call GET /auth/v1/users/me)\n-ORG_ID=$(jq -er '.user.details.resourceOwner' <<< \"$ME\")\n+ORG_ID=$(jq -r '.user.details.resourceOwner' <<< \"$ME\")\n PROVISIONER_ID=$(jq -er '.user.id' <<< \"$ME\")\n log \"organization $ORG_ID\"\n \n",
+      "test_method": "DisputeDesk.PlatformTests.PlatformScriptTests.ProvisionScript_ItsOwnUserWithoutAnOrganization_FailsTheRun",
+      "expect": "fails: a missing resourceOwner becomes null"
+    },
+    {
+      "row": "12",
+      "patch": "--- a/infra/images/zitadel/provision.sh\n+++ b/infra/images/zitadel/provision.sh\n@@ -300,7 +300,7 @@\n     case $active in\n       true) printf '%s\\n' \"$id\" ;;\n       false) ;;\n-      *) log \"GetUserByID $id did not answer with one user\"; return 1 ;;\n+      *) ;;\n     esac\n   done\n }\n",
+      "test_method": "DisputeDesk.PlatformTests.PlatformScriptTests.ProvisionSection_EmptyUserAnswer_FailsTheRun",
+      "expect": "fails: an empty user answer counts as not active"
+    },
+    {
+      "row": "19 L3",
+      "patch": "--- a/infra/tests/DisputeDesk.PlatformTests/ComposeRenderTests.cs\n+++ b/infra/tests/DisputeDesk.PlatformTests/ComposeRenderTests.cs\n@@ -667,7 +667,7 @@\n     {\n         string[] lines = await File.ReadAllLinesAsync(Path.Combine(SourceRoots.Repo, \"scripts/regression-paths.list\"), TestContext.Current.CancellationToken);\n         // Every profile, so a service a new profile holds is read too (Docker, \"Using profiles with Compose\": \"*\").\n-        var profiles = new Dictionary<string, string> { [\"COMPOSE_PROFILES\"] = \"*\" };\n+        var profiles = new Dictionary<string, string> { [\"COMPOSE_PROFILES\"] = \"console\" };\n         JsonNode model = await ComposeModel.RenderAsync([\"docker-compose.yml\"], variables: profiles);\n         string[] sources = [.. StackSources(model)];\n         // The spa's build context, which only the build profile holds: the walk found the sources, every profile's.\n",
+      "test_method": "DisputeDesk.PlatformTests.ComposeRenderTests.RegressionPathsList_CoversEveryStackInputAndTheJobsOwnFiles",
+      "expect": "fails: one profile renders, so the build profile spa context is missed"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/platform-tests.trx"
+    ],
+    "log": "TestResults/platform-tests.log",
+    "summary": "480 total, 480 passed, 0 failed (DisputeDesk.PlatformTests, macOS, Compose 5.6.1)",
+    "diff_hash": "1f905bd59eeb",
+    "head": "f6193f5b574953f4212a8bbea9d6b4668430f886"
+  },
+  "assumptions": [
+    "Row 9: check 12's sweep C allow-list (setup: org.added, instance.member.added, org.member.added, user.machine.added, user.pat.added, project.application.added, instance.smtp.config.added; provisioner: project.application.added, project.application.config.oidc.secret.changed, user.machine.added, user.machine.secret.set, user.grant.added) comes from the security record's expected list and from what provision.sh calls; the event and field names are the record's, not run against AWS. A first run that prints anything else goes to a human, as the README says.",
+    "Row 10: the published UI login still reaches Mailpit's delete API; the security record accepts deletion as a property of the shared demo inbox.",
+    "Row 6: dev-container mode turns on write caching and --unsafe-bypass-fsync (Redpanda 26.2 rpk docs), so the grace period makes a clean shutdown likely but does not make an acknowledged record durable; that stays a production-path item.",
+    "Shell-out platform tests were run on macOS only, not in the Linux SDK container: disk was at the 16 GB gate and Docker-in-container runs would need the daemon; CI's platform job runs them on ubuntu.",
+    "Breaks 5, 7, 9 and 10 reproduce states whose tests were seen failing before the fix; breaks 1 to 4, 6 and 11 were run with scripts/run-breaks.sh (see the report); break 8 (GatewayTests, image builds) was not run here."
+  ],
+  "open_questions": [],
+  "conflicts": [
+    "docs/backlog/story-ci-e2e-regression.md fixes the decide step's payload SHAs (BASE_SHA, HEAD_SHA); row 19 L4 replaces them with the merge commit's parents. The spec is outside this lane's write paths, so its line should be updated in the records pull request.",
+    "docs/production-path.md P50 (outside this lane's write paths) says readers can delete messages through Mailpit's API; suggested addition: 'Mailpit's Send API has its own login (MAILPIT_SEND_API_AUTH, lows-2026-11-10), so the published login cannot send mail into the inbox.' Suggested new line for row 6: 'Redpanda runs in dev-container mode (write caching on, fsync bypassed), so an acknowledged event can be lost on a crash or a kill past the 90 s stop grace; a real environment runs production mode with acks=all on replicated topics.'"
+  ]
+}

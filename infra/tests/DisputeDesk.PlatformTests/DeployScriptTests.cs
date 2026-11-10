@@ -290,8 +290,12 @@ public sealed class DeployScriptTests
         data.Add("ZITADEL_ADMIN_PASSWORD", "Aa1-" + Repeat('a', 28));
         data.Add("ZITADEL_ADMIN_PASSWORD", "Aa1-" + Repeat('a', 124));
         data.Add("LINKING_OTP_HMAC_KEY", Convert.ToBase64String(new byte[32]));
-        data.Add("MAILPIT_UI_AUTH", "u:" + Repeat('p', 32));
-        data.Add("MAILPIT_UI_AUTH", Repeat('u', 32) + ":" + Repeat('p', 128));
+        foreach (string name in new[] { "MAILPIT_UI_AUTH", "MAILPIT_SEND_API_AUTH" })
+        {
+            data.Add(name, "u:" + Repeat('p', 32));
+            data.Add(name, Repeat('u', 32) + ":" + Repeat('p', 128));
+        }
+
         foreach (string name in new[] { "APP_HOST", "AUTH_HOST", "MAILPIT_HOST", "DB_HOST" })
         {
             data.Add(name, HostName(253));
@@ -343,12 +347,16 @@ public sealed class DeployScriptTests
         data.Add("LINKING_OTP_HMAC_KEY", Convert.ToBase64String(new byte[31]));
         data.Add("LINKING_OTP_HMAC_KEY", Convert.ToBase64String(new byte[32]).TrimEnd('=')); // not padded
         data.Add("LINKING_OTP_HMAC_KEY", Convert.ToBase64String(new byte[32])[..^4] + "AAA!"); // a character outside base64
-        data.Add("MAILPIT_UI_AUTH", ":" + Repeat('p', 32));
-        data.Add("MAILPIT_UI_AUTH", Repeat('u', 33) + ":" + Repeat('p', 32));
-        data.Add("MAILPIT_UI_AUTH", "u:" + Repeat('p', 31));
-        data.Add("MAILPIT_UI_AUTH", "u:" + Repeat('p', 129));
-        data.Add("MAILPIT_UI_AUTH", Repeat('p', 32)); // no colon
-        data.Add("MAILPIT_UI_AUTH", "u:" + Repeat('p', 32) + " v:" + Repeat('p', 32)); // two pairs
+        foreach (string name in new[] { "MAILPIT_UI_AUTH", "MAILPIT_SEND_API_AUTH" })
+        {
+            data.Add(name, ":" + Repeat('p', 32));
+            data.Add(name, Repeat('u', 33) + ":" + Repeat('p', 32));
+            data.Add(name, "u:" + Repeat('p', 31));
+            data.Add(name, "u:" + Repeat('p', 129));
+            data.Add(name, Repeat('p', 32)); // no colon
+            data.Add(name, "u:" + Repeat('p', 32) + " v:" + Repeat('p', 32)); // two pairs
+        }
+
         foreach (string name in new[] { "APP_HOST", "AUTH_HOST", "MAILPIT_HOST", "DB_HOST" })
         {
             data.Add(name, HostName(254));
@@ -440,6 +448,18 @@ public sealed class DeployScriptTests
         foreach (string pattern in new[] { "set -x", "set -o xtrace", "cat .env", "compose config", "compose logs", "compose -f docker-compose.yml -f infra/deploy/aws/compose.yml config" })
         {
             Assert.DoesNotContain(pattern, code, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Source_NeverSetsCreateroleSelfGrant()
+    {
+        // rds-init-grant L1: setting createrole_self_grant is what failed on RDS, and DatabaseInitFixture's plain
+        // PostgreSQL master cannot show it, because it holds an ADMIN membership RDS's master lacks. Text, so no way of
+        // setting it (PGOPTIONS, a SET in the init's SQL) comes back unseen; the init's own GRANTs give the master SET.
+        foreach (string file in new[] { "infra/deploy/aws/deploy.sh", "infra/images/postgres/10-roles-and-databases.sh" })
+        {
+            Assert.DoesNotContain("createrole_self_grant", File.ReadAllText(Path.Combine(SourceRoots.Repo, file)), StringComparison.OrdinalIgnoreCase);
         }
     }
 

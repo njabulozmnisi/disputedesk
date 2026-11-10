@@ -51,7 +51,7 @@ scripts/test-lock.sh run stack <owner> -- infra/tests/smoke.sh   # black-box che
 ## Deployed on AWS
 
 One EC2 instance runs the same Compose stack. It sits behind CloudFront, with PostgreSQL on RDS. The environment is
-live: it was first deployed on 2026-11-07, and the post-deploy checks pass
+live: it was first deployed on 2026-11-07, and the post-deploy checks pass except check 7's reboot step
 ([terraform/README.md](terraform/README.md#post-deploy-checks)).
 
 ```mermaid
@@ -167,7 +167,7 @@ scripts/test-lock.sh run stack <owner> -- bash -c 'cd infra/tests && dotnet test
 | What | Where |
 |---|---|
 | Customer logins | [backend/fixtures/local.json](../backend/fixtures/local.json), listed in the [root README](../README.md#try-it) |
-| Zitadel console admin | `admin` / `Dev-Only-Admin-1` at <http://auth.localhost:8080/ui/console> |
+| Zitadel console admin | `admin@disputedesk.auth.localhost` / `Dev-Only-Admin-1` at <http://auth.localhost:8080/ui/console> |
 | Database passwords, Zitadel master key | Inline defaults in `docker-compose.yml`, which an untracked `.env` can override |
 | Generated client secrets | Written by the provisioner, read with `docker compose exec -T zitadel cat /provision/out/zitadel-clients.json` |
 | A browserless sign-in | `scripts/dev-login.sh <login>` leaves a session in a cookie jar |
