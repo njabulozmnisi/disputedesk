@@ -213,13 +213,35 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
 
         string[] provisionValues = [.. environment.Where(variable => variable.Key.StartsWith("PROVISION_", StringComparison.Ordinal))
             .Select(variable => variable.Value!.GetValue<string>())];
-        Assert.Equal(8, provisionValues.Length);
+        Assert.Equal(9, provisionValues.Length);
         Assert.DoesNotContain(provisionValues, value => secrets.Any(secret => value.Contains(secret, StringComparison.Ordinal)));
         Assert.DoesNotContain(provisionValues, value => DevOnlyValue().IsMatch(value));
         Assert.Equal($"http://{authHost}", environment["PROVISION_CALL_URL"]!.GetValue<string>());
         Assert.Equal($"{authHost.Split(':')[0]}:{port}:127.0.0.1:8080", environment["PROVISION_CONNECT_TO"]!.GetValue<string>());
         Assert.Equal(render == "aws" ? "false" : "true", environment["PROVISION_AUTH_DEVELOPMENT_MODE"]!.GetValue<string>());
         Assert.Equal("false", environment["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [MemberData(nameof(Renders))]
+    public async Task Zitadel_HumanAdministrators_AreDeactivatedInAwsOnly(string render)
+    {
+        // aws-admin-lockdown: in AWS the Mailpit inbox, where Zitadel sends password-reset emails, may be public, so the
+        // provisioner deactivates every human administrator there; locally the console admin stays (infra/README.md).
+        JsonNode services = render == "aws" ? aws.Services : (await ComposeModel.RenderAsync(["docker-compose.yml"]))["services"]!;
+
+        Assert.Equal(render == "aws" ? "true" : "false", services["zitadel"]!["environment"]!["PROVISION_DEACTIVATE_HUMAN_ADMINS"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [MemberData(nameof(Renders))]
+    public async Task Zitadel_PublicOrganizationRegistration_IsClosedOnANewInstance(string render)
+    {
+        // aws-admin-lockdown H1: Zitadel's DefaultInstance restriction (cmd/defaults.yaml, v4.20.0) closes
+        // /ui/login/register/org when the instance is created; provision.sh closes it on an existing one.
+        JsonNode services = render == "aws" ? aws.Services : (await ComposeModel.RenderAsync(["docker-compose.yml"]))["services"]!;
+
+        Assert.Equal("true", services["zitadel"]!["environment"]!["ZITADEL_DEFAULTINSTANCE_RESTRICTIONS_DISALLOWPUBLICORGREGISTRATION"]?.GetValue<string>());
     }
 
     [Fact]
@@ -275,9 +297,9 @@ public sealed partial class ComposeRenderTests(AwsComposeModel aws) : IClassFixt
             "zitadel",
             [
                 "GOMEMLIMIT", "PROVISION_APP_ORIGINS", "PROVISION_AUTH_DEVELOPMENT_MODE", "PROVISION_CALL_URL", "PROVISION_CONNECT_TO",
-                "PROVISION_FIXTURES_FILE", "PROVISION_MARKER_FILE", "PROVISION_OUT_DIR", "PROVISION_PAT_FILE",
+                "PROVISION_DEACTIVATE_HUMAN_ADMINS", "PROVISION_FIXTURES_FILE", "PROVISION_MARKER_FILE", "PROVISION_OUT_DIR", "PROVISION_PAT_FILE",
                 "ZITADEL_DATABASE_POSTGRES_DSN", "ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED",
-                "ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROM", "ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROMNAME", "ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_SMTP_HOST",
+                "ZITADEL_DEFAULTINSTANCE_RESTRICTIONS_DISALLOWPUBLICORGREGISTRATION", "ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROM", "ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROMNAME", "ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_SMTP_HOST",
                 "ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_TLS", "ZITADEL_EXTERNALDOMAIN", "ZITADEL_EXTERNALPORT", "ZITADEL_EXTERNALSECURE", "ZITADEL_FIRSTINSTANCE_INSTANCENAME",
                 "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS", "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_VERIFIED",
                 "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_FIRSTNAME", "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_LASTNAME", "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD",

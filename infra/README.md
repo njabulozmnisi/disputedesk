@@ -106,7 +106,7 @@ sequenceDiagram
 | Folder | What |
 |---|---|
 | `images/gateway/` | nginx serving the SPA and routing by host. `templates/` holds the local config: app and identity hosts, security headers and CSP, a coarse rate limit, the `/otlp/` proxy. `templates-aws/` holds the AWS config: app, identity and Mailpit hosts, each requiring CloudFront's origin-verify header |
-| `images/zitadel/` | Zitadel on pinned Alpine. `provision.sh` runs at start and creates the project, roles, web app, operations client, fixture logins and login branding. `verify.sh` checks the result |
+| `images/zitadel/` | Zitadel on pinned Alpine. `provision.sh` runs at start and creates the project, roles, web app, operations client, fixture logins and login branding, and closes public organization registration; in AWS it also deactivates every human administrator of DisputeDesk or the instance. `verify.sh` checks the result |
 | `images/postgres/` | Database init: the `disputedesk` app role, the `zitadel` role, and the read-only `qa_readonly` role |
 | `images/otel-collector/` | The collector config for AWS: OTLP in; X-Ray, CloudWatch Logs and metrics out (AD-29) |
 | `deploy/aws/` | `compose.yml`, the AWS override. `deploy.sh` runs on the instance: it writes `.env`, fetches the RDS CA bundle, writes the gateway's CloudFront real-IP config, runs the first database init, blocks metadata access, and starts Compose. `input-bounds.sh` holds the input bounds |
