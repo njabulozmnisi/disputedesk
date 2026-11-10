@@ -591,7 +591,7 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
   - a ZAP baseline against the running stack.
 - **NFR-SEC-9:** secrets come from the environment, never the repo. In AWS they come from SSM Parameter Store [ASSUMPTION], and Compose uses generated local values.
 - **NFR-SEC-10:** the internal audit log and the stored events are append-only from the application's side, each behind the same insert-only guard. Successful dispute changes (raise, withdraw, operations actions and SLA escalation; FR-13, FR-18, FR-25, FR-26) are recorded only as stored events, with no duplicate audit entry. The audit log records every linking outcome (FR-10), every refused or forbidden action (FR-25), every operations read (FR-25, FR-30), and every sign-in and sign-out (FR-2, FR-3; initiative R41), each with the same audit-entry fields as every other entry (AD-14a). Settled on 2026-10-29 (ad-009, AD-14a).
-- **NFR-SEC-11:** in AWS, Mailpit's web UI sits behind basic auth, with the credentials in SSM, because it shows OTPs. The README notes that a real deployment sends OTPs by SMS.
+- **NFR-SEC-11:** in AWS, Mailpit's web UI sits behind basic auth, with the credentials in SSM, because it shows OTPs. For the demo, the README publishes that login so readers can finish linking on AWS (human decision 2026-11-10; the exposure is accepted in production-path P50). The README notes that a real deployment sends OTPs by SMS.
 
 ### 5.6 Code quality and maintainability
 
