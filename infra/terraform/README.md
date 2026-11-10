@@ -52,6 +52,13 @@ flowchart LR
 - **A fork or rename** must also change the `ghcr.io/njabulozmnisi/` image owner in `.github/workflows/deploy.yml` and
   `ci.yml`.
 - The Zitadel console is not exposed: the gateway answers 404 on `/ui/console`.
+- **No human administrator can sign in to Zitadel.** Zitadel mails password-reset links to Mailpit, whose inbox may be
+  public, so at every deploy the provisioner deactivates each human that holds an administrator role on the instance
+  or as a DisputeDesk user, the FirstInstance `admin` included, and the deploy fails if one is left active. Public
+  organization registration is closed, so no visitor can make themselves an organization's owner. For administrator
+  access, open a shell on the instance (as in *A half-done database init*) and call Zitadel's API from the zitadel
+  container with the provisioner's IAM_OWNER token, `/zitadel/bootstrap/admin.pat`, which never leaves the instance
+  (post-deploy check 12 does).
 
 **Known issue.** `rds.force_ssl` has no `apply_method`, so every plan shows a one-line diff on the parameter group. It is
 harmless, because PostgreSQL 15 and later default to 1 on RDS.
@@ -359,6 +366,37 @@ Run them after the first deploy, and after any change to the Terraform or the AW
       curl -sS -m 10 -o /dev/null -w "%{http_code} Location: %header{location} $url\n" "$url"
     done
     ```
+
+12. No human can administer Zitadel, and nothing was added beside the provisioner's own users. On the instance, from
+    `/opt/disputedesk`, this asks Zitadel's API with the provisioner's token, inside the zitadel container:
+
+    ```sh
+    docker compose -f docker-compose.yml -f infra/deploy/aws/compose.yml exec -T zitadel bash -s <<'SH'
+    set -euo pipefail
+    rpc(){ printf '%s' "$2" | curl -sS --fail-with-body --max-time 30 --connect-to "$PROVISION_CONNECT_TO" \
+      -H @<(printf 'Authorization: Bearer %s\n' "$(tr -d '\n' < "$PROVISION_PAT_FILE")") \
+      -H 'Content-Type: application/json' -H 'Connect-Protocol-Version: 1' --data-binary @- "$PROVISION_CALL_URL/$1"; }
+    ids=$(rpc zitadel.internal_permission.v2.InternalPermissionService/ListAdministrators '{}' \
+      | jq -c '[.administrators[].user.id] | unique')
+    rpc zitadel.user.v2.UserService/ListUsers "{\"queries\":[{\"inUserIdsQuery\":{\"userIds\":$ids}}]}" \
+      | jq -c '[.result[] | {username, type: (if .human then "human" else "machine" end), state}] | sort_by(.username)'
+    rpc zitadel.org.v2.OrganizationService/ListOrganizations '{}' | jq -c '[.result[].name] | sort'
+    rpc zitadel.user.v2.UserService/ListUsers '{"queries":[{"typeQuery":{"type":"TYPE_MACHINE"}}]}' \
+      | jq -c '[.result[].username] | sort'
+    SH
+    ```
+
+    It must print exactly these three lines: the administrators are the provisioner (active) and `admin` (inactive),
+    DisputeDesk is the only organization, and the only machine users are the provisioner and the operations tools.
+    Zitadel stores the FirstInstance admin's username with its domain, `admin@disputedesk.<AUTH_HOST>`.
+
+    ```text
+    [{"username":"admin@disputedesk.<AUTH_HOST>","type":"human","state":"USER_STATE_INACTIVE"},{"username":"provisioner","type":"machine","state":"USER_STATE_ACTIVE"}]
+    ["DisputeDesk"]
+    ["operations-tools","provisioner"]
+    ```
+
+    Publish the Mailpit login only after this check passes.
 
 ## Rollback
 

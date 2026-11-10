@@ -78,6 +78,7 @@ services:
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2030-01-01T00:00:00Z"
       ZITADEL_FIRSTINSTANCE_PATPATH: /zitadel/bootstrap/admin.pat
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
+      ZITADEL_DEFAULTINSTANCE_RESTRICTIONS_DISALLOWPUBLICORGREGISTRATION: "true"   # as in docker-compose.yml
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_SMTP_HOST: mailpit:1025
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_TLS: "false"
       ZITADEL_DEFAULTINSTANCE_SMTPCONFIGURATION_FROM: noreply@disputedesk.test
@@ -92,6 +93,11 @@ services:
       PROVISION_MARKER_FILE: /provision/state/provisioned
       PROVISION_APP_ORIGINS: https://${APP_HOST:?APP_HOST, the app distribution's host name, is required}
       PROVISION_AUTH_DEVELOPMENT_MODE: "false"       # HTTPS origins only (AD-24)
+      # Zitadel mails password-reset links to Mailpit, whose inbox may be public, so the provisioner deactivates every
+      # human administrator of DisputeDesk or the instance, the FirstInstance admin above included, at each start, and
+      # fails the start unless none is left active (provision.sh). The human still has to be set
+      # here: Zitadel's setup always creates one, with a default password when none is given.
+      PROVISION_DEACTIVATE_HUMAN_ADMINS: "true"
     volumes:
       - *rds-ca
     depends_on: !reset {}                            # RDS is up before the stack
