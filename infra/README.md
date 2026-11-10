@@ -100,6 +100,30 @@ sequenceDiagram
   environment's required reviewer approves it. A merge never deploys.
 - Images come from GHCR, pinned by digest.
 - Only the api and the collector can reach instance metadata.
+- The three CloudFront distributions are the only way in. Plain HTTP is redirected to HTTPS or refused.
+- A monthly budget emails at 25 %, 50 % and 80 % of actual spend, and at 100 % of forecast spend.
+
+| Open | URL |
+|---|---|
+| The app | <https://d8189wokwcff7.cloudfront.net> |
+| API reference (Scalar) | <https://d8189wokwcff7.cloudfront.net/scalar/> |
+| Mailpit | <https://d3qqsd2cm8xthz.cloudfront.net>, behind basic auth; the login is in the [root README](../README.md#on-aws) |
+
+### What public traffic costs
+
+The environment runs in its own AWS account on the
+[AWS Free plan](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html). Usage is paid
+from the plan's credits, and a Free plan account is never billed: when the credits run out, AWS closes the account
+instead of charging it.
+
+- Fixed costs don't grow with traffic: the instance, the database, the public IPv4 address and the KMS key.
+- Traffic costs do. The api traces and logs every request it handles, and the collector sends the api's and the
+  worker's spans to X-Ray (stored in CloudWatch Logs) and their logs and metrics to CloudWatch. CloudFront charges for
+  requests beyond its always-free monthly allowance.
+- Flooding the URLs could spend the credits faster, but it can't create a bill. At worst the account closes early and
+  the demo goes offline.
+- What limits it: the gateway allows 10 requests a second per client address on `/api/`, `/scalar`,
+  `/openapi/v1.json` and the Mailpit host; CloudFront is the only way in; and the budget alerts arrive well before the credits run out.
 
 ## Folders
 

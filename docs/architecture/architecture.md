@@ -226,6 +226,23 @@ Only these arrows are allowed. The architecture tests enforce the graph: `LayerT
   - **Timeline.** The timeline is built from the dispute's stored events (glossary: Timeline); the aggregate holds no timeline of its own. The customer view's allowlist in Application admits only the five lifecycle types and hides every other type, including any type added later; tests cover every type and a test-only unknown type. One mapping serves the raise 201 body, the detail read and the history list. Operations (FR-30) see every type. In C#, each stored event type is a sealed record deriving from one abstract `StoredEvent` record in Domain, and `EventType` is the record's type name; the allowlist is a set of the five admitted record types checked with a type test, so a test-only record declared in a test project maps to nothing (OWASP Authorization Cheat Sheet: deny by default). A row whose `EventType` the reader does not know is skipped for customers, never an error.
   - **Disputability and raise order.** Disputability returns a reason: `AlreadyDisputed`, `OutsideWindow` or `NotEligible` (on the wire `alreadyDisputed`, `outsideWindow`, `notEligible`). Raise checks run in this order: transaction found (404), earlier dispute (409 `already-disputed`), then window and eligibility (422 `not-disputable` with `reason`). The unique index stays as the race backstop.
   - **Customer wire view.** `customerStatus` is one of `submitted`, `underReview`, `underReviewPrioritised`, `resolved`, `withdrawn`, plus `outcome`. The timeline `actor` is `you` or `theBank`. No actor type, actor identity, SLA or due date appears. A customer 409 carries `customerStatus`. Each transaction row carries `disputable`, `notDisputableReason`, and the dispute's `disputeId` and `customerStatus` when one exists. Operations responses use the internal `status` and `actorType`.
+  - **Lifecycle.** Operations start the review, escalate and resolve (Upheld or Rejected); the SLA sweep escalates a dispute still open 10 days after submission (AD-18); the customer withdraws. Any other action returns 409 (FR-24).
+
+    ```mermaid
+    stateDiagram-v2
+        [*] --> Submitted: raise
+        Submitted --> UnderReview: start review
+        Submitted --> Escalated: escalate
+        UnderReview --> Escalated: escalate
+        UnderReview --> Resolved: resolve
+        Escalated --> Resolved: resolve
+        Submitted --> Withdrawn: withdraw
+        UnderReview --> Withdrawn: withdraw
+        Escalated --> Withdrawn: withdraw
+        Resolved --> [*]
+        Withdrawn --> [*]
+    ```
+
 - **Rejected:** rules in handlers; a state-machine library; one response shape for both audiences; deciding from the `Disputes` row (a copy of the record, not the record; ad-009); a customer timeline that shows any type not on the allowlist.
 
 ### AD-14 - One commit path for dispute changes
