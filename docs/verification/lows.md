@@ -47,6 +47,14 @@ column marks a finding with no feature record of its own.
 | ui-tokens-icons | ui-tokens-icons-qa.md | `linking-start.spec.ts` criterion 2 flakes when a random traceId contains "abc". | |
 | ui-notices-states | ui-detail-start-review.md | `ErrorSummary.tsx:48`: the summary's field links are 22px tall at 767px and wider, against EXPERIENCE's 44px minimum (seen inside the withdraw dialog). | |
 | ui-notices-states | ui-notices-states-review.md | One theme outline width token for the 1.5px border shared by Button, Input, Textarea and RadioGroup (raw `border-[1.5px]` in each). | |
+| ui-linking | ui-linking-review.md | `input-otp.tsx:59`: `-m-px` does not keep the cells equal (the active cell is 43px against 41px at 320px, QA L2); draw the second pixel with `inset-ring` and drop `-m-px`. | |
+| ui-linking | ui-linking-review.md | The "field holding 481" paste test pastes `4815 1678`, not the `4815167` criterion 3 names. | |
+| ui-linking | ui-linking-review.md, ui-linking-qa.md | The inline "Start again" link is 81x22px: WCAG 2.5.8's inline exception applies, but DESIGN's 44px rule says otherwise; reconcile DESIGN with the inline-link pattern. | |
+| ui-linking | ui-linking-review.md | A disabled field's label is not dimmed as the mockup draws it (`field.tsx`, outside the story's Touches). | |
+| ui-linking | ui-linking-review.md | `docs/backlog/story-ui-linking.md:52`: the Inputs bullet still describes the old paste condition; the code refuses any paste holding more than 6 digits (add `481-5167` and `4815167\n` as refused rows). | |
+| ui-linking | ui-linking-review.md | `OtpScreen.tsx:241`: after a wrong code the field error keeps role="alert", so a refused paste may be announced twice. | |
+| ui-linking | ui-linking-qa.md | After a refused paste, "Enter the 6-digit code." stays beside six valid digits until the next Verify (validate-on-submit). | |
+| carried | ui-linking-qa.md | A 429 from the gateway limiter on `/api/v1/antiforgery` leaves Verify with no visible notice. | |
 | ui-lists | ui-lists-review.md | `TransactionRow.tsx:20`, `DisputeRow.tsx:42`: with only the CSS root font size raised (768px at 150-200%, 1280px at 200%), the md grid's rem tracks are wider than the overflow-hidden panel and the badge column is clipped; page zoom and the browser font setting pass. Let the panel scroll (`overflow-x-auto`) or cap the md tracks on every row. | |
 | ui-lists | ui-lists-qa.md | At 200% text and 320px the transactions text column is 17px wide and the merchant breaks per character; nothing is clipped. | |
 | carried | ui-lists-qa.md, ui-raise-review-qa.md, ui-detail-start-qa.md | At 320 and 360px with 200% text the signed-in header (nowrap buttons, nav, tab bar) makes every page scroll horizontally; predates the UI refresh. Let the header row wrap or its controls shrink. | |
@@ -57,3 +65,14 @@ column marks a finding with no feature record of its own.
 | deploy-recreate-on-config | deploy-recreate-on-config-verify.md | The guard reads any path containing "deploy" as a deploy, so the verifier could not run ShellCheck on `infra/deploy/aws/deploy.sh`; CI runs it. | |
 | rds-init-grant | rds-init-grant-review.md | L1: the test fixture's plain PostgreSQL master holds an implicit ADMIN membership that RDS's master lacks (`DatabaseInitFixture.cs:126-127`). | |
 | rds-init-grant | rds-init-grant-review.md | L2: the recovery steps for a half-done init (`infra/terraform/README.md:263-292`); see the record. | |
+| ui-raise-review | ui-raise-review-review.md | `ReviewScreen.tsx:203`, `:221`: the head row uses `items-start` where the mockup aligns to the end, and the Transaction value is not bold as the mockup draws it. | |
+| carried | ui-raise-review-review.md, ui-detail-start-review.md | The theme has a font size and a colour both named `heading`; Tailwind builds `.text-heading` as colour only, so the 24px size never applies (start page "How it works", every `AlertDialogTitle`). Rename the size (keep the colour), then restore it in `lib/utils.ts`'s font-size list. | Closed: the size is `text-h2` (`text-h2-token`). |
+| ui-raise-review | ui-raise-review-review.md | Criterion 5 still says `9rem` "at every width"; the code caps it at 40% of the row. Amend criterion 5 and add `label-col: 9rem` to DESIGN.md's spacing tokens. | |
+| carried | ui-raise-review-qa.md | After an invalid expected amount is corrected, Continue needs a second click: the onBlur revalidation removes the error and Continue moves 28px between pointer down and up. | |
+| carried | ui-raise-review-qa.md | `aria-disabled:opacity-70` on Change, Cancel and Button differs from DESIGN's Button. | |
+| carried | ui-raise-review-qa.md | At 320px and 200% text the 2rem hero amount widens the review card slightly. | |
+| carried | ui-raise-review-qa.md | `e2e/run-regression.sh` fails every group with only a docker error when port 4318 is taken; check the port first. | |
+| ui-detail-start | ui-detail-start-review.md | `alert-dialog.tsx:63`: the footer turns into a row at `sm` (640px) while the sheet becomes a dialog at `md` (768px), so 640-767px shows a sheet with side-by-side buttons; use `md:flex-row`. | |
+| ui-detail-start | ui-detail-start-review.md | `wordmark.test.ts:131-148`: transparency checks one pixel, and the dot-on-baseline check measures against a box that includes the descender of "p". Check the corners and compare with a letter without a descender. | |
+| carried | ui-detail-start-qa.md | Medium: the session warning does not move focus into the dialog on open, and Tab walks the page behind it (WAI-ARIA APG alertdialog; WCAG 2.2 SC 2.4.3). Give it initial focus on Stay signed in and add a keyboard test. | |
+| carried | ui-detail-start-qa.md | Opening any dialog logs one CSP violation from the scroll-lock library's injected style; the CSP blocks it as intended. | |

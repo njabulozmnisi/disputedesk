@@ -54,6 +54,7 @@ On a re-review, review only the delta since the approved version and say for eac
 - A mechanism that wraps `<Outlet/>` (a layout, a key, a focus or skip-link handler) is checked on every route with every session state, as the skip-link test in `frontend/src/app/routing.test.tsx` does (7.14).
 - A test stand-in for a pinned upstream image sends that image's real headers and behaviour, read from the image itself (for example a Next.js `routes-manifest.json`), never assumed (7.12).
 - A criterion that forces code around the framework (a disabled validator, a routing workaround, a copy of framework behaviour) is a `[decision]` finding against the criterion, not an accepted diff.
+- Pre-build: a criterion that changes a tap target's size names the elements that can overlap it in a focus or hover state; a fixed rem or px width in a criterion is checked against WCAG 2.2 SC 1.4.4 and 1.4.10 (ui-tokens-icons, ui-raise-review).
 
 Rank findings by severity with file and line.
 

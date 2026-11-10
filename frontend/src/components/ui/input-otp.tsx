@@ -39,7 +39,6 @@ function InputOTPGroup({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
-// `text-heading` is the colour utility, so the 24px digit size is the theme variable.
 function InputOTPSlot({
   index,
   className,
@@ -55,7 +54,7 @@ function InputOTPSlot({
       data-slot="input-otp-slot"
       data-active={isActive}
       className={cn(
-        'relative flex h-14 max-w-12 flex-1 items-center justify-center rounded-md border border-input bg-card text-(length:--text-heading) font-title text-card-foreground tabular-nums md:h-16 md:max-w-14',
+        'relative flex h-14 max-w-12 flex-1 items-center justify-center rounded-md border border-input bg-card text-h2 font-title text-card-foreground tabular-nums md:h-16 md:max-w-14',
         // The active border is 1px thicker; the negative margin keeps the cells' widths equal (flex-basis 0 counts borders).
         'data-[active=true]:-m-px data-[active=true]:border-2 data-[active=true]:border-ring data-[active=true]:ring-4 data-[active=true]:ring-primary-subtle',
         'aria-invalid:border-destructive data-[active=true]:aria-invalid:border-destructive data-[active=true]:aria-invalid:ring-destructive/20',

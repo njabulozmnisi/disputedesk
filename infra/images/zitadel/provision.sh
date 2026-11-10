@@ -61,7 +61,8 @@ log "Zitadel is ready"
 
 umask 077
 AUTH_HEADER=$(mktemp)
-trap 'rm -f "$AUTH_HEADER"' EXIT
+SERVED_LOGO=$(mktemp)
+trap 'rm -f "$AUTH_HEADER" "$SERVED_LOGO"' EXIT
 { printf 'Authorization: Bearer '; tr -d '\n' < "$PAT_FILE"; printf '\n'; } > "$AUTH_HEADER"
 
 # call METHOD PATH [JSON]: prints the body; fails on HTTP >= 400, except 409 when ALLOW_CONFLICT=1.
@@ -92,6 +93,13 @@ upload(){
   rm -f "$tmp"
 }
 
+# download PATH FILE: saves a public asset to FILE, with no token. Only a 200 counts, so a redirect or an error fails.
+download(){
+  local p=$1 f=$2 code
+  code=$(curl "${CURL_OPTS[@]}" -sS -o "$f" -w '%{http_code}' "$Z$p") || { log "FAIL GET $p -> curl exit $?"; return 1; }
+  if [ "$code" != 200 ]; then log "FAIL GET $p -> $code"; return 1; fi
+}
+
 # ------------------------------------------------------- hosted login branding: the instance label policy
 # Generated from the theme file (label-policy.sh); the four brand files are mounted read-only, one by one.
 # The Admin API's update fails with 400 when nothing changes, so the preview is compared first and every 400 fails.
@@ -118,19 +126,28 @@ else
   call PUT /admin/v1/policies/label "$label_policy" >/dev/null
   log "label policy colours updated"
 fi
-# shortcut: a changed font or logo file needs down -v, upgrade when rebrands are frequent
+# shortcut: a changed font file needs down -v, upgrade when rebrands are frequent
 if [ -z "$(jq -r '.fontUrl // empty' <<< "$preview")" ]; then
   upload /assets/v1/instance/policy/label/font "$BRAND_FONT"
   log "font uploaded"
 fi
-if [ -z "$(jq -r '.logoUrl // empty' <<< "$preview")" ]; then
-  upload /assets/v1/instance/policy/label/logo "$BRAND_LOGO"
-  log "logo uploaded"
-fi
-if [ -z "$(jq -r '.logoUrlDark // empty' <<< "$preview")" ]; then
-  upload /assets/v1/instance/policy/label/logo/dark "$BRAND_LOGO_DARK"
-  log "dark logo uploaded"
-fi
+
+# refresh_logo FIELD UPLOAD_PATH FILE NAME: uploads FILE unless the preview's FIELD already serves exactly those bytes
+# (Zitadel v4.20.0 serves a logo byte for byte as uploaded). FIELD is an absolute public URL, https in AWS, so only its
+# path is called, by the plain-http route every call here takes. Must run as a plain command: set -e is what stops the
+# run on a failed download.
+refresh_logo(){
+  local field=$1 upload_path=$2 file=$3 name=$4 url
+  url=$(jq -r ".$field // empty" <<< "$preview")
+  if [ -n "$url" ]; then
+    download "/${url#*://*/}" "$SERVED_LOGO"
+    if cmp -s "$SERVED_LOGO" "$file"; then log "$name is current"; return 0; fi
+  fi
+  upload "$upload_path" "$file"
+  log "$name uploaded"
+}
+refresh_logo logoUrl /assets/v1/instance/policy/label/logo "$BRAND_LOGO" logo
+refresh_logo logoUrlDark /assets/v1/instance/policy/label/logo/dark "$BRAND_LOGO_DARK" "dark logo"
 call POST /admin/v1/policies/label/_activate '{}' >/dev/null
 log "label policy activated"
 

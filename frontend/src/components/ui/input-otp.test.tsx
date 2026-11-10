@@ -31,7 +31,7 @@ describe('InputOTP', () => {
 
     const [first] = slots(container);
     expect(first).toHaveClass('rounded-md', 'max-w-12', 'flex-1', 'font-title', 'bg-card');
-    expect(first).toHaveClass('text-(length:--text-heading)');
+    expect(first).toHaveClass('text-h2');
     expect(first).toHaveClass('md:max-w-14');
   });
 

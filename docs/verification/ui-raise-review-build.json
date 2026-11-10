@@ -1,0 +1,159 @@
+{
+  "status": "built",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-ae154877f3a7a40c6",
+  "story_files": [
+    "frontend/src/features/disputes/raise/RaiseScreen.tsx",
+    "frontend/src/features/disputes/raise/TransactionSummary.tsx",
+    "frontend/src/features/disputes/raise/ReviewScreen.tsx",
+    "frontend/src/features/disputes/raise/RaiseScreen.test.tsx",
+    "frontend/src/features/disputes/raise/ReviewScreen.test.tsx",
+    "frontend/src/features/disputes/raise/raiseTelemetry.test.tsx",
+    "frontend/src/lib/utils.ts",
+    "frontend/src/lib/utils.test.ts"
+  ],
+  "criteria": [
+    {
+      "id": "AC1",
+      "requirement": "FR-13",
+      "test": "ReviewScreen.test.tsx: 'shows no step after %s, which ends the draft' (404, 409, 422 x2), 'keeps the step and the card after %s' (network failure, 503, 504), 'shows the step above the h1 while the review card shows'; RaiseScreen.test.tsx: 'shows \"Step 1 of 2: reason and note\" above the h1', 'keeps the error summary after the h1, below the step'"
+    },
+    {
+      "id": "AC2",
+      "requirement": "FR-13",
+      "test": "RaiseScreen.test.tsx: 'is one flat surface: the form holds the transaction block, the reasons and the actions', 'draws the transaction as a quiet block: background fill, rounded-md, no border'"
+    },
+    {
+      "id": "AC3",
+      "requirement": "FR-14",
+      "test": "RaiseScreen.test.tsx: 'draws the difference as 14/700 heading text, still the described-by hint of the input'; lib/utils.test.ts: 'reads text-heading as the navy colour, not a size, so it keeps the size beside it'"
+    },
+    {
+      "id": "AC4",
+      "requirement": "FR-13",
+      "test": "RaiseScreen.test.tsx: 'puts a hairline above the buttons, which are full width below 768px', 'draws Cancel as the secondary pill around the same link'; ReviewScreen.test.tsx: 'puts Submit first and draws Cancel as the secondary pill, both full width below 768px', 'makes Change and Cancel aria-disabled and inert while an attempt is pending'"
+    },
+    {
+      "id": "AC5",
+      "requirement": "FR-15",
+      "test": "ReviewScreen.test.tsx: 'is one flat surface: the hero amount, Change and the read-back sit in the named section', 'reads the dl in a 9rem label column at every width, with hairlines between rows', 'gives an account transaction an Account row after Date', 'reads the draft back, and Change returns to 4a with the values kept'; fix round 1: 'reads the masked number to a screen reader as its short form, hiding the printed one' (card), 'reads an account number as \"account ending\", hiding the printed one'; fix round 2: 'reads the dl in a label column of 9rem, capped at 40% so text scaling keeps room for the value, with hairlines between rows' (renamed from 'reads the dl in a 9rem label column at every width'); theme.test.ts 'declares the list columns' (--label-col)"
+    },
+    {
+      "id": "AC6",
+      "requirement": "FR-15, NFR-CODE-6",
+      "test": "ReviewScreen.test.tsx: 'names Change from its content: visible \"Change\", an sr-only suffix, no aria-label, 44px tall'; raiseTelemetry.test.tsx: 'is still one after 4a, 4b and 4a again'"
+    },
+    {
+      "id": "AC7",
+      "requirement": "FR-15, NFR-CODE-6",
+      "test": "ReviewScreen.test.tsx: 'draws the only-once sentence as a static neutral notice: no alert, status or live region', 'leaves exactly one alert after a 503: the problem notice'"
+    }
+  ],
+  "smoke": "Throwaway headless Chromium (Playwright 1.64.1, @axe-core/playwright 4.14.0) against vite preview with /api stubbed by page.route (session linked, antiforgery, one disputable transaction, POST /v1/disputes 503 core-banking-unavailable then 409 already-disputed). At 320, 767, 768 and 1280px, on raise, raise with Wrong amount (difference shown), review, review after 503 and review after the 409 refusal: axe wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa gave 0 violations on all 20 pages; document scrollWidth equalled clientWidth (no horizontal scroll) on all; no console errors; Tab walk on raise: reason radio, note, Continue, Cancel; on review: Change your dispute, Submit dispute, Cancel, each with a visible focus style (below 768px the header links follow). Heights: Continue 48, Submit dispute 48, Try again 48, Cancel 48 (both screens), Change your dispute 44, Copy 44 at every width; every interactive element is at least 44px except the six Radix reason radio buttons, 24px, which predate this story. The skip link is sr-only until focused. Script, preview server and dist deleted. Fix round 2: throwaway headless Chromium (Playwright from e2e/node_modules) against vite preview of the built dist, /api stubbed by page.route (session linked, antiforgery, one transaction), review screen with a wrapping note, root font size set to 100%, 150% and 200% by a style tag, axe wcag2a/2aa/21a/21aa/22aa 0 violations at every size. Review dl columns (label / value px): 320px: 101.6/136.4 at 100%, 88.8/109.2 at 150%, 102.9/122.4 at 200%; 360px: 117.6/160.4, 104.8/133.2, 102.9/122.4; 1280px at 100%: 144 (9rem) / 302. Before the fix the value column was 22px and 0px. Residual document scroll width, outside the dl and not changed: 320px 150% 339, 320px 200% 452, 360px 200% 452 (the signed-in header: its sign-out button and the navigation); 320px 200% also has the 2rem hero amount (253px, not wrapping) making the card 323px wide in a 256px column.",
+  "standards": [
+    {
+      "mechanism": "Step label over a two-segment bar, the label carries the meaning",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-content"
+    },
+    {
+      "mechanism": "Theme tokens through Tailwind v4 theme variables (form surface, quiet block)",
+      "source": "https://tailwindcss.com/docs/theme"
+    },
+    {
+      "mechanism": "shadcn Field description tied to the input by aria-describedby",
+      "source": "https://ui.shadcn.com/docs/components/field"
+    },
+    {
+      "mechanism": "Button asChild around the router Link; top border for the hairline",
+      "source": "https://ui.shadcn.com/docs/components/button"
+    },
+    {
+      "mechanism": "CSS grid label column; named section as a region landmark",
+      "source": "https://tailwindcss.com/docs/grid-template-columns"
+    },
+    {
+      "mechanism": "Accessible name from content with the visible label inside it (Label in Name); 44px target",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/label-in-name"
+    },
+    {
+      "mechanism": "Static shadcn Alert; role alert kept for errors only",
+      "source": "https://www.w3.org/TR/wai-aria-1.2/#alert"
+    }
+  ],
+  "breaks": [
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/ReviewScreen.tsx\n+++ b/frontend/src/features/disputes/raise/ReviewScreen.tsx\n@@ -182,7 +182,7 @@\n   return (\n     <Page width=\"form\">\n       <div className=\"grid gap-2\">\n-        {refused ? null : <StepProgress label=\"Step 2 of 2: review and submit\" step={2} />}\n+        <StepProgress label=\"Step 2 of 2: review and submit\" step={2} />\n         <h1\n           ref={headingRef}\n           tabIndex={-1}\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/raise/ReviewScreen.test.tsx -t \"shows no step after 404 not-found, which ends the draft\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/TransactionSummary.tsx\n+++ b/frontend/src/features/disputes/raise/TransactionSummary.tsx\n@@ -5,7 +5,7 @@\n /** The transaction being disputed, a quiet block at the top of the raise form (docs/ux/mockups/dispute-new.html). */\n export function TransactionSummary({ row }: { row: TransactionResponse }) {\n   return (\n-    <div className=\"grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 rounded-md bg-background px-4 py-3\">\n+    <div className=\"grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 rounded-md border border-border bg-card p-4\">\n       <div className=\"min-w-0\">\n         <p className=\"font-strong wrap-break-word\">{row.description}</p>\n         <p className=\"text-caption text-muted-foreground\">{formatFullDay(row.transactionDate)}</p>\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/raise/RaiseScreen.test.tsx -t \"draws the transaction as a quiet block\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/RaiseScreen.tsx\n+++ b/frontend/src/features/disputes/raise/RaiseScreen.tsx\n@@ -252,7 +252,6 @@\n                   {showDifference ? (\n                     <FieldDescription\n                       id=\"expectedAmount-disputing\"\n-                      className=\"text-label font-strong text-heading\"\n                     >\n                       You&apos;re disputing{' '}\n                       {formatMoney({\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/raise/RaiseScreen.test.tsx -t \"draws the difference as 14/700 heading text\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/RaiseScreen.tsx\n+++ b/frontend/src/features/disputes/raise/RaiseScreen.tsx\n@@ -291,7 +291,7 @@\n             )}\n           />\n \n-          <div className=\"flex flex-col gap-3 border-t border-border pt-6 md:flex-row\">\n+          <div className=\"flex flex-col gap-3 pt-6 md:flex-row\">\n             <Button type=\"submit\" className=\"w-full md:w-auto\">\n               Continue\n             </Button>\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/raise/RaiseScreen.test.tsx -t \"puts a hairline above the buttons\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/ReviewScreen.tsx\n+++ b/frontend/src/features/disputes/raise/ReviewScreen.tsx\n@@ -59,7 +59,7 @@\n \n function Row({ label, children }: { label: string; children: ReactNode }) {\n   return (\n-    <div className=\"grid grid-cols-[minmax(0,min(var(--label-col),40%))_minmax(0,1fr)] gap-x-4 gap-y-1 border-t border-border py-3\">\n+    <div className=\"grid gap-y-1 md:grid-cols-[minmax(0,min(var(--label-col),40%))_minmax(0,1fr)] gap-x-4 gap-y-1 border-t border-border py-3\">\n       <dt className=\"text-label wrap-anywhere text-muted-foreground\">{label}</dt>\n       <dd className=\"wrap-anywhere\">{children}</dd>\n     </div>\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/raise/ReviewScreen.test.tsx -t \"reads the dl in a label column of 9rem, capped at 40% so text scaling keeps room for the value, with hairlines between rows\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/ReviewScreen.tsx\n+++ b/frontend/src/features/disputes/raise/ReviewScreen.tsx\n@@ -211,7 +211,7 @@\n                 to={raisePath}\n                 params={{ transactionId: row.transactionId }}\n                 disabled={pending}\n-                className=\"inline-flex min-h-(--tap-target) items-center px-1 aria-disabled:cursor-progress aria-disabled:opacity-70\"\n+                className=\"inline-flex items-center px-1 aria-disabled:cursor-progress aria-disabled:opacity-70\"\n               >\n                 Change <span className=\"sr-only\">your dispute</span>\n               </Link>\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/raise/ReviewScreen.test.tsx -t \"names Change from its content\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/ReviewScreen.tsx\n+++ b/frontend/src/features/disputes/raise/ReviewScreen.tsx\n@@ -228,7 +228,7 @@\n             </dl>\n           </section>\n \n-          <Alert tone=\"neutral\">\n+          <Alert tone=\"neutral\" role=\"alert\">\n             <AlertDescription>\n               You can dispute a transaction only once. You can withdraw the dispute while it is\n               open.\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/raise/ReviewScreen.test.tsx -t \"draws the only-once sentence as a static neutral notice\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/ReviewScreen.tsx\n+++ b/frontend/src/features/disputes/raise/ReviewScreen.tsx\n@@ -75,10 +75,7 @@\n     const firstSix = row.maskedCard.slice(0, 6);\n     const lastFour = row.maskedCard.slice(-4);\n     return (\n-      <Row label=\"Card\">\n-        <span aria-hidden=\"true\">{`${firstSix}•• •••• ${lastFour}`}</span>\n-        <span className=\"sr-only\">{`card ending ${lastFour}`}</span>\n-      </Row>\n+      <Row label=\"Card\">{`${firstSix}•• •••• ${lastFour}`}</Row>\n     );\n   }\n   return (\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/raise/ReviewScreen.test.tsx -t \"reads the masked number to a screen reader as its short form, hiding the printed one\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/ReviewScreen.tsx\n+++ b/frontend/src/features/disputes/raise/ReviewScreen.tsx\n@@ -59,7 +59,7 @@\n \n function Row({ label, children }: { label: string; children: ReactNode }) {\n   return (\n-    <div className=\"grid grid-cols-[minmax(0,min(var(--label-col),40%))_minmax(0,1fr)] gap-x-4 gap-y-1 border-t border-border py-3\">\n+    <div className=\"grid grid-cols-[9rem_minmax(0,1fr)] gap-x-4 gap-y-1 border-t border-border py-3\">\n       <dt className=\"text-label wrap-anywhere text-muted-foreground\">{label}</dt>\n       <dd className=\"wrap-anywhere\">{children}</dd>\n     </div>\n",
+      "test_method": "cd frontend && npm ci --silent && npx vitest run src/features/disputes/raise/ReviewScreen.test.tsx -t \"reads the dl in a label column of 9rem, capped at 40% so text scaling keeps room for the value, with hairlines between rows\"",
+      "expect": "fails"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/ui-raise-review-frontend.junit.xml"
+    ],
+    "diff_hash": "cd3e0b7f9cca",
+    "base": "2f897c37b3b58b11119c6126123213f98defeb43",
+    "covers": "ui-tokens-icons (r3-fixed patch, docs and e2e excluded) plus ui-notices-states (r1 patch) plus ui-raise-review plus its fix rounds 1 and 2, all uncommitted. Vitest: 740 tests, 0 failures, run once with --maxWorkers=3 because other lanes held the machine (load average about 8). tsc, eslint, prettier and vite build passed."
+  },
+  "assumptions": [
+    "The Change link's sr-only suffix is 'Change <span>your dispute</span>' (space outside the span), not the spec's '<span> your dispute</span>': dom-accessibility-api joins 'Change' and ' your dispute' as 'Changeyour dispute'. The visible text and the browser's accessible name are the same.",
+    "frontend/src/lib/utils.ts is outside the spec's Touches: 'heading' is removed from the tailwind-merge font-size list. The theme has a size and a colour both named heading; Tailwind builds text-heading as the colour only, so cn('text-label text-muted-foreground', 'text-label font-strong text-heading') dropped text-label and kept the muted colour, which broke criterion 3. alert-dialog's cn('text-heading font-strong') is unchanged in output. One unit test added. The lows batch may rename the size or the colour token.",
+    "The Card and Account dl row is a small NumberRow in ReviewScreen.tsx that repeats MaskedNumber's masking (first six, two dots, last four) and its screen-reader form (printed form aria-hidden, sr-only 'card ending N' / 'account ending N'); fix round 1 restored that form. MaskedNumber stays for the list and the raise form. A third use would justify one shared helper.",
+    "Change sits top right with items-start (HANDOFF 'top right'); the mockup uses align-items flex-end. At 320px the value column is narrow beside the 9rem label column, as the spec requires.",
+    "The six reason radio buttons (Radix, 24px) are below 44px; they are unchanged and the reason cards are out of scope. QA's 44px check will report them unless the lows batch makes the whole card the hit area.",
+    "The existing aria-disabled:opacity-70 on Change, Cancel and Button is kept (Notes: a low for lows.md).",
+    "The base patches are uncommitted in the worktree (the guard refuses builder commits); diff_hash is against 2f897c3 and covers both bases plus this story. TestResults/ is gitignored.",
+    "Fix round 1: the existing test 'gives an account transaction an Account row after Date' asserted the printed '•••• 4821' text node was the dd (tagName DD); the number now sits in an aria-hidden span inside the dd, so it asserts closest('dd') instead. The row, label and value assertions are unchanged.",
+    "Fix round 1 is verified by Vitest with the axe check already in 'reads the draft back' (still 0 violations), not by a new headless Playwright pass; the change is two spans inside the same dd. Breaks 1 to 3 (RaiseScreen, TransactionSummary) were re-checked for applicability only: their files are untouched by this round. Breaks 0 and 4 to 7 were re-run on the final tree and fail.",
+    "Fix round 2: the label column is `minmax(0,min(var(--label-col),40%))` with a new theme token --label-col: 9rem (beside --amount-col) and wrap-anywhere on the dt, so 9rem holds where it fits (1280px: 144px) and the value column keeps at least 60% minus the gap. The minmax(0, ...) wrapper is needed: a bare min(9rem,40%) track counted as 9rem in the container min-content and widened the card. Criterion 5 now reads 9rem capped at 40% (WCAG 1.4.4 and 1.4.10 win, as the fix list says).",
+    "Residual, not fixed (outside the fix list, named for the supervisor): at 200% text size (root 32px) the header (Header.tsx, a base patch) overflows horizontally at 320px and 360px (scroll width 452), and at 320px the 2rem \"You are disputing\" amount is 253px wide and widens the review card by 35px. Neither is in the review dl. A fix is a header wrap and min-w-0 on the card.",
+    "Fix round 2: breaks 0 to 8 were all applied to the tree and the named Vitest test failed each time (break 4, the md-only grid, was rewritten for the new class; break 8 is the new fixed 9rem column); the tree was restored and its diff hash matches the full run."
+  ],
+  "open_questions": [],
+  "conflicts": [],
+  "e2e_lines_for_qa": [
+    "e2e/tests/dispute-raise.spec.ts:311, 450, 456 and 735: getByRole('link', { name: 'Change' }) becomes { name: 'Change your dispute', exact: true } (exact at least once)",
+    "e2e/tests/dispute-raise.spec.ts:386: const change = page.getByRole('link', { name: 'Change' }) likewise. Line 387 (Cancel) still matches, and the aria-disabled assertions at 394, 395 and 410 still hold.",
+    "No other e2e line names the Card caption or the only-once sentence; the alert lookups (410 to 440, 529) still find one alert, since the new notice has no alert role"
+  ],
+  "fix_round": 2
+}
