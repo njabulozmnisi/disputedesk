@@ -79,3 +79,16 @@ These rows stay in `lows.md`:
 - the CSP nonce for the dialog scroll lock (a gateway change);
 - the rows owned by planned feature specs: `guard-allow-list`, `guard-main-session`, `process-checks`, `ci-hardening`
   and `skill-lines`.
+
+## Decisions (human, 2026-11-11)
+
+- Proposals 1, 3, 4, 6, 8, 9, 10, 11, 12 and 13, the capture check in 7, and the skill-line pruning: approved as
+  recommended. The checks land through their planned feature specs (`process-checks`, `ci-hardening`,
+  `skill-lines`); the rule and skill lines land as one process commit. Proposal 6 lands with the tab-bar fix;
+  proposal 17 waits.
+- Proposal 2: the Copilot verifier grades a Small fix against its brief or fix list.
+- Proposal 7: the tokens and peak-context columns are dropped from the capture's metrics (an AGENTS.md change); the
+  capture keeps fix rounds, full-suite runs, wall time per stage and disk change.
+- Proposals 5, 14, 15 and 16: approved, each as its own change: the post-deploy checks in `deploy.yml`, additive and
+  backward-compatible migrations (AD-22), P55, P71, P80 and P81 restated now the environment is live, and the IAM
+  policies built with `jsonencode` (reversing D9).
