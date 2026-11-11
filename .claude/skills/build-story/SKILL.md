@@ -31,14 +31,14 @@ The input is a feature spec, `docs/backlog/story-<id>.md` (`<id>` as AGENTS.md, 
 
 ## Known pitfalls
 
-- A change that adds or changes infrastructure files (Terraform, Dockerfiles, Compose) runs `scripts/security-local.sh`, the Security workflow's Trivy filesystem and config scan, before reporting (7.5).
 - A change that ends a session ends it by a document navigation (`location.replace` to the session-ended screen, or the logout form post), so nothing is cleared in place; the e2e "no customer data in the DOM, also after Back" checks prove it for every way out.
 - Platform: a health check covers every route the service fronts, and no test relies on a stopped container refusing connections, which hangs on CI's network; use an upstream that closes the connection (7.3, 7.12).
 - Run the full suite with a results file (`--report-xunit-trx`), never through `tail`, so a failure can be named (tf-aws-override).
 - Tag throwaway comparison images `disputedesk-*` and remove them before reporting; the Docker daemon and disk are shared (tf-gateway-spa).
 - `infra/tests/smoke.sh` runs `docker compose down -v` and wipes the shared stack's volumes: run it only under the `stack` lock and say so in the report (tf-gateway-spa).
-- A change that relies on a tool behaviour (Compose, Docker, curl) checks it on the oldest version any environment runs: local, the CI runner, AWS (tf-gateway-spa: CI's Compose 2.38.2).
-- A frontend change to the size or position of an interactive element, or to a width in rem: before reporting, run a throwaway headless Chromium pass against `vite preview` (API stubbed with `page.route`) at 320px with axe, a keyboard walk that focuses the skip link, and the root font size at 200% (ui-tokens-icons, ui-raise-review).
+- A change that relies on a tool behaviour other than Compose's (Docker, curl) checks it on the oldest version any environment runs: local, the CI runner, AWS (tf-gateway-spa).
+- A frontend change to the size or position of an interactive element, or to a width in rem: before reporting, run a throwaway headless Chromium pass against `vite preview` (API stubbed with `page.route`) at 320px with axe, a Tab walk from the skip link that checks every focused element is fully in view (WCAG 2.2 SC 2.4.11), and the root font size at 200% (ui-tokens-icons, ui-raise-review, lows-2026-11-10).
+- A change to a form control asserts its accessible name, what a screen reader speaks for its value, how its errors are announced, and where focus lands after an error (lows-2026-11-10).
 
 ## Report
 
