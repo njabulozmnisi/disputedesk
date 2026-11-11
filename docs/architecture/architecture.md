@@ -561,9 +561,9 @@ Only these arrows are allowed. The architecture tests enforce the graph: `LayerT
 
 | Name | Version |
 | --- | --- |
-| .NET SDK / runtime | 10.0.403 / 10.0.14 (pinned exactly in `backend/global.json` and `infra/tests/global.json`, the Dockerfile and `Directory.Packages.props`; bump the SDK, runtime and every `Microsoft.*` 10.0.x package together; stay on 10.0.x when .NET 11 ships) |
-| EF Core / Npgsql EF provider | 10.0.14 / 10.0.3 |
-| OpenIdConnect, JwtBearer, DataProtection.EntityFrameworkCore | same patch as the runtime (10.0.14) |
+| .NET SDK / runtime | 10.0.404 / 10.0.15 (pinned exactly in `backend/global.json` and `infra/tests/global.json`, the Dockerfile and `Directory.Packages.props`; bump the SDK, runtime and every `Microsoft.*` 10.0.x package together; stay on 10.0.x when .NET 11 ships) |
+| EF Core / Npgsql EF provider | 10.0.15 / 10.0.3 |
+| OpenIdConnect, JwtBearer, DataProtection.EntityFrameworkCore | same patch as the runtime (10.0.15) |
 | Microsoft.Extensions.Http.Resilience | 10.11.0 |
 | Confluent.Kafka | 2.16.0 |
 | OpenTelemetry .NET | 1.20.1 |
