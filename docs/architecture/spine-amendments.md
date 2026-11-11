@@ -120,6 +120,12 @@ The human's decisions changed or confirmed these rules; unlike the rows above, t
 |---|---|---|---|
 | AD-29 | 2026-11-09 | The collector sends CloudWatch only the `disputedesk.*` metrics, each with its own attributes as its one dimension set, and drops every other metric: the runtime and framework metrics had made 363 custom metrics that nothing used, each billed per metric-month | human decision; cloudwatch-metric-filter |
 
+## Decisions of 2026-11-11
+
+| Decision | Date | Change | Source |
+|---|---|---|---|
+| AD-22 | 2026-11-11 | Migrations are additive and backward compatible, with expand, migrate, contract for a rename or removal: the first AWS deploy (2026-11-07) put the schema on RDS, so the history may no longer be reshaped in place, and a rollback runs the previous release's code on the newer schema | human decision; lows-2026-11-10 retrospective, proposal 14 (audit DESI-1) |
+
 ## What else left the spine on 2026-11-04
 
 - **PRD and code divergences.** Six differences between the PRD and the code merged before epic 2 (the `ErrorKind` set, `provision.sh`'s roles and keys, Scalar behind `IsDevelopment()`, the Worker's health check, the fixtures, the gateway's `limit_req`, HSTS and `form-action`), each fixed in its story. Every story is merged, so the section was deleted.
