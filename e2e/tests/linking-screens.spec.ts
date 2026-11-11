@@ -212,12 +212,12 @@ async function checkState(page: Page, label: string) {
       const element = document.activeElement as HTMLElement | null;
       if (!element || element === document.body) return null;
       const style = getComputedStyle(element);
-      // input-otp sets outline 0 and no box-shadow on its real input; the focus indicator is the active cell's 2px ring
-      // border and 4px halo, so for the code input the check is on that cell.
+      // input-otp sets outline 0 and no box-shadow on its real input; the focus indicator is the active cell's 1px border
+      // plus an inset ring (the second pixel) and a halo, so for the code input the check is on that cell.
       const cell = element.getAttribute('data-input-otp') === 'true' ? document.querySelector('[data-slot="input-otp-slot"][data-active="true"]') : null;
       const target = cell ? getComputedStyle(cell) : style;
       const visible = cell
-        ? parseFloat(target.borderTopWidth) >= 2 && target.boxShadow !== 'none'
+        ? parseFloat(target.borderTopWidth) >= 1 && target.boxShadow.includes('inset')
         : (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') || style.boxShadow !== 'none';
       const name = element.getAttribute('aria-label') ?? (element.id ? document.querySelector(`label[for="${element.id}"]`)?.textContent : null) ?? element.textContent ?? element.tagName;
       return { name: `${element.tagName.toLowerCase()}:${(name ?? '').trim().slice(0, 40)}`, visible };

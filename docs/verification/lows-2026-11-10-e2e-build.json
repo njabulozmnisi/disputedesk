@@ -1,0 +1,26 @@
+{
+  "status": "built",
+  "sha": "f6193f5b574953f4212a8bbea9d6b4668430f886 plus the uncommitted batch patch",
+  "criteria": [
+    {"id": "otp-active-cell-ring", "test": "e2e/tests/linking-screens.spec.ts keyboard focus check: active OTP cell has borderTopWidth >= 1 and an inset boxShadow"},
+    {"id": "linking-start-no-traceid-flake", "test": "e2e/tests/linking-start.spec.ts criterion 2: 'both fields bad' echoes xyz and uvw, which no hex traceId can contain"},
+    {"id": "regression-port-check", "test": "e2e/run-regression.sh require_free_ports: a taken 4317 or 4318 stops the group with one plain message; observed with 4318 held by another process"},
+    {"id": "regression-per-group-diagnostics", "test": "e2e/run-regression.sh print_diagnostics: ps, logs and error-context.md printed for a failed group before the next down -v"},
+    {"id": "regression-wait-timeout", "test": "e2e/run-regression.sh: docker compose up --wait --wait-timeout 600"}
+  ],
+  "breaks": [
+    {"patch": "linking-screens.spec.ts: boxShadow.includes('inset') -> includes('outset-never')", "must_fail": "linking-screens keyboard focus test (not run)"},
+    {"patch": "linking-start.spec.ts: echoes 'xyz' -> a traceId prefix taken from the response", "must_fail": "criterion 2 (not run)"},
+    {"patch": "run-regression.sh: remove require_free_ports call", "must_fail": "with 4318 taken, each group ends with a docker error instead of the plain message (observed before the change; not re-run after removal)"}
+  ],
+  "test_results": {
+    "journeys": "5 passed",
+    "regression": "linking-rate-limits 7, linking-screens 9, linking-queue 1, linking-verify-a 6, linking-verify-b 3, linking-verify-c 2, regression 260 passed, exit 0",
+    "port_check_demo": "exit 1, plain message in all seven groups with 4318 held by another process",
+    "lint": "eslint clean on the two edited specs",
+    "diff_hash": "not computed: the tree is uncommitted"
+  },
+  "assumptions": ["The OTLP HTTP port was moved to 14318 for the runs because 4318 is held by a VS Code helper on this machine."],
+  "open_questions": [],
+  "conflicts": []
+}

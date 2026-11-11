@@ -38,17 +38,39 @@ check_d_sends() {
   [[ $sends -le 3 ]]
 }
 
+# Fails with a plain message when another process holds a host port the stack publishes, instead of one docker error per group.
+# Run after the stack is down, so the stack's own ports are free.
+require_free_ports() {
+  local port
+  for port in "${DISPUTEDESK_OTLP_GRPC_PORT:-4317}" "${DISPUTEDESK_OTLP_HTTP_PORT:-4318}"; do
+    if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+      echo "Port $port is taken by another process; stop it, or set DISPUTEDESK_OTLP_GRPC_PORT and DISPUTEDESK_OTLP_HTTP_PORT." >&2
+      return 1
+    fi
+  done
+}
+
+# Prints the group's stack state, logs and Playwright error contexts (synthetic data only), before the next group removes them.
+print_diagnostics() {
+  echo "=== diagnostics for group $1 ==="
+  docker compose "${raised_limits[@]}" ps -a
+  docker compose "${raised_limits[@]}" logs --no-color --tail 200
+  find e2e/test-results -name error-context.md -print -exec cat {} \; 2>/dev/null || true
+}
+
 # <project> <production|raised>
 run_group() {
   local project=$1 limits=$2 files=("${small_queue[@]}") result=0
   echo "=== group $project ($limits linking limits) ==="
   docker compose "${raised_limits[@]}" down -v --remove-orphans || return 1
+  require_free_ports || return 1
   if [[ $limits == raised ]]; then files=("${raised_limits[@]}"); fi
-  docker compose "${files[@]}" up -d --wait --build || return 1
+  docker compose "${files[@]}" up -d --wait --wait-timeout 600 --build || { print_diagnostics "$project"; return 1; }
   if [[ $limits == production ]]; then export E2E_LINKING_RATE_LIMITS=production; else unset E2E_LINKING_RATE_LIMITS; fi
   if [[ $project == regression ]]; then export E2E_LINKING_BUDGET_SECONDS=10; else unset E2E_LINKING_BUDGET_SECONDS; fi
   (cd e2e && npx playwright test --project="$project") || result=1
   check_d_sends "$project" || result=1
+  if [[ $result -ne 0 ]]; then print_diagnostics "$project"; fi
   return $result
 }
 

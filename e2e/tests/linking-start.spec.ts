@@ -290,7 +290,8 @@ const formatCases: { name: string; body: string; fields: string[]; echoes: strin
   { name: 'accountNumber one over the maximum', body: JSON.stringify({ idNumber: goodId, accountNumber: '12345678901234567' }), fields: ['accountNumber'], echoes: ['12345678901234567'] },
   { name: 'accountNumber 10,000 characters', body: JSON.stringify({ idNumber: goodId, accountNumber: '8'.repeat(10_000) }), fields: ['accountNumber'], echoes: ['8'.repeat(50)] },
   { name: 'accountNumber as a JSON number', body: `{"idNumber":"${goodId}","accountNumber":${goodAccount}}`, fields: [], echoes: [] },
-  { name: 'both fields bad', body: JSON.stringify({ idNumber: 'abc', accountNumber: 'def' }), fields: ['accountNumber', 'idNumber'], echoes: ['abc', 'def'] },
+  // These values use no hex letters (a-f): the problem details carry a random hex traceId that could contain them.
+  { name: 'both fields bad', body: JSON.stringify({ idNumber: 'xyz', accountNumber: 'uvw' }), fields: ['accountNumber', 'idNumber'], echoes: ['xyz', 'uvw'] },
   { name: 'not valid JSON', body: '{"idNumber": ', fields: [], echoes: [] },
 ];
 
