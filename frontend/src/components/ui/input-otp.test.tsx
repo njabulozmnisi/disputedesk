@@ -35,7 +35,7 @@ describe('InputOTP', () => {
     expect(first).toHaveClass('md:max-w-14');
   });
 
-  it('gives the active cell a 2px ring border and a 4px primary-subtle halo', () => {
+  it('gives the active cell a 2px ring edge and a 4px primary-subtle halo, with every cell the same width', () => {
     const { container } = renderCells();
     act(() => {
       container.querySelector('input')?.focus();
@@ -43,14 +43,16 @@ describe('InputOTP', () => {
 
     const active = slots(container).filter((cell) => cell.getAttribute('data-active') === 'true');
     expect(active).toHaveLength(1);
-    // The negative margin keeps the cells' widths equal while the border grows from 1px to 2px.
+    // The border stays 1px on every cell, so the cells keep one width (flex-basis 0 counts borders); the second pixel
+    // of the edge is an inset ring (Tailwind, box-shadow: inset-ring).
     expect(active[0]).toHaveClass(
-      'data-[active=true]:-m-px',
-      'data-[active=true]:border-2',
       'data-[active=true]:border-ring',
+      'data-[active=true]:inset-ring',
+      'data-[active=true]:inset-ring-ring',
       'data-[active=true]:ring-4',
       'data-[active=true]:ring-primary-subtle',
     );
+    expect(active[0]?.className).not.toMatch(/-m-px|border-2/);
   });
 
   it('takes the destructive border from the aria-invalid on a cell', () => {
@@ -58,7 +60,10 @@ describe('InputOTP', () => {
 
     const [first] = slots(container);
     expect(first).toHaveClass('aria-invalid:border-destructive');
-    expect(first).toHaveClass('data-[active=true]:aria-invalid:border-destructive');
+    expect(first).toHaveClass(
+      'data-[active=true]:aria-invalid:border-destructive',
+      'data-[active=true]:aria-invalid:inset-ring-destructive',
+    );
   });
 
   it('stops the fake caret blinking under reduced motion', () => {

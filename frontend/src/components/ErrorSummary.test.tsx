@@ -32,6 +32,17 @@ describe('ErrorSummary', () => {
     );
   });
 
+  // EXPERIENCE.md, Accessibility Floor: every interactive element is at least 44px tall, a field link included.
+  it('draws each field link at least 44px tall', () => {
+    render(<ErrorSummary items={items} requests={1} />);
+
+    expect(screen.getByRole('link', { name: 'Enter the 6-digit code.' })).toHaveClass(
+      'inline-flex',
+      'min-h-(--tap-target)',
+      'items-center',
+    );
+  });
+
   it('is the only alert role, so nothing is announced twice', () => {
     render(<ErrorSummary items={items} requests={1} />);
 

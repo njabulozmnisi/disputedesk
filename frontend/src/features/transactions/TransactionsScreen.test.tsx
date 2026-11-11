@@ -212,7 +212,9 @@ describe('the row columns', () => {
 
     const row = (await screen.findByText('Shop', { selector: 'p' })).closest('li') as HTMLElement;
     expect(row).toHaveClass('grid', 'grid-cols-[minmax(0,1fr)_auto]');
-    expect(row).toHaveClass('md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)]');
+    expect(row).toHaveClass(
+      'md:grid-cols-[minmax(0,1fr)_min(var(--amount-col),25%)_min(var(--action-col),35%)]',
+    );
     expect(row).toHaveClass('md:gap-x-6');
     const amount = within(row).getByText('R849.00').parentElement;
     expect(amount).toHaveClass('text-right', 'tabular-nums');
@@ -524,6 +526,25 @@ describe('disputability', () => {
     ) as HTMLElement;
     expectDecorativeIcon(row.querySelector('svg.lucide-info'), 'size-3.5');
   });
+
+  // DESIGN.md, Layout & Spacing: spacing comes from the 4-based subset, so the icon sits 4px from the text.
+  it("keeps the hint icon 4px from the text, in DESIGN.md's spacing subset", async () => {
+    serveTransactions([
+      makeRow({
+        description: 'Why not',
+        disputable: false,
+        notDisputableReason: 'outsideWindow',
+      }),
+    ]);
+    renderApp({ path: '/transactions' });
+
+    const row = (await screen.findByText('Why not', { selector: 'p' })).closest(
+      'li',
+    ) as HTMLElement;
+    const hintLine = row.querySelector('svg.lucide-info')?.parentElement;
+    expect(hintLine).toHaveClass('gap-1');
+    expect(hintLine).not.toHaveClass('gap-1.5');
+  });
 });
 
 const disputeId = '3f2b8c1e-7d4a-4e5b-9a60-1c2d3e4f5a6b';
@@ -745,7 +766,9 @@ describe('loading, empty and error states', () => {
     expect(rows).toHaveLength(5);
     for (const row of rows) {
       expect(row.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4);
-      expect(row).toHaveClass('md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)]');
+      expect(row).toHaveClass(
+        'md:grid-cols-[minmax(0,1fr)_min(var(--amount-col),25%)_min(var(--action-col),35%)]',
+      );
     }
   });
 

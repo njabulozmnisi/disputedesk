@@ -70,6 +70,28 @@ describe('the theme file', () => {
     expect(tokens?.text).toMatch(/^\s*--action-col: 14rem;/m);
   });
 
+  // DESIGN.md, Components: the 1.5px outline of secondary buttons and fields is one token, read through Tailwind's
+  // border-(length:--outline-width), so no component holds the raw width.
+  it('declares the outline width once and uses it in place of a raw 1.5px border', () => {
+    const tokens = appSourceFiles(['.css']).find(({ path }) => path === 'theme/tokens.css');
+    const rawBorder = outsideTheme
+      .filter(({ text }) => /border-\[1\.5px\]/.test(text))
+      .map(({ path }) => path);
+    const usingToken = outsideTheme
+      .filter(({ text }) => text.includes('border-(length:--outline-width)'))
+      .map(({ path }) => path)
+      .sort();
+
+    expect(tokens?.text).toMatch(/^\s*--outline-width: 1\.5px;/m);
+    expect(rawBorder).toEqual([]);
+    expect(usingToken).toEqual([
+      'components/ui/button.tsx',
+      'components/ui/input.tsx',
+      'components/ui/radio-group.tsx',
+      'components/ui/textarea.tsx',
+    ]);
+  });
+
   // HANDOFF 5: icons are Lucide components. The pattern uses Unicode escapes so that this file holds no glyph:
   // arrow, circle, triangle, check, cross, return arrow, circled i, warning sign, trigram, flag.
   it('has no text-glyph icon', () => {

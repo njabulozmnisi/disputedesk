@@ -191,6 +191,25 @@ describe('reason and expected amount', () => {
     expect(await screen.findByText(message)).toBeInTheDocument();
   });
 
+  // After the first blur the field checks on every change (React Hook Form, mode onTouched), so a corrected amount
+  // drops its error before the pointer goes to Continue: the layout then holds still between pointer down and up.
+  it('drops the expected-amount error as soon as the amount is corrected, before the field is left', async () => {
+    const { user } = await openRaiseScreen();
+    await chooseReason(user, 'Wrong amount');
+    const field = screen.getByLabelText('Expected amount');
+    await user.type(field, '849.00');
+    await user.tab();
+    const refusal = 'The expected amount must be less than R849.00.';
+    expect(await screen.findByText(refusal)).toBeInTheDocument();
+
+    await user.clear(field);
+    await user.type(field, '80.00');
+
+    expect(screen.queryByText(refusal)).not.toBeInTheDocument();
+    expect(field).not.toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveFocus();
+  });
+
   it('for any reason but Wrong amount the disputed amount is the transaction amount', async () => {
     const requests = recordRaiseRequests();
     const { user } = await openRaiseScreen();

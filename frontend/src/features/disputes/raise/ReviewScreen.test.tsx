@@ -700,7 +700,8 @@ describe('the review screen drawn to the mockup', () => {
     const surface = screen.getByRole('region', { name: 'Your dispute' });
     expect(surface.tagName).toBe('SECTION');
     expect(surface).toHaveClass('bg-card', 'border', 'border-border', 'rounded-lg');
-    expect(within(surface).getByText('R849.00')).toBeInTheDocument();
+    // The hero amount may break when text is scaled up, so it never widens the card (WCAG 2.2 SC 1.4.10).
+    expect(within(surface).getByText('R849.00')).toHaveClass('wrap-anywhere');
     expect(within(surface).getByRole('link', { name: 'Change your dispute' })).toBeInTheDocument();
     expect(surface.querySelector('dl')).not.toBeNull();
   });
@@ -727,6 +728,17 @@ describe('the review screen drawn to the mockup', () => {
       expect(row.querySelector('dt')).toHaveClass('wrap-anywhere');
       expect(row.querySelector('dd')).toHaveClass('wrap-anywhere');
     }
+  });
+
+  // The mockup (dispute-review.html): the Change link lines up with the amount's foot, and the merchant is bold.
+  it('aligns Change with the foot of the hero amount and draws the transaction value bold', async () => {
+    await openReviewScreen();
+
+    const surface = screen.getByRole('region', { name: 'Your dispute' });
+    const change = within(surface).getByRole('link', { name: 'Change your dispute' });
+    expect(change.parentElement).toHaveClass('flex', 'items-end', 'justify-between');
+    expect(change.parentElement).not.toHaveClass('items-start');
+    expect(within(surface).getByText('ZXP*GLOBALSVCS 0800')).toHaveClass('font-strong');
   });
 
   it('gives an account transaction an Account row after Date', async () => {

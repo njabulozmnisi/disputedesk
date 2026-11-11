@@ -213,10 +213,10 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
             aria-label="Your dispute"
             className="grid gap-4 rounded-lg border border-border bg-card px-4 py-6 md:p-6"
           >
-            <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex flex-wrap items-end justify-between gap-4">
               <div className="grid gap-1">
                 <p className="text-label text-muted-foreground">You&apos;re disputing</p>
-                <p className="text-amount-hero font-title tabular-nums">
+                <p className="text-amount-hero font-title wrap-anywhere tabular-nums">
                   {formatMoney({ amount: amountToDispute, currency: row.amount.currency })}
                 </p>
               </div>
@@ -231,7 +231,9 @@ function ReviewForm({ row, draft }: { row: TransactionResponse; draft: Draft }) 
             </div>
 
             <dl>
-              <Row label="Transaction">{row.description}</Row>
+              <Row label="Transaction">
+                <span className="font-strong">{row.description}</span>
+              </Row>
               <Row label="Date">{formatFullDay(row.transactionDate)}</Row>
               <NumberRow row={row} />
               <Row label="Reason">

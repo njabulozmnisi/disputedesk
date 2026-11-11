@@ -14,10 +14,11 @@ import { notDisputableHint } from './notDisputableHint';
 /**
  * The list's columns from 768px (HANDOFF 3.2): text, amount, action. The header, every row and the skeleton rows use
  * them, so every amount and action lines up down the panel. Below 768px a row has two columns and the action sits
- * under the amount.
+ * under the amount. The rem columns are capped at a share of the row (25% and 35%, as the review's label column is
+ * capped at 40%), so a raised root font size leaves the text column at least 40% and nothing is wider than the panel.
  */
 export const ledgerColumns =
-  'md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)] md:gap-x-6';
+  'md:grid-cols-[minmax(0,1fr)_min(var(--amount-col),25%)_min(var(--action-col),35%)] md:gap-x-6';
 
 /** One row of the panel: the grid, the hairline above it and its padding. The first row's hairline closes its day band. */
 export const ledgerRow = cn(
@@ -78,7 +79,9 @@ export function TransactionRow({
         <p className="font-strong wrap-break-word">{row.description}</p>
         <MaskedNumber row={row} />
         {hint ? (
-          <p className="flex items-start gap-1.5 text-caption text-status-neutral-fg">
+          <p className="flex items-start gap-1 text-caption text-status-neutral-fg">
+            {/* mt-0.5 (2px) is the optical offset that centres the 14px icon on the 13px caption's 18px line, as
+                the wordmark dot's ml-0.5 is the other 2px exception to the 4-based spacing (DESIGN.md, Layout & Spacing). */}
             <Info className="mt-0.5 size-3.5 shrink-0" />
             {hint}
           </p>

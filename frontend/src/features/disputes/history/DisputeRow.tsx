@@ -11,8 +11,9 @@ import { reasonCopy } from '../raise/reasons';
 
 /**
  * One dispute. The whole row is the link, so its accessible name carries the description and the status label
- * (WCAG 2.2 SC 2.4.4, 2.5.3). The `li` takes focus after Load more. From 768px the row uses the transactions' columns
- * and a chevron column of 1.25rem (--spacing(5)); the panel clips its content, so both focus rings are drawn inside.
+ * (WCAG 2.2 SC 2.4.4, 2.5.3). The `li` takes focus after Load more. From 768px the row uses the transactions' columns,
+ * capped the same way, and a chevron column of 1.25rem (--spacing(5)); the panel clips its content, so both focus
+ * rings are drawn inside.
  * The row's own group name, group/row, keeps the badge's plain group-hover:underline from firing: a hovered row
  * underlines the merchant only (Tailwind, Differentiating nested groups).
  */
@@ -39,7 +40,7 @@ export function DisputeRow({
       <Link
         to="/disputes/$disputeId"
         params={{ disputeId: dispute.disputeId }}
-        className="group/row grid min-h-(--row-min) grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-4 py-3 font-normal text-foreground no-underline hover:bg-background hover:text-foreground focus-visible:-outline-offset-3 md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)_--spacing(5)] md:items-center md:gap-x-6 md:px-6"
+        className="group/row grid min-h-(--row-min) grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-4 py-3 font-normal text-foreground no-underline hover:bg-background hover:text-foreground focus-visible:-outline-offset-3 md:grid-cols-[minmax(0,1fr)_min(var(--amount-col),25%)_min(var(--action-col),35%)_--spacing(5)] md:items-center md:gap-x-6 md:px-6"
       >
         <div className="col-start-1 row-span-2 row-start-1 min-w-0 md:row-span-1">
           <p className="font-strong wrap-break-word text-primary group-hover/row:underline">

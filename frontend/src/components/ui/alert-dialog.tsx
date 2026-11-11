@@ -4,7 +4,12 @@ import { AlertDialog as AlertDialogPrimitive } from 'radix-ui';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-// shortcut: Radix scroll lock injects a <style> with CSS text that the gateway CSP (style-src 'self' and the empty-string hash) blocks, so the page behind the dialog can still scroll; upgrade if the dialog must lock scrolling
+// shortcut: Radix scroll lock (react-remove-scroll, through react-style-singleton) injects a <style> with CSS text that the
+// gateway CSP (style-src 'self' and the empty-string hash) blocks. Each time a dialog opens the browser logs one CSP
+// violation in the console, and the page behind the dialog can still scroll; the dialog itself works, and focus is trapped by
+// Radix, not by that style. Accepted: the CSP stays strict. Upgrade if the dialog must lock scrolling or the console must
+// stay clean: the gateway answers with a per-response nonce in style-src and in the page, and the SPA passes it to
+// react-style-singleton with get-nonce's setNonce (a gateway change, then a one-line call in main.tsx).
 function AlertDialog({ ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
 }
@@ -60,7 +65,7 @@ function AlertDialogFooter({ className, ...props }: React.ComponentProps<'div'>)
   return (
     <div
       data-slot="alert-dialog-footer"
-      className={cn('flex flex-col gap-3 border-t border-border pt-4 sm:flex-row', className)}
+      className={cn('flex flex-col gap-3 border-t border-border pt-4 md:flex-row', className)}
       {...props}
     />
   );

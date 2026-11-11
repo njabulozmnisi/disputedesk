@@ -24,16 +24,21 @@ export function Header({ state, isStartPage, onSignOut, onSkipToMain }: HeaderPr
     <header className="border-b border-border bg-card">
       <div
         className={cn(
-          'mx-auto flex min-h-16 w-full items-center gap-6 px-4 py-2 md:px-6',
+          'mx-auto flex min-h-16 w-full flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2 md:px-6',
           isStartPage ? 'max-w-(--page-max)' : 'max-w-(--content-max)',
         )}
       >
         {/* The first focusable element, hidden until focused (WCAG 2.2 SC 2.4.1, 2.4.7; technique G1). Focused, it floats
           out of the flow, so nothing moves and a click made while it is focused still lands (SC 2.5.2, 3.2.1). With no
-          offsets, an absolutely positioned child of this flex container sits where it would as the only item: at the
-          container's padding edge and centred like the home link. It is as tall as the home link (--tap-target) and
-          wider, so it fully covers the home link and no 44px target is left partly covered (SC 2.5.8). Focus moves by
-          script, with no hash navigation for the router to see. */}
+          offsets, an absolutely positioned child of this flex container sits where it would as the only item (CSS
+          Flexbox Level 1, section 4.1): at the container's content edge, where the home link starts, and centred like
+          the home link. It is as tall as the home link (--tap-target) and wider, so it fully covers the home link and no
+          44px target is left partly covered (SC 2.5.8). From 768px, signed in, it also reaches about 25px into the
+          nav's "Transactions" link while it has focus. That is accepted: the other 80% of the link stays visible and
+          clickable, well above the 24px minimum (SC 2.5.8), and axe's target-size passes. The row wraps when scaled-up
+          text no longer fits it on one line; the focused link is then centred on both lines and covers most of the home
+          link, which is accepted for that text size. Focus moves by script, with no hash navigation for the router to
+          see. */}
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:z-20 focus:inline-flex focus:min-h-(--tap-target) focus:items-center focus:rounded-full focus:bg-card focus:px-4 focus:shadow-overlay"

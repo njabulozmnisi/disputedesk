@@ -170,7 +170,7 @@ function LoadedCard({
       ) : null}
       <div>
         <p className="text-caption text-muted-foreground">Disputed amount</p>
-        <p className="text-amount-hero font-title tabular-nums">
+        <p className="text-amount-hero font-title wrap-anywhere tabular-nums">
           {formatMoney(dispute.disputedAmount)}
         </p>
       </div>
@@ -306,7 +306,10 @@ export function DisputeDetailScreen() {
 
       <div
         aria-busy={isLoading ? true : undefined}
-        className={cn('grid gap-6', !isMessage && 'lg:grid-cols-2 lg:items-start lg:gap-8')}
+        className={cn(
+          'grid grid-cols-1 gap-6',
+          !isMessage && 'lg:grid-cols-2 lg:items-start lg:gap-8',
+        )}
       >
         {/* One StateSurface in every state, so the h1 is one element at one place in the tree and keeps focus. Only not
             found is drawn as a state surface (it gets an icon); the other states style the section as before. */}

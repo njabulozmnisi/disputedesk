@@ -42,11 +42,13 @@ export function ErrorSummary({
           Check the details below
         </h2>
         {formError ? <p>{formError}</p> : null}
-        <ul className="grid gap-1">
+        <ul>
           {items.map(({ fieldId, message }) => (
             <li key={fieldId}>
               <a
                 href={`#${fieldId}`}
+                // At least 44px tall (--tap-target), the project's floor for every interactive element.
+                className="inline-flex min-h-(--tap-target) items-center"
                 onClick={(event) => {
                   event.preventDefault();
                   document.getElementById(fieldId)?.focus();

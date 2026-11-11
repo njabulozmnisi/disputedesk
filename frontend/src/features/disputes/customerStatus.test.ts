@@ -20,18 +20,19 @@ describe('describeCustomerStatus', () => {
   // Lucide has no search-with-arrow icon: the prioritised badge uses the custom SearchPriority (the lens plus the arrow).
   it('maps underReviewPrioritised to the custom SearchPriority icon', () => {
     const description = describeCustomerStatus('underReviewPrioritised');
-    const Icon = description?.icon ?? 'span';
+    if (!description) throw new Error('underReviewPrioritised has no description');
 
     expect(description).toMatchObject({
       label: 'Under review (prioritised)',
       tone: 'priority',
       group: 'open',
     });
-    expect(Icon).not.toBe('span');
-    expect(Icon).not.toBe(Search);
-    const { container } = render(createElement(Icon));
+    expect(description.icon).not.toBe(Search);
+    const { container } = render(createElement(description.icon));
     expect(container.querySelector('svg.lucide-search-priority')).toBeInTheDocument();
+    // Search's lens and handle, then the arrow.
     expect(container.querySelector('circle[cx="11"][cy="11"][r="8"]')).toBeInTheDocument();
+    expect(container.querySelector('path[d="m21 21-4.34-4.34"]')).toBeInTheDocument();
     expect(container.querySelector('path[d="M11 14V8M8.5 10.5 11 8l2.5 2.5"]')).toBeInTheDocument();
   });
 

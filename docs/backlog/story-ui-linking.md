@@ -244,7 +244,9 @@ exactly after the CLI runs. The builder re-checks publisher, weekly downloads, r
 - Security agent: reviews the `style-src` change against CSP Level 3 and AD-23.
 - QA, holding the `stack` lock: `e2e/run-regression.sh` passes with axe on every spec that runs it; with the
   Playwright MCP each linking screen and state matches its mockup at 360px and 1280px in light and dark; no
-  horizontal scroll at 320px or 200% zoom; every interactive element is at least 44px tall; keyboard order is
+  horizontal scroll at 320px or 200% zoom; every standalone interactive element is at least 44px tall (an inline
+  link in a sentence, such as "Start again", keeps the line height under WCAG 2.2 SC 2.5.8's inline exception,
+  amended in lows-2026-11-10); keyboard order is
   unchanged; paste and typed entry both link a seeded customer; the browser console on `/link/otp` shows no CSP
   violation.
 

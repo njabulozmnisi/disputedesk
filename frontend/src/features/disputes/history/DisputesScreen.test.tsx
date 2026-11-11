@@ -158,7 +158,7 @@ describe('the history', () => {
     expect(chevron).toHaveClass('hidden', 'md:block', 'md:col-start-4');
     expect(link).toHaveClass('grid-cols-[minmax(0,1fr)_auto]');
     expect(link).toHaveClass(
-      'md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)_--spacing(5)]',
+      'md:grid-cols-[minmax(0,1fr)_min(var(--amount-col),25%)_min(var(--action-col),35%)_--spacing(5)]',
     );
     expect(link).toHaveClass('md:gap-x-6');
     expect(

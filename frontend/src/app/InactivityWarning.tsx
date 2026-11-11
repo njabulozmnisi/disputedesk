@@ -5,7 +5,7 @@ import { getGetSessionQueryOptions } from '@/api/generated/disputedesk';
 import { ApiError } from '@/api/mutator';
 import {
   AlertDialog,
-  AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -77,15 +77,9 @@ export function InactivityWarning({ open, onSignOut, signOutFailed }: Inactivity
           </p>
         ) : null}
         <AlertDialogFooter>
-          <AlertDialogAction
-            onClick={(event) => {
-              // Radix closes the dialog on click; it closes only once the session is renewed.
-              event.preventDefault();
-              void staySignedIn();
-            }}
-          >
-            Stay signed in
-          </AlertDialogAction>
+          {/* Radix gives initial focus to the Cancel part (WAI-ARIA APG, alert dialog), and "Stay signed in" is the
+              safe choice here: it cancels the sign-out. Its click calls onOpenChange(false), like Escape. */}
+          <AlertDialogCancel variant="default">Stay signed in</AlertDialogCancel>
           <Button variant="secondary" onClick={onSignOut}>
             Sign out
           </Button>

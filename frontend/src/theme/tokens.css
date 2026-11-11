@@ -117,6 +117,9 @@
   --label-col: 9rem; /* review read-back: the label column, capped at 40% of the row so text scaling keeps room for the value */
   --action-col: 14rem; /* list grid: the Dispute link and badge column, from 768px */
 
+  /* Outline: the border of secondary buttons, text fields and the reason radios; used as border-(length:--outline-width) */
+  --outline-width: 1.5px;
+
   /* Radius */
   /* Radius follows hierarchy: rows none, list panels and fields md, cards and form surfaces lg, controls full. */
   --radius-sm: 8px; /* focus outline, mock notes */

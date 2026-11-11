@@ -720,6 +720,17 @@ describe('the skip link', () => {
     },
   );
 
+  // With text scaled up the wordmark and Sign out no longer fit one line: the row wraps instead of widening the page
+  // (WCAG 2.2 SC 1.4.4, 1.4.10).
+  it('lets the header row wrap, so large text does not make the page scroll sideways', async () => {
+    signInAs('linked');
+    renderApp({ path: '/transactions' });
+    await screen.findByRole('heading', { level: 1, name: 'Transactions' });
+
+    const row = screen.getByRole('link', { name: 'Skip to main content' }).parentElement;
+    expect(row).toHaveClass('flex', 'flex-wrap');
+  });
+
   it('is hidden until it has focus', async () => {
     signInAs('linked');
     renderApp({ path: '/transactions' });
