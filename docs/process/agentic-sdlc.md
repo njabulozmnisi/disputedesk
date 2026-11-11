@@ -100,6 +100,12 @@ A fix round goes to one fresh builder, whose isolated worktree starts at the bas
 
 A fix item that moves a header, or the component that owns a behaviour, lists every response or path the criterion names, each with its expected value.
 
+Every fact a brief or a feature spec states about the repository (a path, a name, a count, a version) comes from a command run while writing it, never from memory; a renamed name or moved path comes with the pasted `git grep` of every use.
+
+A brief for an auth or identity fix lists every path by which an anonymous or low-privilege user reaches the capability, and asks the builder to close or test each one, not only the path that was reported.
+
+A lows batch fixes each row as reported. A fix that reshapes a second component is split out as its own change.
+
 A lane on a worker machine runs through `scripts/lane.sh start|wait|collect <host> <id> ...`: it starts a headless builder in a tmux session, waits for its exit file, and brings back the report and a verified patch. Two machines (M1 and M2) run two lanes each; `lane.sh start` refuses a lane under 15 GB free, and the supervisor fills a lane the moment it frees.
 
 The verifier does not re-run the suite. It checks that the builder's results files cover the current diff (the diff hash in `<id>-build.json`), judges each criterion against its test, and runs each `breaks` entry in a throwaway copy: apply the patch, run the named test, expect a failure. A break that still passes, or a results file for another diff, is a high finding.
