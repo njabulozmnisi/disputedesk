@@ -84,14 +84,21 @@ function predict(filter: number, left: number, up: number, upLeft: number): numb
   }
 }
 
-/** The box around the fully opaque pixels of exactly this colour: the antialiased edge pixels are left out. */
-function boxOf(png: Png, colour: [number, number, number]) {
+/**
+ * The box around the fully opaque pixels of exactly this colour: the antialiased edge pixels are left out. The
+ * optional columns limit it to the pixels between those x positions, both included.
+ */
+function boxOf(
+  png: Png,
+  colour: [number, number, number],
+  columns = { from: 0, to: png.width - 1 },
+) {
   let left = Infinity;
   let top = Infinity;
   let right = -1;
   let bottom = -1;
   for (let y = 0; y < png.height; y++) {
-    for (let x = 0; x < png.width; x++) {
+    for (let x = columns.from; x <= columns.to; x++) {
       const at = (y * png.width + x) * 4;
       const matches =
         png.pixels[at] === colour[0] &&
@@ -106,6 +113,14 @@ function boxOf(png: Png, colour: [number, number, number]) {
     }
   }
   return { left, top, right, bottom };
+}
+
+/** The box of the name's first letter, D, which has no descender: from the name's left edge to its first empty column. */
+function firstLetterBox(png: Png, name: [number, number, number]) {
+  const nameBox = boxOf(png, name);
+  let to = nameBox.left;
+  while (boxOf(png, name, { from: to + 1, to: to + 1 }).right >= 0) to++;
+  return boxOf(png, name, { from: nameBox.left, to });
 }
 
 const themes = [
@@ -128,8 +143,15 @@ describe.each(themes)('$file', ({ file, name, dot }) => {
     expect(metadata).toEqual([]);
   });
 
-  it('is transparent around the drawing', () => {
-    expect(png.pixels[3]).toBe(0);
+  it('is transparent around the drawing, in all four corners', () => {
+    const alphaAt = (x: number, y: number) => png.pixels[(y * png.width + x) * 4 + 3];
+
+    expect([
+      alphaAt(0, 0),
+      alphaAt(png.width - 1, 0),
+      alphaAt(0, png.height - 1),
+      alphaAt(png.width - 1, png.height - 1),
+    ]).toEqual([0, 0, 0, 0]);
   });
 
   it('puts the dot after the name, 32px across, whole within the canvas', () => {
@@ -143,8 +165,11 @@ describe.each(themes)('$file', ({ file, name, dot }) => {
     expect(dotBox.right - dotBox.left + 1).toBeLessThanOrEqual(32);
     expect(dotBox.bottom - dotBox.top + 1).toBeGreaterThanOrEqual(28);
     expect(dotBox.right).toBeLessThan(png.width);
-    // Like a full stop: its foot is at the name's foot or above it (the name's box includes the descender of "p").
-    expect(dotBox.bottom).toBeLessThanOrEqual(nameBox.bottom);
+    // Like a full stop: its foot is on the baseline, within 2px for the antialiased edge. The baseline is the foot of
+    // D, which has no descender (the name's box as a whole includes the descender of "p", 14px lower).
+    const baseline = firstLetterBox(png, [...name]).bottom;
+    expect(dotBox.bottom).toBeLessThanOrEqual(baseline);
+    expect(dotBox.bottom).toBeGreaterThanOrEqual(baseline - 2);
     expect(dotBox.top).toBeGreaterThan(nameBox.top);
   });
 });

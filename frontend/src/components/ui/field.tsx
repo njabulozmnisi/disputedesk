@@ -30,7 +30,11 @@ function Field({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       role="group"
       data-slot="field"
-      className={cn('grid gap-2 data-[invalid=true]:text-destructive', className)}
+      // The label of a field holding a disabled control is muted with it (HANDOFF 3.9).
+      className={cn(
+        'grid gap-2 data-[invalid=true]:text-destructive has-disabled:[&_label]:text-muted-foreground',
+        className,
+      )}
       {...props}
     />
   );

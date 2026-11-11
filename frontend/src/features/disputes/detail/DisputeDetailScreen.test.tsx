@@ -371,7 +371,13 @@ describe('loading, failing and loaded', () => {
 
     expect(screen.getByText('Dispute status:')).toBeInTheDocument();
     expect(screen.getAllByText('Submitted').length).toBeGreaterThan(0);
-    expect(screen.getByText('R849.00')).toBeInTheDocument();
+    // One shrinkable column below lg, so scaled-up text wraps inside the page instead of widening it (SC 1.4.10).
+    expect(screen.getByRole('heading', { level: 1 }).closest('section')?.parentElement).toHaveClass(
+      'grid-cols-1',
+      'lg:grid-cols-2',
+    );
+    // The hero amount may break when text is scaled up, so it never widens the card (WCAG 2.2 SC 1.4.10).
+    expect(screen.getByText('R849.00')).toHaveClass('wrap-anywhere');
     expect(screen.getByText('Unrecognised')).toBeInTheDocument();
     expect(screen.getByText('Mon 26 Oct 2026')).toBeInTheDocument();
     // The one printed form, as on the transaction list; no separate "Card" label repeats it.

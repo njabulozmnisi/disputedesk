@@ -66,6 +66,9 @@ services:
       - --rpc-addr=redpanda:33145
       - --advertise-rpc-addr=redpanda:33145
       - --default-log-level=warn
+    # Time to shut down after SIGTERM before Compose kills it: the 90 s Redpanda's Helm chart gives a broker
+    # (statefulset terminationGracePeriodSeconds), not Compose's default 10 s. Each AWS deploy recreates it.
+    stop_grace_period: 90s
     ports: ["127.0.0.1:${DISPUTEDESK_REDPANDA_PORT:-19092}:19092"]
     volumes: ["redpanda:/var/lib/redpanda/data"]
     healthcheck:

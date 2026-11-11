@@ -96,7 +96,8 @@ for Wrong amount, the expected amount (at least R0.00, below the transaction amo
    **When** the card renders
    **Then** the hero amount, "Change" and the read-back `dl` sit on one flat surface, a
    `<section aria-label="Your dispute">` (`bg-card`, hairline, `rounded-lg`); at every width each `dt` sits in a
-   9rem label column beside its `dd` (`grid-cols-[9rem_minmax(0,1fr)]`, values wrapping with
+   9rem label column, capped at 40% of the row, beside its `dd` (`--label-col`,
+   `minmax(0,min(var(--label-col),40%))`, amended in lows-2026-11-10; values wrapping with
    `overflow-wrap: anywhere`, as the mockup and `screenshots/dispute-review-360.jpg` show), with hairlines between
    rows; the `dl`, `dt` and `dd` semantics stay
    **And** the masked number becomes a `dl` row after Date: `dt` "Card" with `dd` "492345•• •••• 3456" for a card

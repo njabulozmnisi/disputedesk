@@ -25,7 +25,7 @@ public sealed class GatewayFixture : IAsyncLifetime
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(60);
     private static readonly string[] ContainerNames = ["gateway", "gateway-mail", "local", "echo", "otlp", "mailpit", "trusted", "untrusted"];
-    private static readonly string[] AwsTestValueNames = ["APP_HOST", "AUTH_HOST", "MAILPIT_HOST", "GATEWAY_ORIGIN_VERIFY", "MAILPIT_UI_AUTH"];
+    private static readonly string[] AwsTestValueNames = ["APP_HOST", "AUTH_HOST", "MAILPIT_HOST", "GATEWAY_ORIGIN_VERIFY", "MAILPIT_UI_AUTH", "MAILPIT_SEND_API_AUTH"];
 
     private readonly string _work = Directory.CreateTempSubdirectory("disputedesk-gateway-test-").FullName;
 
@@ -52,6 +52,8 @@ public sealed class GatewayFixture : IAsyncLifetime
     public string OriginVerify => AwsTestValues["GATEWAY_ORIGIN_VERIFY"];
 
     public string MailpitCredentials => AwsTestValues["MAILPIT_UI_AUTH"];
+
+    public string MailpitSendCredentials => AwsTestValues["MAILPIT_SEND_API_AUTH"];
 
     /// <summary>The AWS gateway's environment, as Compose renders it with the test inputs.</summary>
     public IReadOnlyDictionary<string, string> AwsGatewayEnvironment { get; private set; } = new Dictionary<string, string>();

@@ -109,6 +109,8 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
       MP_UI_AUTH: ${MAILPIT_UI_AUTH:?MAILPIT_UI_AUTH, one user:password pair, is required}
+      # Its own login for the Send API, which otherwise takes the published UI login (Mailpit, "Send API" authentication).
+      MP_SEND_API_AUTH: ${MAILPIT_SEND_API_AUTH:?MAILPIT_SEND_API_AUTH, one user:password pair, is required}
     ports: !reset []
     mem_limit: 128m
 

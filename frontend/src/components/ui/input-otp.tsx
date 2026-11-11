@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 // shadcn/ui Input OTP (Manual installation: the CLI adds a `cn` package, so the component is copied with `cn` from
 // `@/lib/utils`), changed for DisputeDesk (DESIGN.md, OTP input):
 // - six separate cells, `rounded-md`, 48px wide at most on a phone and 56px from 768px, with 24/800 digits;
-// - the active cell has a 2px `ring` border and a 4px `primary-subtle` halo; an invalid cell has the `destructive`
+// - the active cell has a 2px `ring` edge (a 1px border plus a 1px inset ring) and a 4px `primary-subtle` halo; an invalid cell has the `destructive`
 //   border, from the `aria-invalid` the caller puts on each slot;
 // - a disabled input draws the `muted` fill, `border` edge and `muted-foreground` text, never reduced opacity, through
 //   the container's `group` and `group-has-disabled:`;
@@ -55,9 +55,10 @@ function InputOTPSlot({
       data-active={isActive}
       className={cn(
         'relative flex h-14 max-w-12 flex-1 items-center justify-center rounded-md border border-input bg-card text-h2 font-title text-card-foreground tabular-nums md:h-16 md:max-w-14',
-        // The active border is 1px thicker; the negative margin keeps the cells' widths equal (flex-basis 0 counts borders).
-        'data-[active=true]:-m-px data-[active=true]:border-2 data-[active=true]:border-ring data-[active=true]:ring-4 data-[active=true]:ring-primary-subtle',
-        'aria-invalid:border-destructive data-[active=true]:aria-invalid:border-destructive data-[active=true]:aria-invalid:ring-destructive/20',
+        // The active edge is 2px: the 1px border plus a 1px inset ring. The border stays 1px, so every cell keeps one
+        // width (flex-basis 0 counts borders).
+        'data-[active=true]:border-ring data-[active=true]:inset-ring data-[active=true]:inset-ring-ring data-[active=true]:ring-4 data-[active=true]:ring-primary-subtle',
+        'aria-invalid:border-destructive data-[active=true]:aria-invalid:border-destructive data-[active=true]:aria-invalid:inset-ring-destructive data-[active=true]:aria-invalid:ring-destructive/20',
         'group-has-disabled:border-border group-has-disabled:bg-muted group-has-disabled:text-muted-foreground',
         className,
       )}

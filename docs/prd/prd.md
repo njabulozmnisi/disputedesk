@@ -636,9 +636,9 @@ Each NFR names a threshold or a check. Anything beyond these is a note for `docs
   - three CloudFront distributions, one for the app, one for auth and one for Mailpit (decided 2026-10-30, story 7.4);
   - Mailpit as the demo inbox, protected as in NFR-SEC-11.
 
-  As delivered in v1, the Terraform passes `fmt`, `validate` and mocked `test`, and is applied when the account exists.
+  As delivered in v1, the Terraform passes `fmt`, `validate` and mocked `test`; it was first applied on 2026-11-07.
 - **NFR-INFRA-4:** deployment uses a GitHub OIDC role, with no long-lived AWS keys. Terraform state is held in S3 with native locking. A budget alarm measures spend with credits excluded, so free-plan credits cannot hide real cost.
-- **NFR-INFRA-5:** `terraform destroy` removes the environment cleanly [manual check] [ASSUMPTION]. As delivered in v1, the Terraform passes `fmt`, `validate` and mocked `test`, and is applied, and this check made, when the account exists.
+- **NFR-INFRA-5:** `terraform destroy` removes the environment cleanly [manual check] [ASSUMPTION]. As delivered in v1, the Terraform passes `fmt`, `validate` and mocked `test`, and was first applied on 2026-11-07; this destroy check has not been made, because the environment is still in use.
 
 ### 5.10 Documentation and communication
 

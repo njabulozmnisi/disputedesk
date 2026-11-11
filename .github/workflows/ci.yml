@@ -267,6 +267,7 @@ jobs:
       # The flow scripts' own tests, on scratch repositories and files with stubs: no network, no Docker.
       - run: scripts/ci-gates.test.sh
       - run: scripts/run-breaks.test.sh
+      - run: scripts/verify-with-copilot.test.sh
       - run: scripts/deploy-workflow.test.sh
       - run: scripts/main-protection.test.sh
       - run: scripts/check-ready.test.sh
@@ -404,7 +405,8 @@ jobs:
   # a path in scripts/regression-paths.list (every Compose build or mount source, plus this job's own files); otherwise
   # it passes with a notice. A step decides, not on.paths, which would leave the required check ci-passed pending
   # (ad-012, Options rejected). Its own runner and Docker daemon keep its stacks apart from e2e's, so it adds wall time
-  # only to the pull requests it triggers: about 25 to 35 minutes, an estimate until this job's first run measures it.
+  # only to the pull requests it triggers: about 27 minutes of wall time (26.6 to 28.4 over its first four suite runs,
+  # 2026-11-06 to 2026-11-09).
   # Playwright retries stay 0: a retry re-sends OTPs to customer D, and each group's D budget (at most 3 an hour,
   # e2e/run-regression.sh) would then fail the D check.
   # It is not in publish's needs: on main it only writes the notice.
@@ -421,11 +423,11 @@ jobs:
 
       # The script's status 1 means "no match" and anything above it an error, so only 0 and 1 set run; an error must
       # fail here, never read as "no match" and skip the suite.
+      # On a pull request the checkout is GitHub's merge commit (GitHub Docs, "Events that trigger workflows",
+      # pull_request), whose parents are the base and the head it tests. They are always present, unlike the payload's
+      # base.sha once a stacked base branch is force-pushed.
       - name: Decide whether the suite runs
         id: decide
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [[ $GITHUB_EVENT_NAME != pull_request ]]; then
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -433,7 +435,7 @@ jobs:
             exit 0
           fi
           status=0
-          scripts/regression-paths.sh "$BASE_SHA" "$HEAD_SHA" || status=$?
+          scripts/regression-paths.sh HEAD^1 HEAD^2 || status=$?
           case $status in
             0) echo "run=true" >> "$GITHUB_OUTPUT" ;;
             1)

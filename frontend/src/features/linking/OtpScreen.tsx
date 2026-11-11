@@ -88,15 +88,16 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
   const [summaryRequests, setSummaryRequests] = useState(0);
   const [summaryShown, setSummaryShown] = useState(false);
 
-  const { control, handleSubmit, setError, setValue, setFocus, formState } = useForm<OtpValues>({
-    resolver: zodResolver(otpSchema),
-    defaultValues: { code: '' },
-    mode: 'onSubmit',
-    // Typing never re-checks the field before the next press (GOV.UK, Error message: validate on submit).
-    reValidateMode: 'onSubmit',
-    // The error summary owns focus (GOV.UK Error summary).
-    shouldFocusError: false,
-  });
+  const { control, handleSubmit, setError, clearErrors, setValue, setFocus, formState } =
+    useForm<OtpValues>({
+      resolver: zodResolver(otpSchema),
+      defaultValues: { code: '' },
+      mode: 'onSubmit',
+      // Typing never re-checks the field before the next press (GOV.UK, Error message: validate on submit).
+      reValidateMode: 'onSubmit',
+      // The error summary owns focus (GOV.UK Error summary).
+      shouldFocusError: false,
+    });
 
   // `gcTime: 0` drops the mutation, and the code in its variables, once this screen is gone (TanStack Query,
   // useMutation).
@@ -215,6 +216,12 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
                     autoComplete="one-time-code"
                     pushPasswordManagerStrategy="none"
                     pasteTransformer={transformPastedCode}
+                    // A full code ends the error about the last paste or submit, which would sit beside six valid digits.
+                    // Not onComplete: input-otp fires it only when the value grows to 6, so an edit of a full field misses it.
+                    onChange={(value) => {
+                      field.onChange(value);
+                      if (value.length === codeLength) clearErrors('code');
+                    }}
                     onPaste={(event) => {
                       // input-otp has dropped an over-long paste whole; say why, under the field and to a screen reader
                       // (WCAG 2.2 SC 4.1.3), without the summary or a focus move.
@@ -238,7 +245,11 @@ function OtpForm({ onLocked }: { onLocked: () => void }) {
                     fill it in.
                   </FieldDescription>
                   {message ? (
-                    <FieldError id="code-error" role={wrongCode ? 'alert' : undefined}>
+                    // The wrong-code message is an alert; a paste error that replaces it is announced by the live region.
+                    <FieldError
+                      id="code-error"
+                      role={codeError === undefined && wrongCode ? 'alert' : undefined}
+                    >
                       {message}
                     </FieldError>
                   ) : null}

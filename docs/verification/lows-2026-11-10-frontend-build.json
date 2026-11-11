@@ -1,0 +1,467 @@
+{
+  "status": "built",
+  "worktree": "/Users/njabulomnisi/Projects/Dojo/DisputeDesk/.claude/worktrees/agent-a25dc814bf4b1d086",
+  "criteria": [
+    {
+      "id": "row-1",
+      "requirement": "ui-tokens-icons TransactionRow gap-1.5 / mt-0.5 [fixed]",
+      "test": "TransactionsScreen.test.tsx: keeps the hint icon 4px from the text"
+    },
+    {
+      "id": "row-2",
+      "requirement": "ui-tokens-icons SearchPriority handle path [fixed (test)]",
+      "test": "customerStatus.test.ts: maps underReviewPrioritised to the custom SearchPriority icon"
+    },
+    {
+      "id": "row-3",
+      "requirement": "ui-tokens-icons '?? span' placeholder [fixed (test)]",
+      "test": "customerStatus.test.ts (same test, plain guard)"
+    },
+    {
+      "id": "row-4",
+      "requirement": "ui-tokens-icons skip link covers 24.6px of Transactions [accepted, noted in the Header comment (SC 2.5.8)]",
+      "test": "none (comment)"
+    },
+    {
+      "id": "row-5",
+      "requirement": "ui-tokens-icons Header comment padding vs content edge [fixed (comment, CSS Flexbox 4.1)]",
+      "test": "none (comment)"
+    },
+    {
+      "id": "row-6",
+      "requirement": "ui-notices-states ErrorSummary links 22px [fixed]",
+      "test": "ErrorSummary.test.tsx: draws each field link at least 44px tall"
+    },
+    {
+      "id": "row-7",
+      "requirement": "ui-notices-states one outline width token [fixed: --outline-width, border-(length:--outline-width)]",
+      "test": "theme.test.ts: declares the outline width once; disabled.test.tsx: a Button label"
+    },
+    {
+      "id": "row-8",
+      "requirement": "ui-linking input-otp -m-px [fixed: 1px border plus inset-ring]",
+      "test": "input-otp.test.tsx: gives the active cell a 2px ring edge; headless Chromium: all six cells 41.3 / 48 / 56px with the active cell focused"
+    },
+    {
+      "id": "row-9",
+      "requirement": "ui-linking field holding 481 paste test [fixed (test): 4815167 added]",
+      "test": "OtpScreen.test.tsx: refuses a pasted %j (7 digits) into a field holding 481"
+    },
+    {
+      "id": "row-10",
+      "requirement": "ui-linking Start again inline link [kept inline, comment added; DESIGN text for the supervisor]",
+      "test": "none (comment)"
+    },
+    {
+      "id": "row-11",
+      "requirement": "ui-linking disabled field label [fixed: Field has-disabled label muted]",
+      "test": "field.test.tsx: dims its label while it holds a disabled control"
+    },
+    {
+      "id": "row-12",
+      "requirement": "ui-linking field error role=alert after wrong code [fixed]",
+      "test": "OtpScreen.test.tsx: does not make the field error an alert..."
+    },
+    {
+      "id": "row-13",
+      "requirement": "ui-linking stale error beside six digits [fixed: the field onChange clears the code error whenever the value holds 6 digits, so it covers an edit that keeps 6 digits; fix round 1, M1]",
+      "test": "OtpScreen.test.tsx: clears the refused-paste error when the field is then filled with 6 digits; clears the refused-paste error when a field holding 6 digits is edited by a paste over the last digit / a programmatic fill; clears the invalid-submit error and its summary when the code is then typed in full"
+    },
+    {
+      "id": "row-14",
+      "requirement": "carried 429 on antiforgery [already handled; pinned by two tests]",
+      "test": "OtpScreen.test.tsx: says the wait when the gateway refuses the antiforgery request; shows the generic notice when a 429 on the antiforgery request is not a problem body"
+    },
+    {
+      "id": "row-15",
+      "requirement": "ui-lists rem grid tracks wider than panel [fixed: min(var(--amount-col),25%) and min(var(--action-col),35%)]",
+      "test": "TransactionsScreen.test.tsx and DisputesScreen.test.tsx row column tests; headless Chromium at 100/200% x 320/360/768/1280: no clipped badge"
+    },
+    {
+      "id": "row-16",
+      "requirement": "ui-lists 200% text at 320px text column [not fixed: reason in the report]",
+      "test": "none"
+    },
+    {
+      "id": "row-17",
+      "requirement": "carried header scrolls horizontally at 200% [partly fixed: the header row wraps and Button labels wrap; the phone tab bar is back to its one-row fixed form from main (round 2), so its part stays open: at 320px and 200% text \"Disputes\" sits partly off-screen]",
+      "test": "routing.test.tsx: lets the header row wrap, so large text does not make the page scroll sideways; disabled.test.tsx: a Button label may wrap; headless Chromium: horizontal overflow 0 at 320 and 360 px, 100/150/200% (main: 19 to 132 px)"
+    },
+    {
+      "id": "row-18",
+      "requirement": "ui-raise-review head row alignment, bold Transaction [fixed]",
+      "test": "ReviewScreen.test.tsx: aligns Change with the foot of the hero amount and draws the transaction value bold"
+    },
+    {
+      "id": "row-19",
+      "requirement": "ui-raise-review label-col token [already in the theme as --label-col: 9rem (no code change)]",
+      "test": "theme.test.ts: declares the list columns (existing)"
+    },
+    {
+      "id": "row-20",
+      "requirement": "carried Continue needs a second click [fixed: mode onTouched]",
+      "test": "RaiseScreen.test.tsx: drops the expected-amount error as soon as the amount is corrected"
+    },
+    {
+      "id": "row-21",
+      "requirement": "carried aria-disabled:opacity-70 [not changed: deliberate pending look, DESIGN text for the supervisor]",
+      "test": "disabled.test.tsx: keeps aria-disabled as the pending look (existing)"
+    },
+    {
+      "id": "row-22",
+      "requirement": "carried hero amount widens the review card at 320/200% [fixed: wrap-anywhere on the hero amount (review and detail), Button wraps, detail grid-cols-1]",
+      "test": "ReviewScreen.test.tsx: is one flat surface...; DisputeDetailScreen.test.tsx: shows the summary...; headless Chromium: review 0 overflow at 320/360 x 100/150/200%"
+    },
+    {
+      "id": "row-23",
+      "requirement": "ui-detail-start alert-dialog footer sm vs md [fixed]",
+      "test": "alert-dialog.test.tsx: turns into a row at md"
+    },
+    {
+      "id": "row-24",
+      "requirement": "ui-detail-start wordmark.test one-pixel transparency, descender box [fixed (test): four corners, baseline from the letter D, dot within 2px of it]",
+      "test": "wordmark.test.ts: is transparent around the drawing, in all four corners; puts the dot after the name..."
+    },
+    {
+      "id": "row-25",
+      "requirement": "carried session warning initial focus [fixed: Stay signed in is the Radix Cancel part]",
+      "test": "InactivityWarning.test.tsx: opens with focus on Stay signed in, and Tab and Shift+Tab stay inside the dialog"
+    },
+    {
+      "id": "row-26",
+      "requirement": "carried CSP violation from scroll lock [accepted with an extended shortcut comment; documented fix needs a gateway CSP change, described in the report, stopped]",
+      "test": "none"
+    },
+    {
+      "id": "M1",
+      "requirement": "fix round 1: a stale code error survives a full-length edit (verifier)",
+      "test": "OtpScreen.test.tsx: clears the refused-paste error when a field holding 6 digits is edited by a paste over the last digit and still holds 6; ... by a programmatic fill, as autofill does and still holds 6"
+    },
+    {
+      "id": "M2",
+      "requirement": "fix round 2: the phone tab bar returns to main (fixed, one row, px-3, pb-24 layout reserve), so no wrapped bar hides the end of the page (R1-M1, R1-M2 closed by removal)",
+      "test": "none new: the wrap and sticky tab bar tests are removed with the behaviour; headless Chromium: page end reachable and no focused link wholly under the bar, same as main"
+    }
+  ],
+  "smoke": "Fix round 2: throwaway headless Chromium (Playwright from e2e/node_modules, vite build served statically from a plain node http server, /api stubbed with page.route, 12 transaction rows and 3 disputes, signed in as linked; no Compose stack, so no stack lock) on /transactions and /disputes at 320 and 360 px with root text 100, 150 and 200%, for this tree and for a build of f6193f5 (main). Page end: scrolled to the bottom, the footer ends above the top of the bar in all 12 cases, in both trees (0 px under the bar; the bar is 58, 86 and 114 px tall, one row). Keyboard walk (Tab from the top, 8 stops on /disputes, 17 on /transactions): no focused link wholly under the bar in all 12 cases, in both trees; the only partial overlaps are 2 stops on /disputes at 320 px and 200%, identical in main. Horizontal page overflow: 0 in all 12 cases for this tree; main overflows 19 px at 320/150%, 132 px at 320/200% and 92 px at 360/200% (the header row wrap fixes it). Not measured this round: the tab bar segments at 320 px and 200% text, where main's one-row bar pushes Disputes partly off-screen (known, carried, back in lows.md). M1: Vitest only (jsdom); not run against the real API. The earlier Chromium numbers (rounds 0 and 1) for the other rows are not repeated.",
+  "standards": [
+    {
+      "mechanism": "Outline width as one theme token read with Tailwind border-(length:--outline-width)",
+      "source": "https://tailwindcss.com/docs/border-width#using-a-custom-value"
+    },
+    {
+      "mechanism": "Active OTP cell second pixel as inset-ring (box-shadow), border stays 1px",
+      "source": "https://tailwindcss.com/docs/box-shadow#adding-an-inset-ring"
+    },
+    {
+      "mechanism": "Session warning initial focus through the Radix AlertDialog Cancel part",
+      "source": "https://www.radix-ui.com/primitives/docs/components/alert-dialog#cancel"
+    },
+    {
+      "mechanism": "Alert dialog pattern: focus moves into the dialog, Tab stays inside",
+      "source": "https://www.w3.org/WAI/ARIA/apg/patterns/alertdialog/"
+    },
+    {
+      "mechanism": "Validation mode onTouched: first check on blur, then on every change",
+      "source": "https://react-hook-form.com/docs/useform#mode"
+    },
+    {
+      "mechanism": "Field label dimmed with the CSS :has() relational pseudo-class (Tailwind has-disabled)",
+      "source": "https://developer.mozilla.org/en-US/docs/Web/CSS/:has"
+    },
+    {
+      "mechanism": "Absolutely positioned flex child static position (Header comment)",
+      "source": "https://www.w3.org/TR/css-flexbox-1/#abspos-items"
+    },
+    {
+      "mechanism": "Reflow and text resize: wrapping header row and button labels, wrap-anywhere hero amount, grid track share caps",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/reflow.html"
+    },
+    {
+      "mechanism": "Inline link keeps its text size",
+      "source": "https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html"
+    },
+    {
+      "mechanism": "Code error cleared from the controlled field onChange (React Hook Form Controller field.onChange then clearErrors), because input-otp onComplete fires only when the value grows to 6",
+      "source": "https://react-hook-form.com/docs/usecontroller/controller"
+    }
+  ],
+  "breaks": [
+    {
+      "patch": "--- a/frontend/src/features/transactions/TransactionRow.tsx\n+++ b/frontend/src/features/transactions/TransactionRow.tsx\n@@ -79,7 +79,7 @@\n         <p className=\"font-strong wrap-break-word\">{row.description}</p>\n         <MaskedNumber row={row} />\n         {hint ? (\n-          <p className=\"flex items-start gap-1 text-caption text-status-neutral-fg\">\n+          <p className=\"flex items-start gap-1.5 text-caption text-status-neutral-fg\">\n             {/* mt-0.5 (2px) is the optical offset that centres the 14px icon on the 13px caption's 18px line, as\n                 the wordmark dot's ml-0.5 is the other 2px exception to the 4-based spacing (DESIGN.md, Layout & Spacing). */}\n             <Info className=\"mt-0.5 size-3.5 shrink-0\" />\n",
+      "test_method": "npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"keeps the hint icon 4px from the text\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/customerStatus.ts\n+++ b/frontend/src/features/disputes/customerStatus.ts\n@@ -25,7 +25,6 @@\n // documented custom icon (https://lucide.dev/guide/react/advanced/typescript): Search's own nodes plus the arrow.\n const SearchPriority = createLucideIcon('SearchPriority', [\n   ['circle', { cx: '11', cy: '11', r: '8', key: 'lens' }],\n-  ['path', { d: 'm21 21-4.34-4.34', key: 'handle' }],\n   ['path', { d: 'M11 14V8M8.5 10.5 11 8l2.5 2.5', key: 'arrow' }],\n ]);\n \n",
+      "test_method": "npx vitest run src/features/disputes/customerStatus.test.ts -t \"maps underReviewPrioritised to the custom SearchPriority icon\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/components/ErrorSummary.tsx\n+++ b/frontend/src/components/ErrorSummary.tsx\n@@ -48,7 +48,7 @@\n               <a\n                 href={`#${fieldId}`}\n                 // At least 44px tall (--tap-target), the project's floor for every interactive element.\n-                className=\"inline-flex min-h-(--tap-target) items-center\"\n+                className=\"inline-flex items-center\"\n                 onClick={(event) => {\n                   event.preventDefault();\n                   document.getElementById(fieldId)?.focus();\n",
+      "test_method": "npx vitest run src/components/ErrorSummary.test.tsx -t \"draws each field link at least 44px tall\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/components/ui/input.tsx\n+++ b/frontend/src/components/ui/input.tsx\n@@ -10,7 +10,7 @@\n       type={type}\n       data-slot=\"input\"\n       className={cn(\n-        'min-h-12 w-full min-w-0 rounded-md border-(length:--outline-width) border-input bg-card px-3 text-body text-card-foreground placeholder:text-muted-foreground aria-invalid:border-destructive disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground',\n+        'min-h-12 w-full min-w-0 rounded-md border-[1.5px] border-input bg-card px-3 text-body text-card-foreground placeholder:text-muted-foreground aria-invalid:border-destructive disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground',\n         className,\n       )}\n       {...props}\n",
+      "test_method": "npx vitest run src/theme/theme.test.ts -t \"declares the outline width once\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/components/ui/input-otp.tsx\n+++ b/frontend/src/components/ui/input-otp.tsx\n@@ -57,7 +57,7 @@\n         'relative flex h-14 max-w-12 flex-1 items-center justify-center rounded-md border border-input bg-card text-h2 font-title text-card-foreground tabular-nums md:h-16 md:max-w-14',\n         // The active edge is 2px: the 1px border plus a 1px inset ring. The border stays 1px, so every cell keeps one\n         // width (flex-basis 0 counts borders).\n-        'data-[active=true]:border-ring data-[active=true]:inset-ring data-[active=true]:inset-ring-ring data-[active=true]:ring-4 data-[active=true]:ring-primary-subtle',\n+        '-m-px data-[active=true]:border-2 data-[active=true]:border-ring data-[active=true]:ring-4 data-[active=true]:ring-primary-subtle',\n         'aria-invalid:border-destructive data-[active=true]:aria-invalid:border-destructive data-[active=true]:aria-invalid:inset-ring-destructive data-[active=true]:aria-invalid:ring-destructive/20',\n         'group-has-disabled:border-border group-has-disabled:bg-muted group-has-disabled:text-muted-foreground',\n         className,\n",
+      "test_method": "npx vitest run src/components/ui/input-otp.test.tsx -t \"gives the active cell a 2px ring edge\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/linking/linkSchema.ts\n+++ b/frontend/src/features/linking/linkSchema.ts\n@@ -45,7 +45,7 @@\n  */\n export function isOverlongCode(pasted: string): boolean {\n   const digitCount = (pasted.match(/[0-9]/g) ?? []).length;\n-  return digitCount > codeLength;\n+  return digitCount > codeLength + 1;\n }\n \n /**\n",
+      "test_method": "npx vitest run src/features/linking/OtpScreen.test.tsx -t \"refuses a pasted\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/components/ui/field.tsx\n+++ b/frontend/src/components/ui/field.tsx\n@@ -32,7 +32,7 @@\n       data-slot=\"field\"\n       // The label of a field holding a disabled control is muted with it (HANDOFF 3.9).\n       className={cn(\n-        'grid gap-2 data-[invalid=true]:text-destructive has-disabled:[&_label]:text-muted-foreground',\n+        'grid gap-2 data-[invalid=true]:text-destructive',\n         className,\n       )}\n       {...props}\n",
+      "test_method": "npx vitest run src/components/ui/field.test.tsx -t \"dims its label while it holds a disabled control\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -246,7 +246,7 @@\n                     // The wrong-code message is an alert; a paste error that replaces it is announced by the live region.\n                     <FieldError\n                       id=\"code-error\"\n-                      role={codeError === undefined && wrongCode ? 'alert' : undefined}\n+                      role={wrongCode ? 'alert' : undefined}\n                     >\n                       {message}\n                     </FieldError>\n",
+      "test_method": "npx vitest run src/features/linking/OtpScreen.test.tsx -t \"does not make the field error an alert\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -220,7 +220,6 @@\n                     // Not onComplete: input-otp fires it only when the value grows to 6, so an edit of a full field misses it.\n                     onChange={(value) => {\n                       field.onChange(value);\n-                      if (value.length === codeLength) clearErrors('code');\n                     }}\n                     onPaste={(event) => {\n                       // input-otp has dropped an over-long paste whole; say why, under the field and to a screen reader\n",
+      "test_method": "npx vitest run src/features/linking/OtpScreen.test.tsx -t \"clears the refused-paste error\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -118,7 +118,7 @@\n           setWrongCode({ attemptsRemaining: problemInteger(error, 'attemptsRemaining') });\n           setValue('code', '');\n           setFocus('code');\n-        } else if (error instanceof ApiError && isProblem(error, 'rate-limited')) {\n+        } else if (error instanceof ApiError && isProblem(error, 'not-found')) {\n           rateLimit.start(error);\n         } else if (\n           error instanceof ApiError &&\n",
+      "test_method": "npx vitest run src/features/linking/OtpScreen.test.tsx -t \"says the wait when the gateway refuses the antiforgery request\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/transactions/TransactionRow.tsx\n+++ b/frontend/src/features/transactions/TransactionRow.tsx\n@@ -18,7 +18,7 @@\n  * capped at 40%), so a raised root font size leaves the text column at least 40% and nothing is wider than the panel.\n  */\n export const ledgerColumns =\n-  'md:grid-cols-[minmax(0,1fr)_min(var(--amount-col),25%)_min(var(--action-col),35%)] md:gap-x-6';\n+  'md:grid-cols-[minmax(0,1fr)_var(--amount-col)_var(--action-col)] md:gap-x-6';\n \n /** One row of the panel: the grid, the hairline above it and its padding. The first row's hairline closes its day band. */\n export const ledgerRow = cn(\n",
+      "test_method": "npx vitest run src/features/transactions/TransactionsScreen.test.tsx -t \"is a grid of text, amount and action from 768px\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/app/Header.tsx\n+++ b/frontend/src/app/Header.tsx\n@@ -24,7 +24,7 @@\n     <header className=\"border-b border-border bg-card\">\n       <div\n         className={cn(\n-          'mx-auto flex min-h-16 w-full flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2 md:px-6',\n+          'mx-auto flex min-h-16 w-full items-center gap-6 px-4 py-2 md:px-6',\n           isStartPage ? 'max-w-(--page-max)' : 'max-w-(--content-max)',\n         )}\n       >\n",
+      "test_method": "npx vitest run src/app/routing.test.tsx -t \"lets the header row wrap\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/components/ui/button.tsx\n+++ b/frontend/src/components/ui/button.tsx\n@@ -9,7 +9,7 @@\n // drawn with the muted fill, border edge and text, never at reduced opacity (HANDOFF 3.9); `aria-disabled` is the pending look.\n // The edge is the theme's outline width, and a label may wrap, so scaled-up text never widens the page (SC 1.4.10).\n const buttonVariants = cva(\n-  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border-(length:--outline-width) border-transparent font-strong text-center no-underline transition-colors aria-disabled:cursor-progress aria-disabled:opacity-70 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground',\n+  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border-(length:--outline-width) border-transparent font-strong whitespace-nowrap no-underline transition-colors aria-disabled:cursor-progress aria-disabled:opacity-70 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground',\n   {\n     variants: {\n       variant: {\n",
+      "test_method": "npx vitest run src/components/ui/disabled.test.tsx -t \"may wrap, centred\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/ReviewScreen.tsx\n+++ b/frontend/src/features/disputes/raise/ReviewScreen.tsx\n@@ -213,7 +213,7 @@\n             aria-label=\"Your dispute\"\n             className=\"grid gap-4 rounded-lg border border-border bg-card px-4 py-6 md:p-6\"\n           >\n-            <div className=\"flex flex-wrap items-end justify-between gap-4\">\n+            <div className=\"flex flex-wrap items-start justify-between gap-4\">\n               <div className=\"grid gap-1\">\n                 <p className=\"text-label text-muted-foreground\">You&apos;re disputing</p>\n                 <p className=\"text-amount-hero font-title wrap-anywhere tabular-nums\">\n",
+      "test_method": "npx vitest run src/features/disputes/raise/ReviewScreen.test.tsx -t \"aligns Change with the foot\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/RaiseScreen.tsx\n+++ b/frontend/src/features/disputes/raise/RaiseScreen.tsx\n@@ -76,7 +76,7 @@\n       defaultValues: draftFor(row.transactionId)?.values ?? emptyValues,\n       // Checks when a field is first left, then on every change, so a corrected value drops its error before the\n       // person presses Continue (an error that goes on blur would move Continue between pointer down and up).\n-      mode: 'onTouched',\n+      mode: 'onBlur',\n       // The error summary owns focus (GOV.UK Error summary); the default would move it to a field after the summary.\n       shouldFocusError: false,\n     });\n",
+      "test_method": "npx vitest run src/features/disputes/raise/RaiseScreen.test.tsx -t \"drops the expected-amount error\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/raise/ReviewScreen.tsx\n+++ b/frontend/src/features/disputes/raise/ReviewScreen.tsx\n@@ -216,7 +216,7 @@\n             <div className=\"flex flex-wrap items-end justify-between gap-4\">\n               <div className=\"grid gap-1\">\n                 <p className=\"text-label text-muted-foreground\">You&apos;re disputing</p>\n-                <p className=\"text-amount-hero font-title wrap-anywhere tabular-nums\">\n+                <p className=\"text-amount-hero font-title tabular-nums\">\n                   {formatMoney({ amount: amountToDispute, currency: row.amount.currency })}\n                 </p>\n               </div>\n",
+      "test_method": "npx vitest run src/features/disputes/raise/ReviewScreen.test.tsx -t \"is one flat surface\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/disputes/detail/DisputeDetailScreen.tsx\n+++ b/frontend/src/features/disputes/detail/DisputeDetailScreen.tsx\n@@ -307,7 +307,7 @@\n       <div\n         aria-busy={isLoading ? true : undefined}\n         className={cn(\n-          'grid grid-cols-1 gap-6',\n+          'grid gap-6',\n           !isMessage && 'lg:grid-cols-2 lg:items-start lg:gap-8',\n         )}\n       >\n",
+      "test_method": "npx vitest run src/features/disputes/detail/DisputeDetailScreen.test.tsx -t \"shows the summary\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/components/ui/alert-dialog.tsx\n+++ b/frontend/src/components/ui/alert-dialog.tsx\n@@ -65,7 +65,7 @@\n   return (\n     <div\n       data-slot=\"alert-dialog-footer\"\n-      className={cn('flex flex-col gap-3 border-t border-border pt-4 md:flex-row', className)}\n+      className={cn('flex flex-col gap-3 border-t border-border pt-4 sm:flex-row', className)}\n       {...props}\n     />\n   );\n",
+      "test_method": "npx vitest run src/components/ui/alert-dialog.test.tsx -t \"turns into a row at md\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/app/InactivityWarning.tsx\n+++ b/frontend/src/app/InactivityWarning.tsx\n@@ -79,7 +79,7 @@\n         <AlertDialogFooter>\n           {/* Radix gives initial focus to the Cancel part (WAI-ARIA APG, alert dialog), and \"Stay signed in\" is the\n               safe choice here: it cancels the sign-out. Its click calls onOpenChange(false), like Escape. */}\n-          <AlertDialogCancel variant=\"default\">Stay signed in</AlertDialogCancel>\n+          <Button variant=\"default\" onClick={() => void staySignedIn()}>Stay signed in</Button>\n           <Button variant=\"secondary\" onClick={onSignOut}>\n             Sign out\n           </Button>\n",
+      "test_method": "npx vitest run src/app/InactivityWarning.test.tsx -t \"opens with focus on Stay signed in\"",
+      "expect": "fails"
+    },
+    {
+      "patch": "--- a/frontend/src/features/linking/OtpScreen.tsx\n+++ b/frontend/src/features/linking/OtpScreen.tsx\n@@ -218,9 +218,8 @@\n                     pasteTransformer={transformPastedCode}\n                     // A full code ends the error about the last paste or submit, which would sit beside six valid digits.\n                     // Not onComplete: input-otp fires it only when the value grows to 6, so an edit of a full field misses it.\n-                    onChange={(value) => {\n-                      field.onChange(value);\n-                      if (value.length === codeLength) clearErrors('code');\n+                    onComplete={() => {\n+                      clearErrors('code');\n                     }}\n                     onPaste={(event) => {\n                       // input-otp has dropped an over-long paste whole; say why, under the field and to a screen reader\n",
+      "test_method": "npx vitest run src/features/linking/OtpScreen.test.tsx -t \"edited by\"",
+      "expect": "fails"
+    }
+  ],
+  "test_results": {
+    "files": [
+      "TestResults/frontend-junit.xml"
+    ],
+    "diff_hash": "c3301d13d4a7"
+  },
+  "assumptions": [
+    "Round 2 applied on f6193f5 plus the round 1 patch: Navigation.tsx and RootLayout.tsx are byte-identical to f6193f5 (restored from that commit, unstaged), and the two tab bar tests are removed from routing.test.tsx (header-row wrap test kept). Nothing else changed.",
+    "Vitest: 867 tests (869 in round 1, minus the two removed tab bar tests), 0 failures, one full run (JUnit, TestResults/frontend-junit.xml) on the final diff; eslint, tsc --noEmit, prettier --check and vite build clean; scripts/secret-scan.sh found no leaks. node_modules from npm ci in this worktree. The diff hash c3301d13d4a7 was taken after the Chromium pass and the breaks, with the tree restored.",
+    "Breaks: scripts/run-breaks.sh cannot run frontend breaks, so every one was run by hand from frontend/ (apply the patch, run the named vitest command, reverse the patch): all 20 fail as expected. The four tab bar breaks of round 1 (wrap, sticky, layout reserve, px-2) are dropped; the other 20 are carried unchanged and still apply.",
+    "Open, back in lows.md: row 17's tab bar part. At 320px and 200% text the one-row bar leaves Disputes partly off-screen, as on main. The later fix: a fixed bar with a two-row rem reserve (pb-32 below md) and scroll-padding-bottom on html (WCAG technique C43).",
+    "Carried from earlier rounds and not part of this one: the e2e focus check at e2e/tests/linking-screens.spec.ts:220 (QA updates it in the same batch); rows 2, 3, 9, 14 and 24 change tests only; row 25 swaps AlertDialogAction for AlertDialogCancel for Stay signed in; the dispute detail page still scrolls 10 px sideways at 320 px with 200% text; the empty Disputes state scrolls sideways at 200% text; FieldError keeps gap-1.5 and mt-0.5.",
+    "The Chromium script was a throwaway placed in frontend/ (the guard allows writes only under frontend/ and docs/verification/) and removed before the final hash; frontend/dist is ignored by version control and removed."
+  ],
+  "open_questions": [],
+  "conflicts": [
+    "e2e/tests/linking-screens.spec.ts:220 expects an active OTP cell border of at least 2px; row 8 makes it 1px plus an inset ring (QA updates it in the same batch, per the fix list)."
+  ],
+  "rows": [
+    {
+      "row": "1",
+      "finding": "ui-tokens-icons TransactionRow gap-1.5 / mt-0.5",
+      "outcome": "fixed",
+      "test": "TransactionsScreen.test.tsx: keeps the hint icon 4px from the text"
+    },
+    {
+      "row": "2",
+      "finding": "ui-tokens-icons SearchPriority handle path",
+      "outcome": "fixed (test)",
+      "test": "customerStatus.test.ts: maps underReviewPrioritised to the custom SearchPriority icon"
+    },
+    {
+      "row": "3",
+      "finding": "ui-tokens-icons '?? span' placeholder",
+      "outcome": "fixed (test)",
+      "test": "customerStatus.test.ts (same test, plain guard)"
+    },
+    {
+      "row": "4",
+      "finding": "ui-tokens-icons skip link covers 24.6px of Transactions",
+      "outcome": "accepted, noted in the Header comment (SC 2.5.8)",
+      "test": "none (comment)"
+    },
+    {
+      "row": "5",
+      "finding": "ui-tokens-icons Header comment padding vs content edge",
+      "outcome": "fixed (comment, CSS Flexbox 4.1)",
+      "test": "none (comment)"
+    },
+    {
+      "row": "6",
+      "finding": "ui-notices-states ErrorSummary links 22px",
+      "outcome": "fixed",
+      "test": "ErrorSummary.test.tsx: draws each field link at least 44px tall"
+    },
+    {
+      "row": "7",
+      "finding": "ui-notices-states one outline width token",
+      "outcome": "fixed: --outline-width, border-(length:--outline-width)",
+      "test": "theme.test.ts: declares the outline width once; disabled.test.tsx: a Button label"
+    },
+    {
+      "row": "8",
+      "finding": "ui-linking input-otp -m-px",
+      "outcome": "fixed: 1px border plus inset-ring",
+      "test": "input-otp.test.tsx: gives the active cell a 2px ring edge; headless Chromium: all six cells 41.3 / 48 / 56px with the active cell focused"
+    },
+    {
+      "row": "9",
+      "finding": "ui-linking field holding 481 paste test",
+      "outcome": "fixed (test): 4815167 added",
+      "test": "OtpScreen.test.tsx: refuses a pasted %j (7 digits) into a field holding 481"
+    },
+    {
+      "row": "10",
+      "finding": "ui-linking Start again inline link",
+      "outcome": "kept inline, comment added; DESIGN text for the supervisor",
+      "test": "none (comment)"
+    },
+    {
+      "row": "11",
+      "finding": "ui-linking disabled field label",
+      "outcome": "fixed: Field has-disabled label muted",
+      "test": "field.test.tsx: dims its label while it holds a disabled control"
+    },
+    {
+      "row": "12",
+      "finding": "ui-linking field error role=alert after wrong code",
+      "outcome": "fixed",
+      "test": "OtpScreen.test.tsx: does not make the field error an alert..."
+    },
+    {
+      "row": "13",
+      "finding": "ui-linking stale error beside six digits",
+      "outcome": "fixed: onChange clears the code error whenever the value holds 6 digits (round 1, M1)",
+      "test": "OtpScreen.test.tsx: clears the refused-paste error...; ...edited by a paste over the last digit / a programmatic fill...; clears the invalid-submit error and its summary..."
+    },
+    {
+      "row": "14",
+      "finding": "carried 429 on antiforgery",
+      "outcome": "already handled; pinned by two tests",
+      "test": "OtpScreen.test.tsx: says the wait when the gateway refuses the antiforgery request; shows the generic notice when a 429 on the antiforgery request is not a problem body"
+    },
+    {
+      "row": "15",
+      "finding": "ui-lists rem grid tracks wider than panel",
+      "outcome": "fixed: min(var(--amount-col),25%) and min(var(--action-col),35%)",
+      "test": "TransactionsScreen.test.tsx and DisputesScreen.test.tsx row column tests; headless Chromium at 100/200% x 320/360/768/1280: no clipped badge"
+    },
+    {
+      "row": "16",
+      "finding": "ui-lists 200% text at 320px text column",
+      "outcome": "not fixed: reason in the report",
+      "test": "none"
+    },
+    {
+      "row": "17",
+      "finding": "carried header scrolls horizontally at 200%",
+      "outcome": "partly fixed: header row and Button label wrap; tab bar back to main (one row, fixed), its part stays open for a later change (fixed bar, rem reserve pb-32 below md, scroll-padding-bottom on html, WCAG technique C43)",
+      "test": "routing.test.tsx: lets the header row wrap; disabled.test.tsx: a Button label may wrap"
+    },
+    {
+      "row": "18",
+      "finding": "ui-raise-review head row alignment, bold Transaction",
+      "outcome": "fixed",
+      "test": "ReviewScreen.test.tsx: aligns Change with the foot of the hero amount and draws the transaction value bold"
+    },
+    {
+      "row": "19",
+      "finding": "ui-raise-review label-col token",
+      "outcome": "already in the theme as --label-col: 9rem (no code change)",
+      "test": "theme.test.ts: declares the list columns (existing)"
+    },
+    {
+      "row": "20",
+      "finding": "carried Continue needs a second click",
+      "outcome": "fixed: mode onTouched",
+      "test": "RaiseScreen.test.tsx: drops the expected-amount error as soon as the amount is corrected"
+    },
+    {
+      "row": "21",
+      "finding": "carried aria-disabled:opacity-70",
+      "outcome": "not changed: deliberate pending look, DESIGN text for the supervisor",
+      "test": "disabled.test.tsx: keeps aria-disabled as the pending look (existing)"
+    },
+    {
+      "row": "22",
+      "finding": "carried hero amount widens the review card at 320/200%",
+      "outcome": "fixed: wrap-anywhere on the hero amount (review and detail), Button wraps, detail grid-cols-1",
+      "test": "ReviewScreen.test.tsx: is one flat surface...; DisputeDetailScreen.test.tsx: shows the summary...; headless Chromium: review 0 overflow at 320/360 x 100/150/200%"
+    },
+    {
+      "row": "23",
+      "finding": "ui-detail-start alert-dialog footer sm vs md",
+      "outcome": "fixed",
+      "test": "alert-dialog.test.tsx: turns into a row at md"
+    },
+    {
+      "row": "24",
+      "finding": "ui-detail-start wordmark.test one-pixel transparency, descender box",
+      "outcome": "fixed (test): four corners, baseline from the letter D, dot within 2px of it",
+      "test": "wordmark.test.ts: is transparent around the drawing, in all four corners; puts the dot after the name..."
+    },
+    {
+      "row": "25",
+      "finding": "carried session warning initial focus",
+      "outcome": "fixed: Stay signed in is the Radix Cancel part",
+      "test": "InactivityWarning.test.tsx: opens with focus on Stay signed in, and Tab and Shift+Tab stay inside the dialog"
+    },
+    {
+      "row": "26",
+      "finding": "carried CSP violation from scroll lock",
+      "outcome": "accepted with an extended shortcut comment; documented fix needs a gateway CSP change, described in the report, stopped",
+      "test": "none"
+    }
+  ]
+}

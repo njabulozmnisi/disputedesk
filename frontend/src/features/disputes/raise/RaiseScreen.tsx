@@ -74,7 +74,9 @@ export function RaiseScreen() {
     useForm<RaiseFormValues>({
       resolver: zodResolver(schema),
       defaultValues: draftFor(row.transactionId)?.values ?? emptyValues,
-      mode: 'onBlur',
+      // Checks when a field is first left, then on every change, so a corrected value drops its error before the
+      // person presses Continue (an error that goes on blur would move Continue between pointer down and up).
+      mode: 'onTouched',
       // The error summary owns focus (GOV.UK Error summary); the default would move it to a field after the summary.
       shouldFocusError: false,
     });

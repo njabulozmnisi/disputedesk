@@ -204,8 +204,9 @@ public partial class PlatformScriptTests
     [Fact]
     public async Task ProvisionSection_HumanAdministratorsInScope_AreDeactivated_AndAFreshReadingFindsNoneActive()
     {
-        // aws-admin-lockdown H1 and M1. The list is asked for DisputeDesk users' roles and instance roles only, so a user
-        // of another organization who owns only that organization is never listed and never fails the step.
+        // aws-admin-lockdown H1 and M1. The list is asked for DisputeDesk users' roles, instance roles, and roles on the
+        // DisputeDesk organization or project whoever holds them (review L1), so a user of another organization who
+        // owns only that organization is never listed and never fails the step.
         // ListAdministrators has one entry per role assignment; each user is read once (IDs in sorted order). The
         // provisioner (a machine) and an inactive human are left; an active and a locked human are deactivated.
         SectionRun run = await RunProvisionSectionAsync(HumanAdministratorsSection, deactivateHumanAdmins: true, new()
@@ -220,7 +221,8 @@ public partial class PlatformScriptTests
         });
 
         const string ListAdministrators = "POST /zitadel.internal_permission.v2.InternalPermissionService/ListAdministrators "
-            + "{\"filters\":[{\"or\":{\"queries\":[{\"userOrganizationId\":{\"id\":\"org-disputedesk\"}},{\"resource\":{\"instance\":true}}]}}]}";
+            + "{\"filters\":[{\"or\":{\"queries\":[{\"userOrganizationId\":{\"id\":\"org-disputedesk\"}},{\"resource\":{\"instance\":true}},"
+            + "{\"resource\":{\"organizationId\":\"org-disputedesk\"}},{\"resource\":{\"projectId\":\"project-1\"}}]}}]}";
         string[] userIds = ["human-active", "human-inactive", "human-locked", "provisioner-1"];
         string[] readEachUser = [.. userIds.Select(id => $"POST /zitadel.user.v2.UserService/GetUserByID {{\"userId\":\"{id}\"}}")];
         Assert.Equal(0, run.Result.ExitCode);
@@ -283,6 +285,40 @@ public partial class PlatformScriptTests
         Assert.Contains("a user that is neither human nor machine", run.Result.Errors, StringComparison.Ordinal);
         Assert.Equal(2, run.Calls.Length); // ListAdministrators, then the first GetUserByID, where the run stops
         Assert.DoesNotContain("can sign in", run.Result.Errors, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProvisionSection_EmptyUserAnswer_FailsTheRun()
+    {
+        // aws-admin-lockdown verify L1: an empty 200 body from GetUserByID is no user at all, never "not active". Both
+        // readings are answered, so only the check on the answer can stop the run.
+        SectionRun run = await RunProvisionSectionAsync(HumanAdministratorsSection, deactivateHumanAdmins: true, new()
+        {
+            ["ListAdministrators"] = [TwoAdministrators, TwoAdministrators],
+            ["GetUserByID"] = ["", Machine, "", Machine],
+        });
+
+        Assert.True(run.Result.ExitCode != 0);
+        Assert.Contains("[provision] GetUserByID human-active did not answer with one user\n", run.Result.Errors, StringComparison.Ordinal);
+        Assert.Equal(2, run.Calls.Length); // ListAdministrators, then the first GetUserByID, where the run stops
+        Assert.DoesNotContain("can sign in", run.Result.Errors, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"user":{"id":"provisioner-1","details":{}}}""")]
+    [InlineData("{}")]
+    public async Task ProvisionScript_ItsOwnUserWithoutAnOrganization_FailsTheRun(string me)
+    {
+        // aws-admin-lockdown security L3: ORG_ID scopes the lock-down, so a missing resourceOwner fails the run instead of
+        // becoming the string "null". provision.sh's own ORG_ID line runs on the answer.
+        Match line = new Regex(@"^ORG_ID=.*$", RegexOptions.Multiline, TimeSpan.FromSeconds(1)).Match(ProvisionScript);
+        Assert.True(line.Success, "provision.sh has no ORG_ID line.");
+        Dictionary<string, string> environment = Processes.BaseEnvironment();
+        environment["ME"] = me;
+
+        ProcessResult run = await Processes.RunAsync("bash", ["-c", $"set -euo pipefail\n{line.Value}\nprintf '%s' \"$ORG_ID\""], environment, TimeSpan.FromSeconds(30));
+
+        Assert.True(run.ExitCode != 0, $"ORG_ID became '{run.Output}'");
     }
 
     [Fact]
@@ -624,7 +660,7 @@ public partial class PlatformScriptTests
 
     /// <summary>
     /// Runs one section of provision.sh, from its "# ---- NAME" header to the next header, with the script's shell options,
-    /// its log function and rpc function, ORG_ID org-disputedesk, PROVISIONER_ID provisioner-1 and
+    /// its log function and rpc function, ORG_ID org-disputedesk, PROJECT_ID project-1, PROVISIONER_ID provisioner-1 and
     /// DEACTIVATE_HUMAN_ADMINS. A stand-in replaces `call`: each call is recorded and answered with the next answer
     /// listed under the last segment of its path; a call with no answer left fails, as a failed call does.
     /// </summary>
@@ -655,6 +691,7 @@ public partial class PlatformScriptTests
                   cat "$FOLDER/$name.$n" 2>/dev/null
                 }
                 ORG_ID=org-disputedesk
+                PROJECT_ID=project-1
                 PROVISIONER_ID=provisioner-1
                 DEACTIVATE_HUMAN_ADMINS={{(deactivateHumanAdmins ? "true" : "false")}}
                 {{section.Groups["section"].Value}}

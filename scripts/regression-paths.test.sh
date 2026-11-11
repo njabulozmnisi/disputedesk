@@ -140,14 +140,13 @@ job() { yq ".jobs.e2e-regression$1" "$ci"; }
 [[ $(job '.steps[0].with.persist-credentials') == false ]] || fail "e2e-regression's checkout keeps its credentials"
 [[ $(job '.steps[1].id') == decide ]] || fail "the step after the checkout is not decide"
 [[ $(job '.steps[1] | has("if")') == false ]] || fail "decide has an if, so it may not write run"
-[[ $(job '.steps[1].env.BASE_SHA') == "\${{ github.event.pull_request.base.sha }}" ]] || fail "BASE_SHA is not the base's SHA"
-[[ $(job '.steps[1].env.HEAD_SHA') == "\${{ github.event.pull_request.head.sha }}" ]] || fail "HEAD_SHA is not the head's SHA"
+[[ $(job '.steps[1] | has("env")') == false ]] || fail "decide reads the payload's SHAs, which a force-pushed base can make unreachable"
 [[ $(job '.steps[1].run') != *"\${{"* ]] || fail "decide's script holds \${{ }}"
 [[ $(yq '[.. | select(tag == "!!map") | select(has("continue-on-error"))] | length' "$ci") == 0 ]] || fail "ci.yml has a continue-on-error"
 if grep -Eq '^[[:space:]]*retries:' "$root/e2e/playwright.config.ts"; then fail "playwright.config.ts sets retries"; fi
 [[ $(yq -o=json -I=0 '.jobs.ci-passed.needs | contains(["e2e-regression"])' "$ci") == true ]] || fail "ci-passed does not need e2e-regression"
 [[ $(yq -o=json -I=0 '.jobs.publish.needs | contains(["e2e-regression"])' "$ci") == false ]] || fail "publish needs e2e-regression"
-echo "ok  the job: no if or needs, 60 minutes, full checkout, decide second, SHAs through env, in ci-passed, not in publish"
+echo "ok  the job: no if or needs, 60 minutes, full checkout, decide second, no payload SHAs, in ci-passed, not in publish"
 
 gated="steps.decide.outputs.run == 'true'"
 for step in ./.github/actions/install-compose actions/setup-node 'npm ci' \
@@ -170,13 +169,25 @@ echo "ok  the suite's steps run only on run == 'true'; diagnostics on failure; t
 echo "ok  floor-guard runs this test after scripts/guard.test.sh"
 
 # --- the decide step, run as GitHub runs a bash step (ci-gates.test.sh explains the flags) ---
+# On a pull_request event the checkout is GitHub's merge commit (GitHub Docs, "Events that trigger workflows",
+# pull_request: GITHUB_SHA is the last merge commit), so the step's directory is a repository whose HEAD merges a head
+# commit into a base commit.
 decide_dir="$scratch/decide"
 mkdir -p "$decide_dir/scripts"
+git init -q -b main "$decide_dir"
+git -C "$decide_dir" commit -q --allow-empty -m base
+git -C "$decide_dir" checkout -q -b story
+git -C "$decide_dir" commit -q --allow-empty -m "the story"
+merged_head=$(git -C "$decide_dir" rev-parse HEAD)
+git -C "$decide_dir" checkout -q main
+git -C "$decide_dir" commit -q --allow-empty -m "the base moves on"
+merged_base=$(git -C "$decide_dir" rev-parse HEAD)
+git -C "$decide_dir" merge -q --no-ff -m merge story
 yq '.jobs.e2e-regression.steps[1].run' "$ci" > "$decide_dir/decide.sh"
-# The stub records its arguments and exits with the status the case asks for.
+# The stub records the commits its arguments name and exits with the status the case asks for.
 cat > "$decide_dir/scripts/regression-paths.sh" <<'STUB'
 #!/usr/bin/env bash
-echo "$*" > called
+git rev-parse "$1" "$2" | tr '\n' ' ' > called
 exit "$STUB_STATUS"
 STUB
 chmod +x "$decide_dir/scripts/regression-paths.sh"
@@ -184,15 +195,16 @@ chmod +x "$decide_dir/scripts/regression-paths.sh"
 # decide <event> <stub status>: runs the step; the output file and the log are left for the checks.
 decide() {
   rm -f "$decide_dir/output" "$decide_dir/called"
-  (cd "$decide_dir" && GITHUB_EVENT_NAME=$1 STUB_STATUS=$2 GITHUB_OUTPUT="$decide_dir/output" BASE_SHA=base-sha HEAD_SHA=head-sha \
+  (cd "$decide_dir" && GITHUB_EVENT_NAME=$1 STUB_STATUS=$2 GITHUB_OUTPUT="$decide_dir/output" \
     bash --noprofile --norc -e decide.sh) > "$decide_dir/log" 2>&1
 }
 wrote() { [[ $(cat "$decide_dir/output" 2>/dev/null) == "$1" ]] || fail "$2: GITHUB_OUTPUT is not '$1'"; }
 
 decide pull_request 0 || fail "pull request, status 0: the step failed"
 wrote run=true "pull request, status 0"
-[[ $(cat "$decide_dir/called") == "base-sha head-sha" ]] || fail "the script did not get BASE_SHA and HEAD_SHA"
-echo "ok  decide: status 0 writes run=true, with both SHAs passed"
+[[ $(cat "$decide_dir/called") == "$merged_base $merged_head " ]] ||
+  fail "the script did not get the merge commit's parents, base then head: $(cat "$decide_dir/called")"
+echo "ok  decide: status 0 writes run=true, with the merge commit's base and head parents passed"
 
 decide pull_request 1 || fail "pull request, status 1: the step failed"
 wrote run=false "pull request, status 1"

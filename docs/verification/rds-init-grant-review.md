@@ -63,3 +63,17 @@ No high or medium findings. The lows go to `docs/verification/lows.md` at merge.
 ```json
 {"status": "approve", "record": "docs/verification/rds-init-grant-review.md", "findings": [{"severity": "low", "file": "infra/tests/DisputeDesk.PlatformTests/DatabaseInitFixture.cs", "line": 126, "issue": "The plain PostgreSQL fixture master holds an implicit ADMIN membership, so createrole_self_grant works there; removing the GRANTs and bringing createrole_self_grant back another way passes every test and repeats the RDS failure.", "fix": "Add a source assertion that neither the init script nor the deploy script contains createrole_self_grant; record it as the escape countermeasure."}, {"severity": "low", "file": "infra/terraform/README.md", "line": 263, "issue": "The recovery's DROP ROLE disputedesk may be refused on RDS for the role the failed deploy left, which the master has no membership in (PostgreSQL 16+ DROP ROLE needs ADMIN OPTION); unverified.", "fix": "If RDS refuses it, run GRANT disputedesk TO CURRENT_USER first, then add that line to the README in the records or lows batch."}], "assumptions": ["The GRANT succeeding on RDS for a master with no membership rests on the probe cited in the build record; it cannot be reproduced locally.", "The PostgreSQL 18 doc statements cited were not re-fetched in this session.", "The builder's results file could not be read (its worktree is gone); CI's platform job passing on eb2e8bf was the run I saw."], "open_questions": [], "conflicts": []}
 ```
+
+## Capture (added in lows-2026-11-10; missing after the merge of #17)
+
+### Escapes
+
+| Finding | Caught by | Should have been caught by | Category | Countermeasure |
+|---|---|---|---|---|
+| The first AWS deploy failed at the database init on RDS PostgreSQL 18.3 (`must be able to SET ROLE "disputedesk"`): RDS's master is not a superuser and gets no membership in the roles it creates, so `createrole_self_grant` had nothing to extend | the first live deploy (deploy.yml run 42382797135) | the AWS environment's story and the init's tests, whose plain PostgreSQL master is a superuser | environment or tooling | the init grants the master each owner role `WITH SET, INHERIT`; `DatabaseInitTests`' master now matches RDS (no `createrole_self_grant`) and failed with the RDS error first |
+
+### Metrics
+
+| Fix rounds | Full-suite runs | Stages | Notes |
+|---|---|---|---|
+| 0 | 1 (platform, 439 tests) | builder; reviewer | merged as `9554059` (#17); L1 and L2 to `lows.md` |

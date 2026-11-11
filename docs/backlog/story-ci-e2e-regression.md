@@ -48,9 +48,10 @@ because it trusts a record, not a run.
   commit's tree is the tree the pull request's merge ref tested (AD-32, ad-012 clause 6).
 - Changed paths, on `pull_request` only: `git diff --name-only --no-renames <base sha>...<head sha>` (three dots: the
   changes on head since the merge base, as A3's `git merge-base` named; `--no-renames` lists both the old and the new
-  path of a rename). `<base sha>` is `github.event.pull_request.base.sha`, `<head sha>` is
-  `github.event.pull_request.head.sha`; both reach the script through `env:` as `BASE_SHA` and `HEAD_SHA`. Checkout
-  uses `fetch-depth: 0`.
+  path of a rename). The job checks out GitHub's merge commit, so `<base sha>` is its first parent (`HEAD^1`, the
+  base branch) and `<head sha>` its second (`HEAD^2`, the pull request's head); both are in the checkout, even after a
+  stacked base branch is force-pushed (changed in lows-2026-11-10; the first version read
+  `github.event.pull_request.base.sha` and `head.sha`). Checkout uses `fetch-depth: 0`.
 - Paths that start the suite (settled by the human, D1, 2026-11-06): every stack input, meaning every Compose build
   or mount source plus the job's own files. They live in `scripts/regression-paths.list`, one per line and nothing
   else; a line ending in `/` matches every path under that directory, any other line matches exactly that path. A
@@ -102,7 +103,7 @@ because it trusts a record, not a run.
    **Given** a new `e2e-regression` job with no job-level `if` or `needs`, listed in `ci-passed`'s `needs` and not in
    `publish`'s `needs`
    **When** CI runs
-   **Then** the first step after checkout (id `decide`) runs `scripts/regression-paths.sh "$BASE_SHA" "$HEAD_SHA"`,
+   **Then** the first step after checkout (id `decide`) runs `scripts/regression-paths.sh HEAD^1 HEAD^2`,
    with both SHAs under `env:`, only when `github.event_name == 'pull_request'`; it writes `run=true` on status 0 and
    `run=false` on status 1 to `GITHUB_OUTPUT`, and fails the step on any other status. On any other event it writes
    `run=false` with a notice naming the reason (the squash commit's tree is the pull request's tested merge, under the

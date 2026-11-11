@@ -11,6 +11,8 @@ export function ContactHelp({ offerStartAgain = false }: { offerStartAgain?: boo
         Need help?
       </h2>
       {offerStartAgain ? (
+        // An inline link in a sentence, so it keeps the text's line height (about 22px) and not the 44px of a
+        // standalone control: WCAG 2.2 SC 2.5.8 exempts a target inside a sentence (the "Inline" exception).
         <p className="text-muted-foreground">
           Didn&apos;t get a code? <Link to="/link">Start again</Link>.
         </p>

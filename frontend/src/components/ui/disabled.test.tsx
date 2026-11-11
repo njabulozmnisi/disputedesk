@@ -52,3 +52,14 @@ describe('a disabled Input', () => {
     expect(input.className).not.toMatch(/(^| )disabled:opacity/);
   });
 });
+
+// WCAG 2.2 SC 1.4.10: with text scaled up a label wraps inside its pill, so a button never widens the page.
+describe('a Button label', () => {
+  it('may wrap, centred, and its edge is the theme outline width', () => {
+    render(<Button>Submit dispute</Button>);
+
+    const button = screen.getByRole('button', { name: 'Submit dispute' });
+    expect(button).toHaveClass('text-center', 'border-(length:--outline-width)');
+    expect(button.className).not.toMatch(/whitespace-nowrap/);
+  });
+});

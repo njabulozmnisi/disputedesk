@@ -49,9 +49,10 @@ characters (`maxLength` 6) and only digits (`REGEXP_ONLY_DIGITS`, `^\d+$`; JavaS
 ASCII `0-9`), with a `pasteTransformer` and an `onPaste` handler that refuse a pasted code longer than 6 digits
 (decided 2026-11-08, `docs/verification/decisions.md`):
 
-- the `pasteTransformer` removes spaces from the pasted text; if what is left is digits only and longer than 6, it
-  returns a single space instead, which `REGEXP_ONLY_DIGITS` refuses, so input-otp drops the paste whole and the
-  cells keep their prior value, exactly as it drops `48151a`; otherwise it returns the text without spaces;
+- the `pasteTransformer` refuses any paste holding more than 6 digits, whatever else it holds (`4815167`,
+  `4815 1678`, `481-5167`, `4815167\n`): it returns a single space, which `REGEXP_ONLY_DIGITS` refuses, so input-otp
+  drops the paste whole and the cells keep their prior value, exactly as it drops `48151a`; otherwise it returns the
+  text without spaces, so a paste with exactly 6 digits and other characters (`481516\n`) is accepted;
 - the `onPaste` handler, which input-otp calls after its own paste listener, checks the same condition and calls
   `setError('code', { message: linkingMessages.code })`, as the 400 path already does, so the field shows today's
   six-digit error "Enter the 6-digit code." (`aria-invalid` and the field error; no error summary and no focus
@@ -243,7 +244,9 @@ exactly after the CLI runs. The builder re-checks publisher, weekly downloads, r
 - Security agent: reviews the `style-src` change against CSP Level 3 and AD-23.
 - QA, holding the `stack` lock: `e2e/run-regression.sh` passes with axe on every spec that runs it; with the
   Playwright MCP each linking screen and state matches its mockup at 360px and 1280px in light and dark; no
-  horizontal scroll at 320px or 200% zoom; every interactive element is at least 44px tall; keyboard order is
+  horizontal scroll at 320px or 200% zoom; every standalone interactive element is at least 44px tall (an inline
+  link in a sentence, such as "Start again", keeps the line height under WCAG 2.2 SC 2.5.8's inline exception,
+  amended in lows-2026-11-10); keyboard order is
   unchanged; paste and typed entry both link a seeded customer; the browser console on `/link/otp` shows no CSP
   violation.
 

@@ -81,6 +81,23 @@ describe('the inactivity warning', () => {
     expect(await axe(document.body)).toHaveNoViolations();
   });
 
+  // WAI-ARIA APG, Alert dialog: focus moves into the dialog when it opens, and Tab stays inside it (WCAG 2.2 SC 2.4.3).
+  it('opens with focus on Stay signed in, and Tab and Shift+Tab stay inside the dialog', async () => {
+    const { user } = await openTransactions();
+    await passMinutes(13);
+    await screen.findByRole('alertdialog', { name: warningTitle });
+    const stay = screen.getByRole('button', { name: 'Stay signed in' });
+    const signOut = screen.getByRole('button', { name: 'Sign out' });
+
+    expect(stay).toHaveFocus();
+    await user.tab();
+    expect(signOut).toHaveFocus();
+    await user.tab();
+    expect(stay).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(signOut).toHaveFocus();
+  });
+
   it('does not appear for someone who is not signed in', async () => {
     signInAs('anonymous');
     renderApp({ path: '/', fakeTimers: true });

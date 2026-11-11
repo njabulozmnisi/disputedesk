@@ -1,0 +1,52 @@
+# Simplicity and standards audit: tests (2026-11-11)
+
+Set: `backend/tests/`, `e2e/` (with `e2e/eslint.config.js`), `infra/tests/DisputeDesk.PlatformTests/` and
+`infra/tests/fixtures/`, read from the lows-2026-11-10 worktree. The rules and scale are the 2026-11-03 baseline's
+(`~/disputedesk-rename/retro-8/audit-rerun-plan.md`): AGENTS.md "How to work", `docs/conventions/backend.md` and
+`frontend.md`, `review-story` pass 2 and its standards check. High means home-grown where a framework or standard way
+exists, or code a new engineer cannot follow. Medium means an abstraction, wrapper, option or indirection that does not
+earn its place. Low means local cleverness, naming or dead code. This was a read-only audit and no tests were run.
+
+The infra xUnit project moved into this set from set 5 since the baseline (audit-rerun-plan.md, set 6). Findings in it
+are marked "moved", not "new". No finding below matches an open row in `docs/verification/lows.md`. The known
+`linking-start.spec.ts` "abc" traceId flake (lows row 47) is left out.
+
+## Findings
+
+| ID | Severity | Tag | File:line | Finding | Simplest fix | Baseline kind |
+|---|---|---|---|---|---|---|
+| TEST-1 | high | [code] | `e2e/tests/linking-start.spec.ts:90-97`, `linking-verify.spec.ts:44,129-150,396`, `journeys/uj-1.spec.ts:30-38`, `forwarded-headers.spec.ts:50-57`, `operations-actions.spec.ts:183-185,286`, `sla-sweep.spec.ts:48-52,186`, `seeded-disputes.spec.ts:65-68`, `support.ts:209-213`, `spa-transactions.spec.ts:562`, `linking-screens.spec.ts:97`, `linking-rate-limits.spec.ts:159`; `e2e/eslint.config.js:12-13` | The e2e suite has about 16 hand-written poll loops (a deadline, a check, then `await new Promise((resolve) => setTimeout(resolve, n))`), even though the same specs already use Playwright's documented polling 58 times (`expect.poll`, `expect(...).toPass`). The lint config bans only `waitForTimeout`, so fixed-time waits came back as a `setTimeout` promise (about 25 sites). Two loops also end at their deadline without failing (`sla-sweep.spec.ts:48-52`, `seeded-disputes.spec.ts:66-68`). If the sweep never runs, the failure shows up later as a misleading assertion. | Replace each loop with `await expect.poll(check, { timeout, intervals }).toBe(...)`, or `toPass` for a block. Add a `no-restricted-syntax` rule on `setTimeout` under `tests/`, allowing only the deliberate pacing and absence waits, each with a reason. Source: https://playwright.dev/docs/test-assertions#expectpoll | TST-5 (until loops), still open in a new form |
+| TEST-2 | medium | [code] | `e2e/tests/dispute-list.spec.ts:49`, `operations-read.spec.ts:36`, `operations-actions.spec.ts:35`, `dispute-detail.spec.ts:37` (copies of `support.ts:154`); `linking-rate-limits.spec.ts:32-33`, `linking-screens.spec.ts:26-27`, `forwarded-headers.spec.ts:20-21`, `linking-start.spec.ts:34`, `linking-verify.spec.ts:33`, `session-cookie-never-renewed.spec.ts:26`, `sla-sweep.spec.ts:20-22`, `outbox-relay-failure-paths.spec.ts:43,64` | Specs still redefine helpers that `support.ts` exports or could export. `withoutTraceId` is copied 4 times, `pause`/`sleep` 5 times (`support.ts:166` exports `pause`), and `docker` 5 times. `auditCount` is copied 7 times, `untilAudited` twice (`linking-start.spec.ts:90`, `linking-verify.spec.ts:129`) and `axeViolations` 3 times. `const sql = (statement) => queryDatabase(statement)` is a pass-through alias in 5 specs. | Import `withoutTraceId`, `pause` and `queryDatabase` from `support.ts` and delete the local copies and the `sql` alias. Move `auditCount`, `docker` and `axeViolations` into `support.ts`, since each is past its third copy. | TST-6 (helpers per spec), partly closed: `signInContext`, `queryRows`, `origin` and `axeTags` are now imported |
+| TEST-3 | medium | [code] | `infra/tests/DisputeDesk.PlatformTests/GatewayFixture.cs:105-133,143-155`, `DatabaseInitFixture.cs:189-203`, `ComposeRenderTests.cs:619-633`, `GatewayTests.cs:756-768` | The infra project starts, waits for and removes containers itself through the docker CLI, with four separate fixed-interval readiness and poll loops. The repo's container test library is Testcontainers (`architecture.md:558,571`; `PostgresFixture.cs:17`), which provides networks, wait strategies and Ryuk cleanup. The backend projects each keep one `Eventually`, but this project has none. | At minimum, add one `Eventually.UntilAsync` to the project and use it in all four places. Better, build the gateway and Postgres containers with Testcontainers' `ContainerBuilder` (`WithNetwork`, `WithWaitStrategy`), keeping the docker CLI only for `docker build` and `compose config`. Source: https://dotnet.testcontainers.org/api/wait_strategies/ | moved (was infra shell harnesses, INF-1) |
+| TEST-4 | medium | [code] | `infra/tests/DisputeDesk.PlatformTests/PlatformScriptTests.cs:663-720` (section runs), `:100-116`, `:314`, `:448-452`, `:835`, `:879`; `backend/tests/DisputeDesk.ArchitectureTests/PlatformScriptTests.cs:218-226` | `provision.sh` is tested in two ways, and neither is simple. `RunProvisionSectionAsync` cuts a section out of the script by matching its `# ----` comment header with a regex, finds one-line functions with another regex, and runs them inside a generated script. Other cases assert the script's exact source text with regexes, whitespace included (the clients-file check, the "is current" check, `call()`'s curl line, `ORG_ID`). A reformat breaks both styles, and the text cases pass when the same behaviour is written differently. The aws-admin-lockdown review accepted section runs as stronger than text, which is true, but the mechanism is still home-grown. | Make `provision.sh` sourceable: its steps become functions, and the script runs its main code only when executed directly (`[[ "${BASH_SOURCE[0]}" == "$0" ]] && main "$@"`). Tests then source it, define a stand-in `call`, and run one function, which is the bats-core pattern. Move the text cases onto those runs. Source: https://bats-core.readthedocs.io/en/stable/writing-tests.html | TST-7 (exact-text matches): closed for Compose and the gateway (8.7), still open for `provision.sh` |
+| TEST-5 | low | [code] | `backend/tests/DisputeDesk.ArchitectureTests/PlatformScriptTests.cs:240-360`; `infra/tests/DisputeDesk.PlatformTests/PathStubs.cs:19-41`, `Processes.cs:35-73`, `ComposeModel.cs:15-41` | There are two command-stub harnesses with different answer rules. The backend copy answers calls in order (call N gets answer N). Infra's `PathStubs` answers only an exact argument list and exits 97 for anything else. Each project also has its own process runner and Compose renderer. Copying across projects is allowed under ad-011, but a reader has to learn two stub rules. | Copy `PathStubs`' exact-argument rule into the backend copy, so both projects stub commands the same way. | new |
+| TEST-6 | low | [code] | `infra/tests/DisputeDesk.PlatformTests/PlatformScriptTests.cs:41-61,888-892` | CI workflow YAML is read with a regex that slices the `floor-guard:` job by its two-space indent, and curl lines are found by substring. A reformatted `ci.yml` (indent, key order) changes what is checked, even though the Compose cases next to them already assert on a parsed model. | Parse the workflow as YAML, either with `yq -o json` through `Processes` or with a YAML reader, and assert on `jobs.floor-guard.timeout-minutes` and the steps' `run` text. | new (moved) |
+| TEST-7 | low | [code] | `infra/tests/DisputeDesk.PlatformTests/GatewayFixture.cs:100-104` | The fixture re-reads `compose.test.env` with its own split, although `AwsInputs.TestValues()` (`AwsInputs.cs:12-16`) already returns those values. | Use `AwsInputs.TestValues()` and pick the six names from it. | new (moved) |
+| TEST-8 | low | [code] | `backend/tests/DisputeDesk.Api.IntegrationTests/Disputes/DisputesApi.cs:76-113` | There are three `RaiseAsync` overloads plus `RaiseWithKeyAsync`. `RaiseAsync(json, false)` and `RaiseAsync(json, (string?)null)` mean the same thing, one through a bool flag and one through a nullable token, and the reader has to work out which overload a call binds to. | Write one `RaiseAsync(json, string? antiforgeryToken = Fresh, params string?[] idempotencyKeys)`, or two methods named for the two cases (with a fresh token, with a given token), and drop the bool. | new |
+
+These were checked and are not findings:
+
+- **Closed baseline kinds:** `MetricCollector<T>` and `FakeLogCollector` replaced the `MeterListener` rigs and logger providers (TST-1). `FakeTimeProvider` and `RelayClock` replaced the home-made clocks, and `TestClock` documents why it is not `FakeTimeProvider` (TST-3, TST-4). The architecture rules run on Roslyn syntax trees (`SourceTrees.cs`) and `BannedSymbols.txt` instead of regexes (TST-2). Each backend project has one `Eventually`, `ForbidProbe` is gone, there is one `BodyWithoutTraceIdAsync`, and `DisputeIn(status)` replays valid streams (TST-8 to TST-11).
+- **Seams that use documented mechanisms:** the EF Core interceptors, each a distinct seam (hold, gate, rendezvous, fail), and the `IStartupFilter` probes.
+- **Accepted by a recorded decision:** the IAM name check against AWS's service reference (`IamNames.cs`, human decision 2026-11-04, `architecture.md:488`).
+- **Justified local cases:** the one `MeterListener` in `SweepRig.cs:69` (it covers every instrument on the meter, documented), the two `LockedCollection` copies (no BCL type implements `ICollection<T>` thread-safely for the in-memory exporter), and the absence waits (`LinkingApi.AbsenceWindow`).
+
+## Counts
+
+| Severity | 2026-11-03 baseline | 2026-11-11 |
+|---|---|---|
+| high | 2 | 1 |
+| medium | 5 | 3 |
+| low | 4 | 4 |
+
+The baseline report is no longer in the tree, so findings are compared by kind, not ID. Of the baseline's kinds,
+TST-1 to TST-4 and TST-8 to TST-11 are closed. TST-5 is open in a new form (TEST-1), and TST-6 and TST-7 are partly
+open (TEST-2, TEST-4). TEST-3, TEST-6 and TEST-7 come from the infra project that moved into this set, and TEST-5 and
+TEST-8 are new.
+
+## Trend
+
+The backend test projects now use the standard test tools (MetricCollector, FakeLogger, FakeTimeProvider, Roslyn,
+BannedApiAnalyzers), which closed most of the baseline. In the e2e specs, banning `waitForTimeout` moved fixed-time waits
+into hand-written `setTimeout` loops instead of `expect.poll`. The infra project that moved into this set manages its
+own containers and still reads shell and YAML as text.

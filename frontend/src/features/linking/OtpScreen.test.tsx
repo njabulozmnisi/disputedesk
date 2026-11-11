@@ -330,24 +330,103 @@ describe('screen 2b, the code form', () => {
     expect(within(summary()).getByRole('link', { name: sixDigitError })).toBeInTheDocument();
   });
 
-  it('refuses a pasted 7 digits with a space into a field holding 481: it keeps 481', async () => {
-    const requests = recordLinkingRequests('verify', () => noContent());
+  // The refusal is announced once, by the live region: the field error is an alert only while it says the code was wrong.
+  it('does not make the field error an alert when a refused paste replaces the wrong-code message', async () => {
+    recordLinkingRequests('verify', () => wrongCode(2));
     const { user } = await openOtp();
-    await user.type(codeField(), '481');
+    await verify(user, '481516');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "That code didn't work. You have 2 tries left.",
+    );
 
-    await user.paste('4815 1678');
+    await enterCode(user, '4815167');
 
-    expect(codeField()).toHaveValue('481');
-    expect(cellDigits()).toEqual(['4', '8', '1', '', '', '']);
     expect(fieldError()).toHaveTextContent(sixDigitError);
-    expect(codeField()).toHaveAttribute('aria-invalid', 'true');
-    expect(requests).toHaveLength(0);
-
-    await user.click(verifyButton());
-
-    expect(summary()).toHaveFocus();
-    expect(requests).toHaveLength(0);
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+    expect(screen.getByRole('status')).toHaveTextContent(sixDigitError);
   });
+
+  // The error describes the pasted text, so it goes once the field holds a whole code (WCAG 2.2 SC 3.3.1).
+  it('clears the refused-paste error when the field is then filled with 6 digits', async () => {
+    const { user } = await openOtp();
+    await enterCode(user, '4815167');
+    expect(fieldError()).toHaveTextContent(sixDigitError);
+
+    await enterCode(user, '481516');
+
+    expect(fieldError()).toBeNull();
+    expect(codeField()).toHaveAttribute('aria-invalid', 'false');
+  });
+
+  // input-otp calls onComplete only when the value grows to 6 digits, so an edit that keeps 6 digits must clear it too.
+  it.each([
+    [
+      'a paste over the last digit',
+      async (user: UserEvent) => {
+        // A browser selects the last digit of a full field when it gets focus (input-otp's focus listener).
+        act(() => {
+          codeField().blur();
+          codeField().focus();
+        });
+        await user.paste('481516');
+      },
+      '481514',
+    ],
+    [
+      'a programmatic fill, as autofill does',
+      () => {
+        fireEvent.change(codeField(), { target: { value: '123456' } });
+      },
+      '123456',
+    ],
+  ])(
+    'clears the refused-paste error when a field holding 6 digits is edited by %s and still holds 6',
+    async (_way, edit, expectedValue) => {
+      const { user } = await openOtp();
+      await enterCode(user, '481516');
+      await user.paste('4815167');
+      expect(fieldError()).toHaveTextContent(sixDigitError);
+
+      await edit(user);
+
+      expect(codeField()).toHaveValue(expectedValue);
+      expect(fieldError()).toBeNull();
+      expect(codeField()).toHaveAttribute('aria-invalid', 'false');
+    },
+  );
+
+  it('clears the invalid-submit error and its summary when the code is then typed in full', async () => {
+    const { user } = await openOtp();
+    await user.click(verifyButton());
+    expect(summary()).toBeInTheDocument();
+
+    await typeCode(user, '481516');
+
+    expect(fieldError()).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Check the details below' })).toBeNull();
+  });
+
+  it.each(['4815167', '4815 1678'])(
+    'refuses a pasted %j (7 digits) into a field holding 481: it keeps 481',
+    async (pasted) => {
+      const requests = recordLinkingRequests('verify', () => noContent());
+      const { user } = await openOtp();
+      await user.type(codeField(), '481');
+
+      await user.paste(pasted);
+
+      expect(codeField()).toHaveValue('481');
+      expect(cellDigits()).toEqual(['4', '8', '1', '', '', '']);
+      expect(fieldError()).toHaveTextContent(sixDigitError);
+      expect(codeField()).toHaveAttribute('aria-invalid', 'true');
+      expect(requests).toHaveLength(0);
+
+      await user.click(verifyButton());
+
+      expect(summary()).toHaveFocus();
+      expect(requests).toHaveLength(0);
+    },
+  );
 
   it('sends a pasted 6 digits on Verify, with no error shown before', async () => {
     const requests = recordLinkingRequests('verify', () => noContent());
@@ -555,11 +634,12 @@ describe('screen 2b, the code form', () => {
 describe('screen 2b, wrong codes and the lockout', () => {
   it('keeps the focus in the input, not on the summary, when typing breaks it again after a failed submit', async () => {
     const { user } = await openOtp();
-    await verify(user, '48151');
+    await verify(user, '481');
     expect(summary()).toHaveFocus();
 
-    await user.type(codeField(), '6');
-    await user.type(codeField(), '7');
+    // Still short of a full code, so the summary stays; completing it clears the summary (tested above).
+    await user.type(codeField(), '5');
+    await user.type(codeField(), '1');
 
     expect(codeField()).toHaveFocus();
     expect(summary()).not.toHaveFocus();
@@ -799,6 +879,38 @@ describe('screen 2b, rate limited', () => {
     await user.click(verifyButton());
     await screen.findByRole('heading', { level: 1, name: 'Transactions' });
     expect(requests).toHaveLength(2);
+  });
+
+  // The gateway's own limiter can refuse the antiforgery request that comes before Verify (RFC 6585), with the same
+  // problem and Retry-After as the API's: Verify then shows the same notice, and nothing is sent.
+  it('says the wait when the gateway refuses the antiforgery request, and sends no verify', async () => {
+    const requests = recordLinkingRequests('verify', () => noContent());
+    const { user } = await openOtp({ fakeTimers: true });
+    server.use(http.get('*/api/v1/antiforgery', () => rateLimited('120')));
+
+    await verify(user);
+
+    const notice = await screen.findByRole('alert');
+    expect(notice).toHaveTextContent('Too many attempts. Try again in 2 minutes.');
+    expect(notice).toHaveFocus();
+    expect(verifyButton()).toBeDisabled();
+    expect(requests).toHaveLength(0);
+  });
+
+  it('shows the generic notice when a 429 on the antiforgery request is not a problem body', async () => {
+    const requests = recordLinkingRequests('verify', () => noContent());
+    const { user } = await openOtp({ fakeTimers: true });
+    server.use(
+      http.get(
+        '*/api/v1/antiforgery',
+        () => new HttpResponse('Too Many Requests', { status: 429 }),
+      ),
+    );
+
+    await verify(user);
+
+    expect(await screen.findByText('Something went wrong on our side. Try again.')).toBeVisible();
+    expect(requests).toHaveLength(0);
   });
 
   it('gives focus to Verify when the wait ends while the notice still has it', async () => {
