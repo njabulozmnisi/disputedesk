@@ -12,7 +12,7 @@ namespace DisputeDesk.Api.IntegrationTests.Operations;
 /// AC2: the <c>Authorization</c> header is the operations read's one credential input. Each missing, malformed or
 /// invalid token gets 401 <c>unauthorized</c> with <c>WWW-Authenticate: Bearer</c> and never an <c>error_description</c>
 /// (RFC 6750 §3; RFC 7519 §4.1.4, §4.1.5), and writes no audit row. Tokens are minted from the system clock, which is
-/// the clock JwtBearer 10.0.14 validates against: its handler does not pass the injected <see cref="TimeProvider"/> to
+/// the clock JwtBearer 10.0.15 validates against: its handler does not pass the injected <see cref="TimeProvider"/> to
 /// <c>TokenValidationParameters.TimeProvider</c>.
 /// </summary>
 public class OperationsTokenValidationTests(PostgresFixture postgres)
